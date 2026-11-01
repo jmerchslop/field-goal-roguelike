@@ -29,18 +29,41 @@ var attempt_note := ""
 var score_line := ""
 var last_points := 0
 
+var stats := KickerStats.new()
+var stacks := {}
+var offer: Array = []
+var awaiting_offer := false
+var awaiting_mulligan := false
+var mulligans_left := 0
+var mulligan_used_this_kick := false
+var rerolls_left := 1
+var pending_result := ""
+var pending_offset := 0.0
+var pending_perfect := false
+
 # 0 means "roll the side". -1 or +1 forces the next hash/wide spot.
 var _next_side := 0
 var _rng := RandomNumberGenerator.new()
+var _offer_rng := RandomNumberGenerator.new()
+var _forced_offer: Array = []
 
 
 func _init() -> void:
 	_rng.randomize()
+	_offer_rng.randomize()
 	new_run()
 
 
 func set_seed(seed_value: int) -> void:
 	_rng.seed = seed_value
+
+
+func set_offer_seed(seed_value: int) -> void:
+	_offer_rng.seed = seed_value
+
+
+func force_offer(ids: Array) -> void:
+	_forced_offer = ids.duplicate()
 
 
 func set_next_side(side: int) -> void:
@@ -63,6 +86,16 @@ func new_run() -> void:
 	attempt_note = ""
 	score_line = ""
 	last_points = 0
+	stats.reset()
+	stacks = {}
+	offer = []
+	awaiting_offer = false
+	awaiting_mulligan = false
+	mulligan_used_this_kick = false
+	rerolls_left = 1
+	pending_result = ""
+	attempt_cap = stats.attempt_cap
+	_refill_mulligans()
 	_place_spot()
 
 
@@ -76,7 +109,7 @@ func is_boss() -> bool:
 
 # The multiplier for the kick you are on, from the streak before this kick.
 func current_mult() -> float:
-	return 1.0 + KickConstants.STREAK_MULT_STEP * float(streak)
+	return 1.0 + stats.streak_step * float(streak)
 
 
 func can_advance() -> bool:
@@ -137,8 +170,113 @@ func go_to_next_kick() -> bool:
 	attempt_note = ""
 	score_line = ""
 	last_points = 0
+	awaiting_offer = false
+	awaiting_mulligan = false
+	offer = []
+	mulligan_used_this_kick = false
 	_place_spot()
+	_refill_mulligans()
 	return true
+
+
+func can_mulligan(result_text: String) -> bool:
+	return result_text != "GOOD" and mulligans_left > 0 and not mulligan_used_this_kick and phase == Phase.PLAYING
+
+
+func begin_mulligan(result_text: String, offset: float, perfect: bool) -> void:
+	awaiting_mulligan = true
+	pending_result = result_text
+	pending_offset = offset
+	pending_perfect = perfect
+
+
+func use_mulligan() -> bool:
+	if not awaiting_mulligan:
+		return false
+	awaiting_mulligan = false
+	mulligans_left -= 1
+	mulligan_used_this_kick = true
+	is_first_ball = false
+	pending_result = ""
+	return true
+
+
+func accept_pending_miss() -> void:
+	if not awaiting_mulligan:
+		return
+	awaiting_mulligan = false
+	resolve_kick(pending_result, pending_offset, pending_perfect)
+
+
+func roll_offer() -> void:
+	if phase != Phase.PLAYING:
+		awaiting_offer = false
+		offer = []
+		return
+	if _forced_offer.size() > 0:
+		offer = _forced_offer.duplicate()
+		_forced_offer = []
+	else:
+		offer = Upgrades.draw_offer(Upgrades.eligible_ids(stacks), _offer_rng)
+	awaiting_offer = true
+
+
+func pick_card(index: int) -> bool:
+	if not awaiting_offer or index < 0 or index >= offer.size():
+		return false
+	grant(str(offer[index]))
+	_close_offer()
+	return true
+
+
+func skip_offer() -> bool:
+	if not awaiting_offer:
+		return false
+	score += 10
+	_close_offer()
+	return true
+
+
+func reroll_offer() -> bool:
+	if not awaiting_offer or rerolls_left <= 0:
+		return false
+	rerolls_left -= 1
+	offer = Upgrades.draw_offer(Upgrades.eligible_ids(stacks), _offer_rng)
+	return true
+
+
+func grant(id: String) -> void:
+	var info := Upgrades.get_def(id)
+	if info.is_empty():
+		return
+	if int(stacks.get(id, 0)) >= int(info["max_stacks"]):
+		return
+	Upgrades.apply(id, stats)
+	stacks[id] = int(stacks.get(id, 0)) + 1
+	attempt_cap = mini(stats.attempt_cap, KickConstants.ATTEMPT_CAP_MAX)
+	if id == Upgrades.DEEP_BENCH:
+		attempts = mini(attempts + 1, attempt_cap)
+	elif id == Upgrades.MULLIGAN:
+		mulligans_left += 1
+
+
+func owned_ids() -> Array:
+	var ids: Array = []
+	for item in Upgrades.DEFS:
+		var id := str(item["id"])
+		if int(stacks.get(id, 0)) > 0:
+			ids.append(id)
+	return ids
+
+
+func _close_offer() -> void:
+	awaiting_offer = false
+	offer = []
+
+
+func _refill_mulligans() -> void:
+	if kick_number == 1 or kick_number == 6 or kick_number == 11 or kick_number == 16:
+		mulligans_left = stats.mulligans_per_quarter
 
 
 static func earns_attempt(kick_number_value: int, first_ball: bool, perfect: bool, middle: bool, late_rule: bool) -> bool:

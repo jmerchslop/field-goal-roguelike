@@ -22,10 +22,11 @@ var _tee: MeshInstance3D
 var _arrow: MeshInstance3D
 var _shadow: MeshInstance3D
 var _kicker: Node3D
-var _hud: Control
+var _hud
 
 
 func _ready() -> void:
+	logic.stats = run.stats
 	_world = $World
 	_camera = $Camera3D
 	_hud = $HUD/Overlay
@@ -60,8 +61,36 @@ func load_current_kick() -> void:
 
 
 func settle_kick() -> void:
-	if logic.phase == KickLogic.Phase.RESULT:
-		run.resolve_kick(logic.result_text, logic.offset_yards, logic.perfect)
+	if logic.phase != KickLogic.Phase.RESULT:
+		return
+	if run.kick_resolved or run.awaiting_mulligan or run.awaiting_offer:
+		return
+	if run.can_mulligan(logic.result_text):
+		run.begin_mulligan(logic.result_text, logic.offset_yards, logic.perfect)
+		return
+	run.resolve_kick(logic.result_text, logic.offset_yards, logic.perfect)
+	if run.phase == RunLogic.Phase.PLAYING:
+		run.roll_offer()
+
+
+func retake_with_mulligan() -> void:
+	if not run.use_mulligan():
+		return
+	var distance := logic.kick_distance
+	var spot := logic.start_lateral_yards
+	logic.reset_kick()
+	logic.kick_distance = distance
+	logic.start_lateral_yards = spot
+	logic.sync_tee()
+	_approach_time = 0.0
+	refresh_view()
+
+
+func _choose_card(index: int) -> void:
+	if not run.pick_card(index):
+		return
+	advance_run()
+	refresh_view()
 
 
 func advance_run() -> bool:
@@ -120,20 +149,57 @@ func _process(delta: float) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if _taking_pictures:
 		return
+	if event is InputEventMouseButton:
+		var mouse := event as InputEventMouseButton
+		if mouse.pressed and mouse.button_index == MOUSE_BUTTON_LEFT and run.awaiting_offer:
+			_choose_card(_hud.card_index_at(mouse.position))
+		return
 	if not event is InputEventKey:
 		return
 	var key := event as InputEventKey
 	if not key.pressed or key.echo:
 		return
-	if key.keycode == KEY_R and run.accepts_restart():
+	if key.keycode == KEY_R and run.accepts_restart() and not run.awaiting_offer and not run.awaiting_mulligan:
 		restart_run()
 		return
+	if key.keycode == KEY_M and run.awaiting_mulligan:
+		retake_with_mulligan()
+		return
+	if run.awaiting_offer and (key.keycode == KEY_1 or key.keycode == KEY_KP_1):
+		_choose_card(0)
+		return
+	if run.awaiting_offer and (key.keycode == KEY_2 or key.keycode == KEY_KP_2):
+		_choose_card(1)
+		return
+	if run.awaiting_offer and (key.keycode == KEY_3 or key.keycode == KEY_KP_3):
+		_choose_card(2)
+		return
+	if run.awaiting_offer and key.keycode == KEY_S:
+		if run.skip_offer():
+			advance_run()
+			refresh_view()
+		return
+	if run.awaiting_offer and key.keycode == KEY_F:
+		run.reroll_offer()
+		refresh_view()
+		return
 	if key.keycode != KEY_SPACE:
+		return
+	if run.awaiting_mulligan:
+		run.accept_pending_miss()
+		if run.phase == RunLogic.Phase.PLAYING:
+			run.roll_offer()
+		refresh_view()
+		return
+	if run.awaiting_offer:
 		return
 	if run.phase != RunLogic.Phase.PLAYING:
 		return
 	if logic.phase == KickLogic.Phase.RESULT:
 		settle_kick()
+		if run.awaiting_mulligan or run.awaiting_offer or run.phase != RunLogic.Phase.PLAYING:
+			refresh_view()
+			return
 		advance_run()
 		return
 	logic.press_space()

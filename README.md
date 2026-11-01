@@ -15,6 +15,8 @@ The window is 1280×720. You stand behind the kicker and look up the field. 1 ya
 - Hold **Left** or **Right** to aim. This only works before the meter starts.
 - **Space** starts the meter, locks power, locks accuracy, then goes to the next kick.
 - **R** starts a new run from the game over or win screen.
+- After a kick, press **1**, **2**, or **3** to take a card (or click it). **S** skips for 10 points. **F** rerolls the cards once per run.
+- **M** uses a mulligan after a miss. Space accepts that miss instead.
 
 You begin with 1 attempt and can hold 3. A make on the first try earns one, until the cap. A miss spends one. No attempts left ends the run. Making kick 20 wins. The top-left line shows the kick, the distance, the score, the streak, the multiplier, and the attempt circles.
 

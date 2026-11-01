@@ -37,6 +37,9 @@ var ball_forward_yards := 0.0
 var ball_lateral_yards := 0.0
 var ball_height := 0.0
 
+# Upgrades change these. Defaults match the constants, so an untouched kick plays the same.
+var stats := KickerStats.new()
+
 var _rng := RandomNumberGenerator.new()
 
 
@@ -207,7 +210,7 @@ static func round_tenth(value: float) -> float:
 
 
 func _advance_power(delta: float) -> void:
-	needle += KickConstants.POWER_RISE_PER_SEC * delta
+	needle += stats.power_speed * delta
 	if needle < KickConstants.METER_MAX:
 		return
 	# The fall starts on the next step. One frame at 100 is too small to see.
@@ -216,7 +219,7 @@ func _advance_power(delta: float) -> void:
 
 
 func _advance_accuracy(delta: float) -> void:
-	needle -= KickConstants.ACCURACY_FALL_PER_SEC * delta
+	needle -= stats.accuracy_speed * delta
 	if needle > KickConstants.METER_MIN:
 		return
 	needle = KickConstants.METER_MIN
@@ -238,9 +241,11 @@ func _lock_power(value: float) -> void:
 
 func _lock_accuracy(value: float) -> void:
 	accuracy_error = accuracy_with_red_tip(power, value, _rng)
-	perfect = is_perfect(accuracy_error)
-	final_angle_degrees = final_angle(aim_degrees, accuracy_error)
-	max_range = range_yards(power)
+	# The perfect window comes from the kicker's stats, so Sweet Spot can widen it.
+	perfect = absf(accuracy_error) <= stats.perfect_band
+	var hook := 0.0 if perfect else -accuracy_error * KickConstants.ACCURACY_DEG_PER_ERROR
+	final_angle_degrees = aim_degrees + hook
+	max_range = range_yards(power) + stats.range_bonus
 	offset_yards = offset_yards_at_uprights(kick_distance, final_angle_degrees, start_lateral_yards)
 	# The ball stops at its max range when that is short of the posts.
 	travel_yards = minf(max_range, kick_distance)

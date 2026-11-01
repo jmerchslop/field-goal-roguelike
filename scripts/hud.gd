@@ -13,7 +13,11 @@ func _draw() -> void:
 	var run: RunLogic = game.run
 	_draw_meter(logic)
 	_draw_hud(logic, run)
-	if run.phase == RunLogic.Phase.GAME_OVER or run.phase == RunLogic.Phase.WIN:
+	if run.awaiting_mulligan:
+		_draw_mulligan()
+	elif run.awaiting_offer:
+		_draw_offer(run)
+	elif run.phase == RunLogic.Phase.GAME_OVER or run.phase == RunLogic.Phase.WIN:
 		_draw_end_screen(run)
 	elif logic.phase == KickLogic.Phase.RESULT:
 		_draw_result(logic, run)
@@ -34,8 +38,9 @@ func _draw_meter(logic: KickLogic) -> void:
 		KickConstants.METER_BAR_BOTTOM - KickConstants.METER_BAR_TOP
 	)
 	draw_rect(bar, KickConstants.COLOR_METER_TRACK)
-	_draw_band(-KickConstants.METER_INNER_BAND, KickConstants.METER_INNER_BAND, KickConstants.COLOR_INNER_BAND)
-	_draw_band(-KickConstants.PERFECT_BAND, KickConstants.PERFECT_BAND, KickConstants.COLOR_PERFECT_BAND)
+	var stats: KickerStats = logic.stats
+	_draw_band(-stats.good_band, stats.good_band, KickConstants.COLOR_INNER_BAND)
+	_draw_band(-stats.perfect_band, stats.perfect_band, KickConstants.COLOR_PERFECT_BAND)
 	_draw_band(KickConstants.RED_TIP_START, KickConstants.METER_MAX, KickConstants.COLOR_RED_TIP)
 	var zero_y := KickConstants.meter_y(0.0)
 	draw_line(
@@ -80,7 +85,8 @@ func _draw_band(low: float, high: float, color: Color) -> void:
 
 
 func _draw_hud(logic: KickLogic, run: RunLogic) -> void:
-	draw_rect(Rect2(12, 8, 300, 168), Color(0.02, 0.05, 0.08, 0.42))
+	var list_h := 22.0 * float(run.owned_ids().size())
+	draw_rect(Rect2(12, 8, 320, 168 + list_h), Color(0.02, 0.05, 0.08, 0.42))
 	var x := 24.0
 	var y := 28.0
 	_text(Vector2(x, y), "Kick %d of %d" % [run.kick_number, RunTable.count()], 22, KickConstants.COLOR_TEXT)
@@ -95,6 +101,10 @@ func _draw_hud(logic: KickLogic, run: RunLogic) -> void:
 	_draw_attempt_pips(run, x + 110.0, y - 5.0)
 	y += 24.0
 	_text(Vector2(x, y), "Aim %s°   negative is left" % KickLogic.format_angle(logic.aim_degrees), 16, KickConstants.COLOR_TEXT)
+	y += 22.0
+	for id in run.owned_ids():
+		_text(Vector2(x, y), Upgrades.stack_label(str(id), int(run.stacks[id])), 16, KickConstants.COLOR_ATTEMPT)
+		y += 20.0
 	if run.is_boss() and run.phase == RunLogic.Phase.PLAYING:
 		_text_centered("BOSS KICK", 118.0, 28, KickConstants.COLOR_BOSS)
 	var hint := ""
@@ -108,8 +118,68 @@ func _draw_hud(logic: KickLogic, run: RunLogic) -> void:
 		hint = "Space locks accuracy."
 	elif logic.phase == KickLogic.Phase.RESULT:
 		hint = "Space: next kick."
-	if hint != "":
+	if hint != "" and not run.awaiting_offer and not run.awaiting_mulligan:
 		_text_centered(hint, 708.0, 18, KickConstants.COLOR_TEXT)
+
+
+var card_rects: Array = []
+
+
+func card_index_at(point: Vector2) -> int:
+	for i in card_rects.size():
+		var rect: Rect2 = card_rects[i]
+		if rect.has_point(point):
+			return i
+	return -1
+
+
+func _draw_mulligan() -> void:
+	var box := Rect2(180, 250, 740, 220)
+	draw_rect(box, KickConstants.COLOR_RESULT_SCRIM)
+	_text_centered("Use Mulligan? (M)", box.position.y + 80.0, 42, KickConstants.COLOR_ATTEMPT)
+	_text_centered("M retakes this kick.  Space accepts the miss.", box.position.y + 140.0, 22, KickConstants.COLOR_TEXT)
+
+
+func _draw_offer(run: RunLogic) -> void:
+	card_rects = []
+	var count := run.offer.size()
+	if count == 0:
+		_text_centered("No upgrades left.  S continues.", 460.0, 28, KickConstants.COLOR_TEXT)
+	var width := 230.0
+	var gap := 16.0
+	var total := float(count) * width + float(maxi(count - 1, 0)) * gap
+	var left := (KickConstants.METER_PANEL_LEFT - total) * 0.5
+	for i in count:
+		var rect := Rect2(left + float(i) * (width + gap), 390.0, width, 250.0)
+		card_rects.append(rect)
+		draw_rect(rect, Color(0.05, 0.08, 0.1, 0.92))
+		draw_rect(rect, KickConstants.COLOR_ATTEMPT, false, 2.0)
+		var id := str(run.offer[i])
+		var info := Upgrades.get_def(id)
+		var stacks := int(run.stacks.get(id, 0))
+		_text(rect.position + Vector2(14, 36), "%d  %s" % [i + 1, str(info["name"])], 20, KickConstants.COLOR_ATTEMPT)
+		_text(rect.position + Vector2(14, 64), Upgrades.stack_label(id, stacks), 16, KickConstants.COLOR_TEXT)
+		_draw_wrapped(str(info["description"]), Rect2(rect.position + Vector2(14, 96), Vector2(width - 28, 110)), 16)
+	var reroll_y := 660.0
+	_text_centered("Reroll: %d left    F rerolls    S skips (+10)" % run.rerolls_left, reroll_y, 18, KickConstants.COLOR_TEXT)
+
+
+func _draw_wrapped(text: String, area: Rect2, size: int) -> void:
+	var font := ThemeDB.fallback_font
+	if font == null:
+		return
+	var line := ""
+	var y := area.position.y
+	for word in text.split(" "):
+		var trial := (line + word).strip_edges()
+		if line != "" and font.get_string_size(trial, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > area.size.x:
+			_text(Vector2(area.position.x, y), line.strip_edges(), size, KickConstants.COLOR_TEXT)
+			y += float(size) + 4.0
+			line = word + " "
+		else:
+			line = trial + " "
+	if line.strip_edges() != "":
+		_text(Vector2(area.position.x, y), line.strip_edges(), size, KickConstants.COLOR_TEXT)
 
 
 func _draw_attempt_pips(run: RunLogic, origin_x: float, origin_y: float) -> void:

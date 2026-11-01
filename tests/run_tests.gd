@@ -33,6 +33,7 @@ func _run() -> void:
 	_check_flight_and_reset()
 	_check_detail_text()
 	_check_run()
+	_check_upgrades()
 
 
 func check(ok: bool, label: String) -> void:
@@ -532,6 +533,173 @@ func _kick4_spot(seed_value: int, side: int) -> float:
 		run.go_to_next_kick()
 		step += 1
 	return run.spot_yards
+
+
+func _check_upgrades() -> void:
+	_check_upgrade_offers()
+	_check_upgrade_effects()
+	_check_mulligan_reroll_and_skip()
+
+
+func _check_upgrade_offers() -> void:
+	var eligible := Upgrades.eligible_ids({})
+	check(eligible.size() == 6, "all six upgrades start eligible")
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 4
+	var offer: Array = Upgrades.draw_offer(eligible, rng)
+	check(offer.size() == 3, "check 1 an offer has 3 cards")
+	check(offer[0] != offer[1] and offer[0] != offer[2] and offer[1] != offer[2], "check 1 the three cards are different")
+	var again := RandomNumberGenerator.new()
+	again.seed = 4
+	var replay: Array = Upgrades.draw_offer(eligible, again)
+	check(offer == replay, "the same offer seed draws the same cards")
+	var capped := {"big_leg": 3, "steady_plant": 3, "sweet_spot": 2, "hot_streak": 1}
+	var left := Upgrades.eligible_ids(capped)
+	check(left.find("big_leg") == -1 and left.find("sweet_spot") == -1, "maxed upgrades are not offered")
+	check(left.find("deep_bench") != -1 and left.find("mulligan") != -1, "upgrades under the cap stay eligible")
+	var short := Upgrades.draw_offer(["big_leg", "mulligan"], rng)
+	check(short.size() == 2 and short[0] != short[1], "fewer than 3 eligible cards shows only those")
+	check(str(Upgrades.get_def(Upgrades.BIG_LEG)["rarity"]) == "common", "rarity is stored on the upgrade")
+	var run := RunLogic.new()
+	run.new_run()
+	run.force_offer(["big_leg", "steady_plant", "sweet_spot"])
+	run.roll_offer()
+	check(run.pick_card(0), "check 1 pressing 1 picks the first card")
+	check(run.owned_ids().has("big_leg") and int(run.stacks["big_leg"]) == 1, "check 1 Big Leg shows in the owned list")
+	check(not run.awaiting_offer, "picking closes the offer")
+
+
+func _check_upgrade_effects() -> void:
+	var kick := KickLogic.new()
+	kick.kick_distance = 35.0
+	_lock_power_at(kick, 25.0)
+	check(kick.result_text == "SHORT", "check 2 power 25 from 35 yd is SHORT before Big Leg, range %s" % kick.max_range)
+	kick.stats.range_bonus = 6.0
+	_lock_power_at(kick, 25.0)
+	check(kick.result_text == "GOOD" and kick.max_range >= 35.0, "check 2 Big Leg makes power 25 reach, range %s" % kick.max_range)
+	var slow := KickLogic.new()
+	Upgrades.apply(Upgrades.STEADY_PLANT, slow.stats)
+	check(near(slow.stats.power_speed, 85.0), "check 3 one Steady Plant sets power speed to 85, got %s" % slow.stats.power_speed)
+	slow.press_space()
+	slow.advance(1.0)
+	check(near(slow.needle, 85.0) and slow.phase == KickLogic.Phase.POWER, "check 3 after one second the slower needle is at 85, got %s" % slow.needle)
+	Upgrades.apply(Upgrades.STEADY_PLANT, slow.stats)
+	Upgrades.apply(Upgrades.STEADY_PLANT, slow.stats)
+	check(near(slow.stats.power_speed, 100.0 * 0.85 * 0.85 * 0.85), "three Steady Plants stack by multiplying")
+	var sweet := KickerStats.new()
+	Upgrades.apply(Upgrades.SWEET_SPOT, sweet)
+	check(near(sweet.perfect_band, 4.0) and near(sweet.good_band, 11.0), "check 4 Sweet Spot widens the bands to 4 and 11")
+	Upgrades.apply(Upgrades.SWEET_SPOT, sweet)
+	check(near(sweet.perfect_band, 6.0) and near(sweet.good_band, 14.0), "Sweet Spot stacks a second time")
+	var wide := KickLogic.new()
+	wide.stats.perfect_band = 4.0
+	_lock_power_at(wide, 10.0)
+	# Fall from 10 to 3, which is outside the old perfect band and inside the new one.
+	wide.advance(7.0 / wide.stats.accuracy_speed)
+	if wide.phase == KickLogic.Phase.ACCURACY:
+		wide.press_space()
+	check(wide.perfect and near(wide.final_angle_degrees, 0.0), "a wider perfect band treats e=3 as perfect")
+	var bench := RunLogic.new()
+	bench.new_run()
+	bench.attempts = 2
+	bench.grant(Upgrades.DEEP_BENCH)
+	check(bench.attempt_cap == 4 and bench.attempts == 3, "check 5 Deep Bench makes 4 circles and fills one more")
+	bench.grant(Upgrades.DEEP_BENCH)
+	check(bench.attempt_cap == 5 and bench.attempts == 4, "a second Deep Bench reaches the hard max of 5")
+	var before_cap := bench.attempt_cap
+	var before_attempts := bench.attempts
+	bench.grant(Upgrades.DEEP_BENCH)
+	check(bench.attempt_cap == before_cap and bench.attempts == before_attempts, "Deep Bench does not stack past 2 or past 5")
+	check(Upgrades.eligible_ids(bench.stacks).find(Upgrades.DEEP_BENCH) == -1, "Deep Bench at max is not offered")
+	var hot := RunLogic.new()
+	hot.new_run()
+	hot.grant(Upgrades.HOT_STREAK)
+	check(near(hot.stats.streak_step, 0.5), "Hot Streak sets the streak step to 0.5")
+	hot.resolve_kick("GOOD", 2.0, false)
+	check(near(hot.current_mult(), 1.5), "after one make the Hot Streak mult is 1.5, got %s" % hot.current_mult())
+	hot.grant(Upgrades.HOT_STREAK)
+	check(near(hot.stats.streak_step, 0.5) and int(hot.stacks[Upgrades.HOT_STREAK]) == 1, "Hot Streak does not stack")
+
+
+func _check_mulligan_reroll_and_skip() -> void:
+	var run := RunLogic.new()
+	run.new_run()
+	var attempts := run.attempts
+	var streak := run.streak
+	var score := run.score
+	run.grant(Upgrades.MULLIGAN)
+	check(run.mulligans_left == 1 and run.can_mulligan("WIDE LEFT"), "check 6 a mulligan is ready after picking it")
+	run.begin_mulligan("WIDE LEFT", -5.0, false)
+	check(run.awaiting_mulligan, "check 6 the miss asks Use Mulligan?")
+	check(run.use_mulligan(), "check 6 M retakes")
+	check(run.attempts == attempts and run.streak == streak and run.score == score, "check 6 the miss is erased")
+	check(not run.is_first_ball and run.mulligans_left == 0, "check 6 the retake is not a first ball and spends the mulligan")
+	check(not run.awaiting_offer, "a mulligan retake does not open the card offer")
+	run.resolve_kick("GOOD", 0.0, false)
+	check(run.score == 70 and run.attempts == attempts and run.attempt_note == "", "check 6 the made retake scores and earns no attempt")
+	check(run.go_to_next_kick(), "move on after the retake")
+	check(not run.can_mulligan("SHORT"), "check 6 the next miss in the quarter has no mulligan")
+	run.resolve_kick("SHORT", 0.0, false)
+	check(run.attempts == attempts - 1, "check 6 that miss costs an attempt")
+	var same := RunLogic.new()
+	same.new_run()
+	same.grant(Upgrades.MULLIGAN)
+	same.grant(Upgrades.MULLIGAN)
+	check(same.mulligans_left == 2, "two Mulligan stacks give two charges")
+	same.begin_mulligan("DOINK", 3.1, false)
+	same.use_mulligan()
+	check(same.mulligans_left == 1 and not same.can_mulligan("SHORT"), "the same kick does not get a second mulligan")
+	var quarter := RunLogic.new()
+	quarter.new_run()
+	quarter.grant(Upgrades.MULLIGAN)
+	quarter.mulligans_left = 0
+	quarter.kick_number = 5
+	quarter.kick_resolved = true
+	check(quarter.go_to_next_kick() and quarter.kick_number == 6, "kick 6 starts the next quarter")
+	check(quarter.mulligans_left == 1, "the quarter refills the mulligan")
+	var doomed := RunLogic.new()
+	doomed.new_run()
+	doomed.grant(Upgrades.MULLIGAN)
+	doomed.begin_mulligan("SHORT", 0.0, false)
+	doomed.accept_pending_miss()
+	check(doomed.phase == RunLogic.Phase.GAME_OVER and not doomed.awaiting_offer, "accepting the last miss is game over, with no cards")
+	var cards := RunLogic.new()
+	cards.new_run()
+	cards.set_offer_seed(2)
+	cards.roll_offer()
+	var first: Array = cards.offer.duplicate()
+	check(cards.rerolls_left == 1 and cards.reroll_offer(), "check 7 F rerolls once")
+	check(cards.rerolls_left == 0 and cards.offer.size() == 3, "check 7 the new offer is still 3 cards, Reroll: 0 left")
+	var held: Array = cards.offer.duplicate()
+	check(not cards.reroll_offer() and cards.offer == held, "check 7 a second F does nothing")
+	check(first.size() == 3, "the first offer was full")
+	var skipped := RunLogic.new()
+	skipped.new_run()
+	skipped.resolve_kick("GOOD", 2.0, false)
+	var scored := skipped.score
+	skipped.roll_offer()
+	check(skipped.skip_offer() and skipped.score == scored + 10, "check 8 S adds 10 points")
+	check(skipped.go_to_next_kick() and skipped.kick_number == 2, "check 8 skip starts the next kick")
+	var fresh := RunLogic.new()
+	fresh.new_run()
+	fresh.grant(Upgrades.BIG_LEG)
+	fresh.grant(Upgrades.SWEET_SPOT)
+	check(fresh.stats.range_bonus == 6.0, "the run kept the upgrade")
+	fresh.new_run()
+	check(fresh.stats.range_bonus == 0.0 and fresh.stats.perfect_band == 2.0, "a new run resets KickerStats")
+	check(fresh.owned_ids().is_empty() and fresh.rerolls_left == 1 and fresh.mulligans_left == 0, "a new run clears cards, rerolls, and mulligans")
+
+
+func _lock_power_at(kick: KickLogic, power_value: float) -> void:
+	kick.reset_kick()
+	kick.kick_distance = 35.0
+	kick.start_lateral_yards = 0.0
+	kick.press_space()
+	kick.advance(power_value / kick.stats.power_speed)
+	kick.press_space()
+	kick.advance(kick.power / kick.stats.accuracy_speed)
+	if kick.phase == KickLogic.Phase.ACCURACY:
+		kick.press_space()
 
 
 func _kick_power_accuracy(power_value: float, needle_at_lock: float) -> KickLogic:

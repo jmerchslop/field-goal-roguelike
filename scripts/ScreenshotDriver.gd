@@ -33,7 +33,7 @@ func _ready() -> void:
 		get_tree().quit(1)
 		return
 	board.logic.advance(board.logic.flight_duration)
-	board.settle_kick()
+	board.run.resolve_kick(board.logic.result_text, board.logic.offset_yards, board.logic.perfect)
 	if not await _capture("view_result.png"):
 		get_tree().quit(1)
 		return
@@ -43,6 +43,27 @@ func _ready() -> void:
 	board.force_spot_side(1)
 	board.advance_run()
 	if not await _capture("view_wide.png"):
+		get_tree().quit(1)
+		return
+	board.restart_run()
+	board.run.resolve_kick("GOOD", 0.0, true)
+	board.run.force_offer(["deep_bench", "big_leg", "steady_plant"])
+	board.run.roll_offer()
+	if not await _capture("offer_cards.png"):
+		get_tree().quit(1)
+		return
+	board.run.pick_card(0)
+	board.advance_run()
+	if not await _capture("hud_upgrades.png"):
+		get_tree().quit(1)
+		return
+	board.run.grant("sweet_spot")
+	if not await _capture("sweet_spot_meter.png"):
+		get_tree().quit(1)
+		return
+	board.run.grant("mulligan")
+	board.run.begin_mulligan("WIDE LEFT", -4.0, false)
+	if not await _capture("mulligan_prompt.png"):
 		get_tree().quit(1)
 		return
 	get_tree().quit()
