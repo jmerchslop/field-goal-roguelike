@@ -12,45 +12,44 @@ func _ready() -> void:
 		print("Could not create ", shot_dir)
 		get_tree().quit(1)
 		return
-	if not await _capture("run_kick1.png"):
+	if not await _capture("view_rest.png"):
 		get_tree().quit(1)
 		return
-	_play_straight_make(80.0)
+	board.logic.press_space()
+	board.logic.advance(0.42)
+	board._approach_time = 0.42
+	if not await _capture("view_runup.png"):
+		get_tree().quit(1)
+		return
+	board.load_current_kick()
+	board.logic.press_space()
+	board.logic.advance(0.8)
+	board.logic.press_space()
+	board.logic.advance(0.8 / KickConstants.ACCURACY_FALL_PER_SEC * KickConstants.POWER_RISE_PER_SEC)
+	board.logic.press_space()
+	board.logic.advance(board.logic.flight_duration * 0.58)
+	board._approach_time = 0.8
+	if not await _capture("view_flight.png"):
+		get_tree().quit(1)
+		return
+	board.logic.advance(board.logic.flight_duration)
 	board.settle_kick()
-	if not await _capture("run_make_result.png"):
+	if not await _capture("view_result.png"):
 		get_tree().quit(1)
 		return
-	# Two more makes, then kick 4, which is a hash spot.
-	board.advance_run()
-	board.script_good_kick()
-	board.advance_run()
-	board.script_good_kick()
+	while board.run.kick_number < 10:
+		board.advance_run()
+		board.script_good_kick()
 	board.force_spot_side(1)
 	board.advance_run()
-	if not await _capture("run_kick4_hash.png"):
-		get_tree().quit(1)
-		return
-	board.script_good_kick()
-	board.force_spot_side(-1)
-	board.advance_run()
-	if not await _capture("run_boss_kick_clear.png"):
-		get_tree().quit(1)
-		return
-	board.restart_run()
-	_play_straight_make(20.0)
-	board.settle_kick()
-	if not await _capture("run_game_over.png"):
+	if not await _capture("view_wide.png"):
 		get_tree().quit(1)
 		return
 	get_tree().quit()
 
 
-func _play_straight_make(power_value: float) -> void:
-	board.play_locked_kick(power_value)
-
-
 func _capture(file_name: String) -> bool:
-	board.queue_redraw()
+	board.refresh_view()
 	await get_tree().process_frame
 	await RenderingServer.frame_post_draw
 	var image: Image = board.get_viewport().get_texture().get_image()

@@ -8,7 +8,7 @@ A run of 20 kicks, from 35 yards out to 75. Aim the arrow, press Space three tim
 2. Open `project.godot`.
 3. Press Play (F5).
 
-The window is 1280×720. Shapes stand in for art: a green field, yellow posts, a brown ball.
+The window is 1280×720. You stand behind the kicker and look up the field. 1 yard in the rules is 1 yard on the field. The kicker is a placeholder; a real picture can replace `scenes/kicker.tscn` later.
 
 ## Controls
 
