@@ -1,24 +1,23 @@
 extends Node2D
 
 # Draws the field and reads the keyboard.
-# The kick rules live in KickLogic.gd. This file only shows them.
+# Kick rules live in KickLogic. The run lives in RunLogic.
 
 const ScreenshotDriverScript := preload("res://scripts/ScreenshotDriver.gd")
 
 var logic := KickLogic.new()
+var run := RunLogic.new()
 var _taking_pictures := false
 
 
 func _ready() -> void:
-	# How far this kick is. A later version can change this one line.
-	logic.kick_distance = KickConstants.KICK_DISTANCE_YARDS
-	queue_redraw()
+	run.new_run()
+	load_current_kick()
 	if OS.get_environment("FG_SHOTS") != "1":
 		return
 	_taking_pictures = true
 	var driver := ScreenshotDriverScript.new()
 	driver.board = self
-	driver.logic = logic
 	var dir := OS.get_environment("FG_SHOT_DIR")
 	if dir != "":
 		driver.shot_dir = dir
@@ -26,17 +25,63 @@ func _ready() -> void:
 	add_child(driver)
 
 
+func load_current_kick() -> void:
+	logic.reset_kick()
+	logic.kick_distance = run.distance_yards()
+	logic.start_lateral_yards = run.spot_yards
+	logic.sync_tee()
+	queue_redraw()
+
+
+func settle_kick() -> void:
+	if logic.phase == KickLogic.Phase.RESULT:
+		run.resolve_kick(logic.result_text, logic.offset_yards, logic.perfect)
+
+
+func advance_run() -> bool:
+	if not run.go_to_next_kick():
+		return false
+	load_current_kick()
+	return true
+
+
+func restart_run() -> void:
+	run.new_run()
+	load_current_kick()
+
+
+func force_spot_side(side: int) -> void:
+	run.set_next_side(side)
+
+
+func play_locked_kick(power_value: float) -> void:
+	# Used by the picture taker. It is the same three Space presses as a player.
+	logic.press_space()
+	logic.advance(power_value / KickConstants.POWER_RISE_PER_SEC)
+	logic.press_space()
+	logic.advance(power_value / KickConstants.ACCURACY_FALL_PER_SEC)
+	logic.press_space()
+	logic.advance(logic.flight_duration)
+
+
+func script_good_kick() -> void:
+	# Counts a centered make without flying the ball. Pictures use this to reach a later kick.
+	run.resolve_kick("GOOD", 0.0, false)
+
+
 func _process(delta: float) -> void:
 	if _taking_pictures:
 		return
-	var direction := 0.0
-	if Input.is_key_pressed(KEY_LEFT):
-		direction -= 1.0
-	if Input.is_key_pressed(KEY_RIGHT):
-		direction += 1.0
-	if direction != 0.0:
-		logic.aim(direction, delta)
-	logic.advance(delta)
+	if run.phase == RunLogic.Phase.PLAYING and logic.phase != KickLogic.Phase.RESULT:
+		var direction := 0.0
+		if Input.is_key_pressed(KEY_LEFT):
+			direction -= 1.0
+		if Input.is_key_pressed(KEY_RIGHT):
+			direction += 1.0
+		if direction != 0.0:
+			logic.aim(direction, delta)
+		logic.advance(delta)
+		settle_kick()
 	queue_redraw()
 
 
@@ -46,9 +91,21 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not event is InputEventKey:
 		return
 	var key := event as InputEventKey
-	if key.pressed and not key.echo and key.keycode == KEY_SPACE:
-		logic.press_space()
-		queue_redraw()
+	if not key.pressed or key.echo:
+		return
+	if key.keycode == KEY_R and run.accepts_restart():
+		restart_run()
+		return
+	if key.keycode != KEY_SPACE:
+		return
+	if run.phase != RunLogic.Phase.PLAYING:
+		return
+	if logic.phase == KickLogic.Phase.RESULT:
+		settle_kick()
+		advance_run()
+		return
+	logic.press_space()
+	queue_redraw()
 
 
 func _draw() -> void:
@@ -59,14 +116,14 @@ func _draw() -> void:
 	_draw_ball()
 	_draw_meter()
 	_draw_hud()
-	if logic.phase == KickLogic.Phase.RESULT:
+	if run.phase == RunLogic.Phase.GAME_OVER or run.phase == RunLogic.Phase.WIN:
+		_draw_end_screen()
+	elif logic.phase == KickLogic.Phase.RESULT:
 		_draw_result()
 
 
 func _draw_field() -> void:
-	var size := Vector2(KickConstants.WINDOW_WIDTH, KickConstants.WINDOW_HEIGHT)
-	draw_rect(Rect2(Vector2.ZERO, size), KickConstants.COLOR_FIELD)
-	# Darker grass behind the goal line.
+	draw_rect(Rect2(0, 0, KickConstants.WINDOW_WIDTH, KickConstants.WINDOW_HEIGHT), KickConstants.COLOR_FIELD)
 	draw_rect(Rect2(0, 0, KickConstants.WINDOW_WIDTH, KickConstants.UPRIGHT_Y_PX), KickConstants.COLOR_ENDZONE)
 	draw_line(
 		Vector2(0, KickConstants.UPRIGHT_Y_PX),
@@ -94,9 +151,10 @@ func _draw_uprights() -> void:
 
 
 func _draw_arrow() -> void:
-	var tee := KickConstants.screen_pos(logic.kick_distance, 0.0, 0.0)
+	# The arrow starts on the ball and points straight up the field when aim is 0.
+	# It does not turn itself toward the posts.
+	var tee := KickConstants.screen_pos(logic.kick_distance, 0.0, logic.start_lateral_yards)
 	var aim := deg_to_rad(logic.aim_degrees)
-	# Negative aim points left. Zero points straight up at the posts.
 	var direction := Vector2(sin(aim), -cos(aim))
 	var start := tee + direction * (KickConstants.BALL_RADIUS_PX + 6.0)
 	var tip := tee + direction * (KickConstants.AIM_ARROW_YARDS * KickConstants.PIXELS_PER_YARD)
@@ -110,7 +168,6 @@ func _draw_arrow() -> void:
 
 func _draw_ball() -> void:
 	var ground := KickConstants.screen_pos(logic.kick_distance, logic.ball_forward_yards, logic.ball_lateral_yards)
-	# The shadow stays on the ground. The ball lifts off it and grows to 2x at mid-flight.
 	var lift := KickConstants.BALL_LIFT_PX * logic.ball_height
 	var ball_center := ground + Vector2(0.0, -lift)
 	var radius := KickConstants.BALL_RADIUS_PX * (1.0 + logic.ball_height)
@@ -180,40 +237,79 @@ func _draw_band(low: float, high: float, color: Color) -> void:
 
 
 func _draw_hud() -> void:
-	_text(
-		Vector2(24.0, 34.0),
-		"Aim %s°    negative is left" % KickLogic.format_angle(logic.aim_degrees),
-		20,
-		KickConstants.COLOR_TEXT
-	)
-	if logic.ball_forward_yards < 0.05:
-		var tee := KickConstants.screen_pos(logic.kick_distance, 0.0, 0.0)
-		_text(tee + Vector2(20.0, 40.0), "%s yd" % KickLogic.format_number(logic.kick_distance), 18, KickConstants.COLOR_TEXT)
+	var x := 24.0
+	var y := 28.0
+	_text(Vector2(x, y), "Kick %d of %d" % [run.kick_number, RunTable.count()], 22, KickConstants.COLOR_TEXT)
+	y += 26.0
+	_text(Vector2(x, y), "%s yd" % KickLogic.format_number(run.distance_yards()), 20, KickConstants.COLOR_TEXT)
+	y += 24.0
+	_text(Vector2(x, y), "Score %d    Streak %d" % [run.score, run.streak], 20, KickConstants.COLOR_TEXT)
+	y += 24.0
+	_text(Vector2(x, y), "Mult %s" % RunLogic._two_decimals(run.current_mult()), 20, KickConstants.COLOR_TEXT)
+	y += 26.0
+	_text(Vector2(x, y), "ATTEMPTS", 18, KickConstants.COLOR_TEXT)
+	_draw_attempt_pips(x + 110.0, y - 5.0)
+	y += 24.0
+	_text(Vector2(x, y), "Aim %s°   negative is left" % KickLogic.format_angle(logic.aim_degrees), 16, KickConstants.COLOR_TEXT)
+	if run.is_boss() and run.phase == RunLogic.Phase.PLAYING:
+		# Sit this under the posts so the uprights stay visible.
+		_text_centered("BOSS KICK", 118.0, 28, KickConstants.COLOR_BOSS)
 	var hint := ""
-	if logic.phase == KickLogic.Phase.AIMING:
+	if run.phase == RunLogic.Phase.GAME_OVER or run.phase == RunLogic.Phase.WIN or run.accepts_restart():
+		hint = "R: new run"
+	elif logic.phase == KickLogic.Phase.AIMING:
 		hint = "Hold Left or Right to aim.   Space starts the meter."
 	elif logic.phase == KickLogic.Phase.POWER:
 		hint = "Space locks power."
 	elif logic.phase == KickLogic.Phase.ACCURACY:
 		hint = "Space locks accuracy."
 	elif logic.phase == KickLogic.Phase.RESULT:
-		hint = "Space kicks again."
+		hint = "Space: next kick."
 	if hint != "":
-		_text_centered(hint, 700.0, 20, KickConstants.COLOR_TEXT)
+		_text_centered(hint, 708.0, 18, KickConstants.COLOR_TEXT)
+
+
+func _draw_attempt_pips(origin_x: float, origin_y: float) -> void:
+	for i in run.attempt_cap:
+		var center := Vector2(origin_x + float(i) * KickConstants.ATTEMPT_PIP_GAP, origin_y)
+		if i < run.attempts:
+			draw_circle(center, KickConstants.ATTEMPT_PIP_RADIUS, KickConstants.COLOR_ATTEMPT)
+		else:
+			draw_circle(center, KickConstants.ATTEMPT_PIP_RADIUS, KickConstants.COLOR_TEXT, false, 2.0, true)
 
 
 func _draw_result() -> void:
 	var box := Rect2(KickConstants.RESULT_LEFT, KickConstants.RESULT_TOP, KickConstants.RESULT_WIDTH, KickConstants.RESULT_HEIGHT)
 	draw_rect(box, KickConstants.COLOR_RESULT_SCRIM)
-	var word_color := KickConstants.COLOR_MISS
-	if logic.result_text == "GOOD":
-		word_color = KickConstants.COLOR_GOOD
+	var y := box.position.y + 42.0
 	if logic.perfect:
-		_text_centered("PERFECT!", box.position.y + 58.0, 36, KickConstants.COLOR_PERFECT_TEXT)
-		_text_centered(logic.result_text, box.position.y + 128.0, 68, word_color)
-	else:
-		_text_centered(logic.result_text, box.position.y + 100.0, 68, word_color)
-	_text_centered(logic.detail_line(), box.position.y + 176.0, 28, KickConstants.COLOR_TEXT)
+		_text_centered("PERFECT!", y, 28, KickConstants.COLOR_PERFECT_TEXT)
+		y += 32.0
+	if run.down_the_middle:
+		_text_centered("DOWN THE MIDDLE!", y, 26, KickConstants.COLOR_PERFECT_TEXT)
+		y += 32.0
+	var word_color := KickConstants.COLOR_GOOD if logic.result_text == "GOOD" else KickConstants.COLOR_MISS
+	_text_centered(logic.result_text, y + 20.0, 60, word_color)
+	y += 78.0
+	if run.score_line != "":
+		_text_centered(run.score_line, y, 22, KickConstants.COLOR_TEXT)
+		y += 30.0
+	if run.attempt_note != "":
+		var note_color := KickConstants.COLOR_ATTEMPT if run.attempt_note == RunLogic.NOTE_EARNED else KickConstants.COLOR_TEXT
+		_text_centered(run.attempt_note, y, 26, note_color)
+		y += 32.0
+	_text_centered(logic.detail_line(), y, 20, KickConstants.COLOR_TEXT)
+
+
+func _draw_end_screen() -> void:
+	var box := Rect2(KickConstants.RESULT_LEFT, KickConstants.RESULT_TOP, KickConstants.RESULT_WIDTH, KickConstants.RESULT_HEIGHT)
+	draw_rect(box, KickConstants.COLOR_RESULT_SCRIM)
+	var title := "WIN" if run.phase == RunLogic.Phase.WIN else "GAME OVER"
+	var title_color := KickConstants.COLOR_GOOD if run.phase == RunLogic.Phase.WIN else KickConstants.COLOR_MISS
+	_text_centered(title, box.position.y + 70.0, 64, title_color)
+	_text_centered("Score %d" % run.score, box.position.y + 130.0, 32, KickConstants.COLOR_TEXT)
+	_text_centered("Kicks made %d" % run.kicks_made, box.position.y + 172.0, 28, KickConstants.COLOR_TEXT)
+	_text_centered("Longest make %s yd" % KickLogic.format_number(run.longest_make), box.position.y + 210.0, 28, KickConstants.COLOR_TEXT)
 
 
 func _text(at: Vector2, text: String, size: int, color: Color) -> void:
@@ -233,7 +329,6 @@ func _text_centered(text: String, baseline_y: float, size: int, color: Color) ->
 	if font == null or text == "":
 		return
 	var width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
-	# Center in the field, leaving the meter alone on the right.
 	var field_width := KickConstants.METER_PANEL_LEFT
 	var x := (field_width - width) * 0.5
 	_text(Vector2(x, baseline_y), text, size, color)

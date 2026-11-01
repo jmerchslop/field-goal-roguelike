@@ -10,7 +10,8 @@ enum Phase { AIMING, POWER, ACCURACY, FLIGHT, RESULT }
 # POWER    - The needle rises. Space locks power. At 100 it locks itself.
 # ACCURACY - The needle falls. Space locks accuracy. At -15 it locks itself.
 # FLIGHT   - The ball is in the air. Space does nothing.
-# RESULT   - The words are on screen. Space sets up the same kick again.
+# RESULT   - The words are on screen. Space on this object sets up the same kick again.
+#            The run (main.gd) does not use that. It moves on to the next kick.
 
 var phase: Phase = Phase.AIMING
 var aim_degrees := 0.0
@@ -18,6 +19,9 @@ var needle := 0.0
 var power := 0.0
 var accuracy_error := 0.0
 var kick_distance := KickConstants.KICK_DISTANCE_YARDS
+# Sideways start, in yards. Negative is screen-left. Center spots stay at 0.
+# The aim arrow still starts straight up the field, not pointed at the posts.
+var start_lateral_yards := 0.0
 
 var final_angle_degrees := 0.0
 var max_range := 0.0
@@ -81,6 +85,7 @@ func advance(delta: float) -> void:
 
 func reset_kick() -> void:
 	var distance := kick_distance
+	var lateral := start_lateral_yards
 	phase = Phase.AIMING
 	aim_degrees = 0.0
 	needle = 0.0
@@ -95,9 +100,10 @@ func reset_kick() -> void:
 	flight_duration = 0.0
 	travel_yards = 0.0
 	ball_forward_yards = 0.0
-	ball_lateral_yards = 0.0
+	ball_lateral_yards = lateral
 	ball_height = 0.0
 	kick_distance = distance
+	start_lateral_yards = lateral
 
 
 func detail_line() -> String:
@@ -134,9 +140,10 @@ static func range_yards(power_value: float) -> float:
 	return KickConstants.RANGE_BASE_YARDS + KickConstants.RANGE_PER_POWER * power_value
 
 
-static func offset_yards_at_uprights(distance_yards: float, angle_degrees: float) -> float:
-	# Negative offset is left of the posts.
-	return distance_yards * tan(deg_to_rad(angle_degrees))
+static func offset_yards_at_uprights(distance_yards: float, angle_degrees: float, start_lateral: float = 0.0) -> float:
+	# Where the ball crosses the uprights' line. Negative is left of the posts.
+	# start_lateral is the spot (hash / wide). Aim is measured from straight upfield.
+	return start_lateral + distance_yards * tan(deg_to_rad(angle_degrees))
 
 
 static func flight_time_seconds(distance_yards: float) -> float:
@@ -234,7 +241,7 @@ func _lock_accuracy(value: float) -> void:
 	perfect = is_perfect(accuracy_error)
 	final_angle_degrees = final_angle(aim_degrees, accuracy_error)
 	max_range = range_yards(power)
-	offset_yards = offset_yards_at_uprights(kick_distance, final_angle_degrees)
+	offset_yards = offset_yards_at_uprights(kick_distance, final_angle_degrees, start_lateral_yards)
 	# The ball stops at its max range when that is short of the posts.
 	travel_yards = minf(max_range, kick_distance)
 	flight_duration = flight_time_seconds(kick_distance)
@@ -248,6 +255,11 @@ func _update_ball() -> void:
 	if flight_duration > 0.0 and (phase == Phase.FLIGHT or phase == Phase.RESULT):
 		t = clampf(flight_elapsed / flight_duration, 0.0, 1.0)
 	ball_forward_yards = t * travel_yards
-	ball_lateral_yards = ball_forward_yards * tan(deg_to_rad(final_angle_degrees))
+	ball_lateral_yards = start_lateral_yards + ball_forward_yards * tan(deg_to_rad(final_angle_degrees))
 	# The arc grows the ball on the way up and shrinks it on the way down.
 	ball_height = sin(t * PI)
+
+
+func sync_tee() -> void:
+	# Puts the ball on its spot. Call this after changing the distance or the spot.
+	_update_ball()

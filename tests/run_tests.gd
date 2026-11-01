@@ -32,6 +32,7 @@ func _run() -> void:
 	_check_signs()
 	_check_flight_and_reset()
 	_check_detail_text()
+	_check_run()
 
 
 func check(ok: bool, label: String) -> void:
@@ -310,6 +311,227 @@ func _check_detail_text() -> void:
 	check(sample == "P = 78, e = +3, angle = -1.1°", "detail line reads '%s'" % sample)
 	var late := KickLogic.format_detail(80.0, -15.0, 5.25)
 	check(late == "P = 80, e = -15, angle = +5.3°", "late detail line reads '%s'" % late)
+
+
+func _check_run() -> void:
+	_check_run_table()
+	_check_run_start_earn_and_cap()
+	_check_run_spots_and_attempts()
+	_check_run_score_and_endings()
+	_check_run_late_earn_and_spot_in_the_kick()
+
+
+func _check_run_table() -> void:
+	check(RunTable.count() == 20, "the run has 20 kicks")
+	var distances: Array = [35, 38, 41, 44, 48, 45, 50, 53, 56, 60, 54, 59, 62, 65, 68, 60, 65, 69, 72, 75]
+	var bosses: Array = [5, 10, 15, 20]
+	for n in range(1, 21):
+		var row: Dictionary = RunTable.row(n)
+		check(int(row["kick"]) == n, "table kick number %d" % n)
+		check(near(float(row["distance"]), float(distances[n - 1])), "kick %d distance" % n)
+		var spot := "center"
+		if n >= 4 and n <= 10:
+			spot = "hash"
+		elif n >= 11:
+			spot = "wide"
+		check(str(row["spot"]) == spot, "kick %d spot is %s" % [n, spot])
+		var boss := bosses.has(n)
+		check((str(row["conditions"]) == "boss") == boss, "kick %d boss flag" % n)
+		check(float(row["wind_min"]) <= float(row["wind_max"]), "kick %d wind range is ordered" % n)
+	check(near(float(RunTable.row(1)["wind_min"]), 0.0) and near(float(RunTable.row(1)["wind_max"]), 0.0), "kick 1 wind is 0–0")
+	check(near(float(RunTable.row(4)["wind_max"]), 5.0), "kick 4 wind max is 5")
+	check(near(float(RunTable.row(20)["wind_min"]), 25.0) and near(float(RunTable.row(20)["wind_max"]), 35.0), "kick 20 wind is 25–35")
+	check(RunTable.spot_yards("center", 1) == 0.0, "center spot is 0")
+	check(RunTable.spot_yards("hash", 1) == 3.0 and RunTable.spot_yards("hash", -1) == -3.0, "hash spot is ±3")
+	check(RunTable.spot_yards("wide", 1) == 6.0 and RunTable.spot_yards("wide", -1) == -6.0, "wide spot is ±6")
+	var y75 := KickConstants.UPRIGHT_Y_PX + 75.0 * KickConstants.PIXELS_PER_YARD
+	check(y75 == 585.0 and y75 < KickConstants.WINDOW_HEIGHT, "75 yd still fits under the posts")
+	check(KickConstants.LATE_EARN_RULE == false, "LATE_EARN_RULE starts false")
+	check(KickConstants.ATTEMPTS_START == 1 and KickConstants.ATTEMPT_CAP == 3 and KickConstants.ATTEMPT_CAP_MAX == 5, "attempt numbers are 1, cap 3, hard max 5")
+
+
+func _check_run_start_earn_and_cap() -> void:
+	var run := RunLogic.new()
+	run.new_run()
+	check(run.kick_number == 1 and near(run.distance_yards(), 35.0), "check 1 kick 1 is 35 yd")
+	check(run.attempts == 1 and run.attempt_cap == 3, "check 1 starts with 1 attempt and a cap of 3")
+	check(near(run.spot_yards, 0.0) and near(run.current_mult(), 1.0), "check 1 is centered with mult 1")
+	run.resolve_kick("GOOD", 0.0, false)
+	check(run.attempt_note == "+1 ATTEMPT" and run.attempts == 2, "check 2 a first make earns +1 ATTEMPT, attempts=%d" % run.attempts)
+	check(run.go_to_next_kick(), "check 2 space moves on")
+	check(run.kick_number == 2 and near(run.distance_yards(), 38.0), "check 2 next is kick 2 at 38 yd")
+	check(near(run.spot_yards, 0.0), "check 2 kick 2 is still centered, so the ball is farther up the field only")
+	run.resolve_kick("GOOD", 0.0, false)
+	check(run.attempts == 3 and run.attempt_note == "+1 ATTEMPT", "check 3 kick 2 fills the third attempt")
+	check(run.go_to_next_kick(), "move to kick 3")
+	run.resolve_kick("GOOD", 0.0, false)
+	check(run.attempt_note == "AT CAP" and run.attempts == 3, "check 3 kick 3 is AT CAP and stays at 3")
+	check(run.go_to_next_kick(), "move to kick 4")
+	check(run.kick_number == 4 and near(run.current_mult(), 1.75), "check 3 mult is 1.75 before kick 4, got %s" % run.current_mult())
+	check(near(absf(run.spot_yards), 3.0), "check 4 kick 4 starts ±3 yd off center, got %s" % run.spot_yards)
+
+
+func _check_run_spots_and_attempts() -> void:
+	var left := _kick4_spot(7, -1)
+	var right := _kick4_spot(7, 1)
+	check(near(left, -3.0) and near(right, 3.0), "check 4 forced sides are -3 and +3")
+	var again := _kick4_spot(3, 0)
+	var replay := _kick4_spot(3, 0)
+	check(near(again, replay) and near(absf(again), 3.0), "the same seed puts kick 4 on the same side (%s)" % again)
+	var saw_left := false
+	var saw_right := false
+	for seed_value in range(1, 40):
+		var spot := _kick4_spot(seed_value, 0)
+		if near(spot, -3.0):
+			saw_left = true
+		if near(spot, 3.0):
+			saw_right = true
+	check(saw_left and saw_right, "kick 4 can land on either hash")
+	var run := RunLogic.new()
+	run.new_run()
+	run.attempts = 3
+	run.resolve_kick("WIDE LEFT", -8.0, false)
+	check(run.attempts == 2 and run.streak == 0 and run.phase == RunLogic.Phase.PLAYING, "check 5 first miss leaves 2")
+	check(run.go_to_next_kick(), "miss still moves on")
+	run.resolve_kick("SHORT", 0.0, false)
+	check(run.attempts == 1, "check 5 second miss leaves 1")
+	check(run.go_to_next_kick(), "second miss moves on")
+	run.resolve_kick("GOOD", 0.0, false)
+	check(run.attempts == 2 and run.attempt_note == "+1 ATTEMPT", "check 5 the next make goes back to 2")
+	var over := RunLogic.new()
+	over.new_run()
+	over.resolve_kick("DOINK", 3.1, false)
+	check(over.phase == RunLogic.Phase.GAME_OVER, "check 6 missing kick 1 is game over")
+	check(over.score == 0 and over.kicks_made == 0 and near(over.longest_make, 0.0), "check 6 stats are score 0, made 0, longest 0")
+	check(over.kick_number == 1 and not over.go_to_next_kick(), "check 6 game over does not move on")
+	over.new_run()
+	check(over.kick_number == 1 and over.attempts == 1 and over.score == 0 and over.phase == RunLogic.Phase.PLAYING, "check 6 R starts kick 1 with 1 attempt")
+
+
+func _check_run_score_and_endings() -> void:
+	var line := RunLogic.format_score_line(56.0, 1.5, true, false, true)
+	check(line == "56 yd × 1.50 × 2 = 168 (+5 PERFECT)", "score line reads '%s'" % line)
+	check(RunLogic.points_for(56.0, 1.5, true, false, true) == 173, "that line is worth 168 + 5 = 173")
+	check(RunLogic.points_for(35.0, 1.25, false, false, false) == 44, "35 × 1.25 = 43.75 rounds to 44")
+	check(RunLogic.points_for(38.0, 1.25, false, false, false) == 48, "38 × 1.25 = 47.5 rounds to 48")
+	check(RunLogic.points_for(48.0, 1.0, false, true, false) == 72, "boss ×1.5: 48 × 1.5 = 72")
+	check(RunLogic.points_for(35.0, 1.0, false, false, true) == 40, "+5 PERFECT on a plain 35 is 40")
+	var middle := RunLogic.new()
+	middle.new_run()
+	middle.resolve_kick("GOOD", 0.0, true)
+	check(middle.down_the_middle, "check 7 a dead-center make is down the middle")
+	check(middle.score_line == "35 yd × 1.00 × 2 = 70 (+5 PERFECT)", "check 7 math reads '%s'" % middle.score_line)
+	check(middle.score == 75, "check 7 score is 75, got %d" % middle.score)
+	check(middle.attempt_note == "+1 ATTEMPT", "check 7 also earns an attempt")
+	var edge := RunLogic.new()
+	edge.new_run()
+	edge.resolve_kick("GOOD", 1.0, false)
+	check(edge.down_the_middle and edge.score == 70, "offset of exactly 1 yd is still down the middle")
+	edge = RunLogic.new()
+	edge.new_run()
+	edge.resolve_kick("GOOD", 1.01, false)
+	check(not edge.down_the_middle and edge.score == 35, "offset just past 1 yd is not doubled, score %d" % edge.score)
+	var boss := _fresh(5, 1)
+	boss.streak = 0
+	boss.resolve_kick("GOOD", 4.0, false)
+	check(boss.is_boss(), "kick 5 is a boss kick")
+	check(boss.score == 72 and boss.score_line == "48 yd × 1.00 × 1.5 = 72", "boss math reads '%s'" % boss.score_line)
+	var stacked := RunLogic.points_for(75.0, 1.0, true, true, false)
+	check(stacked == 225, "middle and boss stack: 75 × 2 × 1.5 = 225, got %d" % stacked)
+	var won := _fresh(20, 1)
+	won.resolve_kick("GOOD", 0.4, false)
+	check(won.phase == RunLogic.Phase.WIN, "making kick 20 is a win")
+	check(won.kicks_made == 1 and near(won.longest_make, 75.0), "win stats count that make, longest %s" % won.longest_make)
+	check(won.attempts == 2, "the winning make still earns an attempt")
+	check(not won.go_to_next_kick() and won.kick_number == 20, "a win does not invent kick 21")
+	var last_miss := _fresh(20, 2)
+	last_miss.resolve_kick("WIDE RIGHT", 6.0, false)
+	check(last_miss.phase == RunLogic.Phase.PLAYING and last_miss.attempts == 1, "a miss on kick 20 with an attempt left is not game over")
+	check(not last_miss.go_to_next_kick() and last_miss.accepts_restart(), "there is no kick 21, so R can start over")
+	var last_out := _fresh(20, 1)
+	last_out.resolve_kick("SHORT", 0.0, false)
+	check(last_out.phase == RunLogic.Phase.GAME_OVER, "running out on kick 20 is game over, not a next kick")
+	var streak_run := RunLogic.new()
+	streak_run.new_run()
+	streak_run.resolve_kick("GOOD", 2.0, false)
+	check(streak_run.streak == 1, "a make builds the streak")
+	check(streak_run.go_to_next_kick(), "advance after the make")
+	streak_run.resolve_kick("WIDE RIGHT", 4.0, false)
+	check(streak_run.streak == 0 and streak_run.score == 35, "a miss resets the streak and adds no points")
+
+
+func _check_run_late_earn_and_spot_in_the_kick() -> void:
+	var plain := _fresh(11, 2)
+	plain.late_earn_rule = true
+	plain.resolve_kick("GOOD", 4.0, false)
+	check(plain.attempts == 2 and plain.attempt_note == "", "check 8 a normal good on kick 11 stays at 2 attempts")
+	var middle := _fresh(11, 2)
+	middle.late_earn_rule = true
+	middle.resolve_kick("GOOD", 0.2, false)
+	check(middle.down_the_middle and middle.attempts == 3 and middle.attempt_note == "+1 ATTEMPT", "check 8 down the middle on kick 11 goes to 3")
+	var perfect := _fresh(11, 2)
+	perfect.late_earn_rule = true
+	perfect.resolve_kick("GOOD", 4.0, true)
+	check(perfect.attempts == 3, "check 8 a perfect on kick 11 also earns")
+	var earlier := _fresh(10, 2)
+	earlier.late_earn_rule = true
+	earlier.resolve_kick("GOOD", 4.0, false)
+	check(earlier.attempts == 3, "kick 10 still earns on a normal good when the late rule is on")
+	var retake := _fresh(1, 2)
+	retake.is_first_ball = false
+	retake.resolve_kick("GOOD", 0.0, true)
+	check(retake.attempts == 2 and retake.score == 75 and retake.streak == 1, "a make that is not the first ball scores, but earns no attempt")
+	var hash_kick := KickLogic.new()
+	hash_kick.kick_distance = 44.0
+	hash_kick.start_lateral_yards = 3.0
+	hash_kick.press_space()
+	hash_kick.advance(0.8)
+	hash_kick.press_space()
+	hash_kick.advance(80.0 / 120.0)
+	hash_kick.press_space()
+	hash_kick.advance(hash_kick.flight_duration * 0.5)
+	check(near(hash_kick.offset_yards, 3.0), "aiming straight from +3 yd still arrives 3 yd off, got %s" % hash_kick.offset_yards)
+	check(hash_kick.result_text == "DOINK", "that arrival is a DOINK under the written band, got %s" % hash_kick.result_text)
+	check(hash_kick.ball_forward_yards > 1.0 and near(hash_kick.ball_lateral_yards, 3.0), "the sideways spot stays with the ball in flight")
+	var wired := RunLogic.new()
+	wired.new_run()
+	var center := _kick_power_accuracy(80.0, 0.0)
+	wired.resolve_kick(center.result_text, center.offset_yards, center.perfect)
+	check(center.result_text == "GOOD" and center.perfect and wired.down_the_middle, "a real centered kick is a perfect make down the middle")
+	check(wired.score == 75 and wired.attempts == 2, "the run scores that kick and earns the attempt")
+
+
+func _fresh(kick_number: int, attempt_count: int) -> RunLogic:
+	var run := RunLogic.new()
+	run.new_run()
+	run.phase = RunLogic.Phase.PLAYING
+	run.kick_number = kick_number
+	run.attempts = attempt_count
+	run.attempt_cap = KickConstants.ATTEMPT_CAP
+	run.is_first_ball = true
+	run.kick_resolved = false
+	run.streak = 0
+	run.score = 0
+	run.kicks_made = 0
+	run.longest_make = 0.0
+	run.attempt_note = ""
+	run.score_line = ""
+	run.down_the_middle = false
+	return run
+
+
+func _kick4_spot(seed_value: int, side: int) -> float:
+	var run := RunLogic.new()
+	run.set_seed(seed_value)
+	run.new_run()
+	if side != 0:
+		run.set_next_side(side)
+	var step := 0
+	while step < 3:
+		run.resolve_kick("GOOD", 0.0, false)
+		run.go_to_next_kick()
+		step += 1
+	return run.spot_yards
 
 
 func _kick_power_accuracy(power_value: float, needle_at_lock: float) -> KickLogic:

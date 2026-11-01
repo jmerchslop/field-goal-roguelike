@@ -53,6 +53,30 @@ const RANGE_PER_POWER := 0.67
 const FLIGHT_TIME_BASE_SEC := 1.2
 const FLIGHT_TIME_PER_YARD := 0.02
 
+# --- The run --------------------------------------------------------------------
+# You start with 1 attempt. The cap starts at 3 and is never allowed past 5.
+# Nothing in this build changes the cap. It stays at 3.
+const ATTEMPTS_START := 1
+const ATTEMPT_CAP := 3
+const ATTEMPT_CAP_MAX := 5
+
+# Hash spots are 3 yards off center. Wide spots are 6 yards off center.
+const HASH_OFFSET_YARDS := 3.0
+const WIDE_OFFSET_YARDS := 6.0
+
+# Score: distance × (1 + 0.25 × streak before this kick).
+# Then ×2 inside 1 yard of the middle, ×1.5 on a boss kick, +5 if perfect.
+const STREAK_MULT_STEP := 0.25
+const MIDDLE_YARDS := 1.0
+const MIDDLE_MULTIPLIER := 2.0
+const BOSS_MULTIPLIER := 1.5
+const PERFECT_BONUS := 5
+
+# From kick 11 on, a first-try make earns an attempt only if this is true
+# and the kick was perfect or down the middle. It starts false.
+const LATE_EARN_RULE := false
+const LATE_EARN_FROM_KICK := 11
+
 # --- Drawing sizes -------------------------------------------------------------
 const BALL_RADIUS_PX := 11.0
 const SHADOW_RADIUS_PX := 13.0
@@ -73,10 +97,12 @@ const METER_BAR_RIGHT := 1212.0
 const METER_BAR_TOP := 92.0
 const METER_BAR_BOTTOM := 640.0
 
-const RESULT_LEFT := 180.0
-const RESULT_TOP := 430.0
-const RESULT_WIDTH := 760.0
-const RESULT_HEIGHT := 210.0
+const RESULT_LEFT := 160.0
+const RESULT_TOP := 360.0
+const RESULT_WIDTH := 800.0
+const RESULT_HEIGHT := 300.0
+const ATTEMPT_PIP_RADIUS := 7.0
+const ATTEMPT_PIP_GAP := 22.0
 
 # --- Colors --------------------------------------------------------------------
 const COLOR_FIELD := Color(0.18, 0.55, 0.24)
@@ -100,6 +126,8 @@ const COLOR_GOOD := Color(0.62, 1.0, 0.55)
 const COLOR_MISS := Color(1.0, 0.58, 0.42)
 const COLOR_PERFECT_TEXT := Color(1.0, 0.92, 0.38)
 const COLOR_RESULT_SCRIM := Color(0, 0, 0, 0.6)
+const COLOR_BOSS := Color(0.95, 0.22, 0.16)
+const COLOR_ATTEMPT := Color(1.0, 0.86, 0.35)
 
 
 static func screen_pos(kick_distance: float, forward_yards: float, lateral_yards: float) -> Vector2:
