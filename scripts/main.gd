@@ -17,6 +17,13 @@ var _bank_time := 0.0
 var selecting := true
 var highlight := -1
 var meter_time := 0.0
+var _pose := "idle"
+var _run_time := 0.0
+var _swing_time := 0.0
+var _swing_from := 0.0
+var _early_swing := false
+var _swinging := false
+var _sway_time := 0.0
 
 var _world: Node3D
 var _camera: Camera3D
@@ -80,7 +87,12 @@ func _copy_run_onto_kick() -> void:
 	logic.mud_power = run.has_mud()
 	logic.thin_air_weather = run.weather == RunLogic.THIN_AIR
 	logic.post_half_gap = run.post_half_gap()
+	logic.heavy_ball = run.curse == RunLogic.CURSE_HEAVY
+	logic.howling_wind = run.curse == RunLogic.CURSE_HOWLING
+	logic.shanky = run.curse == RunLogic.CURSE_SHANKY
+	logic.shaky = run.curse == RunLogic.CURSE_SHAKY
 	meter_time = 0.0
+	_reset_kick_pose()
 
 
 func settle_kick() -> void:
@@ -243,7 +255,7 @@ func play_locked_kick(power_value: float) -> void:
 	logic.press_space()
 	logic.advance(power_value / KickConstants.ACCURACY_FALL_PER_SEC)
 	logic.press_space()
-	logic.advance(KickLogic.CONTACT_SEC + logic.flight_duration)
+	logic.advance(logic.flight_duration)
 
 
 func script_good_kick() -> void:
@@ -264,6 +276,9 @@ func _process(delta: float) -> void:
 		return
 	if logic.phase != KickLogic.Phase.AIMING:
 		meter_time += delta
+	_sway_time += delta
+	logic.sway(_sway_time)
+	_step_kick_pose(delta)
 	if logic.bank_shot and logic.phase == KickLogic.Phase.RESULT and _bank_time < 0.3:
 		_bank_time += delta
 	if run.phase == RunLogic.Phase.PLAYING and logic.phase != KickLogic.Phase.RESULT:
@@ -320,6 +335,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if run.awaiting_offer and key.keycode == KEY_F:
 		run.reroll_offer()
+		refresh_view()
+		return
+	if key.shift_pressed and key.keycode == KEY_C and not run.awaiting_mulligan:
+		run.force_cursed_offer()
 		refresh_view()
 		return
 	if key.shift_pressed and run.phase == RunLogic.Phase.PLAYING and not run.awaiting_offer and not run.awaiting_mulligan:
@@ -579,6 +598,109 @@ func _place_world() -> void:
 	_place_camera()
 
 
+func _reset_kick_pose() -> void:
+	_pose = "idle"
+	_run_time = 0.0
+	_swing_time = 0.0
+	_swing_from = KickLogic.PLANT_Z + KickLogic.START_BEHIND
+	_early_swing = false
+	_swinging = false
+
+
+func _step_kick_pose(delta: float) -> void:
+	var phase := logic.phase
+	if phase == KickLogic.Phase.AIMING or phase == KickLogic.Phase.POWER:
+		_pose = "idle"
+		_run_time = 0.0
+		_swinging = false
+		_swing_time = 0.0
+		return
+	if phase == KickLogic.Phase.ACCURACY:
+		_swinging = false
+		_swing_time = 0.0
+		if logic.needle <= KickLogic.APPROACH_AT:
+			_pose = "run"
+			_run_time += delta
+		else:
+			_pose = "idle"
+			_run_time = 0.0
+		return
+	if phase != KickLogic.Phase.FLIGHT and phase != KickLogic.Phase.RESULT:
+		return
+	if not _swinging:
+		_swinging = true
+		_swing_time = 0.0
+		_swing_from = _kicker_behind()
+		# Still above the run threshold, or not yet waiting at the gather: squeeze the rest.
+		var gathered := _pose == "run" and _run_time >= KickLogic.RUN_TO_GATHER_SEC - 0.001
+		_early_swing = not gathered
+	_swing_time += delta
+	if _early_swing:
+		if _swing_time < KickLogic.EARLY_RUN_SEC:
+			_pose = "run"
+		elif _swing_time < KickLogic.EARLY_RUSH_SEC:
+			_pose = "plant"
+		else:
+			_pose = "follow"
+	elif _swing_time < KickLogic.PLANT_BEAT:
+		_pose = "plant"
+	else:
+		_pose = "follow"
+
+
+func pose_for_shot(mode: String) -> void:
+	_reset_kick_pose()
+	if mode == "idle" or mode == "power":
+		_pose = "idle"
+		logic.phase = KickLogic.Phase.AIMING if mode == "idle" else KickLogic.Phase.POWER
+		logic.needle = 55.0
+	elif mode == "high":
+		_pose = "idle"
+		logic.phase = KickLogic.Phase.ACCURACY
+		logic.power = 80.0
+		logic.needle = 70.0
+	elif mode == "run":
+		_pose = "run"
+		_run_time = 0.18
+		logic.phase = KickLogic.Phase.ACCURACY
+		logic.power = 80.0
+		logic.needle = 30.0
+	elif mode == "plant":
+		_pose = "plant"
+		_swinging = true
+		_run_time = KickLogic.RUN_TO_GATHER_SEC
+		_swing_time = KickLogic.PLANT_BEAT
+		_early_swing = false
+		logic.phase = KickLogic.Phase.FLIGHT
+		logic.flight_elapsed = 0.04
+		logic.flight_duration = 2.0
+		logic.travel_yards = 50.0
+		logic.reached_uprights = true
+	elif mode == "follow":
+		_pose = "follow"
+		_swinging = true
+		_run_time = KickLogic.RUN_TO_GATHER_SEC
+		_swing_time = 0.2
+		_early_swing = false
+		logic.phase = KickLogic.Phase.FLIGHT
+		logic.flight_elapsed = 0.16
+		logic.flight_duration = 2.0
+		logic.travel_yards = 50.0
+		logic.reached_uprights = true
+	elif mode == "early":
+		_pose = "run"
+		_early_swing = true
+		_swinging = true
+		_swing_from = KickLogic.PLANT_Z + KickLogic.START_BEHIND
+		_swing_time = 0.1
+		logic.phase = KickLogic.Phase.FLIGHT
+		logic.flight_elapsed = 0.1
+		logic.flight_duration = 2.0
+		logic.travel_yards = 50.0
+		logic.reached_uprights = true
+	refresh_view()
+
+
 func _kicker_art_path() -> String:
 	var who := ""
 	if run.kicker_id == Kickers.WALK_ON:
@@ -587,16 +709,17 @@ func _kicker_art_path() -> String:
 		who = "big_bruce"
 	if who == "":
 		return ""
-	var pose := "idle"
-	if logic.phase == KickLogic.Phase.WINDUP:
-		pose = KickLogic.kick_pose(logic.windup_elapsed)
-	elif logic.phase == KickLogic.Phase.FLIGHT or logic.phase == KickLogic.Phase.RESULT:
-		pose = "follow"
-	if pose == "idle":
-		return "res://art/kickers/%s_back.png" % who
-	if pose == "follow":
+	if _pose == "run":
+		return "res://art/kickers/%s_run.png" % who
+	if _pose == "plant":
+		return "res://art/kickers/%s_plant.png" % who
+	if _pose == "follow":
 		return "res://art/kickers/%s_follow_through.png" % who
-	return "res://art/kickers/%s_%s.png" % [who, pose]
+	return "res://art/kickers/%s_back.png" % who
+
+
+func _kicker_behind() -> float:
+	return KickLogic.approach_z(_pose, _run_time, _swing_time, _early_swing, _swing_from)
 
 
 func _place_kicker(tee: Vector3) -> void:
@@ -610,8 +733,10 @@ func _place_kicker(tee: Vector3) -> void:
 		_fit_sprite(_kicker_sprite, path)
 		_kicker_sprite.set_meta("art", path)
 	var height := _kicker_sprite.pixel_size * _kicker_sprite.region_rect.size.y
-	# Left of the tee, a step closer to the camera, facing the posts.
-	_kicker_sprite.position = tee + Vector3(-1.45, height * 0.5, 1.15)
+	var bob := 0.0
+	if _pose == "run":
+		bob = sin((_run_time + _swing_time) * 16.0) * 0.05
+	_kicker_sprite.position = tee + Vector3(-1.45, height * 0.5 + bob, _kicker_behind())
 
 
 func _tee_position() -> Vector3:

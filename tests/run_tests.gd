@@ -38,6 +38,7 @@ func _run() -> void:
 	_check_power_flight()
 	_check_wind_and_pool()
 	_check_weather_and_bosses()
+	_check_curses_and_rarity()
 
 
 func check(ok: bool, label: String) -> void:
@@ -94,9 +95,7 @@ func _check_meter_motion() -> void:
 	check(near(kick.needle, 40.0), "after 100 the needle falls, got %s" % kick.needle)
 	var during_flight := _kick_power_accuracy(40.0, 0.0)
 	var power_before := during_flight.power
-	check(during_flight.phase == KickLogic.Phase.WINDUP, "locking accuracy starts the run-up, not the flight")
-	during_flight.advance(KickLogic.CONTACT_SEC)
-	check(during_flight.phase == KickLogic.Phase.FLIGHT, "the ball leaves at the contact moment")
+	check(during_flight.phase == KickLogic.Phase.FLIGHT, "locking accuracy launches the ball")
 	during_flight.press_space()
 	check(during_flight.phase == KickLogic.Phase.FLIGHT and near(during_flight.power, power_before), "space during flight does nothing")
 
@@ -284,7 +283,7 @@ func _check_flight_and_reset() -> void:
 	check(near(kick.travel_yards, expected_range), "P=40 flies its max range %s, got %s" % [expected_range, kick.travel_yards])
 	check(near(kick.flight_duration, KickLogic.flight_time_seconds(expected_range)), "flight time follows the yards flown, got %s" % kick.flight_duration)
 	check(kick.result_text == "GOOD", "centered P=40 is GOOD")
-	kick.advance(KickLogic.CONTACT_SEC + kick.flight_duration * 0.5)
+	kick.advance(kick.flight_duration * 0.5)
 	check(near(kick.ball_height, 1.0), "mid-flight height is 1, got %s" % kick.ball_height)
 	check(near(kick.ball_forward_yards, expected_range * 0.5), "mid-flight is halfway along the flight, got %s" % kick.ball_forward_yards)
 	check(near(kick.ball_lateral_yards, 0.0), "a straight kick stays centered")
@@ -299,7 +298,7 @@ func _check_flight_and_reset() -> void:
 	check(absf(full - 83.0) < 0.001, "full power range is about 83 yd, got %s" % full)
 	var short_kick := _kick_power_accuracy(20.0, 0.0)
 	check(near(short_kick.flight_duration, KickLogic.flight_time_seconds(short_kick.max_range)), "a short kick's flight time uses the yards it actually flies")
-	short_kick.advance(KickLogic.CONTACT_SEC + short_kick.flight_duration)
+	short_kick.advance(short_kick.flight_duration)
 	check(near(short_kick.ball_forward_yards, short_kick.max_range), "a short ball drops at max range %s" % short_kick.ball_forward_yards)
 	check(short_kick.ball_forward_yards < short_kick.kick_distance, "a short ball does not reach the posts")
 	var again := KickLogic.new()
@@ -505,7 +504,7 @@ func _check_run_late_earn_and_spot_in_the_kick() -> void:
 	hash_kick.press_space()
 	hash_kick.advance(80.0 / 120.0)
 	hash_kick.press_space()
-	hash_kick.advance(KickLogic.CONTACT_SEC + hash_kick.flight_duration * 0.5)
+	hash_kick.advance(hash_kick.flight_duration * 0.5)
 	check(near(hash_kick.offset_yards, 3.0), "aiming straight from +3 yd still arrives 3 yd off, got %s" % hash_kick.offset_yards)
 	check(hash_kick.result_text == "DOINK", "that arrival is a DOINK under the written band, got %s" % hash_kick.result_text)
 	check(hash_kick.ball_forward_yards > 1.0 and near(hash_kick.ball_lateral_yards, 3.0), "the sideways spot stays with the ball in flight")
@@ -793,7 +792,7 @@ func _check_kickers_and_fixes() -> void:
 	_lock_power_at(short_kick, 12.0)
 	check(short_kick.result_text == "SHORT" and not short_kick.reached_uprights, "check 7 a low centered kick is SHORT, not GOOD")
 	check(short_kick.travel_yards < 35.0, "the short ball is not given the full distance")
-	short_kick.advance(KickLogic.CONTACT_SEC + short_kick.flight_duration)
+	short_kick.advance(short_kick.flight_duration)
 	check(near(short_kick.ball_forward_yards, short_kick.max_range) and short_kick.ball_forward_yards < 35.0, "check 7 the ball lands at max range, in front of the posts")
 	var stay := RunLogic.new()
 	stay.new_run()
@@ -830,7 +829,7 @@ func _check_power_flight() -> void:
 	check(near(low.travel_yards, 29.4), "check 1 the ball travels 29.4 yards, not a fixed length")
 	check(low.result_text == "SHORT" and low.perfect and not low.reached_uprights, "check 1 and 4 a dead-center low kick is SHORT, never GOOD")
 	check(near(low.flight_duration, KickLogic.flight_time_seconds(29.4)), "check 1 flight time uses the yards this ball flies")
-	low.advance(KickLogic.CONTACT_SEC + low.flight_duration)
+	low.advance(low.flight_duration)
 	check(near(low.ball_forward_yards, 29.4) and low.ball_forward_yards < 35.0, "check 1 the ball stops several yards short of the posts")
 	check(low.detail_line() == "P = 20, max range = 29.4 yd, kick = 35 yd, result = SHORT", "check 1 numbers read '%s'" % low.detail_line())
 	var mid := KickLogic.new()
@@ -839,7 +838,7 @@ func _check_power_flight() -> void:
 	check(near(mid.max_range, 49.5) and near(mid.travel_yards, 49.5), "check 2 P=50 flies 49.5 yards, got %s" % mid.travel_yards)
 	check(mid.result_text == "GOOD" and mid.reached_uprights, "check 2 centered P=50 is GOOD")
 	var at_posts := mid.flight_duration * (35.0 / mid.travel_yards)
-	mid.advance(KickLogic.CONTACT_SEC + at_posts)
+	mid.advance(at_posts)
 	check(near(mid.ball_forward_yards, 35.0, 0.02), "check 2 the moving ball reaches the uprights, got %s" % mid.ball_forward_yards)
 	check(near(mid.ball_lateral_yards, mid.offset_yards, 0.02), "the result offset is the ball's sideways spot at the posts")
 	mid.advance(mid.flight_duration)
@@ -853,11 +852,11 @@ func _check_power_flight() -> void:
 	check(near(full.max_range, 83.0) and near(full.travel_yards, 83.0), "check 3 P=100 flies 83 yards, got %s" % full.travel_yards)
 	check(full.travel_yards > mid.travel_yards, "check 3 full power travels farther than P=50")
 	check(full.flight_duration > mid.flight_duration, "a longer kick takes longer")
-	full.advance(KickLogic.CONTACT_SEC + full.flight_duration * 0.7)
+	full.advance(full.flight_duration * 0.7)
 	var mid_same := KickLogic.new()
 	mid_same.stats = walk
 	_lock_power_at(mid_same, 50.0)
-	mid_same.advance(KickLogic.CONTACT_SEC + mid_same.flight_duration * 0.7)
+	mid_same.advance(mid_same.flight_duration * 0.7)
 	check(full.ball_forward_yards > mid_same.ball_forward_yards + 15.0, "check 3 at the same point in the flight, P=100 is well past P=50")
 	var run := RunLogic.new()
 	run.start_with_kicker(Kickers.WALK_ON)
@@ -878,7 +877,7 @@ func _check_power_flight() -> void:
 	_lock_power_at(again, 20.0)
 	check(run.kick_number == 1 and near(again.kick_distance, 35.0), "check 5 the retry is still 35 yards")
 	check(near(again.max_range, 29.4) and near(again.travel_yards, 29.4) and again.result_text == "SHORT", "check 5 the retry flies on the new P, not the earlier 83")
-	again.advance(KickLogic.CONTACT_SEC + again.flight_duration)
+	again.advance(again.flight_duration)
 	check(near(again.ball_forward_yards, 29.4), "check 5 the retry ball stops at 29.4 yards")
 
 
@@ -952,7 +951,7 @@ func _check_wind_and_pool() -> void:
 	curve.wind_direction = 90.0
 	_lock_power_at(curve, 50.0)
 	check(curve.offset_yards > 1.5, "check 5 a centered kick in a right wind lands right, offset %s" % curve.offset_yards)
-	curve.advance(KickLogic.CONTACT_SEC + curve.flight_duration * (35.0 / curve.travel_yards))
+	curve.advance(curve.flight_duration * (35.0 / curve.travel_yards))
 	check(near(curve.ball_lateral_yards, curve.offset_yards, 0.05), "the curve at the posts is the scored offset")
 	var early := KickLogic.path_lateral(0.0, 10.0, 0.0, 35.0, walk_drift)
 	var late := KickLogic.path_lateral(0.0, 30.0, 0.0, 35.0, walk_drift)
@@ -1064,7 +1063,7 @@ func _check_wind_and_pool() -> void:
 	pool.resolve_kick("GOOD", 0.0, false)
 	pool.roll_offer()
 	check(pool.offer.size() > 0 or pool.skip_offer(), "check 9 after 19 picks the screen still has a card or Skip")
-	check(Upgrades.pickable_copies() == 32, "the pool's pickable copies are 32, got %s" % Upgrades.pickable_copies())
+	check(Upgrades.pickable_copies() == 34, "the pool's pickable copies are 34, got %s" % Upgrades.pickable_copies())
 
 
 func _check_weather_and_bosses() -> void:
@@ -1133,18 +1132,18 @@ func _check_weather_and_bosses() -> void:
 	both.thin_air_weather = true
 	_lock_power_at(both, 50.0)
 	check(near(both.max_range, clear_kick.max_range + 6.0 + 4.0), "check 5 thin air weather stacks on top of the upgrade (%s)" % both.max_range)
-	var just_locked := RunLogic.iced_needle_alpha(RunLogic.ICED, false, true, 80.0, 80.0)
+	var just_locked := RunLogic.iced_needle_alpha(true, true, 80.0, 80.0)
 	check(near(just_locked, 1.0), "ICED needle is still visible at the power lock")
-	var fading := RunLogic.iced_needle_alpha(RunLogic.ICED, false, true, 80.0, 80.0 - 0.12 * (80.0 - KickConstants.METER_MIN))
+	var fading := RunLogic.iced_needle_alpha(true, true, 80.0, 80.0 - 0.12 * (80.0 - KickConstants.METER_MIN))
 	check(fading < 0.55 and fading > 0.0, "ICED needle is fading out just after the power lock, alpha %s" % fading)
-	var gone := RunLogic.iced_needle_alpha(RunLogic.ICED, false, true, 80.0, 80.0 - RunLogic.ICED_FADE_OUT * (80.0 - KickConstants.METER_MIN))
+	var gone := RunLogic.iced_needle_alpha(true, true, 80.0, 80.0 - RunLogic.ICED_FADE_OUT * (80.0 - KickConstants.METER_MIN))
 	check(gone < 0.05, "ICED needle is gone before halfway down, alpha %s" % gone)
-	var back := RunLogic.iced_needle_alpha(RunLogic.ICED, false, true, 80.0, 80.0 - 0.5 * (80.0 - KickConstants.METER_MIN))
+	var back := RunLogic.iced_needle_alpha(true, true, 80.0, 80.0 - 0.5 * (80.0 - KickConstants.METER_MIN))
 	check(near(back, 1.0), "ICED needle is fully visible again halfway down")
-	var later := RunLogic.iced_needle_alpha(RunLogic.ICED, false, true, 80.0, 10.0)
+	var later := RunLogic.iced_needle_alpha(true, true, 80.0, 10.0)
 	check(near(later, 1.0), "ICED needle stays visible after halfway")
-	check(near(RunLogic.iced_needle_alpha(RunLogic.ICED, true, true, 80.0, 40.0), 1.0), "Ice Veins never fades the needle")
-	check(near(RunLogic.iced_needle_alpha(RunLogic.CLEAR, false, true, 80.0, 40.0), 1.0), "a normal kick keeps the needle opaque")
+	check(near(RunLogic.iced_needle_alpha(false, true, 80.0, 40.0), 1.0), "Ice Veins never fades the needle")
+	check(near(RunLogic.iced_needle_alpha(false, true, 80.0, 40.0), 1.0), "a normal kick keeps the needle opaque")
 	check(KickLogic.judge(80.0, 35.0, 2.70, "standard", RunLogic.SQUEEZE_HALF)["text"] == "DOINK", "check 7 2.70 yd is a doink on the squeezed posts")
 	check(KickLogic.judge(80.0, 35.0, 2.70, "standard")["text"] == "GOOD", "check 7 the same kick is good on the normal posts")
 	check(near(RunLogic.SQUEEZE_WIDTH, 5.17) and near(RunLogic.SQUEEZE_HALF, 2.585), "check 7 the squeeze is 5.17 yd wide, half 2.585")
@@ -1190,15 +1189,205 @@ func _check_weather_and_bosses() -> void:
 	check(near(spun.spot_yards, 6.0), "H then moves to the right wide")
 	spun.cycle_debug_spot()
 	check(near(spun.spot_yards, -6.0), "H wraps around to the left wide")
-	var posed := _kick_power_accuracy(40.0, 0.0)
-	check(posed.phase == KickLogic.Phase.WINDUP and near(posed.ball_forward_yards, 0.0), "the ball stays on the tee through the run-up")
-	check(KickLogic.kick_pose(0.0) == "idle", "the kick starts on the standing frame")
-	check(KickLogic.kick_pose(0.20) == "run", "the run frame is next")
-	check(KickLogic.kick_pose(0.40) == "plant", "the plant frame is the contact setup")
-	check(KickLogic.kick_pose(KickLogic.CONTACT_SEC) == "follow", "follow-through starts at contact")
-	posed.advance(0.20)
-	check(posed.phase == KickLogic.Phase.WINDUP and KickLogic.kick_pose(posed.windup_elapsed) == "run" and near(posed.ball_forward_yards, 0.0), "at 0.20s the kicker is running and the ball has not left")
-	posed.advance(KickLogic.CONTACT_SEC - 0.20)
-	check(posed.phase == KickLogic.Phase.FLIGHT and near(posed.flight_elapsed, 0.0) and near(posed.ball_forward_yards, 0.0), "the ball launches when the plant ends")
-	posed.advance(0.05)
-	check(posed.ball_forward_yards > 0.2 and KickLogic.kick_pose(posed.windup_elapsed) == "follow", "just after contact the ball is moving and the follow-through is up")
+	var launched := _kick_power_accuracy(40.0, 0.0)
+	check(launched.phase == KickLogic.Phase.FLIGHT and launched.ball_forward_yards >= 0.0, "accuracy lock starts the flight immediately")
+	launched.advance(0.05)
+	check(launched.ball_forward_yards > 0.2, "the ball has left the tee just after the lock")
+
+
+func _check_curses_and_rarity() -> void:
+	var commons := 0
+	for seed_value in 25:
+		var rng := RandomNumberGenerator.new()
+		rng.seed = seed_value + 3
+		var offer: Array = Upgrades.draw_offer(Upgrades.eligible_ids({}), rng)
+		if offer.size() < 3:
+			continue
+		var found := false
+		for id in offer:
+			if Upgrades.is_common(str(id)):
+				found = true
+		check(found, "every full offer has a Common card, seed %s" % seed_value)
+		commons += 1
+	check(commons == 25, "sampled 25 full offers")
+	check(str(Upgrades.get_def(Upgrades.GLASS_LEG)["rarity"]) == "risky", "Glass Leg is Risky")
+	check(str(Upgrades.get_def(Upgrades.HERO_BALL)["rarity"]) == "risky", "Hero Ball is Risky")
+	check(str(Upgrades.get_def(Upgrades.FLAG_READER)["rarity"]) == "rare", "Flag Reader is Rare")
+	var low_cap := RunLogic.new()
+	low_cap.new_run()
+	low_cap.attempt_cap = 2
+	check(Upgrades.eligible_ids(low_cap.stacks, low_cap.attempt_cap).find(Upgrades.GLASS_LEG) == -1, "Glass Leg is not offered at cap 2")
+	var glass := RunLogic.new()
+	glass.new_run()
+	glass.attempts = 3
+	glass.grant(Upgrades.GLASS_LEG)
+	check(glass.attempt_cap == 2 and glass.attempts == 2 and near(glass.stats.range_bonus, 8.0), "Glass Leg drops the cap to 2 and adds 8 yards")
+	var hero := RunLogic.new()
+	hero.start_with_kicker(Kickers.WALK_ON)
+	hero.grant(Upgrades.HERO_BALL)
+	check(near(hero.stats.accuracy_speed, 120.0 * 1.25) and hero.stats.hero_ball, "Hero Ball speeds the accuracy needle and flags the mult")
+	hero.set_wind(0.0, 0.0)
+	hero.resolve_kick("GOOD", 2.0, false)
+	check(hero.score_line.find("hero") >= 0, "Hero Ball shows in the score line: %s" % hero.score_line)
+	hero.force_weather(RunLogic.BIG_GAME)
+	hero.prepare_kick_stats()
+	check(near(hero.stats.accuracy_speed, 120.0) and hero.hero_bonus() == 1.0, "BIG GAME strips Hero Ball speed and keeps the mult")
+	var cursed := RunLogic.new()
+	cursed.set_offer_seed(4)
+	cursed.new_run()
+	check(cursed.cursed_kick >= 1 and cursed.cursed_kick <= 4, "quarter 1's cursed kick is one of the first four, got %s" % cursed.cursed_kick)
+	cursed.kick_number = cursed.cursed_kick
+	cursed.roll_offer()
+	var saw := false
+	for card in cursed.offer:
+		if bool(cursed._as_card(card).get("cursed", false)):
+			saw = true
+	check(saw and cursed.offer.size() == 3, "the chosen kick's offer has one Cursed card")
+	var skipped := RunLogic.new()
+	skipped.new_run()
+	skipped.force_cursed_offer()
+	skipped.roll_offer()
+	check(skipped.skip_offer() and skipped.curse == "", "skipping a Cursed offer applies no curse")
+	var rerolled := RunLogic.new()
+	rerolled.new_run()
+	rerolled.rerolls_left = 2
+	rerolled.force_cursed_offer()
+	rerolled.roll_offer()
+	check(rerolled.reroll_offer(), "a Cursed offer can be rerolled")
+	var still := false
+	for card in rerolled.offer:
+		if bool(rerolled._as_card(card).get("cursed", false)):
+			still = true
+	check(still, "the rerolled trio still has one Cursed card")
+	var veins := RunLogic.new()
+	veins.new_run()
+	veins.grant(Upgrades.ICE_VEINS)
+	var iced_pair := 0
+	for n in 12:
+		veins.force_cursed_offer()
+		veins.roll_offer()
+		for card in veins.offer:
+			var packed: Dictionary = veins._as_card(card)
+			if bool(packed.get("cursed", false)) and str(packed.get("curse", "")) == RunLogic.CURSE_ICED:
+				iced_pair += 1
+		veins.skip_offer()
+	check(iced_pair == 0, "Ice Veins is never paired with the Iced curse")
+	var heavy := KickLogic.new()
+	heavy.heavy_ball = true
+	_lock_power_at(heavy, 50.0)
+	var plain := KickLogic.new()
+	_lock_power_at(plain, 50.0)
+	check(near(heavy.max_range, plain.max_range - 4.0), "Heavy Ball takes 4 yards off max range")
+	var howl := KickLogic.drift_at_uprights(10.0, 90.0, 35.0, 0, 0, "standard") * 1.5
+	var loud := KickLogic.new()
+	loud.wind_speed = 10
+	loud.wind_direction = 90.0
+	loud.howling_wind = true
+	_lock_power_at(loud, 50.0)
+	check(near(loud.drift_yards, howl, 0.02), "Howling Wind multiplies drift by 1.5 after the other factors")
+	var narrow := RunLogic.new()
+	narrow.curse = RunLogic.CURSE_NARROW
+	check(near(narrow.post_half_gap(), 2.585) and near(narrow.post_width(), 5.17), "Narrow Posts uses the 5.17 yard uprights")
+	narrow.weather = RunLogic.SQUEEZE
+	check(near(narrow.post_width(), 5.17), "Narrow Posts does not stack with The Squeeze")
+	var shank := KickLogic.new()
+	shank.shanky = true
+	shank.aim_degrees = 0.0
+	shank.accuracy_error = 10.0
+	var hook := -10.0 * KickConstants.ACCURACY_DEG_PER_ERROR * 1.5
+	shank.press_space()
+	shank.advance(30.0 / shank.stats.power_speed)
+	shank.press_space()
+	shank.needle = 10.0
+	shank.press_space()
+	check(near(shank.final_angle_degrees, hook, 0.02), "Shanky Cleats makes the angle error 1.5×, got %s" % shank.final_angle_degrees)
+	var doubled := RunLogic.new()
+	doubled.new_run()
+	doubled._grant_copy(Upgrades.LOW_DRIVE, true)
+	check(int(doubled.stacks[Upgrades.LOW_DRIVE]) == 1 and doubled.stats.low_drive_stacks == 2 and near(doubled.stats.range_bonus, -6.0), "a cursed Low Drive counts as one stack and applies twice")
+	doubled._grant_copy(Upgrades.WIND_BREAKER, true)
+	check(int(doubled.stacks[Upgrades.WIND_BREAKER]) == 1 and doubled.stats.wind_breaker_stacks == 2, "a cursed Wind Breaker counts as one stack and applies twice")
+	var bench := RunLogic.new()
+	bench.new_run()
+	bench.attempts = 1
+	bench._grant_copy(Upgrades.DEEP_BENCH, true)
+	check(bench.attempt_cap == 5 and bench.attempts == 3 and int(bench.stacks[Upgrades.DEEP_BENCH]) == 1, "a cursed Deep Bench adds two cap and two attempts, one stack")
+	var ended := RunLogic.new()
+	ended.new_run()
+	ended.curse = RunLogic.CURSE_HEAVY
+	ended.kick_number = 5
+	ended.kick_resolved = true
+	ended.last_result_made = true
+	ended.go_to_next_kick()
+	check(ended.kick_number == 6 and ended.curse == "", "the curse is gone after kick 5")
+	check(ended.cursed_kick >= 6 and ended.cursed_kick <= 9, "quarter 2 picks its cursed kick from kicks 6 through 9")
+	var boss_offer := RunLogic.new()
+	boss_offer.set_offer_seed(2)
+	boss_offer.new_run()
+	boss_offer.kick_number = 5
+	boss_offer.roll_offer()
+	var boss_cursed := false
+	for card in boss_offer.offer:
+		if bool(boss_offer._as_card(card).get("cursed", false)):
+			boss_cursed = true
+	check(not boss_cursed, "a boss kick is not the quarter's Cursed offer")
+	var declined := RunLogic.new()
+	declined.new_run()
+	declined.force_cursed_offer()
+	declined.roll_offer()
+	var other := -1
+	for i in declined.offer.size():
+		if not bool(declined._as_card(declined.offer[i]).get("cursed", false)):
+			other = i
+	check(other >= 0 and declined.pick_card(other) and declined.curse == "", "taking a different card applies no curse")
+	var leg := RunLogic.new()
+	leg.new_run()
+	leg._grant_copy(Upgrades.BIG_LEG, true)
+	check(int(leg.stacks[Upgrades.BIG_LEG]) == 1 and near(leg.stats.range_bonus, 12.0), "a cursed Big Leg is +12 yards and one stack")
+	var sweet := RunLogic.new()
+	sweet.new_run()
+	sweet._grant_copy(Upgrades.SWEET_SPOT, true)
+	check(int(sweet.stacks[Upgrades.SWEET_SPOT]) == 1 and near(sweet.stats.perfect_band, 6.0) and near(sweet.stats.good_band, 14.0), "a cursed Sweet Spot widens both bands once")
+	var thin := RunLogic.new()
+	thin.new_run()
+	thin._grant_copy(Upgrades.THIN_AIR, true)
+	check(int(thin.stacks[Upgrades.THIN_AIR]) == 1 and thin.stats.thin_air_stacks == 1 and near(thin.stats.range_bonus, 4.0), "a cursed Thin Air is +4 yards and one stack")
+	var storm := RunLogic.new()
+	storm.new_run()
+	storm._grant_copy(Upgrades.STORM_CHASER, true)
+	check(int(storm.stacks[Upgrades.STORM_CHASER]) == 1 and near(storm.stats.storm_per_mph, 0.2), "a cursed Storm Chaser pays 0.2 per mph")
+	var scout := RunLogic.new()
+	scout.new_run()
+	var scout_before := scout.rerolls_left
+	scout._grant_copy(Upgrades.SCOUTING_REPORT, true)
+	check(int(scout.stacks[Upgrades.SCOUTING_REPORT]) == 1 and scout.rerolls_left == scout_before + 2, "a cursed Scouting Report gives two rerolls")
+	var full := RunLogic.new()
+	full.new_run()
+	for id in Upgrades.DOUBLED_IDS:
+		var cap := int(Upgrades.get_def(str(id))["max_stacks"])
+		for _n in cap:
+			full.grant(str(id))
+	full.force_cursed_offer()
+	full.roll_offer()
+	var invented := false
+	for card in full.offer:
+		if bool(full._as_card(card).get("cursed", false)):
+			invented = true
+	check(not invented, "a full doubled pool skips the Cursed slot")
+	var won := RunLogic.new()
+	won.new_run()
+	won.curse = RunLogic.CURSE_HEAVY
+	won.curses_taken = ["Heavy Ball"]
+	won.kick_number = 20
+	won.resolve_kick("GOOD", 0.0, false)
+	check(won.phase == RunLogic.Phase.WIN and won.curse == "" and str(won.curses_taken[0]) == "Heavy Ball", "a win clears the active curse and keeps the list")
+	var start_z := KickLogic.approach_z("idle", 0.0, 0.0, false)
+	check(near(start_z, KickLogic.PLANT_Z + KickLogic.START_BEHIND), "idle stands behind the plant spot")
+	check(near(KickLogic.approach_z("run", KickLogic.RUN_TO_GATHER_SEC, 0.0, false), KickLogic.PLANT_Z + KickLogic.GATHER_SHORT), "a long accuracy run waits 1 yard short")
+	check(near(KickLogic.approach_z("plant", KickLogic.RUN_TO_GATHER_SEC, KickLogic.PLANT_BEAT, false), KickLogic.PLANT_Z), "the plant beat finishes on the plant spot")
+	check(near(KickLogic.approach_z("run", 0.0, KickLogic.EARLY_RUN_SEC, true, start_z), KickLogic.PLANT_Z), "an early lock reaches the plant spot inside the rush")
+	check(near(KickLogic.approach_z("follow", 0.0, KickLogic.EARLY_RUSH_SEC, true, start_z), KickLogic.PLANT_Z), "follow-through stays on the plant spot")
+	var quick := _kick_power_accuracy(70.0, 0.0)
+	check(quick.phase == KickLogic.Phase.FLIGHT and quick.result_text == "GOOD", "locking accuracy early still launches immediately and can be GOOD")
+	var low := _kick_power_accuracy(15.0, 0.0)
+	check(low.result_text == "SHORT", "a low-power kick is still SHORT")

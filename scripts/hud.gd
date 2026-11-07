@@ -62,7 +62,7 @@ func _draw_meter(logic: KickLogic, run: RunLogic) -> void:
 		needle_color = KickConstants.COLOR_RED_TIP
 	elif logic.phase == KickLogic.Phase.ACCURACY and absf(logic.needle) <= KickConstants.PERFECT_BAND:
 		needle_color = KickConstants.COLOR_ZERO
-	var fade := RunLogic.iced_needle_alpha(run.weather, logic.stats.ice_veins, logic.phase == KickLogic.Phase.ACCURACY, logic.power, logic.needle)
+	var fade := RunLogic.iced_needle_alpha(run.needle_fades(), logic.phase == KickLogic.Phase.ACCURACY, logic.power, logic.needle)
 	needle_color.a = fade
 	if fade > 0.02:
 		draw_line(
@@ -135,6 +135,8 @@ func _draw_hud(logic: KickLogic, run: RunLogic) -> void:
 	y += 26.0
 	_text(Vector2(x, y), "ATTEMPTS", 18, KickConstants.COLOR_TEXT)
 	_draw_attempt_pips(run, x + 110.0, y - 5.0)
+	var pip_end := x + 110.0 + float(run.attempt_cap) * KickConstants.ATTEMPT_PIP_GAP + 6.0
+	_text(Vector2(pip_end, y), "%d / cap %d" % [run.attempts, run.attempt_cap], 16, KickConstants.COLOR_TEXT)
 	y += 22.0
 	if run.kicker_id != "":
 		var who := Kickers.get_def(run.kicker_id)
@@ -152,6 +154,10 @@ func _draw_hud(logic: KickLogic, run: RunLogic) -> void:
 	if run.is_boss() and run.phase == RunLogic.Phase.PLAYING:
 		_text_centered("BOSS KICK", 118.0, 28, KickConstants.COLOR_BOSS)
 	_draw_condition(run)
+	if run.curse != "":
+		_text_centered("%s   ends after kick %d" % [run.curse_label(), run.curse_end_kick], 286.0, 18, Color(0.72, 0.4, 0.95))
+		if run.curse == RunLogic.CURSE_HOWLING:
+			_text_centered("Wind pulls 1.5× harder", 310.0, 16, KickConstants.COLOR_ATTEMPT)
 	var hint := ""
 	if run.phase == RunLogic.Phase.GAME_OVER or run.phase == RunLogic.Phase.WIN or run.accepts_restart():
 		hint = "R: choose a kicker"
@@ -303,10 +309,12 @@ func _draw_wind(logic: KickLogic, run: RunLogic) -> void:
 	_text(anchor + Vector2(-8, 18), RunLogic.wind_readout(run.wind_speed, run.wind_direction), 16, KickConstants.COLOR_ATTEMPT)
 
 
-func _draw_laser(logic: KickLogic, _run: RunLogic) -> void:
+func _draw_laser(logic: KickLogic, run: RunLogic) -> void:
 	if not logic.stats.laser_line or logic.phase != KickLogic.Phase.AIMING:
 		return
 	var drift := KickLogic.drift_at_uprights(float(logic.wind_speed), logic.wind_direction, logic.kick_distance, logic.stats.low_drive_stacks, logic.stats.wind_breaker_stacks, logic.stats.ball_type)
+	if run.curse == RunLogic.CURSE_HOWLING:
+		drift *= 1.5
 	var far := KickLogic.preview_forward(logic.kick_distance)
 	var previous := Vector2.ZERO
 	var started := false
@@ -340,13 +348,24 @@ func _draw_offer(run: RunLogic) -> void:
 		var rect := Rect2(left + float(i) * (width + gap), 390.0, width, 250.0)
 		card_rects.append(rect)
 		draw_rect(rect, Color(0.05, 0.08, 0.1, 0.92))
-		draw_rect(rect, KickConstants.COLOR_ATTEMPT, false, 2.0)
-		var id := str(run.offer[i])
+		var card: Dictionary = run._as_card(run.offer[i])
+		var id := str(card["id"])
+		var cursed := bool(card.get("cursed", false))
+		draw_rect(rect, Upgrades.border_color(id, cursed), false, 4.0)
 		var info := Upgrades.get_def(id)
 		var stacks := int(run.stacks.get(id, 0)) + 1
-		_text(rect.position + Vector2(14, 36), "%d  %s" % [i + 1, str(info["name"])], 20, KickConstants.COLOR_ATTEMPT)
-		_text(rect.position + Vector2(14, 64), Upgrades.stack_label(id, stacks), 16, KickConstants.COLOR_TEXT)
-		_draw_wrapped(str(info["description"]), Rect2(rect.position + Vector2(14, 96), Vector2(width - 28, 110)), 16)
+		var title := "%d  %s" % [i + 1, str(info["name"])]
+		if cursed:
+			title = "%d  CURSED  %s" % [i + 1, str(info["name"])]
+		_text(rect.position + Vector2(14, 36), title, 20, KickConstants.COLOR_ATTEMPT)
+		var label := Upgrades.stack_label(id, stacks)
+		if cursed:
+			label = Upgrades.doubled_line(id)
+		_text(rect.position + Vector2(14, 64), label, 16, KickConstants.COLOR_TEXT)
+		var blurb := str(info["description"])
+		if cursed:
+			blurb = "Curse: %s. Lasts until the end of this quarter." % RunLogic.curse_name(str(card.get("curse", "")))
+		_draw_wrapped(blurb, Rect2(rect.position + Vector2(14, 96), Vector2(width - 28, 110)), 16)
 	var reroll_y := 660.0
 	_text_centered("Reroll: %d left    F rerolls    S skips (+10)" % run.rerolls_left, reroll_y, 18, KickConstants.COLOR_TEXT)
 
@@ -408,7 +427,7 @@ func _draw_result(logic: KickLogic, run: RunLogic) -> void:
 
 
 func _draw_end_screen(run: RunLogic) -> void:
-	var box := Rect2(KickConstants.RESULT_LEFT, KickConstants.RESULT_TOP, KickConstants.RESULT_WIDTH, KickConstants.RESULT_HEIGHT)
+	var box := Rect2(KickConstants.RESULT_LEFT, KickConstants.RESULT_TOP, KickConstants.RESULT_WIDTH, KickConstants.RESULT_HEIGHT + 56.0)
 	draw_rect(box, KickConstants.COLOR_RESULT_SCRIM)
 	var title := "WIN" if run.phase == RunLogic.Phase.WIN else "GAME OVER"
 	var title_color := KickConstants.COLOR_GOOD if run.phase == RunLogic.Phase.WIN else KickConstants.COLOR_MISS
@@ -417,7 +436,23 @@ func _draw_end_screen(run: RunLogic) -> void:
 	_text_centered("Kicks made %d" % run.kicks_made, box.position.y + 172.0, 28, KickConstants.COLOR_TEXT)
 	_text_centered("Longest make %s yd" % KickLogic.format_number(run.longest_make), box.position.y + 210.0, 28, KickConstants.COLOR_TEXT)
 	if run.kicker_id != "":
-		_text_centered("Kicker: %s" % str(Kickers.get_def(run.kicker_id)["name"]), box.position.y + 248.0, 24, KickConstants.COLOR_TEXT)
+		_text_centered("Kicker: %s" % str(Kickers.get_def(run.kicker_id)["name"]), box.position.y + 248.0, 22, KickConstants.COLOR_TEXT)
+	var owned := ""
+	for id in run.owned_ids():
+		if owned != "":
+			owned += ", "
+		owned += str(Upgrades.get_def(str(id))["name"])
+	if owned == "":
+		owned = "none"
+	_text_centered("Upgrades: %s" % owned, box.position.y + 276.0, 16, KickConstants.COLOR_TEXT)
+	var cursed_names := ""
+	for name in run.curses_taken:
+		if cursed_names != "":
+			cursed_names += ", "
+		cursed_names += str(name)
+	if cursed_names == "":
+		cursed_names = "none"
+	_text_centered("Curses: %s" % cursed_names, box.position.y + 298.0, 16, Color(0.78, 0.5, 0.95))
 
 
 func _text(at: Vector2, text: String, size: int, color: Color) -> void:

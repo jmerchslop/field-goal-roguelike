@@ -18,6 +18,13 @@ const ICED := "ICED"
 const SQUEEZE := "THE SQUEEZE"
 const MONSOON := "MONSOON"
 const BIG_GAME := "BIG GAME"
+const CURSE_ICED := "iced"
+const CURSE_SHANKY := "shanky_cleats"
+const CURSE_HEAVY := "heavy_ball"
+const CURSE_HOWLING := "howling_wind"
+const CURSE_SHAKY := "shaky_arrow"
+const CURSE_NARROW := "narrow_posts"
+const CURSE_IDS: Array = [CURSE_ICED, CURSE_SHANKY, CURSE_HEAVY, CURSE_HOWLING, CURSE_SHAKY, CURSE_NARROW]
 const SQUEEZE_WIDTH := 5.17
 const SQUEEZE_HALF := 2.585
 const DEBUG_SPOTS: Array = [-6.0, -3.0, 0.0, 3.0, 6.0]
@@ -60,6 +67,11 @@ var wind_speed := 0
 var wind_direction := 0.0
 var weather := CLEAR
 var weather_forced := false
+var curse := ""
+var curse_end_kick := 0
+var curses_taken: Array = []
+var doubled_copies := {}
+var cursed_kick := 0
 var insurance_left := 0
 var practice_left := 0
 var practicing := false
@@ -73,6 +85,9 @@ var _offer_rng := RandomNumberGenerator.new()
 var _previous_weather := ""
 var _older_weather := ""
 var _forced_offer: Array = []
+var _force_cursed := false
+var _cursed_offer_open := false
+var _quarter_cursed_used := false
 var _insurance_spent := false
 
 
@@ -133,6 +148,13 @@ func new_run() -> void:
 	wind_direction = 0.0
 	weather = CLEAR
 	weather_forced = false
+	curse = ""
+	curse_end_kick = 0
+	curses_taken = []
+	doubled_copies = {}
+	_force_cursed = false
+	_cursed_offer_open = false
+	_quarter_cursed_used = false
 	_previous_weather = ""
 	_older_weather = ""
 	insurance_left = 0
@@ -144,6 +166,7 @@ func new_run() -> void:
 	_place_spot()
 	_roll_wind()
 	_roll_weather()
+	_pick_cursed_kick()
 
 
 func distance_yards() -> float:
@@ -160,9 +183,13 @@ func current_mult() -> float:
 
 
 func storm_bonus() -> float:
-	if stats.storm_chaser_stacks <= 0:
-		return 0.0
-	return 0.1 * float(stats.storm_chaser_stacks) * absf(KickLogic.crosswind_mph(float(wind_speed), wind_direction))
+	return stats.storm_per_mph * absf(KickLogic.crosswind_mph(float(wind_speed), wind_direction))
+
+
+func hero_bonus() -> float:
+	if stats.hero_ball:
+		return 1.0
+	return 0.0
 
 
 func wants_upgrade() -> bool:
@@ -196,10 +223,11 @@ func resolve_kick(result_text: String, offset: float, perfect: bool) -> void:
 	if made:
 		var base_mult := current_mult()
 		var storm := storm_bonus()
-		var mult := base_mult + storm
+		var hero := hero_bonus()
+		var mult := base_mult + storm + hero
 		last_points = points_for(distance, mult, down_the_middle, boss, perfect)
 		score += last_points
-		score_line = format_score_line(distance, base_mult, down_the_middle, boss, perfect, storm)
+		score_line = format_score_line(distance, base_mult, down_the_middle, boss, perfect, storm, hero)
 		kicks_made += 1
 		if distance > longest_make:
 			longest_make = distance
@@ -219,6 +247,10 @@ func resolve_kick(result_text: String, offset: float, perfect: bool) -> void:
 		if attempts <= 0:
 			attempts = 0
 			phase = Phase.GAME_OVER
+	# The quarter is over when its last kick ends the run. A make still clears on the advance.
+	if phase != Phase.PLAYING and (kick_number == 5 or kick_number == 10 or kick_number == 15 or kick_number == 20):
+		curse = ""
+		curse_end_kick = 0
 
 
 func go_to_next_kick() -> bool:
@@ -237,9 +269,15 @@ func go_to_next_kick() -> bool:
 	offer = []
 	mulligan_used_this_kick = false
 	_insurance_spent = false
+	var leaving := kick_number - 1
+	if leaving == 5 or leaving == 10 or leaving == 15 or leaving == 20:
+		curse = ""
+		curse_end_kick = 0
 	_older_weather = _previous_weather
 	_previous_weather = weather
 	weather_forced = false
+	if kick_number == 6 or kick_number == 11 or kick_number == 16:
+		_pick_cursed_kick()
 	_place_spot()
 	_roll_wind()
 	_roll_weather()
@@ -277,15 +315,23 @@ func has_mud() -> bool:
 
 
 func post_half_gap() -> float:
-	if weather == SQUEEZE:
+	if weather == SQUEEZE or curse == CURSE_NARROW:
 		return SQUEEZE_HALF
 	return KickConstants.POST_HALF_GAP_YARDS
 
 
 func post_width() -> float:
-	if weather == SQUEEZE:
+	if weather == SQUEEZE or curse == CURSE_NARROW:
 		return SQUEEZE_WIDTH
 	return KickConstants.POST_SEPARATION_YARDS
+
+
+func needle_fades() -> bool:
+	# Kick 5 and the Iced curse share the current needle fade. The bar stays up.
+	# Ice Veins is read from the owned card, so a BIG GAME strip cannot pair Iced.
+	if int(stacks.get(Upgrades.ICE_VEINS, 0)) > 0 or stats.ice_veins:
+		return false
+	return weather == ICED or curse == CURSE_ICED
 
 
 func force_weather(name: String) -> void:
@@ -402,8 +448,8 @@ const ICED_FADE_OUT := 0.18
 const ICED_VISIBLE_AT := 0.5
 
 
-static func iced_needle_alpha(condition: String, ice_veins: bool, on_accuracy: bool, power: float, needle: float) -> float:
-	if condition != ICED or ice_veins or not on_accuracy:
+static func iced_needle_alpha(fades: bool, on_accuracy: bool, power: float, needle: float) -> float:
+	if not fades or not on_accuracy:
 		return 1.0
 	var span := power - KickConstants.METER_MIN
 	if span <= 0.001:
@@ -485,23 +531,37 @@ func consume_insurance() -> void:
 	_insurance_spent = true
 
 
+func force_cursed_offer() -> void:
+	_force_cursed = true
+
+
 func roll_offer() -> void:
 	if phase != Phase.PLAYING:
 		awaiting_offer = false
 		offer = []
 		return
 	if _forced_offer.size() > 0:
-		offer = _forced_offer.duplicate()
+		offer = _wrap_forced(_forced_offer)
 		_forced_offer = []
+		_cursed_offer_open = false
 	else:
-		offer = Upgrades.draw_offer(Upgrades.eligible_ids(stacks), _offer_rng)
+		offer = _make_offer()
 	awaiting_offer = true
 
 
 func pick_card(index: int) -> bool:
 	if not awaiting_offer or index < 0 or index >= offer.size():
 		return false
-	grant(str(offer[index]))
+	var card: Dictionary = _as_card(offer[index])
+	var id := str(card["id"])
+	var doubled := bool(card.get("doubled", false))
+	if doubled:
+		_grant_copy(id, true)
+		if str(card.get("curse", "")) != "":
+			_activate_curse(str(card["curse"]))
+	else:
+		grant(id)
+	_cursed_offer_open = false
 	_close_offer()
 	return true
 
@@ -510,6 +570,7 @@ func skip_offer() -> bool:
 	if not awaiting_offer:
 		return false
 	score += 10
+	_cursed_offer_open = false
 	_close_offer()
 	return true
 
@@ -518,25 +579,39 @@ func reroll_offer() -> bool:
 	if not awaiting_offer or rerolls_left <= 0:
 		return false
 	rerolls_left -= 1
-	offer = Upgrades.draw_offer(Upgrades.eligible_ids(stacks), _offer_rng)
+	if _cursed_offer_open:
+		offer = _cursed_trio()
+	else:
+		offer = _plain_cards(3)
 	return true
 
 
 func grant(id: String) -> void:
+	_grant_copy(id, false)
+
+
+func _grant_copy(id: String, doubled: bool) -> void:
 	var info := Upgrades.get_def(id)
 	if info.is_empty():
 		return
 	if int(stacks.get(id, 0)) >= int(info["max_stacks"]):
 		return
+	var cap_before := attempt_cap
 	stacks[id] = int(stacks.get(id, 0)) + 1
+	if doubled:
+		doubled_copies[id] = int(doubled_copies.get(id, 0)) + 1
 	rebuild_stats()
-	# These change the run, not the rebuilt stats. A later rebuild must not add them again.
+	var cap_gain := attempt_cap - cap_before
 	if id == Upgrades.DEEP_BENCH:
-		attempts = mini(attempts + 1, attempt_cap)
+		if cap_gain > 0:
+			attempts = mini(attempts + cap_gain, attempt_cap)
+	elif id == Upgrades.GLASS_LEG:
+		if attempts > attempt_cap:
+			attempts = attempt_cap
 	elif id == Upgrades.MULLIGAN:
 		mulligans_left += 1
 	elif id == Upgrades.SCOUTING_REPORT:
-		rerolls_left += 1
+		rerolls_left += 2 if doubled else 1
 	elif id == Upgrades.WIDE_RIGHT_INSURANCE:
 		insurance_left += 1
 	elif id == Upgrades.PRACTICE_SWING:
@@ -550,9 +625,166 @@ func rebuild_stats() -> void:
 	for item in Upgrades.DEFS:
 		var id := str(item["id"])
 		var copies := int(stacks.get(id, 0))
-		for _i in copies:
-			Upgrades.apply(id, stats)
+		var doubles := mini(int(doubled_copies.get(id, 0)), copies)
+		var singles := copies - doubles
+		for _i in singles:
+			Upgrades.apply(id, stats, false)
+		for _j in doubles:
+			Upgrades.apply(id, stats, true)
 	attempt_cap = mini(stats.attempt_cap, KickConstants.ATTEMPT_CAP_MAX)
+
+
+func curse_label() -> String:
+	return curse_name(curse)
+
+
+static func curse_name(id: String) -> String:
+	match id:
+		CURSE_ICED:
+			return "Iced"
+		CURSE_SHANKY:
+			return "Shanky Cleats"
+		CURSE_HEAVY:
+			return "Heavy Ball"
+		CURSE_HOWLING:
+			return "Howling Wind"
+		CURSE_SHAKY:
+			return "Shaky Arrow"
+		CURSE_NARROW:
+			return "Narrow Posts"
+	return ""
+
+
+func _quarter_end(kick: int) -> int:
+	if kick <= 5:
+		return 5
+	if kick <= 10:
+		return 10
+	if kick <= 15:
+		return 15
+	return 20
+
+
+func _pick_cursed_kick() -> void:
+	var start := 1
+	if kick_number >= 16:
+		start = 16
+	elif kick_number >= 11:
+		start = 11
+	elif kick_number >= 6:
+		start = 6
+	cursed_kick = start + _offer_rng.randi_range(0, 3)
+	_quarter_cursed_used = false
+	_cursed_offer_open = false
+
+
+func _activate_curse(id: String) -> void:
+	curse = id
+	curse_end_kick = _quarter_end(kick_number)
+	curses_taken.append(curse_label())
+
+
+func _make_offer() -> Array:
+	var want := _force_cursed or (kick_number == cursed_kick and not _quarter_cursed_used)
+	_force_cursed = false
+	if not want:
+		_cursed_offer_open = false
+		return _plain_cards(3)
+	var cursed := _cursed_trio()
+	if cursed.is_empty():
+		_cursed_offer_open = false
+		_quarter_cursed_used = true
+		return _plain_cards(3)
+	_cursed_offer_open = true
+	_quarter_cursed_used = true
+	return cursed
+
+
+func _plain_cards(count: int) -> Array:
+	var ids: Array = Upgrades.draw_offer(Upgrades.eligible_ids(stacks, attempt_cap), _offer_rng)
+	var cards: Array = []
+	for id in ids:
+		cards.append(_blank_card(str(id)))
+	return cards
+
+
+func _cursed_trio() -> Array:
+	var bonus: Array = []
+	for id in Upgrades.DOUBLED_IDS:
+		if int(stacks.get(id, 0)) < int(Upgrades.get_def(str(id))["max_stacks"]):
+			bonus.append(str(id))
+	if bonus.is_empty():
+		return []
+	var bonus_id := str(bonus[_offer_rng.randi_range(0, bonus.size() - 1)])
+	var curse_id := _roll_curse()
+	var pool: Array = Upgrades.eligible_ids(stacks, attempt_cap)
+	pool.erase(bonus_id)
+	var others: Array = Upgrades.draw_offer(pool, _offer_rng)
+	while others.size() > 2:
+		others.pop_back()
+	var cards: Array = [_cursed_card(bonus_id, curse_id)]
+	for id in others:
+		cards.append(_blank_card(str(id)))
+	if cards.size() == 3 and not _cards_have_common(cards):
+		var taken := {}
+		for card in cards:
+			taken[str(_as_card(card)["id"])] = true
+		var commons: Array = []
+		for id in pool:
+			if Upgrades.is_common(str(id)) and not taken.has(str(id)):
+				commons.append(str(id))
+		if commons.size() > 0:
+			cards[1 + _offer_rng.randi_range(0, 1)] = _blank_card(str(commons[_offer_rng.randi_range(0, commons.size() - 1)]))
+	_shuffle_cards(cards)
+	return cards
+
+
+func _roll_curse() -> String:
+	var choices: Array = []
+	var owns_ice := int(stacks.get(Upgrades.ICE_VEINS, 0)) > 0
+	for id in CURSE_IDS:
+		if str(id) == CURSE_ICED and owns_ice:
+			continue
+		choices.append(str(id))
+	return str(choices[_offer_rng.randi_range(0, choices.size() - 1)])
+
+
+func _cards_have_common(cards: Array) -> bool:
+	for card in cards:
+		if Upgrades.is_common(str(_as_card(card)["id"])) and not bool(_as_card(card).get("cursed", false)):
+			return true
+		if Upgrades.is_common(str(_as_card(card)["id"])):
+			return true
+	return false
+
+
+func _shuffle_cards(cards: Array) -> void:
+	for i in range(cards.size() - 1, 0, -1):
+		var j := _offer_rng.randi_range(0, i)
+		var swap = cards[i]
+		cards[i] = cards[j]
+		cards[j] = swap
+
+
+func _blank_card(id: String) -> Dictionary:
+	return {"id": id, "cursed": false, "curse": "", "doubled": false}
+
+
+func _cursed_card(id: String, curse_id: String) -> Dictionary:
+	return {"id": id, "cursed": true, "curse": curse_id, "doubled": true}
+
+
+func _as_card(item) -> Dictionary:
+	if item is Dictionary:
+		return item
+	return _blank_card(str(item))
+
+
+func _wrap_forced(raw: Array) -> Array:
+	var cards: Array = []
+	for item in raw:
+		cards.append(_as_card(item))
+	return cards
 
 
 func owned_ids() -> Array:
@@ -600,11 +832,16 @@ static func raw_points(distance: float, mult: float, middle: bool, boss: bool, p
 	return total
 
 
-static func format_score_line(distance: float, mult: float, middle: bool, boss: bool, perfect: bool, storm: float = 0.0) -> String:
-	var product := distance * (mult + storm)
+static func format_score_line(distance: float, mult: float, middle: bool, boss: bool, perfect: bool, storm: float = 0.0, hero: float = 0.0) -> String:
+	var product := distance * (mult + storm + hero)
 	var text := "%s yd × %s" % [_whole(distance), _two_decimals(mult)]
-	if storm > 0.001:
-		text = "%s yd × (%s + %s wind)" % [_whole(distance), _two_decimals(mult), _two_decimals(storm)]
+	if storm > 0.001 or hero > 0.001:
+		text = "%s yd × (%s" % [_whole(distance), _two_decimals(mult)]
+		if storm > 0.001:
+			text += " + %s wind" % _two_decimals(storm)
+		if hero > 0.001:
+			text += " + %s hero" % _two_decimals(hero)
+		text += ")"
 	if middle:
 		product *= KickConstants.MIDDLE_MULTIPLIER
 		text += " × 2"

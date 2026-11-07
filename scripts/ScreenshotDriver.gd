@@ -33,7 +33,7 @@ func _ready() -> void:
 	board.logic.press_space()
 	board.logic.advance(0.8 / KickConstants.ACCURACY_FALL_PER_SEC * KickConstants.POWER_RISE_PER_SEC)
 	board.logic.press_space()
-	board.logic.advance(KickLogic.CONTACT_SEC + board.logic.flight_duration * 0.58)
+	board.logic.advance(board.logic.flight_duration * 0.58)
 	board._approach_time = 0.8
 	if not await _capture("view_flight.png"):
 		get_tree().quit(1)
@@ -120,7 +120,7 @@ func _ready() -> void:
 	_lock_full_power_straight()
 	# In the air, past the posts and past where a P=50 kick lands.
 	var flight: float = board.logic.flight_duration
-	board.logic.advance(KickLogic.CONTACT_SEC + flight * (58.0 / board.logic.travel_yards))
+	board.logic.advance(flight * (58.0 / board.logic.travel_yards))
 	if not await _capture("power_100_long.png"):
 		get_tree().quit(1)
 		return
@@ -235,7 +235,7 @@ func _ready() -> void:
 	board.logic.press_space()
 	board.logic.advance(board.logic.power / curve_stats.accuracy_speed)
 	board.logic.press_space()
-	board.logic.advance(KickLogic.CONTACT_SEC + board.logic.flight_duration * (32.0 / board.logic.travel_yards))
+	board.logic.advance(board.logic.flight_duration * (32.0 / board.logic.travel_yards))
 	if not await _capture("windy_curve.png"):
 		get_tree().quit(1)
 		return
@@ -281,34 +281,60 @@ func _ready() -> void:
 		get_tree().quit(1)
 		return
 	board.load_current_kick()
+	board.pose_for_shot("idle")
 	if not await _capture("anim_walk_idle.png"):
 		get_tree().quit(1)
 		return
-	_lock_into_windup(50.0)
-	board.logic.windup_elapsed = 0.22
+	board.pose_for_shot("power")
+	if not await _capture("anim_walk_power.png"):
+		get_tree().quit(1)
+		return
+	board.pose_for_shot("high")
+	if not await _capture("anim_walk_high.png"):
+		get_tree().quit(1)
+		return
+	board.pose_for_shot("run")
 	if not await _capture("anim_walk_run.png"):
 		get_tree().quit(1)
 		return
-	board.logic.windup_elapsed = 0.42
+	board.pose_for_shot("plant")
 	if not await _capture("anim_walk_plant.png"):
 		get_tree().quit(1)
 		return
-	board.logic.advance(KickLogic.CONTACT_SEC - 0.42 + 0.08)
+	board.pose_for_shot("follow")
 	if not await _capture("anim_walk_follow.png"):
+		get_tree().quit(1)
+		return
+	board.load_current_kick()
+	board.pose_for_shot("idle")
+	if not await _capture("anim_walk_next.png"):
+		get_tree().quit(1)
+		return
+	board.pose_for_shot("early")
+	if not await _capture("anim_walk_early.png"):
 		get_tree().quit(1)
 		return
 	board.highlight = 0
 	board.confirm_kicker()
+	board.pose_for_shot("idle")
 	if not await _capture("anim_bruce_idle.png"):
 		get_tree().quit(1)
 		return
-	_lock_into_windup(50.0)
-	board.logic.windup_elapsed = 0.42
+	board.pose_for_shot("run")
+	if not await _capture("anim_bruce_run.png"):
+		get_tree().quit(1)
+		return
+	board.pose_for_shot("plant")
 	if not await _capture("anim_bruce_plant.png"):
 		get_tree().quit(1)
 		return
-	board.logic.advance(KickLogic.CONTACT_SEC - 0.42 + 0.08)
+	board.pose_for_shot("follow")
 	if not await _capture("anim_bruce_follow.png"):
+		get_tree().quit(1)
+		return
+	board.load_current_kick()
+	board.pose_for_shot("idle")
+	if not await _capture("anim_bruce_next.png"):
 		get_tree().quit(1)
 		return
 	board.logic.phase = KickLogic.Phase.AIMING
@@ -327,6 +353,81 @@ func _ready() -> void:
 	if not await _capture("weather_big_game.png"):
 		get_tree().quit(1)
 		return
+	board.run.force_cursed_offer()
+	board.run.roll_offer()
+	if not await _capture("cursed_offer.png"):
+		get_tree().quit(1)
+		return
+	board.run.force_offer([
+		{"id": Upgrades.GLASS_LEG, "cursed": false, "curse": "", "doubled": false},
+		{"id": Upgrades.HERO_BALL, "cursed": false, "curse": "", "doubled": false},
+		{"id": Upgrades.BIG_LEG, "cursed": false, "curse": "", "doubled": false},
+	])
+	board.run.roll_offer()
+	if not await _capture("risky_cards.png"):
+		get_tree().quit(1)
+		return
+	board.run.force_offer([
+		{"id": Upgrades.FLAG_READER, "cursed": false, "curse": "", "doubled": false},
+		{"id": Upgrades.LASER_LINE, "cursed": false, "curse": "", "doubled": false},
+		{"id": Upgrades.BIG_LEG, "cursed": false, "curse": "", "doubled": false},
+	])
+	board.run.roll_offer()
+	if not await _capture("rare_cards.png"):
+		get_tree().quit(1)
+		return
+	board.run.rerolls_left = 2
+	board.run.force_cursed_offer()
+	board.run.roll_offer()
+	board.run.reroll_offer()
+	if not await _capture("cursed_reroll.png"):
+		get_tree().quit(1)
+		return
+	board.run.skip_offer()
+	if not await _capture("curse_skipped.png"):
+		get_tree().quit(1)
+		return
+	board.force_weather(RunLogic.CLEAR)
+	board.run.curse = RunLogic.CURSE_HOWLING
+	board.run.curse_end_kick = 5
+	board.run.awaiting_offer = false
+	board.set_wind(10.0, 90.0)
+	board.load_current_kick()
+	if not await _capture("howling_hud.png"):
+		get_tree().quit(1)
+		return
+	var howl_stats: KickerStats = board.logic.stats
+	board.logic.press_space()
+	board.logic.advance(55.0 / howl_stats.power_speed)
+	board.logic.press_space()
+	board.logic.advance(board.logic.power / howl_stats.accuracy_speed)
+	board.logic.press_space()
+	board.logic.advance(board.logic.flight_duration * (30.0 / board.logic.travel_yards))
+	if not await _capture("howling_curve.png"):
+		get_tree().quit(1)
+		return
+	board.run.curse = RunLogic.CURSE_NARROW
+	board.load_current_kick()
+	if not await _capture("narrow_hud.png"):
+		get_tree().quit(1)
+		return
+	board.run.curse = RunLogic.CURSE_HEAVY
+	board.load_current_kick()
+	if not await _capture("heavy_hud.png"):
+		get_tree().quit(1)
+		return
+	board.run.curse = ""
+	board.load_current_kick()
+	board.run.attempts = 3
+	board.run.grant(Upgrades.GLASS_LEG)
+	if not await _capture("glass_leg_cap.png"):
+		get_tree().quit(1)
+		return
+	board.run.curses_taken = ["Howling Wind", "Heavy Ball"]
+	board.run.phase = RunLogic.Phase.GAME_OVER
+	if not await _capture("run_summary.png"):
+		get_tree().quit(1)
+		return
 	get_tree().quit()
 
 
@@ -335,16 +436,6 @@ func _set_accuracy_needle(power_value: float, along: float) -> void:
 	board.logic.power = power_value
 	var span := power_value - KickConstants.METER_MIN
 	board.logic.needle = power_value - along * span
-
-
-func _lock_into_windup(power_value: float) -> void:
-	var stats: KickerStats = board.logic.stats
-	board.logic.phase = KickLogic.Phase.AIMING
-	board.logic.press_space()
-	board.logic.advance(power_value / stats.power_speed)
-	board.logic.press_space()
-	board.logic.advance(board.logic.power / stats.accuracy_speed)
-	board.logic.press_space()
 
 
 func _log_posts(tag: String) -> void:
@@ -377,10 +468,15 @@ func _finish_centered_power(power_value: float) -> void:
 	board.logic.press_space()
 	board.logic.advance(board.logic.power / stats.accuracy_speed)
 	board.logic.press_space()
-	board.logic.advance(KickLogic.CONTACT_SEC + board.logic.flight_duration)
+	board.logic.advance(board.logic.flight_duration)
 
 
 func _capture(file_name: String) -> bool:
+	var phase = board.logic.phase
+	if phase == KickLogic.Phase.ACCURACY:
+		board._step_kick_pose(0.0)
+	elif (phase == KickLogic.Phase.FLIGHT or phase == KickLogic.Phase.RESULT) and not board._swinging:
+		board._step_kick_pose(0.3)
 	board.refresh_view()
 	await get_tree().process_frame
 	await RenderingServer.frame_post_draw

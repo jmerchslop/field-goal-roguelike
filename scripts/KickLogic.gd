@@ -4,13 +4,21 @@ extends RefCounted
 # The rules of one kick, with no drawing.
 # main.gd reads these variables and paints them.
 
-enum Phase { AIMING, POWER, ACCURACY, WINDUP, FLIGHT, RESULT }
+enum Phase { AIMING, POWER, ACCURACY, FLIGHT, RESULT }
 
-# The kick animation. Contact is the end of the plant frame. The ball leaves then.
-const FRAME_IDLE_SEC := 0.12
-const FRAME_RUN_SEC := 0.22
-const FRAME_PLANT_SEC := 0.16
-const CONTACT_SEC := 0.50
+# The approach animation reads these. They do not change when the ball leaves.
+const APPROACH_AT := 40.0
+const PLANT_BEAT := 0.08
+const EARLY_RUSH_SEC := 0.25
+const RUN_TO_GATHER_SEC := 0.35
+# Yards behind the plant spot. A literal 5 puts the kicker under the fixed camera
+# (the camera is only 6.4 yards behind the tee) and the sprite falls off the bottom.
+# 2.2 is as far back as the standing pose still shows the jersey.
+const START_BEHIND := 2.2
+const GATHER_SHORT := 1.0
+const PLANT_Z := 1.15
+# The run portion of a compressed approach. The last 0.08s is the plant sprite.
+const EARLY_RUN_SEC := 0.17
 
 # AIMING   - Left / Right swings the arrow. Space starts the meter.
 # POWER    - The needle rises. Space locks power. At 100 it locks itself.
@@ -50,7 +58,11 @@ var thin_air_weather := false
 var post_half_gap := KickConstants.POST_HALF_GAP_YARDS
 # The smooth power needle. Mud draws a jitter on top and does not add it back in.
 var power_true := 0.0
-var windup_elapsed := 0.0
+var heavy_ball := false
+var howling_wind := false
+var shanky := false
+var shaky := false
+var aim_base := 0.0
 var flight_elapsed := 0.0
 var flight_duration := 0.0
 var travel_yards := 0.0
@@ -79,8 +91,9 @@ func set_seed(seed_value: int) -> void:
 func aim(direction: float, delta: float) -> void:
 	if phase != Phase.AIMING:
 		return
-	aim_degrees += direction * KickConstants.AIM_SPEED_DEG_PER_SEC * delta
-	aim_degrees = clampf(aim_degrees, KickConstants.AIM_MIN_DEG, KickConstants.AIM_MAX_DEG)
+	aim_base += direction * KickConstants.AIM_SPEED_DEG_PER_SEC * delta
+	aim_base = clampf(aim_base, KickConstants.AIM_MIN_DEG, KickConstants.AIM_MAX_DEG)
+	aim_degrees = aim_base
 
 
 func press_space() -> void:
@@ -111,17 +124,6 @@ func advance(delta: float) -> void:
 		elif phase == Phase.ACCURACY:
 			_advance_accuracy(left)
 			left = 0.0
-		elif phase == Phase.WINDUP:
-			var need := CONTACT_SEC - windup_elapsed
-			var step := minf(left, need)
-			windup_elapsed += step
-			left -= step
-			if windup_elapsed >= CONTACT_SEC - 0.0000001:
-				windup_elapsed = CONTACT_SEC
-				phase = Phase.FLIGHT
-				flight_elapsed = 0.0
-			else:
-				left = 0.0
 		elif phase == Phase.FLIGHT:
 			var remain := flight_duration - flight_elapsed
 			var fly := minf(left, maxf(remain, 0.0))
@@ -146,6 +148,10 @@ func reset_kick() -> void:
 	var keep_mud := mud_power
 	var keep_thin := thin_air_weather
 	var keep_gap := post_half_gap
+	var keep_heavy := heavy_ball
+	var keep_howl := howling_wind
+	var keep_shank := shanky
+	var keep_shaky := shaky
 	phase = Phase.AIMING
 	aim_degrees = 0.0
 	needle = 0.0
@@ -176,8 +182,12 @@ func reset_kick() -> void:
 	mud_power = keep_mud
 	thin_air_weather = keep_thin
 	post_half_gap = keep_gap
+	heavy_ball = keep_heavy
+	howling_wind = keep_howl
+	shanky = keep_shank
+	shaky = keep_shaky
 	power_true = 0.0
-	windup_elapsed = 0.0
+	aim_base = 0.0
 
 
 func detail_line() -> String:
@@ -255,15 +265,34 @@ static func path_lateral(start_lateral: float, forward: float, angle_degrees: fl
 
 
 # End of the aiming preview: the first 40% of the kick, perfect accuracy, with the wind curve.
-# idle, run, plant, then follow-through. The ball is still on the tee until contact.
-static func kick_pose(elapsed: float) -> String:
-	if elapsed < FRAME_IDLE_SEC:
-		return "idle"
-	if elapsed < FRAME_IDLE_SEC + FRAME_RUN_SEC:
-		return "run"
-	if elapsed < CONTACT_SEC:
-		return "plant"
-	return "follow"
+# Yards behind the tee for the approach puppet.
+# idle: standing behind the plant spot, a little left of the tee.
+# run: toward a gather point 1 yard short of the plant, then wait.
+# plant: the last step into the plant spot.
+# early: the whole approach is squeezed into about 0.25 seconds.
+static func approach_z(pose: String, run_time: float, swing_time: float, early: bool, from_z: float = -1.0) -> float:
+	var plant := PLANT_Z
+	var start := plant + START_BEHIND
+	var gather := plant + GATHER_SHORT
+	var origin := start if from_z < 0.0 else from_z
+	if pose == "idle":
+		return start
+	if pose == "run" and early:
+		return lerpf(origin, plant, clampf(swing_time / EARLY_RUN_SEC, 0.0, 1.0))
+	if pose == "run":
+		return lerpf(start, gather, clampf(run_time / RUN_TO_GATHER_SEC, 0.0, 1.0))
+	if pose == "plant" and not early:
+		var held := lerpf(start, gather, clampf(run_time / RUN_TO_GATHER_SEC, 0.0, 1.0))
+		return lerpf(held, plant, clampf(swing_time / PLANT_BEAT, 0.0, 1.0))
+	return plant
+
+
+# Shanky Cleats and Howling Wind are read by the kick. The run turns them on.
+func sway(time: float) -> void:
+	if shaky and phase == Phase.AIMING:
+		aim_degrees = clampf(aim_base + sin(time * 1.6) * 3.0, KickConstants.AIM_MIN_DEG, KickConstants.AIM_MAX_DEG)
+	else:
+		aim_degrees = aim_base
 
 
 static func preview_forward(distance_yards: float) -> float:
@@ -402,16 +431,21 @@ func _lock_accuracy(value: float) -> void:
 		accuracy_error = accuracy_with_red_tip(power, value, _rng, stats.red_tip_start, stats.red_tip_noise)
 	# The perfect window comes from the kicker's stats, so Sweet Spot can widen it.
 	perfect = absf(accuracy_error) <= stats.perfect_band
-	var hook := 0.0 if perfect else -accuracy_error * KickConstants.ACCURACY_DEG_PER_ERROR
+	var per_unit := KickConstants.ACCURACY_DEG_PER_ERROR * (1.5 if shanky else 1.0)
+	var hook := 0.0 if perfect else -accuracy_error * per_unit
 	final_angle_degrees = aim_degrees + hook
 	# This kick's locked power, plus the saved wind. Not last kick's range.
 	drift_yards = drift_at_uprights(float(wind_speed), wind_direction, kick_distance, stats.low_drive_stacks, stats.wind_breaker_stacks, stats.ball_type)
+	if howling_wind:
+		drift_yards *= 1.5
 	var wind_range := wind_range_delta(float(wind_speed), wind_direction, stats.low_drive_stacks, stats.thin_air_stacks >= 1)
 	max_range = stats.range_base + stats.range_per_power * power + stats.range_bonus + wind_range
 	if snow_range:
 		max_range -= 4.0
 	if thin_air_weather:
 		max_range += 4.0
+	if heavy_ball:
+		max_range -= 4.0
 	if max_range < 0.0:
 		max_range = 0.0
 	travel_yards = max_range
@@ -431,18 +465,11 @@ func _lock_accuracy(value: float) -> void:
 		result_text = "GOOD"
 		insured = true
 		insurance_ready = false
-	# The numbers are locked now. The ball waits until the foot meets it.
-	phase = Phase.WINDUP
-	windup_elapsed = 0.0
+	phase = Phase.FLIGHT
 	flight_elapsed = 0.0
 
 
 func _update_ball() -> void:
-	if phase != Phase.FLIGHT and phase != Phase.RESULT:
-		ball_forward_yards = 0.0
-		ball_lateral_yards = start_lateral_yards
-		ball_height = 0.0
-		return
 	var t := 0.0
 	if flight_duration > 0.0 and (phase == Phase.FLIGHT or phase == Phase.RESULT):
 		t = clampf(flight_elapsed / flight_duration, 0.0, 1.0)
