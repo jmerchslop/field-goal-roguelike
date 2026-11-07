@@ -396,8 +396,31 @@ static func _weighted_weather(kick: int, rng: RandomNumberGenerator) -> String:
 	return CLEAR
 
 
-static func meter_hides(condition: String, ice_veins: bool, seconds: float) -> bool:
-	return condition == ICED and not ice_veins and seconds >= 0.4
+# How far the accuracy needle has fallen from the locked power toward the bottom, 0 to 1.
+# The iced needle fades out over the first 18% of that trip and is fully back by halfway.
+const ICED_FADE_OUT := 0.18
+const ICED_VISIBLE_AT := 0.5
+
+
+static func iced_needle_alpha(condition: String, ice_veins: bool, on_accuracy: bool, power: float, needle: float) -> float:
+	if condition != ICED or ice_veins or not on_accuracy:
+		return 1.0
+	var span := power - KickConstants.METER_MIN
+	if span <= 0.001:
+		return 1.0
+	var along := clampf((power - needle) / span, 0.0, 1.0)
+	if along <= 0.0:
+		return 1.0
+	if along < ICED_FADE_OUT:
+		return 1.0 - _smoothstep(along / ICED_FADE_OUT)
+	if along < ICED_VISIBLE_AT:
+		return _smoothstep((along - ICED_FADE_OUT) / (ICED_VISIBLE_AT - ICED_FADE_OUT))
+	return 1.0
+
+
+static func _smoothstep(t: float) -> float:
+	var x := clampf(t, 0.0, 1.0)
+	return x * x * (3.0 - 2.0 * x)
 
 
 func set_wind(speed: float, direction: float) -> void:

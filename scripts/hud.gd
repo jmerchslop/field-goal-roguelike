@@ -15,8 +15,7 @@ func _draw() -> void:
 	var logic: KickLogic = game.logic
 	var run: RunLogic = game.run
 	_draw_weather_tint(run)
-	if not game.hides_meter():
-		_draw_meter(logic)
+	_draw_meter(logic, run)
 	_draw_hud(logic, run)
 	_draw_wind(logic, run)
 	_draw_laser(logic, run)
@@ -30,7 +29,7 @@ func _draw() -> void:
 		_draw_result(logic, run)
 
 
-func _draw_meter(logic: KickLogic) -> void:
+func _draw_meter(logic: KickLogic, run: RunLogic) -> void:
 	var panel := Rect2(
 		KickConstants.METER_PANEL_LEFT,
 		KickConstants.METER_PANEL_TOP,
@@ -63,13 +62,16 @@ func _draw_meter(logic: KickLogic) -> void:
 		needle_color = KickConstants.COLOR_RED_TIP
 	elif logic.phase == KickLogic.Phase.ACCURACY and absf(logic.needle) <= KickConstants.PERFECT_BAND:
 		needle_color = KickConstants.COLOR_ZERO
-	draw_line(
+	var fade := RunLogic.iced_needle_alpha(run.weather, logic.stats.ice_veins, logic.phase == KickLogic.Phase.ACCURACY, logic.power, logic.needle)
+	needle_color.a = fade
+	if fade > 0.02:
+		draw_line(
 		Vector2(KickConstants.METER_BAR_LEFT - 10.0, needle_y),
 		Vector2(KickConstants.METER_BAR_RIGHT + 8.0, needle_y),
 		needle_color,
 		3.0,
 		true
-	)
+		)
 	var title := "METER"
 	if logic.phase == KickLogic.Phase.POWER:
 		title = "POWER"

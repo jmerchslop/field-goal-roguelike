@@ -4,7 +4,13 @@ extends RefCounted
 # The rules of one kick, with no drawing.
 # main.gd reads these variables and paints them.
 
-enum Phase { AIMING, POWER, ACCURACY, FLIGHT, RESULT }
+enum Phase { AIMING, POWER, ACCURACY, WINDUP, FLIGHT, RESULT }
+
+# The kick animation. Contact is the end of the plant frame. The ball leaves then.
+const FRAME_IDLE_SEC := 0.12
+const FRAME_RUN_SEC := 0.22
+const FRAME_PLANT_SEC := 0.16
+const CONTACT_SEC := 0.50
 
 # AIMING   - Left / Right swings the arrow. Space starts the meter.
 # POWER    - The needle rises. Space locks power. At 100 it locks itself.
@@ -44,6 +50,7 @@ var thin_air_weather := false
 var post_half_gap := KickConstants.POST_HALF_GAP_YARDS
 # The smooth power needle. Mud draws a jitter on top and does not add it back in.
 var power_true := 0.0
+var windup_elapsed := 0.0
 var flight_elapsed := 0.0
 var flight_duration := 0.0
 var travel_yards := 0.0
@@ -87,19 +94,44 @@ func press_space() -> void:
 		_lock_accuracy(needle)
 	elif phase == Phase.RESULT:
 		reset_kick()
-	# A press during FLIGHT is ignored.
+	# A press during the run-up or the flight does nothing.
 	_update_ball()
 
 
 func advance(delta: float) -> void:
 	if delta <= 0.0:
 		return
-	if phase == Phase.POWER:
-		_advance_power(delta)
-	elif phase == Phase.ACCURACY:
-		_advance_accuracy(delta)
-	elif phase == Phase.FLIGHT:
-		_advance_flight(delta)
+	var left := delta
+	var guard := 0
+	while left > 0.0000001 and guard < 4:
+		guard += 1
+		if phase == Phase.POWER:
+			_advance_power(left)
+			left = 0.0
+		elif phase == Phase.ACCURACY:
+			_advance_accuracy(left)
+			left = 0.0
+		elif phase == Phase.WINDUP:
+			var need := CONTACT_SEC - windup_elapsed
+			var step := minf(left, need)
+			windup_elapsed += step
+			left -= step
+			if windup_elapsed >= CONTACT_SEC - 0.0000001:
+				windup_elapsed = CONTACT_SEC
+				phase = Phase.FLIGHT
+				flight_elapsed = 0.0
+			else:
+				left = 0.0
+		elif phase == Phase.FLIGHT:
+			var remain := flight_duration - flight_elapsed
+			var fly := minf(left, maxf(remain, 0.0))
+			flight_elapsed += fly
+			if flight_elapsed >= flight_duration - 0.0000001:
+				flight_elapsed = flight_duration
+				phase = Phase.RESULT
+			left = 0.0
+		else:
+			left = 0.0
 	_update_ball()
 
 
@@ -145,6 +177,7 @@ func reset_kick() -> void:
 	thin_air_weather = keep_thin
 	post_half_gap = keep_gap
 	power_true = 0.0
+	windup_elapsed = 0.0
 
 
 func detail_line() -> String:
@@ -222,6 +255,17 @@ static func path_lateral(start_lateral: float, forward: float, angle_degrees: fl
 
 
 # End of the aiming preview: the first 40% of the kick, perfect accuracy, with the wind curve.
+# idle, run, plant, then follow-through. The ball is still on the tee until contact.
+static func kick_pose(elapsed: float) -> String:
+	if elapsed < FRAME_IDLE_SEC:
+		return "idle"
+	if elapsed < FRAME_IDLE_SEC + FRAME_RUN_SEC:
+		return "run"
+	if elapsed < CONTACT_SEC:
+		return "plant"
+	return "follow"
+
+
 static func preview_forward(distance_yards: float) -> float:
 	return distance_yards * 0.4
 
@@ -387,11 +431,18 @@ func _lock_accuracy(value: float) -> void:
 		result_text = "GOOD"
 		insured = true
 		insurance_ready = false
-	phase = Phase.FLIGHT
+	# The numbers are locked now. The ball waits until the foot meets it.
+	phase = Phase.WINDUP
+	windup_elapsed = 0.0
 	flight_elapsed = 0.0
 
 
 func _update_ball() -> void:
+	if phase != Phase.FLIGHT and phase != Phase.RESULT:
+		ball_forward_yards = 0.0
+		ball_lateral_yards = start_lateral_yards
+		ball_height = 0.0
+		return
 	var t := 0.0
 	if flight_duration > 0.0 and (phase == Phase.FLIGHT or phase == Phase.RESULT):
 		t = clampf(flight_elapsed / flight_duration, 0.0, 1.0)

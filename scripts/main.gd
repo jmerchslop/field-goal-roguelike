@@ -208,10 +208,6 @@ func force_spot_side(side: int) -> void:
 	run.set_next_side(side)
 
 
-func hides_meter() -> bool:
-	return RunLogic.meter_hides(run.weather, logic.stats.ice_veins, meter_time)
-
-
 func force_weather(name: String) -> void:
 	run.force_weather(name)
 	_apply_conditions()
@@ -247,7 +243,7 @@ func play_locked_kick(power_value: float) -> void:
 	logic.press_space()
 	logic.advance(power_value / KickConstants.ACCURACY_FALL_PER_SEC)
 	logic.press_space()
-	logic.advance(logic.flight_duration)
+	logic.advance(KickLogic.CONTACT_SEC + logic.flight_duration)
 
 
 func script_good_kick() -> void:
@@ -583,14 +579,30 @@ func _place_world() -> void:
 	_place_camera()
 
 
+func _kicker_art_path() -> String:
+	var who := ""
+	if run.kicker_id == Kickers.WALK_ON:
+		who = "walk_on"
+	elif run.kicker_id == Kickers.BIG_BRUCE:
+		who = "big_bruce"
+	if who == "":
+		return ""
+	var pose := "idle"
+	if logic.phase == KickLogic.Phase.WINDUP:
+		pose = KickLogic.kick_pose(logic.windup_elapsed)
+	elif logic.phase == KickLogic.Phase.FLIGHT or logic.phase == KickLogic.Phase.RESULT:
+		pose = "follow"
+	if pose == "idle":
+		return "res://art/kickers/%s_back.png" % who
+	if pose == "follow":
+		return "res://art/kickers/%s_follow_through.png" % who
+	return "res://art/kickers/%s_%s.png" % [who, pose]
+
+
 func _place_kicker(tee: Vector3) -> void:
 	if _kicker_sprite == null:
 		return
-	var path := ""
-	if run.kicker_id == Kickers.WALK_ON:
-		path = "res://art/kickers/walk_on_back.png"
-	elif run.kicker_id == Kickers.BIG_BRUCE:
-		path = "res://art/kickers/big_bruce_back.png"
+	var path := _kicker_art_path()
 	if path == "":
 		_kicker_sprite.visible = false
 		return

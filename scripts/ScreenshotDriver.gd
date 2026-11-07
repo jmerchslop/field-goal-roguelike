@@ -33,7 +33,7 @@ func _ready() -> void:
 	board.logic.press_space()
 	board.logic.advance(0.8 / KickConstants.ACCURACY_FALL_PER_SEC * KickConstants.POWER_RISE_PER_SEC)
 	board.logic.press_space()
-	board.logic.advance(board.logic.flight_duration * 0.58)
+	board.logic.advance(KickLogic.CONTACT_SEC + board.logic.flight_duration * 0.58)
 	board._approach_time = 0.8
 	if not await _capture("view_flight.png"):
 		get_tree().quit(1)
@@ -120,7 +120,7 @@ func _ready() -> void:
 	_lock_full_power_straight()
 	# In the air, past the posts and past where a P=50 kick lands.
 	var flight: float = board.logic.flight_duration
-	board.logic.advance(flight * (58.0 / board.logic.travel_yards))
+	board.logic.advance(KickLogic.CONTACT_SEC + flight * (58.0 / board.logic.travel_yards))
 	if not await _capture("power_100_long.png"):
 		get_tree().quit(1)
 		return
@@ -235,7 +235,7 @@ func _ready() -> void:
 	board.logic.press_space()
 	board.logic.advance(board.logic.power / curve_stats.accuracy_speed)
 	board.logic.press_space()
-	board.logic.advance(board.logic.flight_duration * (32.0 / board.logic.travel_yards))
+	board.logic.advance(KickLogic.CONTACT_SEC + board.logic.flight_duration * (32.0 / board.logic.travel_yards))
 	if not await _capture("windy_curve.png"):
 		get_tree().quit(1)
 		return
@@ -267,9 +267,48 @@ func _ready() -> void:
 		get_tree().quit(1)
 		return
 	board.force_weather(RunLogic.ICED)
-	board.logic.phase = KickLogic.Phase.POWER
-	board.meter_time = 0.5
-	if not await _capture("weather_iced.png"):
+	_set_accuracy_needle(70.0, 0.12)
+	if not await _capture("iced_needle_fade.png"):
+		get_tree().quit(1)
+		return
+	_set_accuracy_needle(70.0, 0.55)
+	if not await _capture("iced_needle_back.png"):
+		get_tree().quit(1)
+		return
+	board.force_weather(RunLogic.CLEAR)
+	_set_accuracy_needle(70.0, 0.35)
+	if not await _capture("needle_always_visible.png"):
+		get_tree().quit(1)
+		return
+	board.load_current_kick()
+	if not await _capture("anim_walk_idle.png"):
+		get_tree().quit(1)
+		return
+	_lock_into_windup(50.0)
+	board.logic.windup_elapsed = 0.22
+	if not await _capture("anim_walk_run.png"):
+		get_tree().quit(1)
+		return
+	board.logic.windup_elapsed = 0.42
+	if not await _capture("anim_walk_plant.png"):
+		get_tree().quit(1)
+		return
+	board.logic.advance(KickLogic.CONTACT_SEC - 0.42 + 0.08)
+	if not await _capture("anim_walk_follow.png"):
+		get_tree().quit(1)
+		return
+	board.highlight = 0
+	board.confirm_kicker()
+	if not await _capture("anim_bruce_idle.png"):
+		get_tree().quit(1)
+		return
+	_lock_into_windup(50.0)
+	board.logic.windup_elapsed = 0.42
+	if not await _capture("anim_bruce_plant.png"):
+		get_tree().quit(1)
+		return
+	board.logic.advance(KickLogic.CONTACT_SEC - 0.42 + 0.08)
+	if not await _capture("anim_bruce_follow.png"):
 		get_tree().quit(1)
 		return
 	board.logic.phase = KickLogic.Phase.AIMING
@@ -289,6 +328,23 @@ func _ready() -> void:
 		get_tree().quit(1)
 		return
 	get_tree().quit()
+
+
+func _set_accuracy_needle(power_value: float, along: float) -> void:
+	board.logic.phase = KickLogic.Phase.ACCURACY
+	board.logic.power = power_value
+	var span := power_value - KickConstants.METER_MIN
+	board.logic.needle = power_value - along * span
+
+
+func _lock_into_windup(power_value: float) -> void:
+	var stats: KickerStats = board.logic.stats
+	board.logic.phase = KickLogic.Phase.AIMING
+	board.logic.press_space()
+	board.logic.advance(power_value / stats.power_speed)
+	board.logic.press_space()
+	board.logic.advance(board.logic.power / stats.accuracy_speed)
+	board.logic.press_space()
 
 
 func _log_posts(tag: String) -> void:
@@ -321,7 +377,7 @@ func _finish_centered_power(power_value: float) -> void:
 	board.logic.press_space()
 	board.logic.advance(board.logic.power / stats.accuracy_speed)
 	board.logic.press_space()
-	board.logic.advance(board.logic.flight_duration)
+	board.logic.advance(KickLogic.CONTACT_SEC + board.logic.flight_duration)
 
 
 func _capture(file_name: String) -> bool:
