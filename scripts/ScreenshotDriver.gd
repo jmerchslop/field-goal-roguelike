@@ -124,6 +124,65 @@ func _ready() -> void:
 	if not await _capture("power_100_long.png"):
 		get_tree().quit(1)
 		return
+	board.highlight = 1
+	board.confirm_kicker()
+	board.run.resolve_kick("GOOD", 0.0, false)
+	board.run.roll_offer()
+	if not await _capture("upgrade_after_make.png"):
+		get_tree().quit(1)
+		return
+	board.restart_run()
+	board.run.attempts = 2
+	var same_spot: float = board.run.spot_yards
+	var same_wind: int = board.run.wind_speed
+	board.run.resolve_kick("SHORT", 0.0, false)
+	board.run.begin_retry()
+	board.load_current_kick()
+	if not await _capture("miss_no_upgrade.png"):
+		get_tree().quit(1)
+		return
+	if board.run.kick_number != 1 or board.run.awaiting_offer or absf(board.run.spot_yards - same_spot) > 0.01 or board.run.wind_speed != same_wind:
+		print("miss retry drifted")
+		get_tree().quit(1)
+		return
+	board.run.grant(Upgrades.BIG_LEG)
+	board.run.grant(Upgrades.BIG_LEG)
+	board.run.grant(Upgrades.BIG_LEG)
+	if not await _capture("big_leg_stacks.png"):
+		get_tree().quit(1)
+		return
+	board.restart_run()
+	if not await _capture("calm_kick.png"):
+		get_tree().quit(1)
+		return
+	board.set_wind(10.0, 90.0)
+	var stats: KickerStats = board.logic.stats
+	board.logic.press_space()
+	board.logic.advance(55.0 / stats.power_speed)
+	board.logic.press_space()
+	board.logic.advance(board.logic.power / stats.accuracy_speed)
+	board.logic.press_space()
+	var to_posts: float = board.logic.flight_duration * (34.0 / board.logic.travel_yards)
+	board.logic.advance(to_posts)
+	if not await _capture("wind_curve.png"):
+		get_tree().quit(1)
+		return
+	board.load_current_kick()
+	board.set_wind(10.0, 90.0)
+	board.run.grant(Upgrades.FLAG_READER)
+	board.run.grant(Upgrades.LASER_LINE)
+	board.logic.aim_degrees = 4.0
+	if not await _capture("flag_laser.png"):
+		get_tree().quit(1)
+		return
+	board.run.grant(Upgrades.STORM_CHASER)
+	board.load_current_kick()
+	board.set_wind(10.0, 90.0)
+	_finish_centered_power(50.0)
+	board.run.resolve_kick(board.logic.result_text, board.logic.offset_yards, board.logic.perfect)
+	if not await _capture("storm_score.png"):
+		get_tree().quit(1)
+		return
 	get_tree().quit()
 
 

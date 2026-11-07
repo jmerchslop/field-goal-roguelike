@@ -36,6 +36,7 @@ func _run() -> void:
 	_check_upgrades()
 	_check_kickers_and_fixes()
 	_check_power_flight()
+	_check_wind_and_pool()
 
 
 func check(ok: bool, label: String) -> void:
@@ -553,7 +554,8 @@ func _check_upgrades() -> void:
 
 func _check_upgrade_offers() -> void:
 	var eligible := Upgrades.eligible_ids({})
-	check(eligible.size() == 6, "all six upgrades start eligible")
+	check(eligible.size() == Upgrades.DEFS.size(), "every upgrade starts eligible")
+	check(Upgrades.pickable_copies() >= 30, "the pool has at least 30 pickable copies, got %s" % Upgrades.pickable_copies())
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 4
 	var offer: Array = Upgrades.draw_offer(eligible, rng)
@@ -563,7 +565,7 @@ func _check_upgrade_offers() -> void:
 	again.seed = 4
 	var replay: Array = Upgrades.draw_offer(eligible, again)
 	check(offer == replay, "the same offer seed draws the same cards")
-	var capped := {"big_leg": 3, "steady_plant": 3, "sweet_spot": 2, "hot_streak": 1}
+	var capped := {"big_leg": 3, "steady_plant": 3, "sweet_spot": 3, "hot_streak": 1}
 	var left := Upgrades.eligible_ids(capped)
 	check(left.find("big_leg") == -1 and left.find("sweet_spot") == -1, "maxed upgrades are not offered")
 	check(left.find("deep_bench") != -1 and left.find("mulligan") != -1, "upgrades under the cap stay eligible")
@@ -699,6 +701,21 @@ func _check_mulligan_reroll_and_skip() -> void:
 	fresh.new_run()
 	check(fresh.stats.range_bonus == 0.0 and fresh.stats.perfect_band == 2.0, "a new run resets KickerStats")
 	check(fresh.owned_ids().is_empty() and fresh.rerolls_left == 1 and fresh.mulligans_left == 0, "a new run clears cards, rerolls, and mulligans")
+
+
+func _aimed_power(power_value: float, aim: float, insure: bool) -> KickLogic:
+	var kick := KickLogic.new()
+	kick.insurance_ready = insure
+	kick.reset_kick()
+	kick.kick_distance = 35.0
+	kick.aim_degrees = aim
+	kick.press_space()
+	kick.advance(power_value / kick.stats.power_speed)
+	kick.press_space()
+	kick.advance(kick.power / kick.stats.accuracy_speed)
+	if kick.phase == KickLogic.Phase.ACCURACY:
+		kick.press_space()
+	return kick
 
 
 func _lock_power_at(kick: KickLogic, power_value: float) -> void:
@@ -858,3 +875,188 @@ func _check_power_flight() -> void:
 	check(near(again.max_range, 29.4) and near(again.travel_yards, 29.4) and again.result_text == "SHORT", "check 5 the retry flies on the new P, not the earlier 83")
 	again.advance(again.flight_duration)
 	check(near(again.ball_forward_yards, 29.4), "check 5 the retry ball stops at 29.4 yards")
+
+
+func _check_wind_and_pool() -> void:
+	var made := RunLogic.new()
+	made.new_run()
+	made.resolve_kick("GOOD", 0.0, false)
+	check(made.wants_upgrade(), "check 1 a make asks for an upgrade")
+	made.roll_offer()
+	check(made.awaiting_offer and made.offer.size() > 0, "check 1 the upgrade screen has cards")
+	var missed := RunLogic.new()
+	missed.start_with_kicker(Kickers.WALK_ON)
+	missed.attempts = 2
+	missed.set_wind(10.0, 90.0)
+	var spot := missed.spot_yards
+	missed.resolve_kick("WIDE RIGHT", 4.0, false)
+	check(not missed.wants_upgrade() and missed.kick_number == 1 and near(missed.spot_yards, spot), "check 1 a miss does not offer cards and stays on the kick")
+	check(missed.begin_retry() and missed.wind_speed == 10 and near(missed.wind_direction, 90.0), "check 1 and 5 the retry keeps the saved wind")
+	var leg := RunLogic.new()
+	leg.new_run()
+	leg.grant(Upgrades.BIG_LEG)
+	leg.grant(Upgrades.BIG_LEG)
+	leg.grant(Upgrades.BIG_LEG)
+	check(near(leg.stats.range_bonus, 18.0), "check 2 three Big Legs add 18 yards, got %s" % leg.stats.range_bonus)
+	check(Upgrades.stack_label(Upgrades.BIG_LEG, 3) == "Big Leg 3/3 (+18 yd)", "check 2 the label reads '%s'" % Upgrades.stack_label(Upgrades.BIG_LEG, 3))
+	var before := leg.stats.range_bonus
+	leg.rebuild_stats()
+	check(near(leg.stats.range_bonus, before), "rebuilding does not apply Big Leg a second time")
+	var short_before := KickLogic.new()
+	_lock_power_at(short_before, 20.0)
+	check(short_before.result_text == "SHORT", "power 20 is short before Big Leg")
+	var reached := KickLogic.new()
+	reached.stats.range_bonus = 18.0
+	_lock_power_at(reached, 20.0)
+	check(reached.max_range > short_before.max_range + 17.0 and reached.result_text == "GOOD", "check 2 +18 yards turns that short kick into a make, range %s" % reached.max_range)
+	var plant := RunLogic.new()
+	plant.new_run()
+	plant.grant(Upgrades.STEADY_PLANT)
+	check(near(plant.stats.power_speed, 100.0 * 0.85) and near(plant.stats.accuracy_speed, 120.0 * 0.85), "check 3 one Steady Plant is 85% on both needles")
+	plant.grant(Upgrades.STEADY_PLANT)
+	check(near(plant.stats.power_speed, 100.0 * pow(0.85, 2.0)) and near(plant.stats.accuracy_speed, 120.0 * pow(0.85, 2.0)), "check 3 the second copy is about 72% and slower than the first")
+	var after_two := plant.stats.power_speed
+	plant.grant(Upgrades.STEADY_PLANT)
+	check(plant.stats.power_speed < after_two and near(plant.stats.power_speed, 100.0 * pow(0.85, 3.0)), "check 3 the third copy slows both needles again")
+	check(near(plant.stats.accuracy_speed, 120.0 * pow(0.85, 3.0)), "accuracy slows with the third Steady Plant too")
+	var calm := RunLogic.new()
+	calm.set_seed(3)
+	calm.new_run()
+	for kick_n in [1, 2, 3]:
+		check(calm.kick_number == kick_n and calm.wind_speed == 0 and RunLogic.wind_name(calm.wind_speed) == "Calm", "check 4 kick %d is Calm" % kick_n)
+		check(RunLogic.wind_flag_kind(calm.wind_speed) == "none", "check 4 kick %d has no flag" % kick_n)
+		calm.resolve_kick("GOOD", 0.0, false)
+		calm.go_to_next_kick()
+	calm.apply_debug_wind()
+	check(calm.wind_speed == 10 and near(calm.wind_direction, 90.0), "check 5 W sets 10 mph straight right")
+	var held_speed := calm.wind_speed
+	var held_dir := calm.wind_direction
+	calm.attempts = 2
+	calm.resolve_kick("SHORT", 0.0, false)
+	calm.begin_retry()
+	check(calm.wind_speed == held_speed and near(calm.wind_direction, held_dir), "check 5 a miss keeps that wind")
+	calm.resolve_kick("GOOD", 0.0, false)
+	var before_kick := calm.kick_number
+	calm.go_to_next_kick()
+	check(calm.kick_number == before_kick + 1 and not (calm.wind_speed == 10 and near(calm.wind_direction, 90.0)), "check 5 the next kick rolls a new wind")
+	var walk_drift := KickLogic.drift_at_uprights(10.0, 90.0, 35.0, 0, 0, "standard")
+	var bruce_drift := KickLogic.drift_at_uprights(10.0, 90.0, 35.0, 0, 0, "barn_burner")
+	check(walk_drift > 2.0 and near(bruce_drift, walk_drift * 0.7), "check 6 Barn Burner drift is 0.7 times The Walk-On")
+	var curve := KickLogic.new()
+	curve.wind_speed = 10
+	curve.wind_direction = 90.0
+	_lock_power_at(curve, 50.0)
+	check(curve.offset_yards > 1.5, "check 5 a centered kick in a right wind lands right, offset %s" % curve.offset_yards)
+	curve.advance(curve.flight_duration * (35.0 / curve.travel_yards))
+	check(near(curve.ball_lateral_yards, curve.offset_yards, 0.05), "the curve at the posts is the scored offset")
+	var early := KickLogic.path_lateral(0.0, 10.0, 0.0, 35.0, walk_drift)
+	var late := KickLogic.path_lateral(0.0, 30.0, 0.0, 35.0, walk_drift)
+	check(late > early * 2.0, "the bend grows late, not in a straight line")
+	var reader := RunLogic.new()
+	reader.new_run()
+	reader.grant(Upgrades.FLAG_READER)
+	reader.set_wind(10.0, 90.0)
+	check(reader.stats.flag_reader, "check 7 Flag Reader is owned")
+	var readout := RunLogic.wind_readout(reader.wind_speed, reader.wind_direction)
+	check(readout.find("10 mph") >= 0 and readout.find("cross") >= 0 and readout.find("tail") >= 0, "check 7 the readout is '%s'" % readout)
+	check(near(KickLogic.crosswind_mph(10.0, 90.0), 10.0, 0.02) and near(KickLogic.head_tail_mph(10.0, 90.0), 0.0, 0.02), "10 mph at 90° is all crosswind")
+	reader.grant(Upgrades.LASER_LINE)
+	check(reader.stats.laser_line, "check 7 Laser Line is owned")
+	var preview_far := KickLogic.preview_forward(35.0)
+	check(near(preview_far, 14.0), "the preview covers the first 40% of the kick")
+	var preview := KickLogic.path_lateral(0.0, preview_far, 0.0, 35.0, walk_drift)
+	check(near(preview, walk_drift * 0.16, 0.02), "check 7 the preview bends with the wind curve, lateral %s" % preview)
+	var tail_kick := KickLogic.new()
+	tail_kick.wind_speed = 10
+	tail_kick.wind_direction = 0.0
+	_lock_power_at(tail_kick, 50.0)
+	var head_kick := KickLogic.new()
+	head_kick.wind_speed = 10
+	head_kick.wind_direction = 180.0
+	_lock_power_at(head_kick, 50.0)
+	check(tail_kick.max_range > head_kick.max_range + 7.0, "check 8 a tailwind flies farther than a headwind (%s vs %s)" % [tail_kick.max_range, head_kick.max_range])
+	var storm := RunLogic.new()
+	storm.new_run()
+	storm.grant(Upgrades.STORM_CHASER)
+	storm.set_wind(10.0, 90.0)
+	storm.resolve_kick("GOOD", 2.0, false)
+	check(storm.score_line.find("wind") >= 0, "Storm Chaser shows up in the score line: %s" % storm.score_line)
+	check(near(KickLogic.wind_range_delta(10.0, 0.0, 0, false), 4.0, 0.05), "10 mph of tailwind adds 4 yards")
+	check(near(KickLogic.wind_range_delta(10.0, 180.0, 0, false), -4.0, 0.05), "10 mph of headwind takes 4 yards")
+	check(near(KickLogic.wind_range_delta(10.0, 0.0, 0, true), 6.0, 0.05), "Thin Air boosts only the tailwind")
+	check(near(KickLogic.wind_range_delta(10.0, 180.0, 0, true), -4.0, 0.05), "Thin Air does not boost a headwind")
+	var low := RunLogic.new()
+	low.new_run()
+	low.grant(Upgrades.LOW_DRIVE)
+	low.grant(Upgrades.LOW_DRIVE)
+	check(low.stats.low_drive_stacks == 2 and near(low.stats.range_bonus, -6.0), "two Low Drives cost 6 yards of range")
+	var broken := KickLogic.drift_at_uprights(10.0, 90.0, 35.0, 2, 1, "standard")
+	check(near(broken, walk_drift * pow(0.65, 2.0) * 0.8), "Low Drive and Wind Breaker multiply the drift")
+	var ice := RunLogic.new()
+	ice.new_run()
+	ice.grant(Upgrades.ICE_VEINS)
+	var icy := KickLogic.new()
+	icy.stats = ice.stats
+	icy.set_seed(2)
+	_lock_power_at(icy, 96.0)
+	check(icy.accuracy_error == 0.0, "Ice Veins adds no red-tip error when power is in the red, got %s" % icy.accuracy_error)
+	var bare := KickLogic.new()
+	bare.set_seed(2)
+	_lock_power_at(bare, 96.0)
+	check(bare.accuracy_error != 0.0, "without Ice Veins the same seed still wobbles, got %s" % bare.accuracy_error)
+	var insured := RunLogic.new()
+	insured.new_run()
+	insured.grant(Upgrades.WIDE_RIGHT_INSURANCE)
+	check(insured.insurance_left == 1, "insurance starts with one charge")
+	var doink := _aimed_power(50.0, rad_to_deg(atan(3.08 / 35.0)), true)
+	check(doink.result_text == "GOOD" and doink.insured, "a doink with insurance becomes GOOD, got %s" % doink.result_text)
+	insured.consume_insurance()
+	check(insured.insurance_left == 0, "the charge is used up")
+	var again_doink := _aimed_power(50.0, rad_to_deg(atan(3.08 / 35.0)), false)
+	check(again_doink.result_text == "DOINK" and not again_doink.insured, "the next doink in the quarter is still a miss, got %s" % again_doink.result_text)
+	insured.kick_number = 5
+	insured.kick_resolved = true
+	insured.last_result_made = true
+	insured.go_to_next_kick()
+	check(insured.kick_number == 6 and insured.insurance_left == 1, "the next quarter refills insurance")
+	var practice := RunLogic.new()
+	practice.start_with_kicker(Kickers.WALK_ON)
+	practice.grant(Upgrades.PRACTICE_SWING)
+	var score_before := practice.score
+	var attempts_before := practice.attempts
+	var streak_before := practice.streak
+	var first_ball := practice.is_first_ball
+	practice.set_wind(8.0, 45.0)
+	check(practice.start_practice() and practice.practicing and practice.practice_left == 0, "check practice spends the quarterly swing")
+	check(practice.score == score_before and practice.attempts == attempts_before and practice.streak == streak_before and practice.is_first_ball == first_ball, "a practice swing does not touch score, attempts, or streak")
+	check(practice.wind_speed == 8 and not practice.wants_upgrade(), "practice keeps the wind and is not a make")
+	practice.end_practice()
+	check(not practice.practicing and not practice.start_practice(), "the swing is used up until the next quarter")
+	var scout := RunLogic.new()
+	scout.start_with_kicker(Kickers.WALK_ON)
+	check(scout.rerolls_left == 2, "The Walk-On still starts with 2 rerolls")
+	scout.grant(Upgrades.SCOUTING_REPORT)
+	check(scout.stats.rerolls_per_run == 3 and scout.rerolls_left == 3, "Scouting Report adds one reroll")
+	scout.grant(Upgrades.SCOUTING_REPORT)
+	check(scout.stats.rerolls_per_run == 4 and scout.rerolls_left == 4, "a second Scouting Report adds another")
+	var bench := RunLogic.new()
+	bench.new_run()
+	bench.attempts = 1
+	bench.grant(Upgrades.DEEP_BENCH)
+	check(bench.attempts == 2 and bench.attempt_cap == 4, "Deep Bench adds one attempt when it is picked")
+	bench.rebuild_stats()
+	check(bench.attempts == 2 and bench.attempt_cap == 4, "rebuilding does not add the attempt again")
+	var pool := RunLogic.new()
+	pool.new_run()
+	var picked := 0
+	while picked < 19:
+		var choices := Upgrades.eligible_ids(pool.stacks)
+		check(choices.size() > 0, "check 9 card %d still has something to pick" % (picked + 1))
+		if choices.is_empty():
+			break
+		pool.grant(str(choices[0]))
+		picked += 1
+	pool.resolve_kick("GOOD", 0.0, false)
+	pool.roll_offer()
+	check(pool.offer.size() > 0 or pool.skip_offer(), "check 9 after 19 picks the screen still has a card or Skip")
+	check(Upgrades.pickable_copies() == 32, "the pool's pickable copies are 32, got %s" % Upgrades.pickable_copies())

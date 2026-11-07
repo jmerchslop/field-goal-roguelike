@@ -1,7 +1,7 @@
 class_name RunTable
 extends RefCounted
 
-# The 20 kicks in a run. Wind and conditions are stored now and used later.
+# The 20 kicks in a run. Each row's wind min and max are rolled when that kick begins.
 # Spot is where the ball starts: center, hash (3 yd off), or wide (6 yd off).
 
 const SPOT_CENTER := "center"

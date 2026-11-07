@@ -29,7 +29,13 @@ var offset_yards := 0.0
 var result_text := ""
 var perfect := false
 var bank_shot := false
+var insured := false
+var insurance_ready := false
 var reached_uprights := false
+# Saved wind for this kick. 0° blows toward the uprights. Positive crosswind pushes right.
+var wind_speed := 0
+var wind_direction := 0.0
+var drift_yards := 0.0
 var flight_elapsed := 0.0
 var flight_duration := 0.0
 var travel_yards := 0.0
@@ -91,6 +97,9 @@ func advance(delta: float) -> void:
 func reset_kick() -> void:
 	var distance := kick_distance
 	var lateral := start_lateral_yards
+	var saved_speed := wind_speed
+	var saved_direction := wind_direction
+	var keep_insurance := insurance_ready
 	phase = Phase.AIMING
 	aim_degrees = 0.0
 	needle = 0.0
@@ -102,7 +111,9 @@ func reset_kick() -> void:
 	result_text = ""
 	perfect = false
 	bank_shot = false
+	insured = false
 	reached_uprights = false
+	drift_yards = 0.0
 	flight_elapsed = 0.0
 	flight_duration = 0.0
 	travel_yards = 0.0
@@ -111,6 +122,9 @@ func reset_kick() -> void:
 	ball_height = 0.0
 	kick_distance = distance
 	start_lateral_yards = lateral
+	wind_speed = saved_speed
+	wind_direction = saved_direction
+	insurance_ready = keep_insurance
 
 
 func detail_line() -> String:
@@ -151,6 +165,45 @@ static func final_angle(aim: float, accuracy_error_value: float) -> float:
 
 static func range_yards(power_value: float) -> float:
 	return KickConstants.RANGE_BASE_YARDS + KickConstants.RANGE_PER_POWER * power_value
+
+
+# Positive crosswind pushes the ball right. Positive head/tail is a tailwind.
+static func crosswind_mph(speed: float, direction_degrees: float) -> float:
+	return speed * sin(deg_to_rad(direction_degrees))
+
+
+static func head_tail_mph(speed: float, direction_degrees: float) -> float:
+	return speed * cos(deg_to_rad(direction_degrees))
+
+
+# Yards of sideways drift at the uprights, after resist upgrades and the ball.
+static func drift_at_uprights(speed: float, direction_degrees: float, distance_yards: float, low_drive: int, wind_breaker: int, ball_type: String) -> float:
+	var resist := pow(0.65, float(low_drive)) * pow(0.8, float(wind_breaker))
+	if ball_type == "barn_burner":
+		resist *= 0.7
+	return crosswind_mph(speed, direction_degrees) * 0.0065 * distance_yards * resist
+
+
+# Tailwind adds range. Headwind subtracts. Low Drive shrinks it. Thin Air boosts only a tailwind.
+static func wind_range_delta(speed: float, direction_degrees: float, low_drive: int, thin_air: bool) -> float:
+	var change := head_tail_mph(speed, direction_degrees) * 0.4
+	change *= pow(0.65, float(low_drive))
+	if thin_air and change > 0.0:
+		change *= 1.5
+	return change
+
+
+# The same line the ball is drawn on. At the posts, the wind term is the full drift.
+static func path_lateral(start_lateral: float, forward: float, angle_degrees: float, distance_yards: float, drift: float) -> float:
+	var along := 0.0
+	if distance_yards > 0.0:
+		along = forward / distance_yards
+	return start_lateral + forward * tan(deg_to_rad(angle_degrees)) + drift * along * along
+
+
+# End of the aiming preview: the first 40% of the kick, perfect accuracy, with the wind curve.
+static func preview_forward(distance_yards: float) -> float:
+	return distance_yards * 0.4
 
 
 static func offset_yards_at_uprights(distance_yards: float, angle_degrees: float, start_lateral: float = 0.0) -> float:
@@ -264,25 +317,35 @@ func _lock_power(value: float) -> void:
 
 
 func _lock_accuracy(value: float) -> void:
-	accuracy_error = accuracy_with_red_tip(power, value, _rng, stats.red_tip_start, stats.red_tip_noise)
+	if stats.ice_veins:
+		accuracy_error = value
+	else:
+		accuracy_error = accuracy_with_red_tip(power, value, _rng, stats.red_tip_start, stats.red_tip_noise)
 	# The perfect window comes from the kicker's stats, so Sweet Spot can widen it.
 	perfect = absf(accuracy_error) <= stats.perfect_band
 	var hook := 0.0 if perfect else -accuracy_error * KickConstants.ACCURACY_DEG_PER_ERROR
 	final_angle_degrees = aim_degrees + hook
-	# This kick's locked power. Not a leftover, and not the kick distance.
-	max_range = stats.range_base + stats.range_per_power * power + stats.range_bonus
+	# This kick's locked power, plus the saved wind. Not last kick's range.
+	drift_yards = drift_at_uprights(float(wind_speed), wind_direction, kick_distance, stats.low_drive_stacks, stats.wind_breaker_stacks, stats.ball_type)
+	var wind_range := wind_range_delta(float(wind_speed), wind_direction, stats.low_drive_stacks, stats.thin_air_stacks >= 1)
+	max_range = stats.range_base + stats.range_per_power * power + stats.range_bonus + wind_range
 	travel_yards = max_range
 	flight_duration = flight_time_seconds(travel_yards)
 	reached_uprights = travel_yards >= kick_distance
 	# The drawn path is this same line. A short ball stops at max range.
 	# A long ball is scored where that line crosses the uprights, then it keeps going.
 	if reached_uprights:
-		offset_yards = offset_yards_at_uprights(kick_distance, final_angle_degrees, start_lateral_yards)
+		offset_yards = path_lateral(start_lateral_yards, kick_distance, final_angle_degrees, kick_distance, drift_yards)
 	else:
-		offset_yards = offset_yards_at_uprights(travel_yards, final_angle_degrees, start_lateral_yards)
+		offset_yards = path_lateral(start_lateral_yards, travel_yards, final_angle_degrees, kick_distance, drift_yards)
 	var judged := judge(max_range, kick_distance, offset_yards if reached_uprights else 0.0, stats.ball_type)
 	result_text = str(judged["text"])
 	bank_shot = bool(judged["bank"])
+	insured = false
+	if result_text == "DOINK" and insurance_ready:
+		result_text = "GOOD"
+		insured = true
+		insurance_ready = false
 	phase = Phase.FLIGHT
 	flight_elapsed = 0.0
 
@@ -292,7 +355,7 @@ func _update_ball() -> void:
 	if flight_duration > 0.0 and (phase == Phase.FLIGHT or phase == Phase.RESULT):
 		t = clampf(flight_elapsed / flight_duration, 0.0, 1.0)
 	ball_forward_yards = t * travel_yards
-	ball_lateral_yards = start_lateral_yards + ball_forward_yards * tan(deg_to_rad(final_angle_degrees))
+	ball_lateral_yards = path_lateral(start_lateral_yards, ball_forward_yards, final_angle_degrees, kick_distance, drift_yards)
 	# The arc grows the ball on the way up and shrinks it on the way down.
 	ball_height = sin(t * PI)
 

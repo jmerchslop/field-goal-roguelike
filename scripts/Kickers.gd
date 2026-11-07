@@ -3,7 +3,7 @@ extends RefCounted
 
 # The two kickers. Adding a third one later means adding data here.
 # Kick code never names a kicker. It only reads KickerStats and ball_type.
-# Barn Burner's wind drift (× 0.7) belongs to the wind prompt. It is not built here.
+# A barn_burner ball multiplies sideways wind drift by 0.7. The kick reads ball_type.
 
 const BIG_BRUCE := "big_bruce"
 const WALK_ON := "walk_on"

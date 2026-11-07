@@ -56,12 +56,21 @@ func _ready() -> void:
 
 func load_current_kick() -> void:
 	logic.reset_kick()
-	logic.kick_distance = run.distance_yards()
-	logic.start_lateral_yards = run.spot_yards
+	_copy_run_onto_kick()
 	logic.sync_tee()
 	_approach_time = 0.0
 	_bank_time = 0.0
 	refresh_view()
+
+
+func _copy_run_onto_kick() -> void:
+	logic.stats = run.stats
+	logic.kick_distance = run.distance_yards()
+	logic.start_lateral_yards = run.spot_yards
+	logic.wind_speed = run.wind_speed
+	logic.wind_direction = run.wind_direction
+	logic.insurance_ready = run.insurance_left > 0
+	logic.insured = false
 
 
 func settle_kick() -> void:
@@ -69,12 +78,21 @@ func settle_kick() -> void:
 		return
 	if run.kick_resolved or run.awaiting_mulligan or run.awaiting_offer:
 		return
+	if run.practicing:
+		run.end_practice()
+		load_current_kick()
+		return
 	if run.can_mulligan(logic.result_text):
 		run.begin_mulligan(logic.result_text, logic.offset_yards, logic.perfect)
 		return
+	if logic.insured:
+		run.consume_insurance()
 	run.resolve_kick(logic.result_text, logic.offset_yards, logic.perfect)
-	if run.phase == RunLogic.Phase.PLAYING:
+	if run.wants_upgrade():
 		run.roll_offer()
+	elif run.phase == RunLogic.Phase.PLAYING:
+		run.begin_retry()
+		load_current_kick()
 
 
 func retake_with_mulligan() -> void:
@@ -85,6 +103,7 @@ func retake_with_mulligan() -> void:
 	logic.reset_kick()
 	logic.kick_distance = distance
 	logic.start_lateral_yards = spot
+	_copy_run_onto_kick()
 	logic.sync_tee()
 	_approach_time = 0.0
 	_bank_time = 0.0
@@ -112,7 +131,6 @@ func confirm_kicker() -> void:
 		return
 	selecting = false
 	run.start_with_kicker(id)
-	logic.stats = run.stats
 	_tint_ball()
 	load_current_kick()
 
@@ -171,13 +189,18 @@ func restart_run() -> void:
 		open_select()
 		return
 	run.start_with_kicker(id)
-	logic.stats = run.stats
 	_tint_ball()
 	load_current_kick()
 
 
 func force_spot_side(side: int) -> void:
 	run.set_next_side(side)
+
+
+func set_wind(speed: float, direction: float) -> void:
+	run.set_wind(speed, direction)
+	logic.wind_speed = run.wind_speed
+	logic.wind_direction = run.wind_direction
 
 
 func play_locked_kick(power_value: float) -> void:
@@ -216,6 +239,8 @@ func _process(delta: float) -> void:
 		if direction != 0.0:
 			logic.aim(direction, delta)
 		logic.advance(delta)
+		if logic.insured:
+			run.consume_insurance()
 		settle_kick()
 		if logic.phase == KickLogic.Phase.POWER or logic.phase == KickLogic.Phase.ACCURACY:
 			_approach_time += delta
@@ -261,12 +286,23 @@ func _unhandled_input(event: InputEvent) -> void:
 		run.reroll_offer()
 		refresh_view()
 		return
+	if key.keycode == KEY_W and run.phase == RunLogic.Phase.PLAYING and not run.awaiting_offer and not run.awaiting_mulligan:
+		run.apply_debug_wind()
+		logic.wind_speed = run.wind_speed
+		logic.wind_direction = run.wind_direction
+		refresh_view()
+		return
+	if key.keycode == KEY_P and logic.phase == KickLogic.Phase.AIMING and not run.awaiting_offer and not run.awaiting_mulligan:
+		if run.start_practice():
+			refresh_view()
+		return
 	if key.keycode != KEY_SPACE:
 		return
 	if run.awaiting_mulligan:
 		run.accept_pending_miss()
 		if run.phase == RunLogic.Phase.PLAYING:
-			run.roll_offer()
+			run.begin_retry()
+			load_current_kick()
 		refresh_view()
 		return
 	if run.awaiting_offer:
@@ -275,12 +311,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if logic.phase == KickLogic.Phase.RESULT:
 		settle_kick()
-		if run.awaiting_mulligan or run.awaiting_offer or run.phase != RunLogic.Phase.PLAYING:
-			refresh_view()
-			return
-		advance_run()
+		refresh_view()
 		return
 	logic.press_space()
+	if logic.insured:
+		run.consume_insurance()
 	refresh_view()
 
 
@@ -406,6 +441,10 @@ func _ball_position() -> Vector3:
 	if forward < 0.05 and logic.phase != KickLogic.Phase.RESULT:
 		y = 0.16 + BALL_RADIUS
 	return Vector3(lateral, y, logic.kick_distance - forward)
+
+
+func world_to_screen(point: Vector3) -> Vector2:
+	return _camera.unproject_position(point)
 
 
 func _place_arrow(tee: Vector3) -> void:

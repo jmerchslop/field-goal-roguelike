@@ -18,6 +18,16 @@ var streak_step := KickConstants.STREAK_MULT_STEP
 var mulligans_per_quarter := 0
 var rerolls_per_run := 1
 var ball_type := "standard"
+# Stack counts the kick reads. Rebuild sets these from the owned cards.
+var low_drive_stacks := 0
+var wind_breaker_stacks := 0
+var storm_chaser_stacks := 0
+var thin_air_stacks := 0
+var flag_reader := false
+var laser_line := false
+var ice_veins := false
+var insurance_per_quarter := 0
+var practice_per_quarter := 0
 
 
 func reset() -> void:
@@ -35,3 +45,12 @@ func reset() -> void:
 	mulligans_per_quarter = 0
 	rerolls_per_run = 1
 	ball_type = "standard"
+	low_drive_stacks = 0
+	wind_breaker_stacks = 0
+	storm_chaser_stacks = 0
+	thin_air_stacks = 0
+	flag_reader = false
+	laser_line = false
+	ice_veins = false
+	insurance_per_quarter = 0
+	practice_per_quarter = 0

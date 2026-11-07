@@ -16,6 +16,8 @@ func _draw() -> void:
 	var run: RunLogic = game.run
 	_draw_meter(logic)
 	_draw_hud(logic, run)
+	_draw_wind(logic, run)
+	_draw_laser(logic, run)
 	if run.awaiting_mulligan:
 		_draw_mulligan()
 	elif run.awaiting_offer:
@@ -123,6 +125,10 @@ func _draw_hud(logic: KickLogic, run: RunLogic) -> void:
 		hint = "R: choose a kicker"
 	elif logic.phase == KickLogic.Phase.AIMING:
 		hint = "Hold Left or Right to aim.   Space starts the meter."
+		if run.can_practice():
+			hint += "   P: practice."
+		elif run.practicing:
+			hint += "   Practice swing."
 	elif logic.phase == KickLogic.Phase.POWER:
 		hint = "Space locks power."
 	elif logic.phase == KickLogic.Phase.ACCURACY:
@@ -218,6 +224,44 @@ func card_index_at(point: Vector2) -> int:
 	return -1
 
 
+func _draw_wind(logic: KickLogic, run: RunLogic) -> void:
+	var anchor: Vector2 = game.world_to_screen(Vector3(8.2, 6.2, 0.4))
+	var name := RunLogic.wind_name(run.wind_speed)
+	_text(anchor + Vector2(-8, -8), name, 20, KickConstants.COLOR_TEXT)
+	var kind := RunLogic.wind_flag_kind(run.wind_speed)
+	if kind != "none":
+		var reach := 2.2
+		if kind == "medium":
+			reach = 4.0
+		elif kind == "long":
+			reach = 6.5
+		var radians := deg_to_rad(run.wind_direction)
+		var tip_world := Vector3(8.2, 6.2, 0.4) + Vector3(sin(radians), 0.0, -cos(radians)) * reach
+		var tip: Vector2 = game.world_to_screen(tip_world)
+		draw_line(anchor, tip, Color(0.95, 0.95, 0.9), 4.0)
+		draw_circle(tip, 5.0, Color(0.95, 0.82, 0.16))
+	if not logic.stats.flag_reader:
+		return
+	_text(anchor + Vector2(-8, 18), RunLogic.wind_readout(run.wind_speed, run.wind_direction), 16, KickConstants.COLOR_ATTEMPT)
+
+
+func _draw_laser(logic: KickLogic, _run: RunLogic) -> void:
+	if not logic.stats.laser_line or logic.phase != KickLogic.Phase.AIMING:
+		return
+	var drift := KickLogic.drift_at_uprights(float(logic.wind_speed), logic.wind_direction, logic.kick_distance, logic.stats.low_drive_stacks, logic.stats.wind_breaker_stacks, logic.stats.ball_type)
+	var far := KickLogic.preview_forward(logic.kick_distance)
+	var previous := Vector2.ZERO
+	var started := false
+	for step in 9:
+		var forward := far * float(step) / 8.0
+		var lateral := KickLogic.path_lateral(logic.start_lateral_yards, forward, logic.aim_degrees, logic.kick_distance, drift)
+		var point: Vector2 = game.world_to_screen(Vector3(lateral, 0.35, logic.kick_distance - forward))
+		if started and step % 2 == 0:
+			draw_line(previous, point, Color(0.95, 0.82, 0.16), 3.0)
+		previous = point
+		started = true
+
+
 func _draw_mulligan() -> void:
 	var box := Rect2(180, 250, 740, 220)
 	draw_rect(box, KickConstants.COLOR_RESULT_SCRIM)
@@ -241,7 +285,7 @@ func _draw_offer(run: RunLogic) -> void:
 		draw_rect(rect, KickConstants.COLOR_ATTEMPT, false, 2.0)
 		var id := str(run.offer[i])
 		var info := Upgrades.get_def(id)
-		var stacks := int(run.stacks.get(id, 0))
+		var stacks := int(run.stacks.get(id, 0)) + 1
 		_text(rect.position + Vector2(14, 36), "%d  %s" % [i + 1, str(info["name"])], 20, KickConstants.COLOR_ATTEMPT)
 		_text(rect.position + Vector2(14, 64), Upgrades.stack_label(id, stacks), 16, KickConstants.COLOR_TEXT)
 		_draw_wrapped(str(info["description"]), Rect2(rect.position + Vector2(14, 96), Vector2(width - 28, 110)), 16)
@@ -282,6 +326,9 @@ func _draw_result(logic: KickLogic, run: RunLogic) -> void:
 	var y := box.position.y + 42.0
 	if logic.bank_shot:
 		_text_centered("BANK SHOT!", y, 36, KickConstants.COLOR_ATTEMPT)
+		y += 40.0
+	if logic.insured:
+		_text_centered("INSURED!", y, 36, KickConstants.COLOR_ATTEMPT)
 		y += 40.0
 	if logic.perfect:
 		_text_centered("PERFECT!", y, 28, KickConstants.COLOR_PERFECT_TEXT)

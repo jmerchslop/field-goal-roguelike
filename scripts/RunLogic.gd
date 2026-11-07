@@ -42,22 +42,33 @@ var rerolls_left := 1
 var pending_result := ""
 var pending_offset := 0.0
 var pending_perfect := false
+# Whole mph, and the direction it blows. Kept for a miss or a mulligan.
+var wind_speed := 0
+var wind_direction := 0.0
+var insurance_left := 0
+var practice_left := 0
+var practicing := false
 
 # 0 means "roll the side". -1 or +1 forces the next hash/wide spot.
 var _next_side := 0
 var _rng := RandomNumberGenerator.new()
+var _wind_rng := RandomNumberGenerator.new()
 var _offer_rng := RandomNumberGenerator.new()
 var _forced_offer: Array = []
+var _insurance_spent := false
 
 
 func _init() -> void:
 	_rng.randomize()
+	_wind_rng.randomize()
 	_offer_rng.randomize()
 	new_run()
 
 
 func set_seed(seed_value: int) -> void:
 	_rng.seed = seed_value
+	# Wind has its own generator so a spot seed still lands on the same hash.
+	_wind_rng.seed = seed_value + 7919
 
 
 func set_offer_seed(seed_value: int) -> void:
@@ -98,9 +109,16 @@ func new_run() -> void:
 	mulligan_used_this_kick = false
 	rerolls_left = stats.rerolls_per_run
 	pending_result = ""
+	wind_speed = 0
+	wind_direction = 0.0
+	insurance_left = 0
+	practice_left = 0
+	practicing = false
+	_insurance_spent = false
 	attempt_cap = stats.attempt_cap
-	_refill_mulligans()
+	_refill_quarter()
 	_place_spot()
+	_roll_wind()
 
 
 func distance_yards() -> float:
@@ -114,6 +132,17 @@ func is_boss() -> bool:
 # The multiplier for the kick you are on, from the streak before this kick.
 func current_mult() -> float:
 	return 1.0 + stats.streak_step * float(streak)
+
+
+func storm_bonus() -> float:
+	if stats.storm_chaser_stacks <= 0:
+		return 0.0
+	return 0.1 * float(stats.storm_chaser_stacks) * absf(KickLogic.crosswind_mph(float(wind_speed), wind_direction))
+
+
+func wants_upgrade() -> bool:
+	# Cards only after a make, and not on the win.
+	return phase == Phase.PLAYING and kick_resolved and last_result_made
 
 
 func can_advance() -> bool:
@@ -140,10 +169,12 @@ func resolve_kick(result_text: String, offset: float, perfect: bool) -> void:
 	score_line = ""
 	last_points = 0
 	if made:
-		var mult := current_mult()
+		var base_mult := current_mult()
+		var storm := storm_bonus()
+		var mult := base_mult + storm
 		last_points = points_for(distance, mult, down_the_middle, boss, perfect)
 		score += last_points
-		score_line = format_score_line(distance, mult, down_the_middle, boss, perfect)
+		score_line = format_score_line(distance, base_mult, down_the_middle, boss, perfect, storm)
 		kicks_made += 1
 		if distance > longest_make:
 			longest_make = distance
@@ -180,8 +211,10 @@ func go_to_next_kick() -> bool:
 	awaiting_mulligan = false
 	offer = []
 	mulligan_used_this_kick = false
+	_insurance_spent = false
 	_place_spot()
-	_refill_mulligans()
+	_roll_wind()
+	_refill_quarter()
 	return true
 
 
@@ -202,9 +235,18 @@ func begin_retry() -> bool:
 func start_with_kicker(id: String) -> void:
 	new_run()
 	kicker_id = id
-	Kickers.apply_to(stats, id)
-	attempt_cap = mini(stats.attempt_cap, KickConstants.ATTEMPT_CAP_MAX)
+	rebuild_stats()
 	rerolls_left = stats.rerolls_per_run
+
+
+func set_wind(speed: float, direction: float) -> void:
+	wind_speed = int(round(speed))
+	wind_direction = direction
+
+
+func apply_debug_wind() -> void:
+	# W: 10 mph straight to the right. Stays until the next new kick, or another press.
+	set_wind(10.0, 90.0)
 
 
 func can_mulligan(result_text: String) -> bool:
@@ -234,6 +276,29 @@ func accept_pending_miss() -> void:
 		return
 	awaiting_mulligan = false
 	resolve_kick(pending_result, pending_offset, pending_perfect)
+
+
+func can_practice() -> bool:
+	return practice_left > 0 and not practicing and int(stacks.get(Upgrades.PRACTICE_SWING, 0)) > 0
+
+
+func start_practice() -> bool:
+	if not can_practice():
+		return false
+	practice_left -= 1
+	practicing = true
+	return true
+
+
+func end_practice() -> void:
+	practicing = false
+
+
+func consume_insurance() -> void:
+	if _insurance_spent or insurance_left <= 0:
+		return
+	insurance_left -= 1
+	_insurance_spent = true
 
 
 func roll_offer() -> void:
@@ -279,13 +344,31 @@ func grant(id: String) -> void:
 		return
 	if int(stacks.get(id, 0)) >= int(info["max_stacks"]):
 		return
-	Upgrades.apply(id, stats)
 	stacks[id] = int(stacks.get(id, 0)) + 1
-	attempt_cap = mini(stats.attempt_cap, KickConstants.ATTEMPT_CAP_MAX)
+	rebuild_stats()
+	# These change the run, not the rebuilt stats. A later rebuild must not add them again.
 	if id == Upgrades.DEEP_BENCH:
 		attempts = mini(attempts + 1, attempt_cap)
 	elif id == Upgrades.MULLIGAN:
 		mulligans_left += 1
+	elif id == Upgrades.SCOUTING_REPORT:
+		rerolls_left += 1
+	elif id == Upgrades.WIDE_RIGHT_INSURANCE:
+		insurance_left += 1
+	elif id == Upgrades.PRACTICE_SWING:
+		practice_left += 1
+
+
+func rebuild_stats() -> void:
+	stats.reset()
+	if kicker_id != "":
+		Kickers.apply_to(stats, kicker_id)
+	for item in Upgrades.DEFS:
+		var id := str(item["id"])
+		var copies := int(stacks.get(id, 0))
+		for _i in copies:
+			Upgrades.apply(id, stats)
+	attempt_cap = mini(stats.attempt_cap, KickConstants.ATTEMPT_CAP_MAX)
 
 
 func owned_ids() -> Array:
@@ -302,9 +385,12 @@ func _close_offer() -> void:
 	offer = []
 
 
-func _refill_mulligans() -> void:
+func _refill_quarter() -> void:
 	if kick_number == 1 or kick_number == 6 or kick_number == 11 or kick_number == 16:
 		mulligans_left = stats.mulligans_per_quarter
+		insurance_left = stats.insurance_per_quarter
+		practice_left = stats.practice_per_quarter
+		_insurance_spent = false
 
 
 static func earns_attempt(kick_number_value: int, first_ball: bool, perfect: bool, middle: bool, late_rule: bool) -> bool:
@@ -330,9 +416,11 @@ static func raw_points(distance: float, mult: float, middle: bool, boss: bool, p
 	return total
 
 
-static func format_score_line(distance: float, mult: float, middle: bool, boss: bool, perfect: bool) -> String:
-	var product := distance * mult
+static func format_score_line(distance: float, mult: float, middle: bool, boss: bool, perfect: bool, storm: float = 0.0) -> String:
+	var product := distance * (mult + storm)
 	var text := "%s yd × %s" % [_whole(distance), _two_decimals(mult)]
+	if storm > 0.001:
+		text = "%s yd × (%s + %s wind)" % [_whole(distance), _two_decimals(mult), _two_decimals(storm)]
 	if middle:
 		product *= KickConstants.MIDDLE_MULTIPLIER
 		text += " × 2"
@@ -363,6 +451,44 @@ func _place_spot() -> void:
 	if side == 0:
 		side = -1 if _rng.randi_range(0, 1) == 0 else 1
 	spot_yards = RunTable.spot_yards(spot, side)
+
+
+func _roll_wind() -> void:
+	var info := RunTable.row(kick_number)
+	var lo := int(info["wind_min"])
+	var hi := int(info["wind_max"])
+	wind_speed = _wind_rng.randi_range(lo, hi)
+	if wind_speed <= 0:
+		wind_speed = 0
+		wind_direction = 0.0
+		return
+	wind_direction = float(_wind_rng.randi_range(0, 359))
+
+
+static func wind_name(speed: int) -> String:
+	if speed <= 0:
+		return "Calm"
+	if speed <= 7:
+		return "Breezy"
+	if speed <= 15:
+		return "Windy"
+	return "GALE"
+
+
+static func wind_readout(speed: int, direction: float) -> String:
+	var cross := KickLogic.crosswind_mph(float(speed), direction)
+	var tail := KickLogic.head_tail_mph(float(speed), direction)
+	return "%d mph   cross %s   tail %s" % [speed, KickLogic.format_signed(cross), KickLogic.format_signed(tail)]
+
+
+static func wind_flag_kind(speed: int) -> String:
+	if speed <= 0:
+		return "none"
+	if speed <= 7:
+		return "short"
+	if speed <= 15:
+		return "medium"
+	return "long"
 
 
 static func _two_decimals(value: float) -> String:
