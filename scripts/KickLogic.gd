@@ -114,7 +114,13 @@ func reset_kick() -> void:
 
 
 func detail_line() -> String:
-	return format_detail(power, accuracy_error, final_angle_degrees)
+	# Shown after the kick so the range math can be checked against the flight.
+	return "P = %s, max range = %s yd, kick = %s yd, result = %s" % [
+		format_number(power),
+		format_number(max_range),
+		format_number(kick_distance),
+		result_text,
+	]
 
 
 # --- Pure math. The meter and the tests both call these. ----------------------
@@ -263,13 +269,17 @@ func _lock_accuracy(value: float) -> void:
 	perfect = absf(accuracy_error) <= stats.perfect_band
 	var hook := 0.0 if perfect else -accuracy_error * KickConstants.ACCURACY_DEG_PER_ERROR
 	final_angle_degrees = aim_degrees + hook
+	# This kick's locked power. Not a leftover, and not the kick distance.
 	max_range = stats.range_base + stats.range_per_power * power + stats.range_bonus
-	reached_uprights = max_range >= kick_distance
-	# A short kick stops where it lands. Do not pretend it reached the posts.
-	var flown := kick_distance if reached_uprights else max_range
-	offset_yards = offset_yards_at_uprights(flown, final_angle_degrees, start_lateral_yards)
-	travel_yards = flown
-	flight_duration = flight_time_seconds(kick_distance)
+	travel_yards = max_range
+	flight_duration = flight_time_seconds(travel_yards)
+	reached_uprights = travel_yards >= kick_distance
+	# The drawn path is this same line. A short ball stops at max range.
+	# A long ball is scored where that line crosses the uprights, then it keeps going.
+	if reached_uprights:
+		offset_yards = offset_yards_at_uprights(kick_distance, final_angle_degrees, start_lateral_yards)
+	else:
+		offset_yards = offset_yards_at_uprights(travel_yards, final_angle_degrees, start_lateral_yards)
 	var judged := judge(max_range, kick_distance, offset_yards if reached_uprights else 0.0, stats.ball_type)
 	result_text = str(judged["text"])
 	bank_shot = bool(judged["bank"])

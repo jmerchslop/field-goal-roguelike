@@ -102,7 +102,45 @@ func _ready() -> void:
 	if not await _capture("miss_same_kick.png"):
 		get_tree().quit(1)
 		return
+	board.highlight = 1
+	board.confirm_kicker()
+	board.run.attempts = 2
+	_finish_centered_power(20.0)
+	board.run.resolve_kick(board.logic.result_text, board.logic.offset_yards, board.logic.perfect)
+	if not await _capture("power_20_short.png"):
+		get_tree().quit(1)
+		return
+	board.restart_run()
+	_finish_centered_power(50.0)
+	board.run.resolve_kick(board.logic.result_text, board.logic.offset_yards, board.logic.perfect)
+	if not await _capture("power_50_good.png"):
+		get_tree().quit(1)
+		return
+	board.restart_run()
+	_lock_full_power_straight()
+	# In the air, past the posts and past where a P=50 kick lands.
+	var flight: float = board.logic.flight_duration
+	board.logic.advance(flight * (58.0 / board.logic.travel_yards))
+	if not await _capture("power_100_long.png"):
+		get_tree().quit(1)
+		return
 	get_tree().quit()
+
+
+func _lock_full_power_straight() -> void:
+	var stats: KickerStats = board.logic.stats
+	for seed_value in 40:
+		board.load_current_kick()
+		board.logic.set_seed(seed_value)
+		board.logic.press_space()
+		# Stay under 100 so the rise does not lock itself before the accuracy press.
+		board.logic.advance(99.0 / stats.power_speed)
+		board.logic.press_space()
+		if board.logic.phase == KickLogic.Phase.ACCURACY:
+			board.logic.advance(board.logic.power / stats.accuracy_speed)
+			board.logic.press_space()
+		if board.logic.result_text == "GOOD" and absf(board.logic.offset_yards) < 1.5:
+			return
 
 
 func _finish_centered_power(power_value: float) -> void:

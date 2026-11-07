@@ -393,12 +393,15 @@ func _ball_position() -> Vector3:
 		height = sin(bounce * PI) * 1.6
 		forward = logic.kick_distance
 	elif logic.result_text == "DOINK" and (logic.phase == KickLogic.Phase.FLIGHT or logic.phase == KickLogic.Phase.RESULT):
-		var span := maxf(logic.travel_yards, 0.001)
-		var along := clampf((forward - span * 0.84) / (span * 0.16), 0.0, 1.0)
-		forward -= along * 4.5
-		var side := -1.0 if logic.offset_yards < 0.0 else 1.0
-		lateral += side * along * 2.2
-		height = logic.ball_height * ARC_YARDS * (1.0 - along) + sin(along * PI) * 2.4
+		# The hop is off the post, even when the ball still had range past it.
+		var posts := logic.kick_distance
+		var start_bounce := posts - 4.0
+		if forward >= start_bounce:
+			var along := clampf((minf(forward, posts) - start_bounce) / 4.0, 0.0, 1.0)
+			forward = minf(forward, posts) - along * 4.5
+			var side := -1.0 if logic.offset_yards < 0.0 else 1.0
+			lateral += side * along * 2.2
+			height = logic.ball_height * ARC_YARDS * (1.0 - along) + sin(along * PI) * 2.4
 	var y := BALL_RADIUS + height
 	if forward < 0.05 and logic.phase != KickLogic.Phase.RESULT:
 		y = 0.16 + BALL_RADIUS

@@ -22,6 +22,8 @@ You begin by picking Big Bruce or The Walk-On. You start with 1 attempt and can 
 
 The needle on the right goes up for power, then down for accuracy. The green line is 0. The band labeled PERFECT is a perfect kick. The red tip at the top (95 to 100) adds a random wobble, so full power can knock a centered press out of PERFECT.
 
+How far the ball flies is the power you just locked: 16 + 0.67 × P, plus any range bonus, and Big Bruce uses 0.75 instead of 0.67. If that distance is short of the kick, the ball drops there and the result is SHORT. If it is long enough, the ball goes through the posts and keeps going. The result line shows the power, the max range, and the kick distance.
+
 ## Which way the ball goes
 
 Negative degrees are screen-left. Holding Left aims down to **-12°**. Holding Right aims up to **+12°**.
