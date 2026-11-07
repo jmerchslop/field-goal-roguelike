@@ -6,9 +6,8 @@ extends Node3D
 # Negative sideways yards are -X, which is screen-left when you look up-field.
 
 const ScreenshotDriverScript := preload("res://scripts/ScreenshotDriver.gd")
-const KickerScene := preload("res://scenes/kicker.tscn")
-const ARC_YARDS := 5.2
-const BALL_RADIUS := 0.16
+const ARC_YARDS := 6.4
+const BALL_RADIUS := 0.18
 
 var logic := KickLogic.new()
 var run := RunLogic.new()
@@ -17,14 +16,19 @@ var _approach_time := 0.0
 var _bank_time := 0.0
 var selecting := true
 var highlight := -1
+var meter_time := 0.0
 
 var _world: Node3D
 var _camera: Camera3D
-var _ball: MeshInstance3D
+var _ball: Sprite3D
 var _tee: MeshInstance3D
 var _arrow: MeshInstance3D
 var _shadow: MeshInstance3D
-var _kicker: Node3D
+var _kicker_sprite: Sprite3D
+var _post_l: MeshInstance3D
+var _post_r: MeshInstance3D
+var _crossbar: MeshInstance3D
+var _mud: MeshInstance3D
 var _hud
 
 
@@ -38,8 +42,7 @@ func _ready() -> void:
 	_build_field()
 	_build_uprights()
 	_build_ball()
-	_kicker = KickerScene.instantiate()
-	_world.add_child(_kicker)
+	_build_kicker_sprite()
 	selecting = true
 	highlight = -1
 	if OS.get_environment("FG_SHOTS") != "1":
@@ -64,13 +67,20 @@ func load_current_kick() -> void:
 
 
 func _copy_run_onto_kick() -> void:
-	logic.stats = run.stats
 	logic.kick_distance = run.distance_yards()
 	logic.start_lateral_yards = run.spot_yards
+	run.prepare_kick_stats()
+	logic.stats = run.stats
 	logic.wind_speed = run.wind_speed
 	logic.wind_direction = run.wind_direction
 	logic.insurance_ready = run.insurance_left > 0
 	logic.insured = false
+	logic.rain_faster = run.has_rain()
+	logic.snow_range = run.weather == RunLogic.SNOW
+	logic.mud_power = run.has_mud()
+	logic.thin_air_weather = run.weather == RunLogic.THIN_AIR
+	logic.post_half_gap = run.post_half_gap()
+	meter_time = 0.0
 
 
 func settle_kick() -> void:
@@ -173,7 +183,8 @@ func _tint_ball() -> void:
 	var ink := Color(0.45, 0.24, 0.1)
 	if not info.is_empty():
 		ink = info["color"]
-	_ball.material_override = _mat(ink, 0.55)
+	if _ball != null:
+		_ball.modulate = ink.lerp(Color(0.72, 0.42, 0.18), 0.45)
 
 
 func advance_run() -> bool:
@@ -195,6 +206,33 @@ func restart_run() -> void:
 
 func force_spot_side(side: int) -> void:
 	run.set_next_side(side)
+
+
+func hides_meter() -> bool:
+	return RunLogic.meter_hides(run.weather, logic.stats.ice_veins, meter_time)
+
+
+func force_weather(name: String) -> void:
+	run.force_weather(name)
+	_apply_conditions()
+	refresh_view()
+
+
+func cycle_spot() -> void:
+	run.cycle_debug_spot()
+	logic.start_lateral_yards = run.spot_yards
+	logic.sync_tee()
+	refresh_view()
+
+
+func _apply_conditions() -> void:
+	run.prepare_kick_stats()
+	logic.stats = run.stats
+	logic.rain_faster = run.has_rain()
+	logic.snow_range = run.weather == RunLogic.SNOW
+	logic.mud_power = run.has_mud()
+	logic.thin_air_weather = run.weather == RunLogic.THIN_AIR
+	logic.post_half_gap = run.post_half_gap()
 
 
 func set_wind(speed: float, direction: float) -> void:
@@ -228,6 +266,8 @@ func _process(delta: float) -> void:
 	if selecting:
 		refresh_view()
 		return
+	if logic.phase != KickLogic.Phase.AIMING:
+		meter_time += delta
 	if logic.bank_shot and logic.phase == KickLogic.Phase.RESULT and _bank_time < 0.3:
 		_bank_time += delta
 	if run.phase == RunLogic.Phase.PLAYING and logic.phase != KickLogic.Phase.RESULT:
@@ -286,6 +326,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		run.reroll_offer()
 		refresh_view()
 		return
+	if key.shift_pressed and run.phase == RunLogic.Phase.PLAYING and not run.awaiting_offer and not run.awaiting_mulligan:
+		var forced := _shift_weather(key.keycode)
+		if forced != "":
+			force_weather(forced)
+			return
+	if key.keycode == KEY_H and run.phase == RunLogic.Phase.PLAYING and not run.awaiting_offer and not run.awaiting_mulligan:
+		cycle_spot()
+		return
 	if key.keycode == KEY_W and run.phase == RunLogic.Phase.PLAYING and not run.awaiting_offer and not run.awaiting_mulligan:
 		run.apply_debug_wind()
 		logic.wind_speed = run.wind_speed
@@ -319,6 +367,28 @@ func _unhandled_input(event: InputEvent) -> void:
 	refresh_view()
 
 
+func _shift_weather(code: Key) -> String:
+	if code == KEY_0 or code == KEY_KP_0:
+		return RunLogic.CLEAR
+	if code == KEY_1 or code == KEY_KP_1:
+		return RunLogic.RAIN
+	if code == KEY_2 or code == KEY_KP_2:
+		return RunLogic.SNOW
+	if code == KEY_3 or code == KEY_KP_3:
+		return RunLogic.MUD
+	if code == KEY_4 or code == KEY_KP_4:
+		return RunLogic.THIN_AIR
+	if code == KEY_5 or code == KEY_KP_5:
+		return RunLogic.ICED
+	if code == KEY_6 or code == KEY_KP_6:
+		return RunLogic.SQUEEZE
+	if code == KEY_7 or code == KEY_KP_7:
+		return RunLogic.MONSOON
+	if code == KEY_8 or code == KEY_KP_8:
+		return RunLogic.BIG_GAME
+	return ""
+
+
 func _style_world() -> void:
 	var env := Environment.new()
 	env.background_mode = Environment.BG_COLOR
@@ -333,7 +403,7 @@ func _style_world() -> void:
 	sun.light_energy = 1.25
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 160.0
-	_camera.fov = 52.0
+	_camera.fov = 58.0
 
 
 func _build_field() -> void:
@@ -348,30 +418,85 @@ func _build_field() -> void:
 		z += 5.0
 	var mark := 10
 	while mark <= 70:
-		_yard_sign(-18.0, float(mark), str(mark))
-		_yard_sign(18.0, float(mark), str(mark))
+		_yard_sign(-20.0, float(mark), str(mark))
+		_yard_sign(20.0, float(mark), str(mark))
 		mark += 10
+	_box(Vector3(0.16, 0.04, 86.0), Vector3(-25.0, 0.05, 40.0), Color(0.93, 0.95, 0.92))
+	_box(Vector3(0.16, 0.04, 86.0), Vector3(25.0, 0.05, 40.0), Color(0.93, 0.95, 0.92))
+	var tick := 0.0
+	while tick <= 78.0:
+		_box(Vector3(0.9, 0.03, 0.08), Vector3(-10.2, 0.07, tick), Color(0.93, 0.95, 0.92))
+		_box(Vector3(0.9, 0.03, 0.08), Vector3(10.2, 0.07, tick), Color(0.93, 0.95, 0.92))
+		if int(tick) % 5 != 0:
+			_box(Vector3(0.42, 0.03, 0.08), Vector3(0.0, 0.07, tick), Color(0.93, 0.95, 0.92))
+		tick += 1.0
+	_build_stadium()
+
+
+func _build_stadium() -> void:
+	# Flat walls of seats, not a cylinder. A cylinder's UVs turn the crowd into a smear.
+	_stand(Vector3(96.0, 14.0, 1.2), Vector3(0.0, 8.0, -3.0), Vector3(8.0, 3.0, 1.0))
+	_stand(Vector3(1.2, 12.0, 96.0), Vector3(-32.0, 7.0, 40.0), Vector3(8.0, 2.5, 1.0))
+	_stand(Vector3(1.2, 12.0, 96.0), Vector3(32.0, 7.0, 40.0), Vector3(8.0, 2.5, 1.0))
+	_box(Vector3(100.0, 2.2, 1.4), Vector3(0.0, 16.2, -3.2), Color(0.62, 0.78, 0.9))
+
+
+func _stand(size: Vector3, pos: Vector3, tiles: Vector3) -> void:
+	var wall := MeshInstance3D.new()
+	var mesh := BoxMesh.new()
+	mesh.size = size
+	wall.mesh = mesh
+	wall.position = pos
+	var paint := _mat(Color.WHITE, 1.0)
+	var crowd := load("res://art/field/crowd.png") as Texture2D
+	if crowd != null:
+		paint.albedo_texture = crowd
+		paint.uv1_scale = tiles
+	paint.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	wall.material_override = paint
+	wall.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_world.add_child(wall)
 
 
 func _build_uprights() -> void:
-	var half := KickConstants.POST_SEPARATION_YARDS * 0.5
 	var yellow := Color(0.95, 0.82, 0.16)
 	var crossbar_y := 3.33
-	_box(Vector3(0.18, crossbar_y, 0.18), Vector3(0, crossbar_y * 0.5, 0), yellow)
-	_box(Vector3(KickConstants.POST_SEPARATION_YARDS, 0.16, 0.16), Vector3(0, crossbar_y, 0), yellow)
-	var upright_h := 9.0
-	_box(Vector3(0.14, upright_h, 0.14), Vector3(-half, crossbar_y + upright_h * 0.5, 0), yellow)
-	_box(Vector3(0.14, upright_h, 0.14), Vector3(half, crossbar_y + upright_h * 0.5, 0), yellow)
+	var upright_h := 10.0
+	_post_l = _pole(Vector3(0.16, upright_h, 0.16), Vector3(0, crossbar_y + upright_h * 0.5, 0), yellow)
+	_post_r = _pole(Vector3(0.16, upright_h, 0.16), Vector3(0, crossbar_y + upright_h * 0.5, 0), yellow)
+	_crossbar = _pole(Vector3(1.0, 0.16, 0.16), Vector3(0, crossbar_y, 0), yellow)
+	_pole(Vector3(0.2, crossbar_y, 0.2), Vector3(0, crossbar_y * 0.5, 0), yellow)
+	_fit_posts(KickConstants.POST_SEPARATION_YARDS)
+
+
+func _pole(size: Vector3, pos: Vector3, color: Color) -> MeshInstance3D:
+	var body := MeshInstance3D.new()
+	var mesh := BoxMesh.new()
+	mesh.size = size
+	body.mesh = mesh
+	body.position = pos
+	body.material_override = _mat(color, 0.55)
+	body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_world.add_child(body)
+	return body
+
+
+func _fit_posts(width: float) -> void:
+	var half := width * 0.5
+	if _post_l != null:
+		_post_l.position.x = -half
+	if _post_r != null:
+		_post_r.position.x = half
+	if _crossbar != null:
+		var mesh := _crossbar.mesh as BoxMesh
+		if mesh != null:
+			mesh.size.x = width
 
 
 func _build_ball() -> void:
-	var ball_mesh := SphereMesh.new()
-	ball_mesh.radius = BALL_RADIUS
-	ball_mesh.height = BALL_RADIUS * 2.0
-	_ball = MeshInstance3D.new()
-	_ball.mesh = ball_mesh
-	_ball.material_override = _mat(Color(0.45, 0.24, 0.1), 0.55)
-	_ball.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	_ball = Sprite3D.new()
+	_style_sprite(_ball, 0.55)
+	_fit_sprite(_ball, "res://art/field/football.png")
 	_world.add_child(_ball)
 	var tee_mesh := CylinderMesh.new()
 	tee_mesh.top_radius = 0.02
@@ -394,11 +519,52 @@ func _build_ball() -> void:
 	_shadow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_world.add_child(_shadow)
 	var shaft := BoxMesh.new()
-	shaft.size = Vector3(0.12, 0.03, 8.0)
+	shaft.size = Vector3(0.08, 0.025, 18.0)
 	_arrow = MeshInstance3D.new()
 	_arrow.mesh = shaft
-	_arrow.material_override = _mat(Color(0.95, 0.95, 0.9), 0.4)
+	_arrow.material_override = _mat(Color(0.95, 0.86, 0.2), 0.45)
 	_world.add_child(_arrow)
+	var mud_mesh := BoxMesh.new()
+	mud_mesh.size = Vector3(1.8, 0.04, 1.35)
+	_mud = MeshInstance3D.new()
+	_mud.mesh = mud_mesh
+	_mud.material_override = _mat(Color(0.38, 0.24, 0.12), 0.95)
+	_mud.visible = false
+	_world.add_child(_mud)
+
+
+func _build_kicker_sprite() -> void:
+	_kicker_sprite = Sprite3D.new()
+	_style_sprite(_kicker_sprite, 2.7)
+	_kicker_sprite.visible = false
+	_world.add_child(_kicker_sprite)
+
+
+func _style_sprite(sprite: Sprite3D, height_yards: float) -> void:
+	sprite.billboard = BaseMaterial3D.BILLBOARD_FIXED_Y
+	sprite.transparent = true
+	sprite.alpha_cut = SpriteBase3D.ALPHA_CUT_DISCARD
+	sprite.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	sprite.pixel_size = 0.01
+	sprite.set_meta("height_yards", height_yards)
+
+
+func _fit_sprite(sprite: Sprite3D, path: String) -> void:
+	var tex := load(path) as Texture2D
+	if tex == null:
+		sprite.visible = false
+		return
+	sprite.texture = tex
+	sprite.visible = true
+	var image := tex.get_image()
+	if image != null:
+		var used := image.get_used_rect()
+		if used.size.y > 1.0:
+			sprite.region_enabled = true
+			sprite.region_rect = used
+			var height_yards := float(sprite.get_meta("height_yards", 2.0))
+			sprite.pixel_size = height_yards / used.size.y
+	sprite.centered = true
 
 
 func _place_world() -> void:
@@ -408,10 +574,32 @@ func _place_world() -> void:
 	_tee.position = tee + Vector3(0, 0.08, 0)
 	_tee.visible = logic.ball_forward_yards < 0.2
 	_shadow.position = Vector3(spot.x, 0.05, spot.z)
+	if _mud != null:
+		_mud.visible = run.has_mud()
+		_mud.position = tee + Vector3(0.0, 0.06, 0.15)
+	_fit_posts(run.post_width())
+	_place_kicker(tee)
 	_place_arrow(tee)
 	_place_camera()
-	if _kicker != null and _kicker.has_method("follow"):
-		_kicker.follow(tee, logic.phase, _approach_time, logic.flight_elapsed)
+
+
+func _place_kicker(tee: Vector3) -> void:
+	if _kicker_sprite == null:
+		return
+	var path := ""
+	if run.kicker_id == Kickers.WALK_ON:
+		path = "res://art/kickers/walk_on_back.png"
+	elif run.kicker_id == Kickers.BIG_BRUCE:
+		path = "res://art/kickers/big_bruce_back.png"
+	if path == "":
+		_kicker_sprite.visible = false
+		return
+	if str(_kicker_sprite.get_meta("art", "")) != path:
+		_fit_sprite(_kicker_sprite, path)
+		_kicker_sprite.set_meta("art", path)
+	var height := _kicker_sprite.pixel_size * _kicker_sprite.region_rect.size.y
+	# Left of the tee, a step closer to the camera, facing the posts.
+	_kicker_sprite.position = tee + Vector3(-1.45, height * 0.5, 1.15)
 
 
 func _tee_position() -> Vector3:
@@ -421,7 +609,7 @@ func _tee_position() -> Vector3:
 func _ball_position() -> Vector3:
 	var forward := logic.ball_forward_yards
 	var lateral := logic.ball_lateral_yards
-	var height := logic.ball_height * ARC_YARDS
+	var height := _arc_height(forward)
 	if logic.bank_shot and logic.phase == KickLogic.Phase.RESULT:
 		var bounce := clampf(_bank_time / 0.3, 0.0, 1.0)
 		lateral = lerpf(logic.offset_yards, 0.0, bounce)
@@ -436,11 +624,25 @@ func _ball_position() -> Vector3:
 			forward = minf(forward, posts) - along * 4.5
 			var side := -1.0 if logic.offset_yards < 0.0 else 1.0
 			lateral += side * along * 2.2
-			height = logic.ball_height * ARC_YARDS * (1.0 - along) + sin(along * PI) * 2.4
-	var y := BALL_RADIUS + height
-	if forward < 0.05 and logic.phase != KickLogic.Phase.RESULT:
-		y = 0.16 + BALL_RADIUS
+			height = _arc_height(forward) * (1.0 - along) + sin(along * PI) * 2.4
+	var y := height
+	if y < 0.2:
+		y = 0.22
 	return Vector3(lateral, y, logic.kick_distance - forward)
+
+
+func _arc_height(forward: float) -> float:
+	# Visual only. A ball that reaches the posts is still above the crossbar there.
+	# A short kick is back on the ground before that plane. Scoring does not use this.
+	if logic.phase != KickLogic.Phase.FLIGHT and logic.phase != KickLogic.Phase.RESULT:
+		return 0.0
+	var travel := maxf(logic.travel_yards, 0.001)
+	var dist := maxf(logic.kick_distance, 0.001)
+	var peak := dist if logic.reached_uprights else travel
+	if forward <= peak:
+		return sin(clampf(forward / peak, 0.0, 1.0) * PI * 0.5) * ARC_YARDS
+	var rest := maxf(travel - peak, 0.001)
+	return (1.0 - clampf((forward - peak) / rest, 0.0, 1.0)) * ARC_YARDS
 
 
 func world_to_screen(point: Vector3) -> Vector2:
@@ -454,16 +656,24 @@ func _place_arrow(tee: Vector3) -> void:
 		return
 	var aim := deg_to_rad(logic.aim_degrees)
 	var dir := Vector3(sin(aim), 0.0, -cos(aim))
-	_arrow.position = tee + dir * 4.6 + Vector3(0, 0.08, 0)
+	_arrow.position = tee + dir * 10.0 + Vector3(0, 0.06, 0)
 	if dir.length_squared() > 0.001:
 		_arrow.look_at(_arrow.position + dir, Vector3.UP)
 
 
 func _place_camera() -> void:
+	# The camera rides with the tee. It looks along the tee's line, not at the posts,
+	# so a left spot leaves the posts on the right of the screen and a right spot does the opposite.
 	var spot := logic.start_lateral_yards
 	var dist := logic.kick_distance
-	_camera.position = Vector3(spot - 0.35, 2.7, dist + 6.4)
-	_camera.rotation_degrees = Vector3(-11.0, 0.0, 0.0)
+	var extra := 0.0
+	if dist > 48.0:
+		extra = (dist - 48.0) * 0.11
+	var back := 6.4 + extra
+	var height := 3.05 + extra * 0.22
+	_camera.position = Vector3(spot - 0.05, height, dist + back)
+	var look := Vector3(spot, 1.05, maxf(dist - 14.0, 0.0))
+	_camera.look_at(look, Vector3.UP)
 
 
 func _yard_sign(x: float, z: float, label: String) -> void:

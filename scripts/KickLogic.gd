@@ -36,6 +36,14 @@ var reached_uprights := false
 var wind_speed := 0
 var wind_direction := 0.0
 var drift_yards := 0.0
+# Weather for this kick. The run copies these in. They do not change the scoring rules except where Prompt 5 says so.
+var rain_faster := false
+var snow_range := false
+var mud_power := false
+var thin_air_weather := false
+var post_half_gap := KickConstants.POST_HALF_GAP_YARDS
+# The smooth power needle. Mud draws a jitter on top and does not add it back in.
+var power_true := 0.0
 var flight_elapsed := 0.0
 var flight_duration := 0.0
 var travel_yards := 0.0
@@ -72,6 +80,7 @@ func press_space() -> void:
 	if phase == Phase.AIMING:
 		phase = Phase.POWER
 		needle = 0.0
+		power_true = 0.0
 	elif phase == Phase.POWER:
 		_lock_power(needle)
 	elif phase == Phase.ACCURACY:
@@ -100,6 +109,11 @@ func reset_kick() -> void:
 	var saved_speed := wind_speed
 	var saved_direction := wind_direction
 	var keep_insurance := insurance_ready
+	var keep_rain := rain_faster
+	var keep_snow := snow_range
+	var keep_mud := mud_power
+	var keep_thin := thin_air_weather
+	var keep_gap := post_half_gap
 	phase = Phase.AIMING
 	aim_degrees = 0.0
 	needle = 0.0
@@ -125,6 +139,12 @@ func reset_kick() -> void:
 	wind_speed = saved_speed
 	wind_direction = saved_direction
 	insurance_ready = keep_insurance
+	rain_faster = keep_rain
+	snow_range = keep_snow
+	mud_power = keep_mud
+	thin_air_weather = keep_thin
+	post_half_gap = keep_gap
+	power_true = 0.0
 
 
 func detail_line() -> String:
@@ -223,10 +243,11 @@ static func classify(max_range_yards: float, distance_yards: float, offset: floa
 
 # reached is true only when the ball's path gets to the uprights' plane.
 # ball_type "barn_burner" can turn a doink into GOOD when there is range to spare.
-static func judge(max_range_yards: float, distance_yards: float, offset: float, ball_type: String) -> Dictionary:
+static func judge(max_range_yards: float, distance_yards: float, offset: float, ball_type: String, half_gap: float = -1.0) -> Dictionary:
 	if max_range_yards < distance_yards:
 		return {"text": "SHORT", "bank": false, "reached": false}
-	var text := _result_at_plane(offset)
+	var gap := KickConstants.POST_HALF_GAP_YARDS if half_gap < 0.0 else half_gap
+	var text := _result_at_plane(offset, gap)
 	var bank := false
 	if ball_type == "barn_burner" and text == "DOINK" and max_range_yards >= distance_yards + 10.0:
 		text = "GOOD"
@@ -234,11 +255,11 @@ static func judge(max_range_yards: float, distance_yards: float, offset: float, 
 	return {"text": text, "bank": bank, "reached": true}
 
 
-static func _result_at_plane(offset: float) -> String:
-	var from_the_post := absf(absf(offset) - KickConstants.POST_HALF_GAP_YARDS)
+static func _result_at_plane(offset: float, half_gap: float = KickConstants.POST_HALF_GAP_YARDS) -> String:
+	var from_the_post := absf(absf(offset) - half_gap)
 	if from_the_post <= KickConstants.DOINK_BAND_YARDS:
 		return "DOINK"
-	if absf(offset) > KickConstants.POST_HALF_GAP_YARDS:
+	if absf(offset) > half_gap:
 		if offset < 0.0:
 			return "WIDE LEFT"
 		return "WIDE RIGHT"
@@ -287,16 +308,29 @@ static func round_tenth(value: float) -> float:
 
 
 func _advance_power(delta: float) -> void:
-	needle += stats.power_speed * delta
-	if needle < KickConstants.METER_MAX:
+	power_true += stats.power_speed * delta
+	if power_true < KickConstants.METER_MAX:
+		needle = _shown_power(power_true)
 		return
 	# The fall starts on the next step. One frame at 100 is too small to see.
-	needle = KickConstants.METER_MAX
-	_lock_power(KickConstants.METER_MAX)
+	power_true = KickConstants.METER_MAX
+	needle = _shown_power(power_true)
+	_lock_power(needle)
+
+
+func _shown_power(true_value: float) -> float:
+	# Mud jitters the shown needle. The jitter is new every frame and is not kept.
+	var shown := true_value
+	if mud_power:
+		shown += _rng.randf_range(-3.0, 3.0)
+	return clampf(shown, 0.0, KickConstants.METER_MAX)
 
 
 func _advance_accuracy(delta: float) -> void:
-	needle -= stats.accuracy_speed * delta
+	var fall := stats.accuracy_speed
+	if rain_faster:
+		fall *= 1.20
+	needle -= fall * delta
 	if needle > KickConstants.METER_MIN:
 		return
 	needle = KickConstants.METER_MIN
@@ -313,6 +347,7 @@ func _advance_flight(delta: float) -> void:
 func _lock_power(value: float) -> void:
 	power = clampf(value, KickConstants.METER_MIN, KickConstants.METER_MAX)
 	needle = power
+	power_true = power
 	phase = Phase.ACCURACY
 
 
@@ -329,6 +364,12 @@ func _lock_accuracy(value: float) -> void:
 	drift_yards = drift_at_uprights(float(wind_speed), wind_direction, kick_distance, stats.low_drive_stacks, stats.wind_breaker_stacks, stats.ball_type)
 	var wind_range := wind_range_delta(float(wind_speed), wind_direction, stats.low_drive_stacks, stats.thin_air_stacks >= 1)
 	max_range = stats.range_base + stats.range_per_power * power + stats.range_bonus + wind_range
+	if snow_range:
+		max_range -= 4.0
+	if thin_air_weather:
+		max_range += 4.0
+	if max_range < 0.0:
+		max_range = 0.0
 	travel_yards = max_range
 	flight_duration = flight_time_seconds(travel_yards)
 	reached_uprights = travel_yards >= kick_distance
@@ -338,7 +379,7 @@ func _lock_accuracy(value: float) -> void:
 		offset_yards = path_lateral(start_lateral_yards, kick_distance, final_angle_degrees, kick_distance, drift_yards)
 	else:
 		offset_yards = path_lateral(start_lateral_yards, travel_yards, final_angle_degrees, kick_distance, drift_yards)
-	var judged := judge(max_range, kick_distance, offset_yards if reached_uprights else 0.0, stats.ball_type)
+	var judged := judge(max_range, kick_distance, offset_yards if reached_uprights else 0.0, stats.ball_type, post_half_gap)
 	result_text = str(judged["text"])
 	bank_shot = bool(judged["bank"])
 	insured = false

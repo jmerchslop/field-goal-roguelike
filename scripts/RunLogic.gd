@@ -9,6 +9,19 @@ enum Phase { PLAYING, GAME_OVER, WIN }
 const NOTE_EARNED := "+1 ATTEMPT"
 const NOTE_CAP := "AT CAP"
 
+const CLEAR := "CLEAR"
+const RAIN := "RAIN"
+const SNOW := "SNOW"
+const MUD := "MUD"
+const THIN_AIR := "THIN AIR"
+const ICED := "ICED"
+const SQUEEZE := "THE SQUEEZE"
+const MONSOON := "MONSOON"
+const BIG_GAME := "BIG GAME"
+const SQUEEZE_WIDTH := 5.17
+const SQUEEZE_HALF := 2.585
+const DEBUG_SPOTS: Array = [-6.0, -3.0, 0.0, 3.0, 6.0]
+
 var phase: Phase = Phase.PLAYING
 var kick_number := 1
 var attempts := KickConstants.ATTEMPTS_START
@@ -45,6 +58,8 @@ var pending_perfect := false
 # Whole mph, and the direction it blows. Kept for a miss or a mulligan.
 var wind_speed := 0
 var wind_direction := 0.0
+var weather := CLEAR
+var weather_forced := false
 var insurance_left := 0
 var practice_left := 0
 var practicing := false
@@ -53,7 +68,10 @@ var practicing := false
 var _next_side := 0
 var _rng := RandomNumberGenerator.new()
 var _wind_rng := RandomNumberGenerator.new()
+var _weather_rng := RandomNumberGenerator.new()
 var _offer_rng := RandomNumberGenerator.new()
+var _previous_weather := ""
+var _older_weather := ""
 var _forced_offer: Array = []
 var _insurance_spent := false
 
@@ -61,14 +79,16 @@ var _insurance_spent := false
 func _init() -> void:
 	_rng.randomize()
 	_wind_rng.randomize()
+	_weather_rng.randomize()
 	_offer_rng.randomize()
 	new_run()
 
 
 func set_seed(seed_value: int) -> void:
 	_rng.seed = seed_value
-	# Wind has its own generator so a spot seed still lands on the same hash.
+	# Wind and weather have their own generators so a spot seed still lands on the same hash.
 	_wind_rng.seed = seed_value + 7919
+	_weather_rng.seed = seed_value + 1543
 
 
 func set_offer_seed(seed_value: int) -> void:
@@ -111,6 +131,10 @@ func new_run() -> void:
 	pending_result = ""
 	wind_speed = 0
 	wind_direction = 0.0
+	weather = CLEAR
+	weather_forced = false
+	_previous_weather = ""
+	_older_weather = ""
 	insurance_left = 0
 	practice_left = 0
 	practicing = false
@@ -119,6 +143,7 @@ func new_run() -> void:
 	_refill_quarter()
 	_place_spot()
 	_roll_wind()
+	_roll_weather()
 
 
 func distance_yards() -> float:
@@ -212,8 +237,12 @@ func go_to_next_kick() -> bool:
 	offer = []
 	mulligan_used_this_kick = false
 	_insurance_spent = false
+	_older_weather = _previous_weather
+	_previous_weather = weather
+	weather_forced = false
 	_place_spot()
 	_roll_wind()
+	_roll_weather()
 	_refill_quarter()
 	return true
 
@@ -237,6 +266,138 @@ func start_with_kicker(id: String) -> void:
 	kicker_id = id
 	rebuild_stats()
 	rerolls_left = stats.rerolls_per_run
+
+
+func has_rain() -> bool:
+	return weather == RAIN or weather == MONSOON
+
+
+func has_mud() -> bool:
+	return weather == MUD or weather == MONSOON
+
+
+func post_half_gap() -> float:
+	if weather == SQUEEZE:
+		return SQUEEZE_HALF
+	return KickConstants.POST_HALF_GAP_YARDS
+
+
+func post_width() -> float:
+	if weather == SQUEEZE:
+		return SQUEEZE_WIDTH
+	return KickConstants.POST_SEPARATION_YARDS
+
+
+func force_weather(name: String) -> void:
+	weather = name
+	weather_forced = true
+
+
+func prepare_kick_stats() -> void:
+	rebuild_stats()
+	if weather != BIG_GAME:
+		return
+	var base := KickerStats.new()
+	if kicker_id != "":
+		Kickers.apply_to(base, kicker_id)
+	stats.power_speed = base.power_speed
+	stats.accuracy_speed = base.accuracy_speed
+	stats.perfect_band = base.perfect_band
+	stats.good_band = base.good_band
+	stats.red_tip_start = base.red_tip_start
+	stats.red_tip_noise = base.red_tip_noise
+	stats.ice_veins = false
+
+
+func cycle_debug_spot() -> void:
+	var best := 0
+	var best_gap := 1000.0
+	for i in DEBUG_SPOTS.size():
+		var gap := absf(spot_yards - float(DEBUG_SPOTS[i]))
+		if gap < best_gap:
+			best_gap = gap
+			best = i
+	spot_yards = float(DEBUG_SPOTS[(best + 1) % DEBUG_SPOTS.size()])
+
+
+static func spot_label(yards: float) -> String:
+	if yards <= -5.0:
+		return "LEFT WIDE"
+	if yards < -0.5:
+		return "LEFT HASH"
+	if yards >= 5.0:
+		return "RIGHT WIDE"
+	if yards > 0.5:
+		return "RIGHT HASH"
+	return "CENTER"
+
+
+static func boss_weather(kick: int) -> String:
+	if kick == 5:
+		return ICED
+	if kick == 10:
+		return SQUEEZE
+	if kick == 15:
+		return MONSOON
+	if kick == 20:
+		return BIG_GAME
+	return ""
+
+
+static func weather_pool(kick: int) -> Array:
+	if kick <= 4:
+		return [CLEAR]
+	if kick >= 6 and kick <= 8:
+		return [CLEAR, RAIN]
+	if kick == 9:
+		return [CLEAR, RAIN, SNOW]
+	if (kick >= 11 and kick <= 14) or (kick >= 16 and kick <= 19):
+		return [RAIN, SNOW, MUD, THIN_AIR]
+	return [CLEAR]
+
+
+static func roll_weather_name(kick: int, previous: String, older: String, rng: RandomNumberGenerator) -> String:
+	var boss := boss_weather(kick)
+	if boss != "":
+		return boss
+	var blocked := ""
+	if previous != "" and previous == older:
+		blocked = previous
+	var pool: Array = weather_pool(kick)
+	var allowed: Array = []
+	for name in pool:
+		if str(name) != blocked:
+			allowed.append(name)
+	if allowed.is_empty():
+		allowed = pool
+	for _try in 24:
+		var pick := _weighted_weather(kick, rng)
+		if allowed.has(pick):
+			return pick
+	return str(allowed[rng.randi_range(0, allowed.size() - 1)])
+
+
+static func _weighted_weather(kick: int, rng: RandomNumberGenerator) -> String:
+	var roll := rng.randf()
+	if kick >= 6 and kick <= 8:
+		return RAIN if roll < 0.30 else CLEAR
+	if kick == 9:
+		if roll < 0.30:
+			return RAIN
+		if roll < 0.50:
+			return SNOW
+		return CLEAR
+	if (kick >= 11 and kick <= 14) or (kick >= 16 and kick <= 19):
+		var names := [RAIN, SNOW, MUD, THIN_AIR]
+		var index := int(roll * 4.0)
+		if index > 3:
+			index = 3
+		return str(names[index])
+	return CLEAR
+
+
+static func meter_hides(condition: String, ice_veins: bool, seconds: float) -> bool:
+	return condition == ICED and not ice_veins and seconds >= 0.4
 
 
 func set_wind(speed: float, direction: float) -> void:
@@ -451,6 +612,12 @@ func _place_spot() -> void:
 	if side == 0:
 		side = -1 if _rng.randi_range(0, 1) == 0 else 1
 	spot_yards = RunTable.spot_yards(spot, side)
+
+
+func _roll_weather() -> void:
+	if weather_forced:
+		return
+	weather = roll_weather_name(kick_number, _previous_weather, _older_weather, _weather_rng)
 
 
 func _roll_wind() -> void:

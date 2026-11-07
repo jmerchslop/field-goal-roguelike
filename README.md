@@ -33,7 +33,7 @@ Negative degrees are screen-left. Holding Left aims down to **-12°**. Holding R
 
 A positive accuracy number also pulls the ball left (a hook). A negative one pushes it right (a slice). The result line uses that same sign, so `angle = -1.1°` means a little to the left.
 
-Kick 1 starts **35 yards** out, centered. Later kicks move the ball back, and hash or wide kicks also start off to one side. The arrow still begins pointing straight up the field, not at the posts. The first three kicks are calm. After that the wind is rolled from the kick table and the ball bends with it.
+Kick 1 starts **35 yards** out, centered. Later kicks move the ball back, and hash or wide kicks also start off to one side. The arrow still begins pointing straight up the field, not at the posts. The first three kicks are calm and clear. After that the wind and the weather are rolled for that kick and kept if you miss. Boss kicks are ICED, THE SQUEEZE, MONSOON, and BIG GAME. The camera stays with your spot, so a kick from the left shows the posts to the right.
 
 ## Files
 

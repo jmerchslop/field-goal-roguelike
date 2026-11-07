@@ -14,7 +14,9 @@ func _draw() -> void:
 		return
 	var logic: KickLogic = game.logic
 	var run: RunLogic = game.run
-	_draw_meter(logic)
+	_draw_weather_tint(run)
+	if not game.hides_meter():
+		_draw_meter(logic)
 	_draw_hud(logic, run)
 	_draw_wind(logic, run)
 	_draw_laser(logic, run)
@@ -80,6 +82,31 @@ func _draw_meter(logic: KickLogic) -> void:
 	_text(Vector2(KickConstants.METER_BAR_RIGHT + 8.0, KickConstants.meter_y(-15.0) + 5.0), "-15", 14, KickConstants.COLOR_TEXT)
 
 
+func _draw_weather_tint(run: RunLogic) -> void:
+	var tint := Color(0, 0, 0, 0)
+	if run.has_rain():
+		tint = Color(0.25, 0.45, 0.9, 0.22)
+	elif run.weather == RunLogic.SNOW:
+		tint = Color(0.93, 0.95, 1.0, 0.28)
+	if tint.a > 0.0:
+		draw_rect(Rect2(0, 0, KickConstants.WINDOW_WIDTH, KickConstants.WINDOW_HEIGHT), tint)
+
+
+func _draw_condition(run: RunLogic) -> void:
+	var name := run.weather
+	var color := KickConstants.COLOR_TEXT
+	if run.weather == RunLogic.THIN_AIR:
+		var badge := Rect2(470, 132, 220, 36)
+		draw_rect(badge, Color(0.92, 0.78, 0.12, 0.92))
+		_text_centered(name, 158.0, 22, Color(0.15, 0.1, 0.02))
+		return
+	if run.weather == RunLogic.BIG_GAME or run.weather == RunLogic.ICED or run.weather == RunLogic.SQUEEZE or run.weather == RunLogic.MONSOON:
+		color = KickConstants.COLOR_BOSS
+	_text_centered(name, 158.0, 22, color)
+	if run.weather == RunLogic.BIG_GAME:
+		_text_centered("Meter upgrades off", 184.0, 16, KickConstants.COLOR_TEXT)
+
+
 func _draw_band(low: float, high: float, color: Color) -> void:
 	var top := KickConstants.meter_y(high)
 	var bottom := KickConstants.meter_y(low)
@@ -91,13 +118,15 @@ func _draw_band(low: float, high: float, color: Color) -> void:
 
 func _draw_hud(logic: KickLogic, run: RunLogic) -> void:
 	var list_h := 22.0 * float(run.owned_ids().size())
-	draw_rect(Rect2(12, 8, 340, 210.0 + list_h), Color(0.02, 0.05, 0.08, 0.42))
+	draw_rect(Rect2(12, 8, 360, 232.0 + list_h), Color(0.02, 0.05, 0.08, 0.42))
 	var x := 24.0
 	var y := 28.0
 	_text(Vector2(x, y), "Kick %d of %d" % [run.kick_number, RunTable.count()], 22, KickConstants.COLOR_TEXT)
 	y += 26.0
 	_text(Vector2(x, y), "%s yd" % KickLogic.format_number(run.distance_yards()), 20, KickConstants.COLOR_TEXT)
-	y += 24.0
+	y += 22.0
+	_text(Vector2(x, y), RunLogic.spot_label(run.spot_yards), 16, KickConstants.COLOR_ATTEMPT)
+	y += 22.0
 	_text(Vector2(x, y), "Score %d    Streak %d" % [run.score, run.streak], 20, KickConstants.COLOR_TEXT)
 	y += 24.0
 	_text(Vector2(x, y), "Mult %s" % RunLogic._two_decimals(run.current_mult()), 20, KickConstants.COLOR_TEXT)
@@ -120,6 +149,7 @@ func _draw_hud(logic: KickLogic, run: RunLogic) -> void:
 		y += 20.0
 	if run.is_boss() and run.phase == RunLogic.Phase.PLAYING:
 		_text_centered("BOSS KICK", 118.0, 28, KickConstants.COLOR_BOSS)
+	_draw_condition(run)
 	var hint := ""
 	if run.phase == RunLogic.Phase.GAME_OVER or run.phase == RunLogic.Phase.WIN or run.accepts_restart():
 		hint = "R: choose a kicker"
@@ -181,12 +211,38 @@ func _draw_kicker_select() -> void:
 	_text_centered("1 or 2 to highlight.  Space or click again to start.", 690.0, 20, KickConstants.COLOR_TEXT)
 
 
+var _portraits := {}
+
+
+func _portrait_texture(path: String) -> Texture2D:
+	if _portraits.has(path):
+		return _portraits[path]
+	var imported := load(path) as Texture2D
+	if imported == null:
+		return null
+	var image := imported.get_image()
+	if image == null:
+		return null
+	var picture := ImageTexture.create_from_image(image)
+	_portraits[path] = picture
+	return picture
+
+
+func _fit_rect(area: Rect2, texture_size: Vector2) -> Rect2:
+	if texture_size.x <= 0.0 or texture_size.y <= 0.0:
+		return area
+	var scale := minf(area.size.x / texture_size.x, area.size.y / texture_size.y)
+	var size := texture_size * scale
+	return Rect2(area.position + (area.size - size) * 0.5, size)
+
+
 func _draw_portrait(info: Dictionary, area: Rect2) -> void:
 	var id := str(info["id"])
 	if Kickers.has_portrait(id):
-		var picture := load(str(info["portrait_path"])) as Texture2D
+		var picture := _portrait_texture(str(info["portrait_path"]))
 		if picture != null:
-			draw_texture_rect(picture, area, false)
+			var fitted := _fit_rect(area, picture.get_size())
+			draw_texture_rect(picture, fitted, false)
 			return
 	var ink: Color = info["color"]
 	if str(info["shape"]) == "square":

@@ -183,7 +183,119 @@ func _ready() -> void:
 	if not await _capture("storm_score.png"):
 		get_tree().quit(1)
 		return
+	board.open_select()
+	board.highlight = 0
+	if not await _capture("select_headshots.png"):
+		get_tree().quit(1)
+		return
+	board.highlight = 1
+	board.confirm_kicker()
+	_log_posts("center")
+	if not await _capture("stadium_center.png"):
+		get_tree().quit(1)
+		return
+	board.cycle_spot()
+	_log_posts("right_hash")
+	if not await _capture("spot_right_hash.png"):
+		get_tree().quit(1)
+		return
+	board.cycle_spot()
+	_log_posts("right_wide")
+	if not await _capture("spot_right_wide.png"):
+		get_tree().quit(1)
+		return
+	board.cycle_spot()
+	_log_posts("left_wide")
+	if not await _capture("spot_left_wide.png"):
+		get_tree().quit(1)
+		return
+	board.cycle_spot()
+	_log_posts("left_hash")
+	if not await _capture("spot_left_hash.png"):
+		get_tree().quit(1)
+		return
+	board.cycle_spot()
+	board.run.attempts = 2
+	_finish_centered_power(20.0)
+	board.run.resolve_kick(board.logic.result_text, board.logic.offset_yards, board.logic.perfect)
+	if not await _capture("kick_short.png"):
+		get_tree().quit(1)
+		return
+	board.load_current_kick()
+	_finish_centered_power(55.0)
+	print("GOOD? ", board.logic.result_text, " range ", board.logic.max_range)
+	if not await _capture("kick_good.png"):
+		get_tree().quit(1)
+		return
+	board.load_current_kick()
+	board.set_wind(12.0, 90.0)
+	var curve_stats: KickerStats = board.logic.stats
+	board.logic.press_space()
+	board.logic.advance(60.0 / curve_stats.power_speed)
+	board.logic.press_space()
+	board.logic.advance(board.logic.power / curve_stats.accuracy_speed)
+	board.logic.press_space()
+	board.logic.advance(board.logic.flight_duration * (32.0 / board.logic.travel_yards))
+	if not await _capture("windy_curve.png"):
+		get_tree().quit(1)
+		return
+	board.load_current_kick()
+	board.run.spot_yards = 6.0
+	board.logic.kick_distance = 72.0
+	board.logic.start_lateral_yards = 6.0
+	board.refresh_view()
+	_log_posts("long_right")
+	if not await _capture("long_kick.png"):
+		get_tree().quit(1)
+		return
+	board.run.spot_yards = 0.0
+	board.load_current_kick()
+	board.force_weather(RunLogic.RAIN)
+	if not await _capture("weather_rain.png"):
+		get_tree().quit(1)
+		return
+	board.force_weather(RunLogic.SNOW)
+	if not await _capture("weather_snow.png"):
+		get_tree().quit(1)
+		return
+	board.force_weather(RunLogic.MUD)
+	if not await _capture("weather_mud.png"):
+		get_tree().quit(1)
+		return
+	board.force_weather(RunLogic.THIN_AIR)
+	if not await _capture("weather_thin_air.png"):
+		get_tree().quit(1)
+		return
+	board.force_weather(RunLogic.ICED)
+	board.logic.phase = KickLogic.Phase.POWER
+	board.meter_time = 0.5
+	if not await _capture("weather_iced.png"):
+		get_tree().quit(1)
+		return
+	board.logic.phase = KickLogic.Phase.AIMING
+	board.meter_time = 0.0
+	board.force_weather(RunLogic.SQUEEZE)
+	_log_posts("squeeze")
+	if not await _capture("weather_squeeze.png"):
+		get_tree().quit(1)
+		return
+	board.force_weather(RunLogic.MONSOON)
+	if not await _capture("weather_monsoon.png"):
+		get_tree().quit(1)
+		return
+	board.run.grant(Upgrades.BIG_LEG)
+	board.force_weather(RunLogic.BIG_GAME)
+	if not await _capture("weather_big_game.png"):
+		get_tree().quit(1)
+		return
 	get_tree().quit()
+
+
+func _log_posts(tag: String) -> void:
+	var tee: Vector2 = board.world_to_screen(board._tee_position())
+	var left: Vector2 = board.world_to_screen(Vector3(-board.run.post_half_gap(), 5.0, 0.0))
+	var right: Vector2 = board.world_to_screen(Vector3(board.run.post_half_gap(), 5.0, 0.0))
+	print(tag, " spot ", board.logic.start_lateral_yards, " tee_x ", tee.x, " post_x ", left.x, " ", right.x, " label ", RunLogic.spot_label(board.run.spot_yards))
 
 
 func _lock_full_power_straight() -> void:

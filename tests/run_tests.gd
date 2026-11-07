@@ -37,6 +37,7 @@ func _run() -> void:
 	_check_kickers_and_fixes()
 	_check_power_flight()
 	_check_wind_and_pool()
+	_check_weather_and_bosses()
 
 
 func check(ok: bool, label: String) -> void:
@@ -774,7 +775,8 @@ func _check_kickers_and_fixes() -> void:
 	var walked := RunLogic.new()
 	walked.start_with_kicker(Kickers.WALK_ON)
 	check(walked.rerolls_left == 2 and walked.kicker_id == Kickers.WALK_ON, "starting as The Walk-On shows Reroll: 2 left")
-	check(not Kickers.has_portrait(Kickers.BIG_BRUCE), "check 5 a missing portrait file falls back to the shape")
+	check(Kickers.has_portrait(Kickers.BIG_BRUCE) and Kickers.has_portrait(Kickers.WALK_ON), "check 5 the select screen uses the headshot files")
+	check(not Kickers.has_portrait("nobody"), "check 5 a missing portrait still falls back to the shape")
 	check(ResourceLoader.exists("res://scripts/Kickers.gd"), "a file that is really there would be drawn")
 	check(str(Kickers.get_def(Kickers.BIG_BRUCE)["portrait_path"]) == "res://art/kickers/big_bruce.png", "Big Bruce looks for res://art/kickers/big_bruce.png")
 	var carried := RunLogic.new()
@@ -1060,3 +1062,119 @@ func _check_wind_and_pool() -> void:
 	pool.roll_offer()
 	check(pool.offer.size() > 0 or pool.skip_offer(), "check 9 after 19 picks the screen still has a card or Skip")
 	check(Upgrades.pickable_copies() == 32, "the pool's pickable copies are 32, got %s" % Upgrades.pickable_copies())
+
+
+func _check_weather_and_bosses() -> void:
+	check(RunLogic.boss_weather(5) == RunLogic.ICED, "kick 5 is ICED")
+	check(RunLogic.boss_weather(10) == RunLogic.SQUEEZE, "kick 10 is THE SQUEEZE")
+	check(RunLogic.boss_weather(15) == RunLogic.MONSOON, "kick 15 is MONSOON")
+	check(RunLogic.boss_weather(20) == RunLogic.BIG_GAME, "kick 20 is BIG GAME")
+	check(RunLogic.weather_pool(1) == [RunLogic.CLEAR] and RunLogic.weather_pool(4) == [RunLogic.CLEAR], "kicks 1 through 4 are always clear")
+	check(RunLogic.weather_pool(11).size() == 4 and RunLogic.weather_pool(11).has(RunLogic.CLEAR) == false, "kicks 11 through 14 are never clear")
+	var blocked := 0
+	var samples := 0
+	while samples < 40:
+		var rng := RandomNumberGenerator.new()
+		rng.seed = samples + 1
+		var name := RunLogic.roll_weather_name(12, RunLogic.RAIN, RunLogic.RAIN, rng)
+		if name == RunLogic.RAIN:
+			blocked += 1
+		samples += 1
+	check(blocked == 0, "check a rain streak does not become a third rain on kick 12")
+	var only := RunLogic.roll_weather_name(3, RunLogic.CLEAR, RunLogic.CLEAR, RandomNumberGenerator.new())
+	check(only == RunLogic.CLEAR, "when clear is the only legal weather, the repeat is allowed")
+	var early := RunLogic.new()
+	early.set_seed(8)
+	early.new_run()
+	check(early.weather == RunLogic.CLEAR and early.kick_number == 1, "kick 1 rolls clear")
+	var rain := KickLogic.new()
+	var plain := KickLogic.new()
+	rain.rain_faster = true
+	_lock_power_at(rain, 40.0)
+	_lock_power_at(plain, 40.0)
+	rain.advance(0.25)
+	plain.advance(0.25)
+	check(rain.needle < plain.needle - 4.0, "check 1 rain makes the accuracy needle fall faster (%s vs %s)" % [rain.needle, plain.needle])
+	var clear_kick := KickLogic.new()
+	_lock_power_at(clear_kick, 50.0)
+	var snow := KickLogic.new()
+	snow.snow_range = true
+	_lock_power_at(snow, 50.0)
+	check(near(snow.max_range, clear_kick.max_range - 4.0), "check 2 snow takes 4 yards off max range (%s vs %s)" % [snow.max_range, clear_kick.max_range])
+	check(snow.travel_yards < clear_kick.travel_yards, "check 2 the snow ball travels shorter")
+	var muddy := KickLogic.new()
+	muddy.mud_power = true
+	muddy.set_seed(5)
+	muddy.press_space()
+	muddy.advance(0.3)
+	var shown := muddy.needle
+	check(absf(shown - muddy.power_true) <= 3.01, "check 3 mud jitter stays within 3 of the true needle (%s vs %s)" % [shown, muddy.power_true])
+	muddy.press_space()
+	check(near(muddy.power, shown), "check 3 locking power keeps the jittered P, got %s" % muddy.power)
+	var again := KickLogic.new()
+	again.mud_power = true
+	again.set_seed(5)
+	again.press_space()
+	again.advance(0.3)
+	var true_before := again.power_true
+	again.advance(0.05)
+	check(near(again.power_true, true_before + again.stats.power_speed * 0.05), "check 3 the true needle ignores the jitter")
+	check(absf(again.needle - again.power_true) <= 3.01, "check 3 the next frame's jitter is still just ±3")
+	var thin := KickLogic.new()
+	thin.thin_air_weather = true
+	_lock_power_at(thin, 50.0)
+	check(near(thin.max_range, clear_kick.max_range + 4.0), "check 4 thin air weather adds 4 yards (%s)" % thin.max_range)
+	var both := KickLogic.new()
+	both.stats.range_bonus = 6.0
+	both.stats.thin_air_stacks = 3
+	both.thin_air_weather = true
+	_lock_power_at(both, 50.0)
+	check(near(both.max_range, clear_kick.max_range + 6.0 + 4.0), "check 5 thin air weather stacks on top of the upgrade (%s)" % both.max_range)
+	check(RunLogic.meter_hides(RunLogic.ICED, false, 0.4), "check 6 ICED hides the meter at 0.4 seconds")
+	check(not RunLogic.meter_hides(RunLogic.ICED, false, 0.39), "check 6 the meter is still up before 0.4 seconds")
+	check(not RunLogic.meter_hides(RunLogic.ICED, true, 1.0), "check 6 Ice Veins keeps the meter visible")
+	check(KickLogic.judge(80.0, 35.0, 2.70, "standard", RunLogic.SQUEEZE_HALF)["text"] == "DOINK", "check 7 2.70 yd is a doink on the squeezed posts")
+	check(KickLogic.judge(80.0, 35.0, 2.70, "standard")["text"] == "GOOD", "check 7 the same kick is good on the normal posts")
+	check(near(RunLogic.SQUEEZE_WIDTH, 5.17) and near(RunLogic.SQUEEZE_HALF, 2.585), "check 7 the squeeze is 5.17 yd wide, half 2.585")
+	var wide_now := KickLogic.judge(80.0, 35.0, 2.90, "standard", RunLogic.SQUEEZE_HALF)
+	check(str(wide_now["text"]) == "WIDE RIGHT", "check 7 a kick outside the new edge is wide")
+	var storm := RunLogic.new()
+	storm.force_weather(RunLogic.MONSOON)
+	check(storm.has_rain() and storm.has_mud() and storm.weather == RunLogic.MONSOON, "check 8 monsoon is rain and mud together")
+	var game := RunLogic.new()
+	game.start_with_kicker(Kickers.BIG_BRUCE)
+	game.grant(Upgrades.STEADY_PLANT)
+	game.grant(Upgrades.SWEET_SPOT)
+	game.grant(Upgrades.BIG_LEG)
+	game.grant(Upgrades.ICE_VEINS)
+	check(game.stats.ice_veins and game.stats.power_speed < 100.0, "the meter upgrades are on before the big game")
+	game.force_weather(RunLogic.BIG_GAME)
+	game.prepare_kick_stats()
+	check(near(game.stats.power_speed, KickConstants.POWER_RISE_PER_SEC), "check 9 big game restores base power speed, got %s" % game.stats.power_speed)
+	check(near(game.stats.accuracy_speed, KickConstants.ACCURACY_FALL_PER_SEC * 1.1), "check 9 Big Bruce keeps his base accuracy speed")
+	check(near(game.stats.perfect_band, 2.0) and near(game.stats.good_band, 8.0), "check 9 the bands are back to ±2 and ±8")
+	check(near(game.stats.red_tip_start, 90.0) and near(game.stats.red_tip_noise, 7.0), "check 9 the red tip is the kicker's base tip")
+	check(not game.stats.ice_veins, "check 9 Ice Veins does not change the big-game meter")
+	check(near(game.stats.range_bonus, 6.0), "check 9 Big Leg still adds range")
+	var redo := RunLogic.new()
+	redo.start_with_kicker(Kickers.WALK_ON)
+	redo.attempts = 2
+	redo.force_weather(RunLogic.RAIN)
+	redo.set_wind(10.0, 90.0)
+	var saved_spot := redo.spot_yards
+	redo.resolve_kick("SHORT", 0.0, false)
+	check(not redo.wants_upgrade(), "check 10 a rainy miss does not offer an upgrade")
+	check(redo.begin_retry(), "check 10 the miss retries")
+	check(redo.weather == RunLogic.RAIN and redo.wind_speed == 10 and near(redo.wind_direction, 90.0), "check 10 the retry keeps the rain and the wind")
+	check(near(redo.spot_yards, saved_spot) and redo.kick_number == 1, "check 10 the retry is the same kick")
+	check(RunLogic.spot_label(0.0) == "CENTER", "center spot label")
+	check(RunLogic.spot_label(-3.0) == "LEFT HASH" and RunLogic.spot_label(3.0) == "RIGHT HASH", "hash labels")
+	check(RunLogic.spot_label(-6.0) == "LEFT WIDE" and RunLogic.spot_label(6.0) == "RIGHT WIDE", "wide labels")
+	var spun := RunLogic.new()
+	spun.new_run()
+	spun.cycle_debug_spot()
+	check(near(spun.spot_yards, 3.0), "H moves from center to the right hash")
+	spun.cycle_debug_spot()
+	check(near(spun.spot_yards, 6.0), "H then moves to the right wide")
+	spun.cycle_debug_spot()
+	check(near(spun.spot_yards, -6.0), "H wraps around to the left wide")
