@@ -18,7 +18,7 @@ The window is 1280×720. You stand behind the kicker and look up the field. 1 ya
 - After a kick, press **1**, **2**, or **3** to take a card (or click it). **S** skips for 10 points. **F** rerolls the cards once per run.
 - **M** uses a mulligan after a miss. Space accepts that miss instead.
 
-You begin with 1 attempt and can hold 3. A make on the first try earns one, until the cap. A miss spends one. No attempts left ends the run. Making kick 20 wins. The top-left line shows the kick, the distance, the score, the streak, the multiplier, and the attempt circles.
+You begin by picking Big Bruce or The Walk-On. You start with 1 attempt and can hold 3. A make on the first try of a kick earns one, until the cap. A miss spends one and you kick that same spot again. No attempts left ends the run. Making kick 20 wins. The top-left line shows the kick, the distance, the score, the streak, the multiplier, and the attempt circles.
 
 The needle on the right goes up for power, then down for accuracy. The green line is 0. The band labeled PERFECT is a perfect kick. The red tip at the top (95 to 100) adds a random wobble, so full power can knock a centered press out of PERFECT.
 

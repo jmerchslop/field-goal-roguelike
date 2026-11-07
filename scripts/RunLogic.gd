@@ -24,6 +24,8 @@ var is_first_ball := true
 var late_earn_rule := KickConstants.LATE_EARN_RULE
 
 var kick_resolved := false
+var last_result_made := false
+var kicker_id := ""
 var down_the_middle := false
 var attempt_note := ""
 var score_line := ""
@@ -82,6 +84,8 @@ func new_run() -> void:
 	is_first_ball = true
 	late_earn_rule = KickConstants.LATE_EARN_RULE
 	kick_resolved = false
+	last_result_made = false
+	kicker_id = ""
 	down_the_middle = false
 	attempt_note = ""
 	score_line = ""
@@ -92,7 +96,7 @@ func new_run() -> void:
 	awaiting_offer = false
 	awaiting_mulligan = false
 	mulligan_used_this_kick = false
-	rerolls_left = 1
+	rerolls_left = stats.rerolls_per_run
 	pending_result = ""
 	attempt_cap = stats.attempt_cap
 	_refill_mulligans()
@@ -113,24 +117,24 @@ func current_mult() -> float:
 
 
 func can_advance() -> bool:
-	return phase == Phase.PLAYING and kick_resolved and kick_number < RunTable.count()
+	# Only a make moves the kick number. A miss retries this same kick.
+	return phase == Phase.PLAYING and kick_resolved and last_result_made and kick_number < RunTable.count()
 
 
 # R is allowed when the run is over. A miss on kick 20 with attempts left is also over:
 # there is no kick 21, and it is not a win.
 func accepts_restart() -> bool:
-	if phase == Phase.GAME_OVER or phase == Phase.WIN:
-		return true
-	return kick_resolved and kick_number >= RunTable.count() and phase == Phase.PLAYING
+	return phase == Phase.GAME_OVER or phase == Phase.WIN
 
 
 func resolve_kick(result_text: String, offset: float, perfect: bool) -> void:
 	if kick_resolved or phase != Phase.PLAYING:
 		return
 	kick_resolved = true
+	var made := result_text == "GOOD"
+	last_result_made = made
 	var distance := distance_yards()
 	var boss := is_boss()
-	var made := result_text == "GOOD"
 	down_the_middle = absf(offset) <= KickConstants.MIDDLE_YARDS
 	attempt_note = ""
 	score_line = ""
@@ -155,6 +159,7 @@ func resolve_kick(result_text: String, offset: float, perfect: bool) -> void:
 	else:
 		streak = 0
 		attempts -= 1
+		is_first_ball = false
 		if attempts <= 0:
 			attempts = 0
 			phase = Phase.GAME_OVER
@@ -166,6 +171,7 @@ func go_to_next_kick() -> bool:
 	kick_number += 1
 	is_first_ball = true
 	kick_resolved = false
+	last_result_made = false
 	down_the_middle = false
 	attempt_note = ""
 	score_line = ""
@@ -177,6 +183,28 @@ func go_to_next_kick() -> bool:
 	_place_spot()
 	_refill_mulligans()
 	return true
+
+
+func begin_retry() -> bool:
+	# After a miss and the upgrade screen, kick the same distance and spot again.
+	if phase != Phase.PLAYING or not kick_resolved or last_result_made:
+		return false
+	kick_resolved = false
+	is_first_ball = false
+	awaiting_offer = false
+	offer = []
+	attempt_note = ""
+	score_line = ""
+	down_the_middle = false
+	return true
+
+
+func start_with_kicker(id: String) -> void:
+	new_run()
+	kicker_id = id
+	Kickers.apply_to(stats, id)
+	attempt_cap = mini(stats.attempt_cap, KickConstants.ATTEMPT_CAP_MAX)
+	rerolls_left = stats.rerolls_per_run
 
 
 func can_mulligan(result_text: String) -> bool:

@@ -9,6 +9,9 @@ var game
 func _draw() -> void:
 	if game == null:
 		return
+	if game.selecting:
+		_draw_kicker_select()
+		return
 	var logic: KickLogic = game.logic
 	var run: RunLogic = game.run
 	_draw_meter(logic)
@@ -41,7 +44,7 @@ func _draw_meter(logic: KickLogic) -> void:
 	var stats: KickerStats = logic.stats
 	_draw_band(-stats.good_band, stats.good_band, KickConstants.COLOR_INNER_BAND)
 	_draw_band(-stats.perfect_band, stats.perfect_band, KickConstants.COLOR_PERFECT_BAND)
-	_draw_band(KickConstants.RED_TIP_START, KickConstants.METER_MAX, KickConstants.COLOR_RED_TIP)
+	_draw_band(stats.red_tip_start, KickConstants.METER_MAX, KickConstants.COLOR_RED_TIP)
 	var zero_y := KickConstants.meter_y(0.0)
 	draw_line(
 		Vector2(KickConstants.METER_BAR_LEFT, zero_y),
@@ -52,7 +55,7 @@ func _draw_meter(logic: KickLogic) -> void:
 	)
 	var needle_y := KickConstants.meter_y(logic.needle)
 	var needle_color := KickConstants.COLOR_NEEDLE
-	if logic.phase == KickLogic.Phase.POWER and logic.needle >= KickConstants.RED_TIP_START:
+	if logic.phase == KickLogic.Phase.POWER and logic.needle >= logic.stats.red_tip_start:
 		needle_color = KickConstants.COLOR_RED_TIP
 	elif logic.phase == KickLogic.Phase.ACCURACY and absf(logic.needle) <= KickConstants.PERFECT_BAND:
 		needle_color = KickConstants.COLOR_ZERO
@@ -86,7 +89,7 @@ func _draw_band(low: float, high: float, color: Color) -> void:
 
 func _draw_hud(logic: KickLogic, run: RunLogic) -> void:
 	var list_h := 22.0 * float(run.owned_ids().size())
-	draw_rect(Rect2(12, 8, 320, 168 + list_h), Color(0.02, 0.05, 0.08, 0.42))
+	draw_rect(Rect2(12, 8, 340, 210.0 + list_h), Color(0.02, 0.05, 0.08, 0.42))
 	var x := 24.0
 	var y := 28.0
 	_text(Vector2(x, y), "Kick %d of %d" % [run.kick_number, RunTable.count()], 22, KickConstants.COLOR_TEXT)
@@ -99,7 +102,15 @@ func _draw_hud(logic: KickLogic, run: RunLogic) -> void:
 	y += 26.0
 	_text(Vector2(x, y), "ATTEMPTS", 18, KickConstants.COLOR_TEXT)
 	_draw_attempt_pips(run, x + 110.0, y - 5.0)
-	y += 24.0
+	y += 22.0
+	if run.kicker_id != "":
+		var who := Kickers.get_def(run.kicker_id)
+		_text(Vector2(x, y), str(who["name"]), 16, KickConstants.COLOR_TEXT)
+		y += 18.0
+		_text(Vector2(x, y), str(who["ball_name"]), 16, KickConstants.COLOR_ATTEMPT)
+		y += 22.0
+	else:
+		y += 24.0
 	_text(Vector2(x, y), "Aim %s°   negative is left" % KickLogic.format_angle(logic.aim_degrees), 16, KickConstants.COLOR_TEXT)
 	y += 22.0
 	for id in run.owned_ids():
@@ -109,7 +120,7 @@ func _draw_hud(logic: KickLogic, run: RunLogic) -> void:
 		_text_centered("BOSS KICK", 118.0, 28, KickConstants.COLOR_BOSS)
 	var hint := ""
 	if run.phase == RunLogic.Phase.GAME_OVER or run.phase == RunLogic.Phase.WIN or run.accepts_restart():
-		hint = "R: new run"
+		hint = "R: choose a kicker"
 	elif logic.phase == KickLogic.Phase.AIMING:
 		hint = "Hold Left or Right to aim.   Space starts the meter."
 	elif logic.phase == KickLogic.Phase.POWER:
@@ -117,12 +128,86 @@ func _draw_hud(logic: KickLogic, run: RunLogic) -> void:
 	elif logic.phase == KickLogic.Phase.ACCURACY:
 		hint = "Space locks accuracy."
 	elif logic.phase == KickLogic.Phase.RESULT:
-		hint = "Space: next kick."
+		hint = "Space: continue."
 	if hint != "" and not run.awaiting_offer and not run.awaiting_mulligan:
 		_text_centered(hint, 708.0, 18, KickConstants.COLOR_TEXT)
 
 
 var card_rects: Array = []
+var kicker_rects: Array = []
+
+
+func kicker_slot_at(point: Vector2) -> int:
+	for i in kicker_rects.size():
+		var rect: Rect2 = kicker_rects[i]
+		if rect.has_point(point):
+			return i
+	return -1
+
+
+func _draw_kicker_select() -> void:
+	draw_rect(Rect2(0, 0, KickConstants.WINDOW_WIDTH, KickConstants.WINDOW_HEIGHT), Color(0.05, 0.08, 0.12, 0.72))
+	_text_centered("Choose your kicker", 64.0, 36, KickConstants.COLOR_TEXT)
+	kicker_rects = []
+	var width := 460.0
+	var gap := 40.0
+	var left := (KickConstants.WINDOW_WIDTH - (width * 2.0 + gap)) * 0.5
+	for i in Kickers.ALL.size():
+		var info: Dictionary = Kickers.ALL[i]
+		var rect := Rect2(left + float(i) * (width + gap), 96.0, width, 560.0)
+		kicker_rects.append(rect)
+		var picked := int(game.highlight) == i
+		draw_rect(rect, Color(0.06, 0.08, 0.1, 0.94))
+		draw_rect(rect, KickConstants.COLOR_ATTEMPT if picked else Color(0.7, 0.75, 0.7), false, 4.0 if picked else 2.0)
+		_draw_portrait(info, Rect2(rect.position + Vector2(20, 16), Vector2(width - 40, 200)))
+		var y := rect.position.y + 240.0
+		_text(Vector2(rect.position.x + 18, y), str(info["name"]), 28, KickConstants.COLOR_ATTEMPT)
+		y += 28.0
+		y = _draw_wrapped_at(str(info["lore"]), rect.position.x + 18, y, width - 36, 16)
+		y += 8.0
+		_text(Vector2(rect.position.x + 18, y), "Excels: %s" % str(info["excels"]), 16, KickConstants.COLOR_GOOD)
+		y += 22.0
+		_text(Vector2(rect.position.x + 18, y), "Downside: %s" % str(info["downside"]), 16, KickConstants.COLOR_MISS)
+		y += 26.0
+		_text(Vector2(rect.position.x + 18, y), "Ball: %s" % str(info["ball_name"]), 18, KickConstants.COLOR_TEXT)
+		y += 22.0
+		_draw_wrapped_at(str(info["ball_description"]), rect.position.x + 18, y, width - 36, 15)
+	_text_centered("1 or 2 to highlight.  Space or click again to start.", 690.0, 20, KickConstants.COLOR_TEXT)
+
+
+func _draw_portrait(info: Dictionary, area: Rect2) -> void:
+	var id := str(info["id"])
+	if Kickers.has_portrait(id):
+		var picture := load(str(info["portrait_path"])) as Texture2D
+		if picture != null:
+			draw_texture_rect(picture, area, false)
+			return
+	var ink: Color = info["color"]
+	if str(info["shape"]) == "square":
+		var side := minf(area.size.x, area.size.y) * 0.7
+		draw_rect(Rect2(area.position + (area.size - Vector2(side, side)) * 0.5, Vector2(side, side)), ink)
+	else:
+		var radius := minf(area.size.x, area.size.y) * 0.32
+		draw_circle(area.position + area.size * 0.5, radius, ink)
+
+
+func _draw_wrapped_at(text: String, x: float, y: float, width: float, size: int) -> float:
+	var font := ThemeDB.fallback_font
+	if font == null:
+		return y
+	var line := ""
+	for word in text.split(" "):
+		var trial := (line + word).strip_edges()
+		if line != "" and font.get_string_size(trial, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > width:
+			_text(Vector2(x, y), line.strip_edges(), size, KickConstants.COLOR_TEXT)
+			y += float(size) + 4.0
+			line = word + " "
+		else:
+			line = trial + " "
+	if line.strip_edges() != "":
+		_text(Vector2(x, y), line.strip_edges(), size, KickConstants.COLOR_TEXT)
+		y += float(size) + 4.0
+	return y
 
 
 func card_index_at(point: Vector2) -> int:
@@ -195,10 +280,13 @@ func _draw_result(logic: KickLogic, run: RunLogic) -> void:
 	var box := Rect2(KickConstants.RESULT_LEFT, KickConstants.RESULT_TOP, KickConstants.RESULT_WIDTH, KickConstants.RESULT_HEIGHT)
 	draw_rect(box, KickConstants.COLOR_RESULT_SCRIM)
 	var y := box.position.y + 42.0
+	if logic.bank_shot:
+		_text_centered("BANK SHOT!", y, 36, KickConstants.COLOR_ATTEMPT)
+		y += 40.0
 	if logic.perfect:
 		_text_centered("PERFECT!", y, 28, KickConstants.COLOR_PERFECT_TEXT)
 		y += 32.0
-	if run.down_the_middle:
+	if run.down_the_middle and logic.result_text == "GOOD":
 		_text_centered("DOWN THE MIDDLE!", y, 26, KickConstants.COLOR_PERFECT_TEXT)
 		y += 32.0
 	var word_color := KickConstants.COLOR_GOOD if logic.result_text == "GOOD" else KickConstants.COLOR_MISS
@@ -223,6 +311,8 @@ func _draw_end_screen(run: RunLogic) -> void:
 	_text_centered("Score %d" % run.score, box.position.y + 130.0, 32, KickConstants.COLOR_TEXT)
 	_text_centered("Kicks made %d" % run.kicks_made, box.position.y + 172.0, 28, KickConstants.COLOR_TEXT)
 	_text_centered("Longest make %s yd" % KickLogic.format_number(run.longest_make), box.position.y + 210.0, 28, KickConstants.COLOR_TEXT)
+	if run.kicker_id != "":
+		_text_centered("Kicker: %s" % str(Kickers.get_def(run.kicker_id)["name"]), box.position.y + 248.0, 24, KickConstants.COLOR_TEXT)
 
 
 func _text(at: Vector2, text: String, size: int, color: Color) -> void:

@@ -12,6 +12,12 @@ func _ready() -> void:
 		print("Could not create ", shot_dir)
 		get_tree().quit(1)
 		return
+	board.highlight = 0
+	if not await _capture("kicker_select.png"):
+		get_tree().quit(1)
+		return
+	board.highlight = 1
+	board.confirm_kicker()
 	if not await _capture("view_rest.png"):
 		get_tree().quit(1)
 		return
@@ -49,6 +55,9 @@ func _ready() -> void:
 	board.run.resolve_kick("GOOD", 0.0, true)
 	board.run.force_offer(["deep_bench", "big_leg", "steady_plant"])
 	board.run.roll_offer()
+	if not await _capture("walk_on_reroll.png"):
+		get_tree().quit(1)
+		return
 	if not await _capture("offer_cards.png"):
 		get_tree().quit(1)
 		return
@@ -66,7 +75,44 @@ func _ready() -> void:
 	if not await _capture("mulligan_prompt.png"):
 		get_tree().quit(1)
 		return
+	board.highlight = 0
+	board.confirm_kicker()
+	if not await _capture("big_bruce_play.png"):
+		get_tree().quit(1)
+		return
+	board.run.attempts = 2
+	_finish_centered_power(4.0)
+	board.run.resolve_kick(board.logic.result_text, board.logic.offset_yards, board.logic.perfect)
+	if not await _capture("short_result.png"):
+		get_tree().quit(1)
+		return
+	board.restart_run()
+	board.logic.aim_degrees = rad_to_deg(atan(3.08 / 35.0))
+	_finish_centered_power(80.0)
+	board._bank_time = 0.15
+	board.run.resolve_kick(board.logic.result_text, board.logic.offset_yards, board.logic.perfect)
+	if not await _capture("bank_shot.png"):
+		get_tree().quit(1)
+		return
+	board.restart_run()
+	board.run.attempts = 2
+	board.script_good_kick()
+	board.advance_run()
+	board.run.resolve_kick("SHORT", 0.0, false)
+	if not await _capture("miss_same_kick.png"):
+		get_tree().quit(1)
+		return
 	get_tree().quit()
+
+
+func _finish_centered_power(power_value: float) -> void:
+	var stats: KickerStats = board.logic.stats
+	board.logic.press_space()
+	board.logic.advance(power_value / stats.power_speed)
+	board.logic.press_space()
+	board.logic.advance(board.logic.power / stats.accuracy_speed)
+	board.logic.press_space()
+	board.logic.advance(board.logic.flight_duration)
 
 
 func _capture(file_name: String) -> bool:

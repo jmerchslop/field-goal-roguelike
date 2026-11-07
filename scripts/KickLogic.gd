@@ -28,6 +28,8 @@ var max_range := 0.0
 var offset_yards := 0.0
 var result_text := ""
 var perfect := false
+var bank_shot := false
+var reached_uprights := false
 var flight_elapsed := 0.0
 var flight_duration := 0.0
 var travel_yards := 0.0
@@ -99,6 +101,8 @@ func reset_kick() -> void:
 	offset_yards = 0.0
 	result_text = ""
 	perfect = false
+	bank_shot = false
+	reached_uprights = false
 	flight_elapsed = 0.0
 	flight_duration = 0.0
 	travel_yards = 0.0
@@ -115,11 +119,11 @@ func detail_line() -> String:
 
 # --- Pure math. The meter and the tests both call these. ----------------------
 
-static func accuracy_with_red_tip(power_value: float, needle_value: float, rng: RandomNumberGenerator) -> float:
+static func accuracy_with_red_tip(power_value: float, needle_value: float, rng: RandomNumberGenerator, tip_start: float = KickConstants.RED_TIP_START, noise: float = 5.0) -> float:
 	var error := needle_value
 	# The wobble is added before the perfect check, so a press on 0 can miss PERFECT.
-	if power_value >= KickConstants.RED_TIP_START:
-		error += rng.randf_range(KickConstants.RED_TIP_ERROR_MIN, KickConstants.RED_TIP_ERROR_MAX)
+	if power_value >= tip_start:
+		error += rng.randf_range(-noise, noise)
 	return error
 
 
@@ -154,10 +158,24 @@ static func flight_time_seconds(distance_yards: float) -> float:
 
 
 static func classify(max_range_yards: float, distance_yards: float, offset: float) -> String:
-	# Short is checked first. A ball that dies early is SHORT even if it was aimed wide.
+	# The ball has to reach the posts. A perfect aim that falls short is still SHORT.
+	return str(judge(max_range_yards, distance_yards, offset, "standard")["text"])
+
+
+# reached is true only when the ball's path gets to the uprights' plane.
+# ball_type "barn_burner" can turn a doink into GOOD when there is range to spare.
+static func judge(max_range_yards: float, distance_yards: float, offset: float, ball_type: String) -> Dictionary:
 	if max_range_yards < distance_yards:
-		return "SHORT"
-	# Doink overlaps the wide side of the post. It is a miss, and it wins over WIDE.
+		return {"text": "SHORT", "bank": false, "reached": false}
+	var text := _result_at_plane(offset)
+	var bank := false
+	if ball_type == "barn_burner" and text == "DOINK" and max_range_yards >= distance_yards + 10.0:
+		text = "GOOD"
+		bank = true
+	return {"text": text, "bank": bank, "reached": true}
+
+
+static func _result_at_plane(offset: float) -> String:
 	var from_the_post := absf(absf(offset) - KickConstants.POST_HALF_GAP_YARDS)
 	if from_the_post <= KickConstants.DOINK_BAND_YARDS:
 		return "DOINK"
@@ -240,17 +258,21 @@ func _lock_power(value: float) -> void:
 
 
 func _lock_accuracy(value: float) -> void:
-	accuracy_error = accuracy_with_red_tip(power, value, _rng)
+	accuracy_error = accuracy_with_red_tip(power, value, _rng, stats.red_tip_start, stats.red_tip_noise)
 	# The perfect window comes from the kicker's stats, so Sweet Spot can widen it.
 	perfect = absf(accuracy_error) <= stats.perfect_band
 	var hook := 0.0 if perfect else -accuracy_error * KickConstants.ACCURACY_DEG_PER_ERROR
 	final_angle_degrees = aim_degrees + hook
-	max_range = range_yards(power) + stats.range_bonus
-	offset_yards = offset_yards_at_uprights(kick_distance, final_angle_degrees, start_lateral_yards)
-	# The ball stops at its max range when that is short of the posts.
-	travel_yards = minf(max_range, kick_distance)
+	max_range = stats.range_base + stats.range_per_power * power + stats.range_bonus
+	reached_uprights = max_range >= kick_distance
+	# A short kick stops where it lands. Do not pretend it reached the posts.
+	var flown := kick_distance if reached_uprights else max_range
+	offset_yards = offset_yards_at_uprights(flown, final_angle_degrees, start_lateral_yards)
+	travel_yards = flown
 	flight_duration = flight_time_seconds(kick_distance)
-	result_text = classify(max_range, kick_distance, offset_yards)
+	var judged := judge(max_range, kick_distance, offset_yards if reached_uprights else 0.0, stats.ball_type)
+	result_text = str(judged["text"])
+	bank_shot = bool(judged["bank"])
 	phase = Phase.FLIGHT
 	flight_elapsed = 0.0
 

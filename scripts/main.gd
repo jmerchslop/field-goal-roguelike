@@ -14,6 +14,9 @@ var logic := KickLogic.new()
 var run := RunLogic.new()
 var _taking_pictures := false
 var _approach_time := 0.0
+var _bank_time := 0.0
+var selecting := true
+var highlight := -1
 
 var _world: Node3D
 var _camera: Camera3D
@@ -37,8 +40,8 @@ func _ready() -> void:
 	_build_ball()
 	_kicker = KickerScene.instantiate()
 	_world.add_child(_kicker)
-	run.new_run()
-	load_current_kick()
+	selecting = true
+	highlight = -1
 	if OS.get_environment("FG_SHOTS") != "1":
 		return
 	_taking_pictures = true
@@ -57,6 +60,7 @@ func load_current_kick() -> void:
 	logic.start_lateral_yards = run.spot_yards
 	logic.sync_tee()
 	_approach_time = 0.0
+	_bank_time = 0.0
 	refresh_view()
 
 
@@ -83,14 +87,75 @@ func retake_with_mulligan() -> void:
 	logic.start_lateral_yards = spot
 	logic.sync_tee()
 	_approach_time = 0.0
+	_bank_time = 0.0
 	refresh_view()
 
 
 func _choose_card(index: int) -> void:
 	if not run.pick_card(index):
 		return
-	advance_run()
+	_after_cards()
+
+
+func _after_cards() -> void:
+	if run.last_result_made:
+		advance_run()
+	else:
+		run.begin_retry()
+		load_current_kick()
 	refresh_view()
+
+
+func confirm_kicker() -> void:
+	var id := Kickers.id_for_slot(highlight)
+	if id == "":
+		return
+	selecting = false
+	run.start_with_kicker(id)
+	logic.stats = run.stats
+	_tint_ball()
+	load_current_kick()
+
+
+func open_select() -> void:
+	selecting = true
+	highlight = -1
+	refresh_view()
+
+
+func _select_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		var mouse := event as InputEventMouseButton
+		if mouse.pressed and mouse.button_index == MOUSE_BUTTON_LEFT:
+			var slot: int = _hud.kicker_slot_at(mouse.position)
+			var step: Dictionary = Kickers.click_slot(highlight, slot)
+			highlight = int(step["highlight"])
+			if bool(step["confirm"]):
+				confirm_kicker()
+			else:
+				refresh_view()
+		return
+	if not event is InputEventKey:
+		return
+	var key := event as InputEventKey
+	if not key.pressed or key.echo:
+		return
+	if key.keycode == KEY_1 or key.keycode == KEY_KP_1:
+		highlight = 0
+		refresh_view()
+	elif key.keycode == KEY_2 or key.keycode == KEY_KP_2:
+		highlight = 1
+		refresh_view()
+	elif key.keycode == KEY_SPACE:
+		confirm_kicker()
+
+
+func _tint_ball() -> void:
+	var info := Kickers.get_def(run.kicker_id)
+	var ink := Color(0.45, 0.24, 0.1)
+	if not info.is_empty():
+		ink = info["color"]
+	_ball.material_override = _mat(ink, 0.55)
 
 
 func advance_run() -> bool:
@@ -101,7 +166,13 @@ func advance_run() -> bool:
 
 
 func restart_run() -> void:
-	run.new_run()
+	var id := run.kicker_id
+	if id == "":
+		open_select()
+		return
+	run.start_with_kicker(id)
+	logic.stats = run.stats
+	_tint_ball()
 	load_current_kick()
 
 
@@ -131,6 +202,11 @@ func refresh_view() -> void:
 func _process(delta: float) -> void:
 	if _taking_pictures:
 		return
+	if selecting:
+		refresh_view()
+		return
+	if logic.bank_shot and logic.phase == KickLogic.Phase.RESULT and _bank_time < 0.3:
+		_bank_time += delta
 	if run.phase == RunLogic.Phase.PLAYING and logic.phase != KickLogic.Phase.RESULT:
 		var direction := 0.0
 		if Input.is_key_pressed(KEY_LEFT):
@@ -149,6 +225,9 @@ func _process(delta: float) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if _taking_pictures:
 		return
+	if selecting:
+		_select_input(event)
+		return
 	if event is InputEventMouseButton:
 		var mouse := event as InputEventMouseButton
 		if mouse.pressed and mouse.button_index == MOUSE_BUTTON_LEFT and run.awaiting_offer:
@@ -160,7 +239,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not key.pressed or key.echo:
 		return
 	if key.keycode == KEY_R and run.accepts_restart() and not run.awaiting_offer and not run.awaiting_mulligan:
-		restart_run()
+		open_select()
 		return
 	if key.keycode == KEY_M and run.awaiting_mulligan:
 		retake_with_mulligan()
@@ -176,8 +255,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if run.awaiting_offer and key.keycode == KEY_S:
 		if run.skip_offer():
-			advance_run()
-			refresh_view()
+			_after_cards()
 		return
 	if run.awaiting_offer and key.keycode == KEY_F:
 		run.reroll_offer()
@@ -309,7 +387,12 @@ func _ball_position() -> Vector3:
 	var forward := logic.ball_forward_yards
 	var lateral := logic.ball_lateral_yards
 	var height := logic.ball_height * ARC_YARDS
-	if logic.result_text == "DOINK" and (logic.phase == KickLogic.Phase.FLIGHT or logic.phase == KickLogic.Phase.RESULT):
+	if logic.bank_shot and logic.phase == KickLogic.Phase.RESULT:
+		var bounce := clampf(_bank_time / 0.3, 0.0, 1.0)
+		lateral = lerpf(logic.offset_yards, 0.0, bounce)
+		height = sin(bounce * PI) * 1.6
+		forward = logic.kick_distance
+	elif logic.result_text == "DOINK" and (logic.phase == KickLogic.Phase.FLIGHT or logic.phase == KickLogic.Phase.RESULT):
 		var span := maxf(logic.travel_yards, 0.001)
 		var along := clampf((forward - span * 0.84) / (span * 0.16), 0.0, 1.0)
 		forward -= along * 4.5
