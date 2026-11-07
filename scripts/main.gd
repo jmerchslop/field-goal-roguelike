@@ -15,6 +15,10 @@ var _taking_pictures := false
 var _approach_time := 0.0
 var _bank_time := 0.0
 var selecting := true
+var showing_records := false
+var save_note := ""
+var _note_time := 0.0
+var _trophy_time := 0.0
 var highlight := -1
 var meter_time := 0.0
 var _pose := "idle"
@@ -82,15 +86,12 @@ func _copy_run_onto_kick() -> void:
 	logic.wind_direction = run.wind_direction
 	logic.insurance_ready = run.insurance_left > 0
 	logic.insured = false
-	logic.rain_faster = run.has_rain()
-	logic.snow_range = run.weather == RunLogic.SNOW
-	logic.mud_power = run.has_mud()
-	logic.thin_air_weather = run.weather == RunLogic.THIN_AIR
+	_copy_weather_onto_kick()
 	logic.post_half_gap = run.post_half_gap()
-	logic.heavy_ball = run.curse == RunLogic.CURSE_HEAVY
-	logic.howling_wind = run.curse == RunLogic.CURSE_HOWLING
-	logic.shanky = run.curse == RunLogic.CURSE_SHANKY
-	logic.shaky = run.curse == RunLogic.CURSE_SHAKY
+	logic.heavy_ball = run.has_curse(Loadout.HEAVY)
+	logic.howling_wind = run.has_curse(Loadout.HOWLING)
+	logic.shaky = run.has_curse(Loadout.SHAKY)
+	logic.angle_scale = run.stats.angle_scale
 	meter_time = 0.0
 	_reset_kick_pose()
 
@@ -157,6 +158,12 @@ func confirm_kicker() -> void:
 	load_current_kick()
 
 
+func tap_f9() -> void:
+	save_note = SaveData.press_f9(Time.get_ticks_msec() / 1000.0)
+	_note_time = 0.0
+	refresh_view()
+
+
 func open_select() -> void:
 	selecting = true
 	highlight = -1
@@ -179,6 +186,19 @@ func _select_input(event: InputEvent) -> void:
 		return
 	var key := event as InputEventKey
 	if not key.pressed or key.echo:
+		return
+	if key.keycode == KEY_T:
+		showing_records = true
+		refresh_view()
+		return
+	if key.keycode == KEY_ESCAPE and showing_records:
+		showing_records = false
+		refresh_view()
+		return
+	if key.keycode == KEY_F9:
+		tap_f9()
+		return
+	if showing_records:
 		return
 	if key.keycode == KEY_1 or key.keycode == KEY_KP_1:
 		highlight = 0
@@ -233,14 +253,26 @@ func cycle_spot() -> void:
 	refresh_view()
 
 
+func _copy_weather_onto_kick() -> void:
+	var cut := run.stats.weather_cut
+	logic.rain_faster = run.has_rain() and cut < 2
+	logic.rain_scale = 1.10 if cut == 1 else 1.20
+	logic.snow_range = run.weather == RunLogic.SNOW and cut < 2
+	logic.snow_penalty = 2.0 if cut == 1 else 4.0
+	logic.mud_power = run.has_mud() and cut < 2
+	logic.mud_span = 1.5 if cut == 1 else 3.0
+	logic.thin_air_weather = run.weather == RunLogic.THIN_AIR
+
+
 func _apply_conditions() -> void:
 	run.prepare_kick_stats()
 	logic.stats = run.stats
-	logic.rain_faster = run.has_rain()
-	logic.snow_range = run.weather == RunLogic.SNOW
-	logic.mud_power = run.has_mud()
-	logic.thin_air_weather = run.weather == RunLogic.THIN_AIR
+	_copy_weather_onto_kick()
 	logic.post_half_gap = run.post_half_gap()
+	logic.heavy_ball = run.has_curse(Loadout.HEAVY)
+	logic.howling_wind = run.has_curse(Loadout.HOWLING)
+	logic.shaky = run.has_curse(Loadout.SHAKY)
+	logic.angle_scale = run.stats.angle_scale
 
 
 func set_wind(speed: float, direction: float) -> void:
@@ -269,6 +301,19 @@ func refresh_view() -> void:
 
 
 func _process(delta: float) -> void:
+	if not _taking_pictures:
+		if save_note != "":
+			_note_time += delta
+			if _note_time >= 2.0:
+				save_note = ""
+				_note_time = 0.0
+		if run.trophy_name != "":
+			_trophy_time += delta
+			if _trophy_time >= 2.0:
+				run.trophy_name = ""
+				_trophy_time = 0.0
+		elif _trophy_time != 0.0:
+			_trophy_time = 0.0
 	if _taking_pictures:
 		return
 	if selecting:
@@ -314,7 +359,15 @@ func _unhandled_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
 	if not key.pressed or key.echo:
 		return
-	if key.keycode == KEY_R and run.accepts_restart() and not run.awaiting_offer and not run.awaiting_mulligan:
+	if key.keycode == KEY_ESCAPE and showing_records:
+		showing_records = false
+		refresh_view()
+		return
+	if key.keycode == KEY_T and (selecting or run.phase == RunLogic.Phase.GAME_OVER or run.phase == RunLogic.Phase.WIN):
+		showing_records = true
+		refresh_view()
+		return
+	if key.keycode == KEY_R and run.accepts_restart() and not run.awaiting_offer and not run.awaiting_mulligan and not showing_records:
 		open_select()
 		return
 	if key.keycode == KEY_M and run.awaiting_mulligan:
@@ -335,10 +388,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if run.awaiting_offer and key.keycode == KEY_F:
 		run.reroll_offer()
-		refresh_view()
-		return
-	if key.shift_pressed and key.keycode == KEY_C and not run.awaiting_mulligan:
-		run.force_cursed_offer()
 		refresh_view()
 		return
 	if key.shift_pressed and run.phase == RunLogic.Phase.PLAYING and not run.awaiting_offer and not run.awaiting_mulligan:

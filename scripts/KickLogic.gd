@@ -60,8 +60,11 @@ var post_half_gap := KickConstants.POST_HALF_GAP_YARDS
 var power_true := 0.0
 var heavy_ball := false
 var howling_wind := false
-var shanky := false
 var shaky := false
+var angle_scale := 1.0
+var rain_scale := 1.2
+var snow_penalty := 4.0
+var mud_span := 3.0
 var aim_base := 0.0
 var flight_elapsed := 0.0
 var flight_duration := 0.0
@@ -150,8 +153,11 @@ func reset_kick() -> void:
 	var keep_gap := post_half_gap
 	var keep_heavy := heavy_ball
 	var keep_howl := howling_wind
-	var keep_shank := shanky
 	var keep_shaky := shaky
+	var keep_angle := angle_scale
+	var keep_rain_scale := rain_scale
+	var keep_snow_pen := snow_penalty
+	var keep_mud_span := mud_span
 	phase = Phase.AIMING
 	aim_degrees = 0.0
 	needle = 0.0
@@ -184,8 +190,11 @@ func reset_kick() -> void:
 	post_half_gap = keep_gap
 	heavy_ball = keep_heavy
 	howling_wind = keep_howl
-	shanky = keep_shank
 	shaky = keep_shaky
+	angle_scale = keep_angle
+	rain_scale = keep_rain_scale
+	snow_penalty = keep_snow_pen
+	mud_span = keep_mud_span
 	power_true = 0.0
 	aim_base = 0.0
 
@@ -395,14 +404,14 @@ func _shown_power(true_value: float) -> float:
 	# Mud jitters the shown needle. The jitter is new every frame and is not kept.
 	var shown := true_value
 	if mud_power:
-		shown += _rng.randf_range(-3.0, 3.0)
+		shown += _rng.randf_range(-mud_span, mud_span)
 	return clampf(shown, 0.0, KickConstants.METER_MAX)
 
 
 func _advance_accuracy(delta: float) -> void:
 	var fall := stats.accuracy_speed
 	if rain_faster:
-		fall *= 1.20
+		fall *= rain_scale
 	needle -= fall * delta
 	if needle > KickConstants.METER_MIN:
 		return
@@ -431,17 +440,18 @@ func _lock_accuracy(value: float) -> void:
 		accuracy_error = accuracy_with_red_tip(power, value, _rng, stats.red_tip_start, stats.red_tip_noise)
 	# The perfect window comes from the kicker's stats, so Sweet Spot can widen it.
 	perfect = absf(accuracy_error) <= stats.perfect_band
-	var per_unit := KickConstants.ACCURACY_DEG_PER_ERROR * (1.5 if shanky else 1.0)
+	var per_unit := KickConstants.ACCURACY_DEG_PER_ERROR * angle_scale
 	var hook := 0.0 if perfect else -accuracy_error * per_unit
 	final_angle_degrees = aim_degrees + hook
-	# This kick's locked power, plus the saved wind. Not last kick's range.
-	drift_yards = drift_at_uprights(float(wind_speed), wind_direction, kick_distance, stats.low_drive_stacks, stats.wind_breaker_stacks, stats.ball_type)
+	# Howling Wind multiplies this kick's wind speed. The saved wind number stays put.
+	var blown := float(wind_speed)
 	if howling_wind:
-		drift_yards *= 1.5
-	var wind_range := wind_range_delta(float(wind_speed), wind_direction, stats.low_drive_stacks, stats.thin_air_stacks >= 1)
+		blown *= 1.5
+	drift_yards = drift_at_uprights(blown, wind_direction, kick_distance, 0, 0, stats.ball_type) * stats.drift_factor
+	var wind_range := wind_range_delta(blown, wind_direction, 0, stats.thin_air)
 	max_range = stats.range_base + stats.range_per_power * power + stats.range_bonus + wind_range
 	if snow_range:
-		max_range -= 4.0
+		max_range -= snow_penalty
 	if thin_air_weather:
 		max_range += 4.0
 	if heavy_ball:

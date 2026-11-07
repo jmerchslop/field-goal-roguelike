@@ -9,13 +9,20 @@ var game
 func _draw() -> void:
 	if game == null:
 		return
+	if game.showing_records:
+		_draw_records()
+		_draw_save_note()
+		return
 	if game.selecting:
 		_draw_kicker_select()
+		_draw_save_note()
 		return
 	var logic: KickLogic = game.logic
 	var run: RunLogic = game.run
 	_draw_weather_tint(run)
-	_draw_meter(logic, run)
+	var on_meter := logic.phase == KickLogic.Phase.POWER or logic.phase == KickLogic.Phase.ACCURACY or logic.phase == KickLogic.Phase.FLIGHT or logic.phase == KickLogic.Phase.RESULT
+	if not run.meter_hidden(on_meter, game.meter_time):
+		_draw_meter(logic, run)
 	_draw_hud(logic, run)
 	_draw_wind(logic, run)
 	_draw_laser(logic, run)
@@ -27,6 +34,8 @@ func _draw() -> void:
 		_draw_end_screen(run)
 	elif logic.phase == KickLogic.Phase.RESULT:
 		_draw_result(logic, run)
+	_draw_trophy(run)
+	_draw_save_note()
 
 
 func _draw_meter(logic: KickLogic, run: RunLogic) -> void:
@@ -119,8 +128,7 @@ func _draw_band(low: float, high: float, color: Color) -> void:
 
 
 func _draw_hud(logic: KickLogic, run: RunLogic) -> void:
-	var list_h := 22.0 * float(run.owned_ids().size())
-	draw_rect(Rect2(12, 8, 360, 232.0 + list_h), Color(0.02, 0.05, 0.08, 0.42))
+	draw_rect(Rect2(12, 8, 420, 430), Color(0.02, 0.05, 0.08, 0.42))
 	var x := 24.0
 	var y := 28.0
 	_text(Vector2(x, y), "Kick %d of %d" % [run.kick_number, RunTable.count()], 22, KickConstants.COLOR_TEXT)
@@ -148,16 +156,19 @@ func _draw_hud(logic: KickLogic, run: RunLogic) -> void:
 		y += 24.0
 	_text(Vector2(x, y), "Aim %s°   negative is left" % KickLogic.format_angle(logic.aim_degrees), 16, KickConstants.COLOR_TEXT)
 	y += 22.0
-	for id in run.owned_ids():
-		_text(Vector2(x, y), Upgrades.stack_label(str(id), int(run.stacks[id])), 16, KickConstants.COLOR_ATTEMPT)
-		y += 20.0
+	_draw_loadout(run, x, y)
 	if run.is_boss() and run.phase == RunLogic.Phase.PLAYING:
 		_text_centered("BOSS KICK", 118.0, 28, KickConstants.COLOR_BOSS)
 	_draw_condition(run)
-	if run.curse != "":
-		_text_centered("%s   ends after kick %d" % [run.curse_label(), run.curse_end_kick], 286.0, 18, Color(0.72, 0.4, 0.95))
-		if run.curse == RunLogic.CURSE_HOWLING:
-			_text_centered("Wind pulls 1.5× harder", 310.0, 16, KickConstants.COLOR_ATTEMPT)
+	if run.has_curse(Loadout.HOWLING):
+		_text_centered("Howling Wind   wind ×1.5   items ×1.15", 286.0, 18, Color(0.72, 0.4, 0.95))
+	elif run.curse_ids.size() > 0:
+		var names := ""
+		for id in run.curse_ids:
+			if names != "":
+				names += ", "
+			names += Loadout.piece_name(str(id))
+		_text_centered(names, 286.0, 18, Color(0.72, 0.4, 0.95))
 	var hint := ""
 	if run.phase == RunLogic.Phase.GAME_OVER or run.phase == RunLogic.Phase.WIN or run.accepts_restart():
 		hint = "R: choose a kicker"
@@ -290,9 +301,10 @@ func card_index_at(point: Vector2) -> int:
 
 func _draw_wind(logic: KickLogic, run: RunLogic) -> void:
 	var anchor: Vector2 = game.world_to_screen(Vector3(8.2, 6.2, 0.4))
-	var name := RunLogic.wind_name(run.wind_speed)
+	var shown_speed := run.shown_wind_speed()
+	var name := RunLogic.wind_name(shown_speed)
 	_text(anchor + Vector2(-8, -8), name, 20, KickConstants.COLOR_TEXT)
-	var kind := RunLogic.wind_flag_kind(run.wind_speed)
+	var kind := RunLogic.wind_flag_kind(shown_speed)
 	if kind != "none":
 		var reach := 2.2
 		if kind == "medium":
@@ -306,16 +318,21 @@ func _draw_wind(logic: KickLogic, run: RunLogic) -> void:
 		draw_circle(tip, 5.0, Color(0.95, 0.82, 0.16))
 	if not logic.stats.flag_reader:
 		return
-	_text(anchor + Vector2(-8, 18), RunLogic.wind_readout(run.wind_speed, run.wind_direction), 16, KickConstants.COLOR_ATTEMPT)
+	_text(anchor + Vector2(-8, 18), RunLogic.wind_readout(shown_speed, run.wind_direction), 16, KickConstants.COLOR_ATTEMPT)
+	var preview_y := 40.0
+	for line in run.upcoming_winds():
+		_text(anchor + Vector2(-8, preview_y), str(line), 14, KickConstants.COLOR_TEXT)
+		preview_y += 16.0
 
 
 func _draw_laser(logic: KickLogic, run: RunLogic) -> void:
 	if not logic.stats.laser_line or logic.phase != KickLogic.Phase.AIMING:
 		return
-	var drift := KickLogic.drift_at_uprights(float(logic.wind_speed), logic.wind_direction, logic.kick_distance, logic.stats.low_drive_stacks, logic.stats.wind_breaker_stacks, logic.stats.ball_type)
-	if run.curse == RunLogic.CURSE_HOWLING:
-		drift *= 1.5
-	var far := KickLogic.preview_forward(logic.kick_distance)
+	var blown := float(logic.wind_speed)
+	if logic.howling_wind:
+		blown *= 1.5
+	var drift := KickLogic.drift_at_uprights(blown, logic.wind_direction, logic.kick_distance, 0, 0, logic.stats.ball_type) * logic.stats.drift_factor
+	var far := logic.kick_distance if logic.stats.laser_full else KickLogic.preview_forward(logic.kick_distance)
 	var previous := Vector2.ZERO
 	var started := false
 	for step in 9:
@@ -339,35 +356,27 @@ func _draw_offer(run: RunLogic) -> void:
 	card_rects = []
 	var count := run.offer.size()
 	if count == 0:
-		_text_centered("No upgrades left.  S continues.", 460.0, 28, KickConstants.COLOR_TEXT)
-	var width := 230.0
+		_text_centered("Nothing left to take.  S continues.", 430.0, 28, KickConstants.COLOR_TEXT)
+	var width := 250.0
 	var gap := 16.0
 	var total := float(count) * width + float(maxi(count - 1, 0)) * gap
-	var left := (KickConstants.METER_PANEL_LEFT - total) * 0.5
+	var left := (KickConstants.WINDOW_WIDTH - total) * 0.5
+	if count > 0 and left > 430.0:
+		left = 430.0
 	for i in count:
-		var rect := Rect2(left + float(i) * (width + gap), 390.0, width, 250.0)
+		var rect := Rect2(left + float(i) * (width + gap), 360.0, width, 250.0)
 		card_rects.append(rect)
-		draw_rect(rect, Color(0.05, 0.08, 0.1, 0.92))
-		var card: Dictionary = run._as_card(run.offer[i])
-		var id := str(card["id"])
-		var cursed := bool(card.get("cursed", false))
-		draw_rect(rect, Upgrades.border_color(id, cursed), false, 4.0)
-		var info := Upgrades.get_def(id)
-		var stacks := int(run.stacks.get(id, 0)) + 1
-		var title := "%d  %s" % [i + 1, str(info["name"])]
-		if cursed:
-			title = "%d  CURSED  %s" % [i + 1, str(info["name"])]
-		_text(rect.position + Vector2(14, 36), title, 20, KickConstants.COLOR_ATTEMPT)
-		var label := Upgrades.stack_label(id, stacks)
-		if cursed:
-			label = Upgrades.doubled_line(id)
-		_text(rect.position + Vector2(14, 64), label, 16, KickConstants.COLOR_TEXT)
-		var blurb := str(info["description"])
-		if cursed:
-			blurb = "Curse: %s. Lasts until the end of this quarter." % RunLogic.curse_name(str(card.get("curse", "")))
-		_draw_wrapped(blurb, Rect2(rect.position + Vector2(14, 96), Vector2(width - 28, 110)), 16)
-	var reroll_y := 660.0
-	_text_centered("Reroll: %d left    F rerolls    S skips (+10)" % run.rerolls_left, reroll_y, 18, KickConstants.COLOR_TEXT)
+		var card: Dictionary = run.offer[i]
+		var id := str(card.get("id", ""))
+		var rank := int(card.get("rank", 1))
+		var slot := str(card.get("slot", ""))
+		draw_rect(rect, Color(0.05, 0.08, 0.1, 0.94))
+		draw_rect(rect, _slot_color(slot), false, 4.0)
+		_text(rect.position + Vector2(14, 32), "%d  %s" % [i + 1, Loadout.type_label(slot)], 16, _slot_color(slot))
+		_text(rect.position + Vector2(14, 62), Loadout.card_title(id, rank), 20, KickConstants.COLOR_ATTEMPT)
+		_draw_wrapped(Loadout.effect_line(id, rank), Rect2(rect.position + Vector2(14, 84), Vector2(width - 28, 140)), 16)
+	_text_centered("Reroll: %d left    F rerolls    S skips" % run.rerolls_left, 640.0, 18, KickConstants.COLOR_TEXT)
+	_text_centered("Skip takes nothing.", 666.0, 16, KickConstants.COLOR_TEXT)
 
 
 func _draw_wrapped(text: String, area: Rect2, size: int) -> void:
@@ -438,21 +447,18 @@ func _draw_end_screen(run: RunLogic) -> void:
 	if run.kicker_id != "":
 		_text_centered("Kicker: %s" % str(Kickers.get_def(run.kicker_id)["name"]), box.position.y + 248.0, 22, KickConstants.COLOR_TEXT)
 	var owned := ""
-	for id in run.owned_ids():
+	for label in run.owned_labels():
 		if owned != "":
 			owned += ", "
-		owned += str(Upgrades.get_def(str(id))["name"])
+		owned += str(label)
 	if owned == "":
 		owned = "none"
-	_text_centered("Upgrades: %s" % owned, box.position.y + 276.0, 16, KickConstants.COLOR_TEXT)
-	var cursed_names := ""
-	for name in run.curses_taken:
-		if cursed_names != "":
-			cursed_names += ", "
-		cursed_names += str(name)
-	if cursed_names == "":
-		cursed_names = "none"
-	_text_centered("Curses: %s" % cursed_names, box.position.y + 298.0, 16, Color(0.78, 0.5, 0.95))
+	_text_centered("Loadout: %s" % owned, box.position.y + 276.0, 16, KickConstants.COLOR_TEXT)
+	if run.new_record_score:
+		_text_centered("NEW RECORD!", box.position.y + 150.0, 22, KickConstants.COLOR_ATTEMPT)
+	if run.new_record_long:
+		_text_centered("NEW RECORD!", box.position.y + 230.0, 22, KickConstants.COLOR_ATTEMPT)
+	_text_centered("T: records", box.position.y + 320.0, 16, KickConstants.COLOR_TEXT)
 
 
 func _text(at: Vector2, text: String, size: int, color: Color) -> void:
@@ -475,3 +481,127 @@ func _text_centered(text: String, baseline_y: float, size: int, color: Color) ->
 	var field_width := KickConstants.METER_PANEL_LEFT
 	var x := (field_width - width) * 0.5
 	_text(Vector2(x, baseline_y), text, size, color)
+
+
+func _draw_loadout(run: RunLogic, x: float, y: float) -> void:
+	var slots: Array = [
+		["Cleats", run.cleats_id, run.cleats_rank, Loadout.CLEATS],
+		["Helmet", run.helmet_id, run.helmet_rank, Loadout.HELMET],
+		["Gloves", run.gloves_id, run.gloves_rank, Loadout.GLOVES],
+	]
+	for slot in slots:
+		var label := "%s: —" % str(slot[0])
+		if str(slot[1]) != "":
+			var words := Loadout.piece_name(str(slot[1])).split(" ")
+			label = "%s: %s %s" % [str(slot[0]), str(words[0]), Loadout.rank_label(int(slot[2]))]
+		_text(Vector2(x, y), label, 15, _slot_color(str(slot[3])))
+		y += 18.0
+	for i in 2:
+		var label := "Perk %d: —" % (i + 1)
+		if i < run.perks.size():
+			var item: Dictionary = run.perks[i]
+			label = "Perk %d: %s" % [i + 1, Loadout.card_title(str(item.get("id", "")), int(item.get("rank", 1)))]
+		_text(Vector2(x, y), label, 15, _slot_color(Loadout.PERK))
+		y += 18.0
+	for i in 2:
+		var label := "Curse %d: —" % (i + 1)
+		if i < run.curse_ids.size():
+			label = "Curse %d: %s" % [i + 1, Loadout.piece_name(str(run.curse_ids[i]))]
+		_text(Vector2(x, y), label, 15, _slot_color(Loadout.CURSE))
+		y += 18.0
+
+
+func _slot_color(slot: String) -> Color:
+	if slot == Loadout.CLEATS:
+		return Color(0.95, 0.55, 0.2)
+	if slot == Loadout.HELMET:
+		return Color(0.45, 0.75, 0.95)
+	if slot == Loadout.GLOVES:
+		return Color(0.45, 0.8, 0.45)
+	if slot == Loadout.PERK:
+		return Color(0.45, 0.6, 0.95)
+	if slot == Loadout.CURSE:
+		return Color(0.72, 0.4, 0.95)
+	return KickConstants.COLOR_TEXT
+
+
+func _draw_trophy(run: RunLogic) -> void:
+	if run.trophy_name == "":
+		return
+	var box := Rect2(280, 78, 520, 54)
+	draw_rect(box, Color(0.45, 0.32, 0.05, 0.94))
+	draw_rect(box, Color(0.95, 0.78, 0.2), false, 3.0)
+	_text_centered("TROPHY: %s" % run.trophy_name, 112.0, 26, Color(1.0, 0.9, 0.45))
+
+
+func _draw_save_note() -> void:
+	if game.save_note == "":
+		return
+	var box := Rect2(340, 620, 600, 48)
+	draw_rect(box, Color(0.05, 0.08, 0.1, 0.92))
+	_text_centered(str(game.save_note), 650.0, 22, KickConstants.COLOR_ATTEMPT)
+
+
+func _draw_records() -> void:
+	draw_rect(Rect2(0, 0, KickConstants.WINDOW_WIDTH, KickConstants.WINDOW_HEIGHT), Color(0.04, 0.07, 0.1, 0.96))
+	_text(Vector2(48, 42), "RECORDS", 32, KickConstants.COLOR_ATTEMPT)
+	_text(Vector2(48, 78), "Esc: back", 16, KickConstants.COLOR_TEXT)
+	var y := 120.0
+	_text(Vector2(48, y), "Lifetime", 22, KickConstants.COLOR_TEXT)
+	y += 28.0
+	_text(Vector2(48, y), "Runs %d    Wins %d" % [SaveData.runs, SaveData.wins], 18, KickConstants.COLOR_TEXT)
+	y += 24.0
+	_text(Vector2(48, y), "Best score %d" % SaveData.best_score, 18, KickConstants.COLOR_TEXT)
+	y += 24.0
+	_text(Vector2(48, y), "Longest make %s" % _yd_or_dash(SaveData.longest_make), 18, KickConstants.COLOR_TEXT)
+	y += 22.0
+	_text(Vector2(48, y), "NFL record: 68 yd (Cam Little, 2025)", 15, Color(0.65, 0.68, 0.7))
+	y += 24.0
+	_text(Vector2(48, y), "FG%% %s" % SaveData.fg_text(SaveData.makes, SaveData.attempts), 18, KickConstants.COLOR_TEXT)
+	var columns := [
+		[Kickers.BIG_BRUCE, 460.0],
+		[Kickers.WALK_ON, 860.0],
+	]
+	for column in columns:
+		var id := str(column[0])
+		var left := float(column[1])
+		var info := Kickers.get_def(id)
+		var tint: Color = info["color"]
+		var box := Rect2(left - 20.0, 100.0, 360.0, 230.0)
+		draw_rect(box, Color(tint.r, tint.g, tint.b, 0.28))
+		draw_rect(box, tint, false, 3.0)
+		var row: Dictionary = SaveData.kicker_row(id)
+		var line_y := 132.0
+		_text(Vector2(left, line_y), str(info["name"]), 22, tint.lightened(0.35))
+		line_y += 32.0
+		_text(Vector2(left, line_y), "Runs %d    Wins %d" % [int(row["runs"]), int(row["wins"])], 16, KickConstants.COLOR_TEXT)
+		line_y += 24.0
+		_text(Vector2(left, line_y), "Best score %d" % int(row["best_score"]), 16, KickConstants.COLOR_TEXT)
+		line_y += 24.0
+		_text(Vector2(left, line_y), "Longest %s" % _yd_or_dash(int(row["longest_make"])), 16, KickConstants.COLOR_TEXT)
+		line_y += 24.0
+		_text(Vector2(left, line_y), "FG%% %s" % SaveData.fg_text(int(row["makes"]), int(row["attempts"])), 16, KickConstants.COLOR_TEXT)
+	_text(Vector2(48, 380), "Trophies", 22, KickConstants.COLOR_TEXT)
+	var index := 0
+	for id in SaveData.TROPHY_IDS:
+		var col := index % 4
+		var row_i := int(index / 4.0)
+		var box := Rect2(48.0 + float(col) * 300.0, 400.0 + float(row_i) * 140.0, 280.0, 120.0)
+		var earned := SaveData.has_trophy(str(id))
+		if earned:
+			draw_rect(box, Color(0.45, 0.32, 0.05, 0.95))
+			draw_rect(box, Color(0.95, 0.78, 0.2), false, 3.0)
+			_text(box.position + Vector2(16, 36), SaveData.trophy_name(str(id)), 18, Color(1.0, 0.9, 0.45))
+			_draw_wrapped(SaveData.trophy_condition(str(id)), Rect2(box.position + Vector2(16, 56), Vector2(248, 50)), 14)
+		else:
+			draw_rect(box, Color(0.12, 0.13, 0.15, 0.95))
+			draw_rect(box, Color(0.45, 0.47, 0.5), false, 3.0)
+			_text(box.position + Vector2(16, 36), "?", 22, Color(0.6, 0.62, 0.66))
+			_draw_wrapped(SaveData.trophy_condition(str(id)), Rect2(box.position + Vector2(16, 56), Vector2(248, 50)), 14)
+		index += 1
+
+
+func _yd_or_dash(yards: int) -> String:
+	if yards <= 0:
+		return "—"
+	return "%d yd" % yards

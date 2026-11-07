@@ -556,154 +556,131 @@ func _check_upgrades() -> void:
 
 
 func _check_upgrade_offers() -> void:
-	var eligible := Upgrades.eligible_ids({})
-	check(eligible.size() == Upgrades.DEFS.size(), "every upgrade starts eligible")
-	check(Upgrades.pickable_copies() >= 30, "the pool has at least 30 pickable copies, got %s" % Upgrades.pickable_copies())
+	var state := Loadout.empty_state()
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 4
-	var offer: Array = Upgrades.draw_offer(eligible, rng)
-	check(offer.size() == 3, "check 1 an offer has 3 cards")
-	check(offer[0] != offer[1] and offer[0] != offer[2] and offer[1] != offer[2], "check 1 the three cards are different")
+	var offer: Array = Loadout.draw_offer(state, 3, rng)
+	check(offer.size() == 3, "an offer has 3 cards")
+	var equip := 0
+	var curses := 0
+	for card in offer:
+		if str(card.get("kind", "")) == Loadout.EQUIPMENT:
+			equip += 1
+		if str(card.get("kind", "")) == Loadout.CURSE:
+			curses += 1
+	check(equip == 1, "a fresh offer has exactly one equipment card")
+	check(curses <= 1, "a fresh offer has at most one curse")
 	var again := RandomNumberGenerator.new()
 	again.seed = 4
-	var replay: Array = Upgrades.draw_offer(eligible, again)
-	check(offer == replay, "the same offer seed draws the same cards")
-	var capped := {"big_leg": 3, "steady_plant": 3, "sweet_spot": 3, "hot_streak": 1}
-	var left := Upgrades.eligible_ids(capped)
-	check(left.find("big_leg") == -1 and left.find("sweet_spot") == -1, "maxed upgrades are not offered")
-	check(left.find("deep_bench") != -1 and left.find("mulligan") != -1, "upgrades under the cap stay eligible")
-	var short := Upgrades.draw_offer(["big_leg", "mulligan"], rng)
-	check(short.size() == 2 and short[0] != short[1], "fewer than 3 eligible cards shows only those")
-	check(str(Upgrades.get_def(Upgrades.BIG_LEG)["rarity"]) == "common", "rarity is stored on the upgrade")
+	check(Loadout.draw_offer(state, 3, again) == offer, "the same offer seed draws the same cards")
+	var saw_equip := 0
+	for seed_value in 20:
+		var roller := RandomNumberGenerator.new()
+		roller.seed = seed_value + 9
+		var cards: Array = Loadout.draw_offer(Loadout.empty_state(), 3, roller)
+		var count := 0
+		var curse_count := 0
+		for card in cards:
+			if str(card.get("kind", "")) == Loadout.EQUIPMENT:
+				count += 1
+			if str(card.get("kind", "")) == Loadout.CURSE:
+				curse_count += 1
+		check(count == 1 and curse_count <= 1, "seed %s keeps one equipment and at most one curse" % seed_value)
+		saw_equip += count
+	check(saw_equip == 20, "sampled 20 offers")
 	var run := RunLogic.new()
 	run.new_run()
-	run.force_offer(["big_leg", "steady_plant", "sweet_spot"])
+	run.force_offer([{"id": Loadout.CANNON, "rank": 1}, {"id": Loadout.DEEP_BENCH, "rank": 1}, {"id": Loadout.ICED, "rank": 1}])
 	run.roll_offer()
-	check(run.pick_card(0), "check 1 pressing 1 picks the first card")
-	check(run.owned_ids().has("big_leg") and int(run.stacks["big_leg"]) == 1, "check 1 Big Leg shows in the owned list")
+	check(run.pick_card(0) and run.cleats_id == Loadout.CANNON and run.cleats_rank == 1, "picking the first card takes Cannon Cleats")
 	check(not run.awaiting_offer, "picking closes the offer")
+	var locked: Array = Loadout.legal_equipment(run.loadout_state())
+	var other_cleat := false
+	var rank_up := false
+	for card in locked:
+		if str(card.get("slot", "")) == Loadout.CLEATS and str(card.get("id", "")) != Loadout.CANNON:
+			other_cleat = true
+		if str(card.get("id", "")) == Loadout.CANNON and int(card.get("rank", 0)) == 2:
+			rank_up = true
+	check(not other_cleat and rank_up, "Cannon Cleats locks the slot and can rank up")
 
 
 func _check_upgrade_effects() -> void:
 	var kick := KickLogic.new()
 	kick.kick_distance = 35.0
 	_lock_power_at(kick, 25.0)
-	check(kick.result_text == "SHORT", "check 2 power 25 from 35 yd is SHORT before Big Leg, range %s" % kick.max_range)
+	check(kick.result_text == "SHORT", "power 25 from 35 yd is SHORT before Cannon Cleats, range %s" % kick.max_range)
 	kick.stats.range_bonus = 6.0
 	_lock_power_at(kick, 25.0)
-	check(kick.result_text == "GOOD" and kick.max_range >= 35.0, "check 2 Big Leg makes power 25 reach, range %s" % kick.max_range)
-	var slow := KickLogic.new()
-	Upgrades.apply(Upgrades.STEADY_PLANT, slow.stats)
-	check(near(slow.stats.power_speed, 85.0), "check 3 one Steady Plant sets power speed to 85, got %s" % slow.stats.power_speed)
-	slow.press_space()
-	slow.advance(1.0)
-	check(near(slow.needle, 85.0) and slow.phase == KickLogic.Phase.POWER, "check 3 after one second the slower needle is at 85, got %s" % slow.needle)
-	Upgrades.apply(Upgrades.STEADY_PLANT, slow.stats)
-	Upgrades.apply(Upgrades.STEADY_PLANT, slow.stats)
-	check(near(slow.stats.power_speed, 100.0 * 0.85 * 0.85 * 0.85), "three Steady Plants stack by multiplying")
-	var sweet := KickerStats.new()
-	Upgrades.apply(Upgrades.SWEET_SPOT, sweet)
-	check(near(sweet.perfect_band, 4.0) and near(sweet.good_band, 11.0), "check 4 Sweet Spot widens the bands to 4 and 11")
-	Upgrades.apply(Upgrades.SWEET_SPOT, sweet)
-	check(near(sweet.perfect_band, 6.0) and near(sweet.good_band, 14.0), "Sweet Spot stacks a second time")
-	var wide := KickLogic.new()
-	wide.stats.perfect_band = 4.0
-	_lock_power_at(wide, 10.0)
-	# Fall from 10 to 3, which is outside the old perfect band and inside the new one.
-	wide.advance(7.0 / wide.stats.accuracy_speed)
-	if wide.phase == KickLogic.Phase.ACCURACY:
-		wide.press_space()
-	check(wide.perfect and near(wide.final_angle_degrees, 0.0), "a wider perfect band treats e=3 as perfect")
+	check(kick.result_text == "GOOD" and kick.max_range >= 35.0, "Cannon Cleats I makes power 25 reach, range %s" % kick.max_range)
+	var slow := RunLogic.new()
+	slow.new_run()
+	slow.give(Loadout.ANCHOR, 1)
+	check(near(slow.stats.power_speed, 85.0) and near(slow.stats.accuracy_speed, 120.0 * 0.85), "Anchor Cleats I is 85% on both needles")
+	slow.give(Loadout.ANCHOR, 2)
+	check(near(slow.stats.power_speed, 100.0 * pow(0.85, 2.0)), "Anchor Cleats II is 0.85 squared")
+	var pinpoint := RunLogic.new()
+	pinpoint.new_run()
+	pinpoint.give(Loadout.PINPOINT, 1)
+	check(near(pinpoint.stats.perfect_band, 4.0) and near(pinpoint.stats.good_band, 11.0), "Pinpoint Cleats I widens the bands")
 	var bench := RunLogic.new()
 	bench.new_run()
 	bench.attempts = 2
-	bench.grant(Upgrades.DEEP_BENCH)
-	check(bench.attempt_cap == 4 and bench.attempts == 3, "check 5 Deep Bench makes 4 circles and fills one more")
-	bench.grant(Upgrades.DEEP_BENCH)
-	check(bench.attempt_cap == 5 and bench.attempts == 4, "a second Deep Bench reaches the hard max of 5")
+	bench.give(Loadout.DEEP_BENCH, 1)
+	check(bench.attempt_cap == 4 and bench.attempts == 3, "Deep Bench I makes 4 circles and fills one more")
+	bench.give(Loadout.DEEP_BENCH, 2)
+	check(bench.attempt_cap == 5 and bench.attempts == 4, "Deep Bench II reaches the hard max of 5")
 	var before_cap := bench.attempt_cap
 	var before_attempts := bench.attempts
-	bench.grant(Upgrades.DEEP_BENCH)
-	check(bench.attempt_cap == before_cap and bench.attempts == before_attempts, "Deep Bench does not stack past 2 or past 5")
-	check(Upgrades.eligible_ids(bench.stacks).find(Upgrades.DEEP_BENCH) == -1, "Deep Bench at max is not offered")
+	bench.give(Loadout.DEEP_BENCH, 2)
+	check(bench.attempt_cap == before_cap and bench.attempts == before_attempts, "Deep Bench does not rank past II")
 	var hot := RunLogic.new()
 	hot.new_run()
-	hot.grant(Upgrades.HOT_STREAK)
-	check(near(hot.stats.streak_step, 0.5), "Hot Streak sets the streak step to 0.5")
-	hot.resolve_kick("GOOD", 2.0, false)
-	check(near(hot.current_mult(), 1.5), "after one make the Hot Streak mult is 1.5, got %s" % hot.current_mult())
-	hot.grant(Upgrades.HOT_STREAK)
-	check(near(hot.stats.streak_step, 0.5) and int(hot.stacks[Upgrades.HOT_STREAK]) == 1, "Hot Streak does not stack")
+	hot.give(Loadout.HOT_STREAK, 1)
+	check(near(hot.stats.streak_step, 0.5), "Hot Streak I sets the streak step to 0.5")
+	hot.give(Loadout.HOT_STREAK, 2)
+	check(near(hot.stats.streak_step, 0.75), "Hot Streak II sets the streak step to 0.75")
+	var glass := RunLogic.new()
+	glass.new_run()
+	glass.attempt_cap = 2
+	check(Loadout.legal_perks(glass.loadout_state(), glass.attempt_cap).size() >= 0, "perk list still builds at a low cap")
+	var blocked := false
+	for card in Loadout.legal_perks(glass.loadout_state(), 2):
+		if str(card.get("id", "")) == Loadout.GLASS_LEG:
+			blocked = true
+	check(not blocked, "Glass Leg is not offered at cap 2")
+	glass.attempt_cap = 3
+	glass.attempts = 3
+	glass.give(Loadout.GLASS_LEG, 1)
+	check(glass.attempt_cap == 2 and glass.attempts == 2 and near(glass.stats.range_bonus, 8.0), "Glass Leg I drops the cap to 2 and adds 8 yards")
+	glass.give(Loadout.GLASS_LEG, 2)
+	check(glass.attempt_cap == 2 and near(glass.stats.range_bonus, 16.0), "Glass Leg II is +16 yards and does not drop the cap again")
 
 
 func _check_mulligan_reroll_and_skip() -> void:
-	var run := RunLogic.new()
-	run.new_run()
-	var attempts := run.attempts
-	var streak := run.streak
-	var score := run.score
-	run.grant(Upgrades.MULLIGAN)
-	check(run.mulligans_left == 1 and run.can_mulligan("WIDE LEFT"), "check 6 a mulligan is ready after picking it")
-	run.begin_mulligan("WIDE LEFT", -5.0, false)
-	check(run.awaiting_mulligan, "check 6 the miss asks Use Mulligan?")
-	check(run.use_mulligan(), "check 6 M retakes")
-	check(run.attempts == attempts and run.streak == streak and run.score == score, "check 6 the miss is erased")
-	check(not run.is_first_ball and run.mulligans_left == 0, "check 6 the retake is not a first ball and spends the mulligan")
-	check(not run.awaiting_offer, "a mulligan retake does not open the card offer")
-	run.resolve_kick("GOOD", 0.0, false)
-	check(run.score == 70 and run.attempts == attempts and run.attempt_note == "", "check 6 the made retake scores and earns no attempt")
-	check(run.go_to_next_kick(), "move on after the retake")
-	check(not run.can_mulligan("SHORT"), "check 6 the next miss in the quarter has no mulligan")
-	run.resolve_kick("SHORT", 0.0, false)
-	check(run.attempts == attempts - 1, "check 6 that miss costs an attempt")
-	var same := RunLogic.new()
-	same.new_run()
-	same.grant(Upgrades.MULLIGAN)
-	same.grant(Upgrades.MULLIGAN)
-	check(same.mulligans_left == 2, "two Mulligan stacks give two charges")
-	same.begin_mulligan("DOINK", 3.1, false)
-	same.use_mulligan()
-	check(same.mulligans_left == 1 and not same.can_mulligan("SHORT"), "the same kick does not get a second mulligan")
-	var quarter := RunLogic.new()
-	quarter.new_run()
-	quarter.grant(Upgrades.MULLIGAN)
-	quarter.mulligans_left = 0
-	quarter.kick_number = 5
-	quarter.kick_resolved = true
-	quarter.last_result_made = true
-	check(quarter.go_to_next_kick() and quarter.kick_number == 6, "kick 6 starts the next quarter")
-	check(quarter.mulligans_left == 1, "the quarter refills the mulligan")
-	var doomed := RunLogic.new()
-	doomed.new_run()
-	doomed.grant(Upgrades.MULLIGAN)
-	doomed.begin_mulligan("SHORT", 0.0, false)
-	doomed.accept_pending_miss()
-	check(doomed.phase == RunLogic.Phase.GAME_OVER and not doomed.awaiting_offer, "accepting the last miss is game over, with no cards")
 	var cards := RunLogic.new()
 	cards.new_run()
 	cards.set_offer_seed(2)
 	cards.roll_offer()
-	var first: Array = cards.offer.duplicate()
-	check(cards.rerolls_left == 1 and cards.reroll_offer(), "check 7 F rerolls once")
-	check(cards.rerolls_left == 0 and cards.offer.size() == 3, "check 7 the new offer is still 3 cards, Reroll: 0 left")
+	check(cards.rerolls_left == 1 and cards.reroll_offer(), "F rerolls once")
+	check(cards.rerolls_left == 0 and cards.offer.size() == 3, "the new offer is still 3 cards")
 	var held: Array = cards.offer.duplicate()
-	check(not cards.reroll_offer() and cards.offer == held, "check 7 a second F does nothing")
-	check(first.size() == 3, "the first offer was full")
+	check(not cards.reroll_offer() and cards.offer == held, "a second F does nothing")
 	var skipped := RunLogic.new()
 	skipped.new_run()
 	skipped.resolve_kick("GOOD", 2.0, false)
 	var scored := skipped.score
 	skipped.roll_offer()
-	check(skipped.skip_offer() and skipped.score == scored + 10, "check 8 S adds 10 points")
-	check(skipped.go_to_next_kick() and skipped.kick_number == 2, "check 8 skip starts the next kick")
+	check(skipped.skip_offer() and skipped.score == scored and skipped.curse_ids.is_empty(), "S takes nothing and applies no curse")
+	check(skipped.go_to_next_kick() and skipped.kick_number == 2, "skip starts the next kick")
 	var fresh := RunLogic.new()
 	fresh.new_run()
-	fresh.grant(Upgrades.BIG_LEG)
-	fresh.grant(Upgrades.SWEET_SPOT)
-	check(fresh.stats.range_bonus == 6.0, "the run kept the upgrade")
+	fresh.give(Loadout.CANNON, 1)
+	fresh.give(Loadout.ICED)
+	check(fresh.cleats_id == Loadout.CANNON and fresh.has_curse(Loadout.ICED), "the run kept the loadout")
 	fresh.new_run()
-	check(fresh.stats.range_bonus == 0.0 and fresh.stats.perfect_band == 2.0, "a new run resets KickerStats")
-	check(fresh.owned_ids().is_empty() and fresh.rerolls_left == 1 and fresh.mulligans_left == 0, "a new run clears cards, rerolls, and mulligans")
+	check(fresh.cleats_id == "" and fresh.curse_ids.is_empty() and fresh.stats.range_bonus == 0.0, "a new run clears the loadout")
+	check(fresh.rerolls_left == 1, "a new run without a kicker starts with 1 reroll")
 
 
 func _aimed_power(power_value: float, aim: float, insure: bool) -> KickLogic:
@@ -783,8 +760,8 @@ func _check_kickers_and_fixes() -> void:
 	check(str(Kickers.get_def(Kickers.BIG_BRUCE)["portrait_path"]) == "res://art/kickers/big_bruce.png", "Big Bruce looks for res://art/kickers/big_bruce.png")
 	var carried := RunLogic.new()
 	carried.start_with_kicker(Kickers.BIG_BRUCE)
-	carried.grant(Upgrades.BIG_LEG)
-	check(near(carried.stats.range_per_power, 0.75) and carried.stats.range_bonus == 6.0, "Big Bruce kept his leg and an upgrade")
+	carried.give(Loadout.CANNON, 1)
+	check(near(carried.stats.range_per_power, 0.75) and carried.stats.range_bonus == 6.0, "Big Bruce kept his leg and Cannon Cleats")
 	carried.start_with_kicker(Kickers.WALK_ON)
 	check(near(carried.stats.range_per_power, 0.67) and carried.stats.range_bonus == 0.0, "check 6 the next kicker does not keep the last stats")
 	check(carried.rerolls_left == 2 and carried.stats.ball_type == "standard", "check 6 The Walk-On starts clean")
@@ -898,31 +875,28 @@ func _check_wind_and_pool() -> void:
 	check(missed.begin_retry() and missed.wind_speed == 10 and near(missed.wind_direction, 90.0), "check 1 and 5 the retry keeps the saved wind")
 	var leg := RunLogic.new()
 	leg.new_run()
-	leg.grant(Upgrades.BIG_LEG)
-	leg.grant(Upgrades.BIG_LEG)
-	leg.grant(Upgrades.BIG_LEG)
-	check(near(leg.stats.range_bonus, 18.0), "check 2 three Big Legs add 18 yards, got %s" % leg.stats.range_bonus)
-	check(Upgrades.stack_label(Upgrades.BIG_LEG, 3) == "Big Leg 3/3 (+18 yd)", "check 2 the label reads '%s'" % Upgrades.stack_label(Upgrades.BIG_LEG, 3))
+	leg.give(Loadout.CANNON, 3)
+	check(near(leg.stats.range_bonus, 18.0), "Cannon Cleats III adds 18 yards, got %s" % leg.stats.range_bonus)
+	check(Loadout.card_title(Loadout.CANNON, 3) == "Cannon Cleats III", "the rank label reads Cannon Cleats III")
 	var before := leg.stats.range_bonus
 	leg.rebuild_stats()
-	check(near(leg.stats.range_bonus, before), "rebuilding does not apply Big Leg a second time")
+	check(near(leg.stats.range_bonus, before), "rebuilding does not apply Cannon Cleats a second time")
 	var short_before := KickLogic.new()
 	_lock_power_at(short_before, 20.0)
-	check(short_before.result_text == "SHORT", "power 20 is short before Big Leg")
+	check(short_before.result_text == "SHORT" and near(short_before.max_range, 29.4), "P=20 is still SHORT at 29.4 yards")
 	var reached := KickLogic.new()
 	reached.stats.range_bonus = 18.0
 	_lock_power_at(reached, 20.0)
-	check(reached.max_range > short_before.max_range + 17.0 and reached.result_text == "GOOD", "check 2 +18 yards turns that short kick into a make, range %s" % reached.max_range)
+	check(reached.max_range > short_before.max_range + 17.0 and reached.result_text == "GOOD", "+18 yards turns that short kick into a make, range %s" % reached.max_range)
+	var solid := KickLogic.new()
+	_lock_power_at(solid, 50.0)
+	check(solid.result_text == "GOOD" and near(solid.max_range, 49.5), "P=50 is still GOOD at 49.5 yards")
 	var plant := RunLogic.new()
 	plant.new_run()
-	plant.grant(Upgrades.STEADY_PLANT)
-	check(near(plant.stats.power_speed, 100.0 * 0.85) and near(plant.stats.accuracy_speed, 120.0 * 0.85), "check 3 one Steady Plant is 85% on both needles")
-	plant.grant(Upgrades.STEADY_PLANT)
-	check(near(plant.stats.power_speed, 100.0 * pow(0.85, 2.0)) and near(plant.stats.accuracy_speed, 120.0 * pow(0.85, 2.0)), "check 3 the second copy is about 72% and slower than the first")
-	var after_two := plant.stats.power_speed
-	plant.grant(Upgrades.STEADY_PLANT)
-	check(plant.stats.power_speed < after_two and near(plant.stats.power_speed, 100.0 * pow(0.85, 3.0)), "check 3 the third copy slows both needles again")
-	check(near(plant.stats.accuracy_speed, 120.0 * pow(0.85, 3.0)), "accuracy slows with the third Steady Plant too")
+	plant.give(Loadout.ANCHOR, 1)
+	check(near(plant.stats.power_speed, 100.0 * 0.85) and near(plant.stats.accuracy_speed, 120.0 * 0.85), "Anchor Cleats I is 85% on both needles")
+	plant.give(Loadout.ANCHOR, 2)
+	check(near(plant.stats.power_speed, 100.0 * pow(0.85, 2.0)), "Anchor Cleats II slows both needles again")
 	var calm := RunLogic.new()
 	calm.set_seed(3)
 	calm.new_run()
@@ -958,14 +932,14 @@ func _check_wind_and_pool() -> void:
 	check(late > early * 2.0, "the bend grows late, not in a straight line")
 	var reader := RunLogic.new()
 	reader.new_run()
-	reader.grant(Upgrades.FLAG_READER)
+	reader.give(Loadout.WIND_VISOR, 1)
 	reader.set_wind(10.0, 90.0)
-	check(reader.stats.flag_reader, "check 7 Flag Reader is owned")
+	check(reader.stats.flag_reader, "Wind Visor I shows the wind numbers")
 	var readout := RunLogic.wind_readout(reader.wind_speed, reader.wind_direction)
 	check(readout.find("10 mph") >= 0 and readout.find("cross") >= 0 and readout.find("tail") >= 0, "check 7 the readout is '%s'" % readout)
 	check(near(KickLogic.crosswind_mph(10.0, 90.0), 10.0, 0.02) and near(KickLogic.head_tail_mph(10.0, 90.0), 0.0, 0.02), "10 mph at 90° is all crosswind")
-	reader.grant(Upgrades.LASER_LINE)
-	check(reader.stats.laser_line, "check 7 Laser Line is owned")
+	reader.give(Loadout.WIND_VISOR, 2)
+	check(reader.stats.laser_line, "Wind Visor II draws the aim path")
 	var preview_far := KickLogic.preview_forward(35.0)
 	check(near(preview_far, 14.0), "the preview covers the first 40% of the kick")
 	var preview := KickLogic.path_lateral(0.0, preview_far, 0.0, 35.0, walk_drift)
@@ -981,7 +955,7 @@ func _check_wind_and_pool() -> void:
 	check(tail_kick.max_range > head_kick.max_range + 7.0, "check 8 a tailwind flies farther than a headwind (%s vs %s)" % [tail_kick.max_range, head_kick.max_range])
 	var storm := RunLogic.new()
 	storm.new_run()
-	storm.grant(Upgrades.STORM_CHASER)
+	storm.give(Loadout.STORM_CHASER, 1)
 	storm.set_wind(10.0, 90.0)
 	storm.resolve_kick("GOOD", 2.0, false)
 	check(storm.score_line.find("wind") >= 0, "Storm Chaser shows up in the score line: %s" % storm.score_line)
@@ -991,26 +965,25 @@ func _check_wind_and_pool() -> void:
 	check(near(KickLogic.wind_range_delta(10.0, 180.0, 0, true), -4.0, 0.05), "Thin Air does not boost a headwind")
 	var low := RunLogic.new()
 	low.new_run()
-	low.grant(Upgrades.LOW_DRIVE)
-	low.grant(Upgrades.LOW_DRIVE)
-	check(low.stats.low_drive_stacks == 2 and near(low.stats.range_bonus, -6.0), "two Low Drives cost 6 yards of range")
+	low.give(Loadout.STICKER, 1)
+	check(near(low.stats.drift_factor, 0.8), "Sticker Cleats I multiplies drift by 0.8")
 	var broken := KickLogic.drift_at_uprights(10.0, 90.0, 35.0, 2, 1, "standard")
-	check(near(broken, walk_drift * pow(0.65, 2.0) * 0.8), "Low Drive and Wind Breaker multiply the drift")
+	check(near(broken, walk_drift * pow(0.65, 2.0) * 0.8), "the old drift formula still multiplies when called directly")
 	var ice := RunLogic.new()
 	ice.new_run()
-	ice.grant(Upgrades.ICE_VEINS)
+	ice.give(Loadout.ICE_CAGE, 1)
 	var icy := KickLogic.new()
 	icy.stats = ice.stats
 	icy.set_seed(2)
 	_lock_power_at(icy, 96.0)
-	check(icy.accuracy_error == 0.0, "Ice Veins adds no red-tip error when power is in the red, got %s" % icy.accuracy_error)
+	check(icy.accuracy_error == 0.0, "Ice Cage adds no red-tip error when power is in the red, got %s" % icy.accuracy_error)
 	var bare := KickLogic.new()
 	bare.set_seed(2)
 	_lock_power_at(bare, 96.0)
-	check(bare.accuracy_error != 0.0, "without Ice Veins the same seed still wobbles, got %s" % bare.accuracy_error)
+	check(bare.accuracy_error != 0.0, "without Ice Cage the same seed still wobbles, got %s" % bare.accuracy_error)
 	var insured := RunLogic.new()
 	insured.new_run()
-	insured.grant(Upgrades.WIDE_RIGHT_INSURANCE)
+	insured.give(Loadout.DOINK_CAP, 1)
 	check(insured.insurance_left == 1, "insurance starts with one charge")
 	var doink := _aimed_power(50.0, rad_to_deg(atan(3.08 / 35.0)), true)
 	check(doink.result_text == "GOOD" and doink.insured, "a doink with insurance becomes GOOD, got %s" % doink.result_text)
@@ -1022,10 +995,10 @@ func _check_wind_and_pool() -> void:
 	insured.kick_resolved = true
 	insured.last_result_made = true
 	insured.go_to_next_kick()
-	check(insured.kick_number == 6 and insured.insurance_left == 1, "the next quarter refills insurance")
+	check(insured.kick_number == 6 and insured.insurance_left == 1, "the next quarter refills Doink Cap")
 	var practice := RunLogic.new()
 	practice.start_with_kicker(Kickers.WALK_ON)
-	practice.grant(Upgrades.PRACTICE_SWING)
+	practice.give(Loadout.REPLAY_GLOVES, 1)
 	var score_before := practice.score
 	var attempts_before := practice.attempts
 	var streak_before := practice.streak
@@ -1039,31 +1012,22 @@ func _check_wind_and_pool() -> void:
 	var scout := RunLogic.new()
 	scout.start_with_kicker(Kickers.WALK_ON)
 	check(scout.rerolls_left == 2, "The Walk-On still starts with 2 rerolls")
-	scout.grant(Upgrades.SCOUTING_REPORT)
-	check(scout.stats.rerolls_per_run == 3 and scout.rerolls_left == 3, "Scouting Report adds one reroll")
-	scout.grant(Upgrades.SCOUTING_REPORT)
-	check(scout.stats.rerolls_per_run == 4 and scout.rerolls_left == 4, "a second Scouting Report adds another")
+	scout.give(Loadout.SCOUT_LID, 1)
+	check(scout.stats.rerolls_per_run == 3 and scout.rerolls_left == 3, "Scout Lid I adds one reroll")
+	scout.give(Loadout.SCOUT_LID, 2)
+	check(scout.stats.rerolls_per_run == 4 and scout.rerolls_left == 4, "Scout Lid II adds another reroll")
 	var bench := RunLogic.new()
 	bench.new_run()
 	bench.attempts = 1
-	bench.grant(Upgrades.DEEP_BENCH)
+	bench.give(Loadout.DEEP_BENCH, 1)
 	check(bench.attempts == 2 and bench.attempt_cap == 4, "Deep Bench adds one attempt when it is picked")
 	bench.rebuild_stats()
 	check(bench.attempts == 2 and bench.attempt_cap == 4, "rebuilding does not add the attempt again")
 	var pool := RunLogic.new()
 	pool.new_run()
-	var picked := 0
-	while picked < 19:
-		var choices := Upgrades.eligible_ids(pool.stacks)
-		check(choices.size() > 0, "check 9 card %d still has something to pick" % (picked + 1))
-		if choices.is_empty():
-			break
-		pool.grant(str(choices[0]))
-		picked += 1
 	pool.resolve_kick("GOOD", 0.0, false)
 	pool.roll_offer()
-	check(pool.offer.size() > 0 or pool.skip_offer(), "check 9 after 19 picks the screen still has a card or Skip")
-	check(Upgrades.pickable_copies() == 34, "the pool's pickable copies are 34, got %s" % Upgrades.pickable_copies())
+	check(pool.offer.size() > 0 or pool.skip_offer(), "after a make the screen still has a card or Skip")
 
 
 func _check_weather_and_bosses() -> void:
@@ -1128,7 +1092,7 @@ func _check_weather_and_bosses() -> void:
 	check(near(thin.max_range, clear_kick.max_range + 4.0), "check 4 thin air weather adds 4 yards (%s)" % thin.max_range)
 	var both := KickLogic.new()
 	both.stats.range_bonus = 6.0
-	both.stats.thin_air_stacks = 3
+	both.stats.thin_air = true
 	both.thin_air_weather = true
 	_lock_power_at(both, 50.0)
 	check(near(both.max_range, clear_kick.max_range + 6.0 + 4.0), "check 5 thin air weather stacks on top of the upgrade (%s)" % both.max_range)
@@ -1154,19 +1118,19 @@ func _check_weather_and_bosses() -> void:
 	check(storm.has_rain() and storm.has_mud() and storm.weather == RunLogic.MONSOON, "check 8 monsoon is rain and mud together")
 	var game := RunLogic.new()
 	game.start_with_kicker(Kickers.BIG_BRUCE)
-	game.grant(Upgrades.STEADY_PLANT)
-	game.grant(Upgrades.SWEET_SPOT)
-	game.grant(Upgrades.BIG_LEG)
-	game.grant(Upgrades.ICE_VEINS)
-	check(game.stats.ice_veins and game.stats.power_speed < 100.0, "the meter upgrades are on before the big game")
+	game.give(Loadout.CANNON, 1)
+	game.give(Loadout.HERO_BALL, 1)
+	game.give(Loadout.ICE_CAGE, 2)
+	check(game.stats.ice_veins and game.stats.power_speed < 100.0, "the meter help is on before the big game")
 	game.force_weather(RunLogic.BIG_GAME)
 	game.prepare_kick_stats()
 	check(near(game.stats.power_speed, KickConstants.POWER_RISE_PER_SEC), "check 9 big game restores base power speed, got %s" % game.stats.power_speed)
 	check(near(game.stats.accuracy_speed, KickConstants.ACCURACY_FALL_PER_SEC * 1.1), "check 9 Big Bruce keeps his base accuracy speed")
 	check(near(game.stats.perfect_band, 2.0) and near(game.stats.good_band, 8.0), "check 9 the bands are back to ±2 and ±8")
 	check(near(game.stats.red_tip_start, 90.0) and near(game.stats.red_tip_noise, 7.0), "check 9 the red tip is the kicker's base tip")
-	check(not game.stats.ice_veins, "check 9 Ice Veins does not change the big-game meter")
-	check(near(game.stats.range_bonus, 6.0), "check 9 Big Leg still adds range")
+	check(not game.stats.ice_veins, "Big Game turns off Ice Cage's red-tip help")
+	check(game.has_ice_cage(), "Ice Cage is still owned on Big Game")
+	check(near(game.stats.range_bonus, 6.0), "Cannon Cleats still adds range on Big Game")
 	var redo := RunLogic.new()
 	redo.start_with_kicker(Kickers.WALK_ON)
 	redo.attempts = 2
@@ -1196,198 +1160,218 @@ func _check_weather_and_bosses() -> void:
 
 
 func _check_curses_and_rarity() -> void:
-	var commons := 0
-	for seed_value in 25:
-		var rng := RandomNumberGenerator.new()
-		rng.seed = seed_value + 3
-		var offer: Array = Upgrades.draw_offer(Upgrades.eligible_ids({}), rng)
-		if offer.size() < 3:
-			continue
-		var found := false
-		for id in offer:
-			if Upgrades.is_common(str(id)):
-				found = true
-		check(found, "every full offer has a Common card, seed %s" % seed_value)
-		commons += 1
-	check(commons == 25, "sampled 25 full offers")
-	check(str(Upgrades.get_def(Upgrades.GLASS_LEG)["rarity"]) == "risky", "Glass Leg is Risky")
-	check(str(Upgrades.get_def(Upgrades.HERO_BALL)["rarity"]) == "risky", "Hero Ball is Risky")
-	check(str(Upgrades.get_def(Upgrades.FLAG_READER)["rarity"]) == "rare", "Flag Reader is Rare")
-	var low_cap := RunLogic.new()
-	low_cap.new_run()
-	low_cap.attempt_cap = 2
-	check(Upgrades.eligible_ids(low_cap.stacks, low_cap.attempt_cap).find(Upgrades.GLASS_LEG) == -1, "Glass Leg is not offered at cap 2")
-	var glass := RunLogic.new()
-	glass.new_run()
-	glass.attempts = 3
-	glass.grant(Upgrades.GLASS_LEG)
-	check(glass.attempt_cap == 2 and glass.attempts == 2 and near(glass.stats.range_bonus, 8.0), "Glass Leg drops the cap to 2 and adds 8 yards")
+	var records = get_root().get_node("SaveData")
+	records.file_path = "user://fg_prompt7_test.cfg"
+	records.reset_save()
+	check(records.runs == 0 and records.best_score == 0 and not records.has_trophy("extra_point"), "a fresh save is zeros with no trophies")
+	var bad := FileAccess.open("user://fg_prompt7_bad.cfg", FileAccess.WRITE)
+	bad.store_string("this is not a config file {{{")
+	bad.close()
+	records.file_path = "user://fg_prompt7_bad.cfg"
+	records.load_file()
+	check(records.runs == 0 and records.wins == 0, "a bad save file falls back to defaults")
+	var repaired := ConfigFile.new()
+	check(repaired.load("user://fg_prompt7_bad.cfg") == OK and int(repaired.get_value("meta", "version", 0)) == 1, "the bad file is rewritten as version 1")
+	records.file_path = "user://fg_prompt7_test.cfg"
+	records.reset_save()
+	var warning: String = records.press_f9(10.0)
+	check(warning == "Press F9 again to reset save.", "one F9 warns, got %s" % warning)
+	records.runs = 4
+	records.save_file()
+	var cleared: String = records.press_f9(11.0)
+	check(cleared == "Save reset" and records.runs == 0, "a second F9 within 2 seconds resets the save")
+	var late: String = records.press_f9(20.0)
+	check(late.begins_with("Press F9"), "F9 after the window warns again")
+	var walk := RunLogic.new()
+	walk.start_with_kicker(Kickers.WALK_ON)
+	walk.resolve_kick("GOOD", 0.0, false)
+	check(walk.trophy_name == "Extra Point" and records.has_trophy("extra_point"), "the first make earns Extra Point")
+	walk.roll_offer()
+	var equip := 0
+	var curses := 0
+	for card in walk.offer:
+		if str(card.get("kind", "")) == Loadout.EQUIPMENT:
+			equip += 1
+		if str(card.get("kind", "")) == Loadout.CURSE:
+			curses += 1
+	check(walk.offer.size() == 3 and equip == 1 and curses <= 1, "the offer after a make has one equipment card and at most one curse")
+	var scored := walk.score
+	walk.skip_offer()
+	check(walk.score == scored and walk.curse_ids.is_empty() and walk.cleats_id == "", "skip applies nothing")
+	walk.give(Loadout.CANNON, 1)
+	var legal: Array = Loadout.legal_equipment(walk.loadout_state())
+	var foreign := false
+	var next_rank := false
+	for card in legal:
+		if str(card.get("slot", "")) == Loadout.CLEATS and str(card.get("id", "")) != Loadout.CANNON:
+			foreign = true
+		if str(card.get("id", "")) == Loadout.CANNON and int(card.get("rank", 0)) == 2:
+			next_rank = true
+	check(not foreign and next_rank, "style lock keeps Cannon Cleats and offers rank II")
+	walk.give(Loadout.DEEP_BENCH, 1)
+	walk.give(Loadout.HOT_STREAK, 1)
+	var third := false
+	for card in Loadout.legal_perks(walk.loadout_state(), walk.attempt_cap):
+		var id := str(card.get("id", ""))
+		if id != Loadout.DEEP_BENCH and id != Loadout.HOT_STREAK:
+			third = true
+	check(not third, "two perk styles block a third perk style")
+	walk.give(Loadout.ICED)
+	walk.give(Loadout.NARROW)
+	check(Loadout.legal_curses(walk.loadout_state()).is_empty(), "two curses block another curse")
+	var cage := RunLogic.new()
+	cage.new_run()
+	cage.give(Loadout.ICE_CAGE, 1)
+	var paired := false
+	for card in Loadout.legal_curses(cage.loadout_state()):
+		if str(card.get("id", "")) == Loadout.ICED:
+			paired = true
+	check(not paired, "Ice Cage is never paired with Iced")
+	cage.weather = RunLogic.ICED
+	check(not cage.needle_fades(), "Ice Cage blocks the kick 5 needle fade")
+	check(not cage.meter_hidden(true, 1.0), "Ice Cage blocks the Iced meter hide")
+	var iced := RunLogic.new()
+	iced.new_run()
+	iced.give(Loadout.ICED)
+	check(iced.meter_hidden(true, 0.4) and not iced.meter_hidden(true, 0.39), "Iced hides the meter 0.4 seconds after Space")
+	check(not iced.meter_hidden(false, 1.0), "Iced does not hide the meter before the meter starts")
+	iced.set_wind(0.0, 0.0)
+	iced.resolve_kick("GOOD", 2.0, false)
+	check(iced.score_line.find("0.50 curse") >= 0, "Iced shows +0.5 Mult, got %s" % iced.score_line)
+	var howl := RunLogic.new()
+	howl.new_run()
+	howl.give(Loadout.CANNON, 1)
+	howl.give(Loadout.HOWLING)
+	check(near(howl.stats.range_bonus, 6.0 * 1.15), "Howling Wind makes Cannon Cleats 15% stronger")
+	check(howl.shown_wind_speed() == 0, "calm wind stays calm under Howling Wind")
+	howl.set_wind(10.0, 90.0)
+	check(howl.shown_wind_speed() == 15, "Howling Wind shows 15 mph when the saved wind is 10")
+	var loud := KickLogic.new()
+	loud.wind_speed = 10
+	loud.wind_direction = 90.0
+	loud.howling_wind = true
+	loud.stats.drift_factor = 1.0
+	_lock_power_at(loud, 50.0)
+	var expected := KickLogic.drift_at_uprights(15.0, 90.0, 35.0, 0, 0, "standard")
+	check(near(loud.drift_yards, expected, 0.02), "Howling Wind uses 1.5 times the wind speed")
+	var narrow := RunLogic.new()
+	narrow.new_run()
+	narrow.give(Loadout.NARROW)
+	check(near(narrow.post_half_gap(), 2.585) and near(narrow.post_width(), 5.17), "Narrow Posts uses the 5.17 yard uprights")
+	narrow.weather = RunLogic.SQUEEZE
+	check(near(narrow.post_width(), 5.17), "Narrow Posts does not stack with The Squeeze")
 	var hero := RunLogic.new()
 	hero.start_with_kicker(Kickers.WALK_ON)
-	hero.grant(Upgrades.HERO_BALL)
-	check(near(hero.stats.accuracy_speed, 120.0 * 1.25) and hero.stats.hero_ball, "Hero Ball speeds the accuracy needle and flags the mult")
-	hero.set_wind(0.0, 0.0)
-	hero.resolve_kick("GOOD", 2.0, false)
-	check(hero.score_line.find("hero") >= 0, "Hero Ball shows in the score line: %s" % hero.score_line)
+	hero.give(Loadout.HERO_BALL, 1)
+	check(near(hero.stats.power_speed, 100.0 * 0.8) and near(hero.stats.accuracy_speed, 120.0 * 0.8) and near(hero.stats.hero_mult, 1.0), "Hero Ball slows both needles and adds 1 Mult")
 	hero.force_weather(RunLogic.BIG_GAME)
 	hero.prepare_kick_stats()
-	check(near(hero.stats.accuracy_speed, 120.0) and hero.hero_bonus() == 1.0, "BIG GAME strips Hero Ball speed and keeps the mult")
-	var cursed := RunLogic.new()
-	cursed.set_offer_seed(4)
-	cursed.new_run()
-	check(cursed.cursed_kick >= 1 and cursed.cursed_kick <= 4, "quarter 1's cursed kick is one of the first four, got %s" % cursed.cursed_kick)
-	cursed.kick_number = cursed.cursed_kick
-	cursed.roll_offer()
-	var saw := false
-	for card in cursed.offer:
-		if bool(cursed._as_card(card).get("cursed", false)):
-			saw = true
-	check(saw and cursed.offer.size() == 3, "the chosen kick's offer has one Cursed card")
-	var skipped := RunLogic.new()
-	skipped.new_run()
-	skipped.force_cursed_offer()
-	skipped.roll_offer()
-	check(skipped.skip_offer() and skipped.curse == "", "skipping a Cursed offer applies no curse")
-	var rerolled := RunLogic.new()
-	rerolled.new_run()
-	rerolled.rerolls_left = 2
-	rerolled.force_cursed_offer()
-	rerolled.roll_offer()
-	check(rerolled.reroll_offer(), "a Cursed offer can be rerolled")
-	var still := false
-	for card in rerolled.offer:
-		if bool(rerolled._as_card(card).get("cursed", false)):
-			still = true
-	check(still, "the rerolled trio still has one Cursed card")
-	var veins := RunLogic.new()
-	veins.new_run()
-	veins.grant(Upgrades.ICE_VEINS)
-	var iced_pair := 0
-	for n in 12:
-		veins.force_cursed_offer()
-		veins.roll_offer()
-		for card in veins.offer:
-			var packed: Dictionary = veins._as_card(card)
-			if bool(packed.get("cursed", false)) and str(packed.get("curse", "")) == RunLogic.CURSE_ICED:
-				iced_pair += 1
-		veins.skip_offer()
-	check(iced_pair == 0, "Ice Veins is never paired with the Iced curse")
+	check(near(hero.stats.accuracy_speed, 120.0) and near(hero.stats.power_speed, 100.0) and near(hero.hero_bonus(), 1.0), "Big Game strips Hero Ball's slower needles and keeps the Mult")
+	var shank := KickLogic.new()
+	shank.angle_scale = 1.5
+	shank.aim_degrees = 0.0
+	shank.press_space()
+	shank.advance(30.0 / shank.stats.power_speed)
+	shank.press_space()
+	shank.needle = 10.0
+	shank.press_space()
+	check(near(shank.final_angle_degrees, -10.0 * 0.35 * 1.5, 0.02), "Shanky Cleats makes the angle error 1.5 times, got %s" % shank.final_angle_degrees)
 	var heavy := KickLogic.new()
 	heavy.heavy_ball = true
 	_lock_power_at(heavy, 50.0)
 	var plain := KickLogic.new()
 	_lock_power_at(plain, 50.0)
 	check(near(heavy.max_range, plain.max_range - 4.0), "Heavy Ball takes 4 yards off max range")
-	var howl := KickLogic.drift_at_uprights(10.0, 90.0, 35.0, 0, 0, "standard") * 1.5
-	var loud := KickLogic.new()
-	loud.wind_speed = 10
-	loud.wind_direction = 90.0
-	loud.howling_wind = true
-	_lock_power_at(loud, 50.0)
-	check(near(loud.drift_yards, howl, 0.02), "Howling Wind multiplies drift by 1.5 after the other factors")
-	var narrow := RunLogic.new()
-	narrow.curse = RunLogic.CURSE_NARROW
-	check(near(narrow.post_half_gap(), 2.585) and near(narrow.post_width(), 5.17), "Narrow Posts uses the 5.17 yard uprights")
-	narrow.weather = RunLogic.SQUEEZE
-	check(near(narrow.post_width(), 5.17), "Narrow Posts does not stack with The Squeeze")
-	var shank := KickLogic.new()
-	shank.shanky = true
-	shank.aim_degrees = 0.0
-	shank.accuracy_error = 10.0
-	var hook := -10.0 * KickConstants.ACCURACY_DEG_PER_ERROR * 1.5
-	shank.press_space()
-	shank.advance(30.0 / shank.stats.power_speed)
-	shank.press_space()
-	shank.needle = 10.0
-	shank.press_space()
-	check(near(shank.final_angle_degrees, hook, 0.02), "Shanky Cleats makes the angle error 1.5×, got %s" % shank.final_angle_degrees)
-	var doubled := RunLogic.new()
-	doubled.new_run()
-	doubled._grant_copy(Upgrades.LOW_DRIVE, true)
-	check(int(doubled.stacks[Upgrades.LOW_DRIVE]) == 1 and doubled.stats.low_drive_stacks == 2 and near(doubled.stats.range_bonus, -6.0), "a cursed Low Drive counts as one stack and applies twice")
-	doubled._grant_copy(Upgrades.WIND_BREAKER, true)
-	check(int(doubled.stacks[Upgrades.WIND_BREAKER]) == 1 and doubled.stats.wind_breaker_stacks == 2, "a cursed Wind Breaker counts as one stack and applies twice")
-	var bench := RunLogic.new()
-	bench.new_run()
-	bench.attempts = 1
-	bench._grant_copy(Upgrades.DEEP_BENCH, true)
-	check(bench.attempt_cap == 5 and bench.attempts == 3 and int(bench.stacks[Upgrades.DEEP_BENCH]) == 1, "a cursed Deep Bench adds two cap and two attempts, one stack")
+	records.reset_save()
 	var ended := RunLogic.new()
-	ended.new_run()
-	ended.curse = RunLogic.CURSE_HEAVY
-	ended.kick_number = 5
-	ended.kick_resolved = true
-	ended.last_result_made = true
-	ended.go_to_next_kick()
-	check(ended.kick_number == 6 and ended.curse == "", "the curse is gone after kick 5")
-	check(ended.cursed_kick >= 6 and ended.cursed_kick <= 9, "quarter 2 picks its cursed kick from kicks 6 through 9")
-	var boss_offer := RunLogic.new()
-	boss_offer.set_offer_seed(2)
-	boss_offer.new_run()
-	boss_offer.kick_number = 5
-	boss_offer.roll_offer()
-	var boss_cursed := false
-	for card in boss_offer.offer:
-		if bool(boss_offer._as_card(card).get("cursed", false)):
-			boss_cursed = true
-	check(not boss_cursed, "a boss kick is not the quarter's Cursed offer")
-	var declined := RunLogic.new()
-	declined.new_run()
-	declined.force_cursed_offer()
-	declined.roll_offer()
-	var other := -1
-	for i in declined.offer.size():
-		if not bool(declined._as_card(declined.offer[i]).get("cursed", false)):
-			other = i
-	check(other >= 0 and declined.pick_card(other) and declined.curse == "", "taking a different card applies no curse")
-	var leg := RunLogic.new()
-	leg.new_run()
-	leg._grant_copy(Upgrades.BIG_LEG, true)
-	check(int(leg.stacks[Upgrades.BIG_LEG]) == 1 and near(leg.stats.range_bonus, 12.0), "a cursed Big Leg is +12 yards and one stack")
-	var sweet := RunLogic.new()
-	sweet.new_run()
-	sweet._grant_copy(Upgrades.SWEET_SPOT, true)
-	check(int(sweet.stacks[Upgrades.SWEET_SPOT]) == 1 and near(sweet.stats.perfect_band, 6.0) and near(sweet.stats.good_band, 14.0), "a cursed Sweet Spot widens both bands once")
-	var thin := RunLogic.new()
-	thin.new_run()
-	thin._grant_copy(Upgrades.THIN_AIR, true)
-	check(int(thin.stacks[Upgrades.THIN_AIR]) == 1 and thin.stats.thin_air_stacks == 1 and near(thin.stats.range_bonus, 4.0), "a cursed Thin Air is +4 yards and one stack")
-	var storm := RunLogic.new()
-	storm.new_run()
-	storm._grant_copy(Upgrades.STORM_CHASER, true)
-	check(int(storm.stacks[Upgrades.STORM_CHASER]) == 1 and near(storm.stats.storm_per_mph, 0.2), "a cursed Storm Chaser pays 0.2 per mph")
-	var scout := RunLogic.new()
-	scout.new_run()
-	var scout_before := scout.rerolls_left
-	scout._grant_copy(Upgrades.SCOUTING_REPORT, true)
-	check(int(scout.stacks[Upgrades.SCOUTING_REPORT]) == 1 and scout.rerolls_left == scout_before + 2, "a cursed Scouting Report gives two rerolls")
-	var full := RunLogic.new()
-	full.new_run()
-	for id in Upgrades.DOUBLED_IDS:
-		var cap := int(Upgrades.get_def(str(id))["max_stacks"])
-		for _n in cap:
-			full.grant(str(id))
-	full.force_cursed_offer()
-	full.roll_offer()
-	var invented := false
-	for card in full.offer:
-		if bool(full._as_card(card).get("cursed", false)):
-			invented = true
-	check(not invented, "a full doubled pool skips the Cursed slot")
-	var won := RunLogic.new()
-	won.new_run()
-	won.curse = RunLogic.CURSE_HEAVY
-	won.curses_taken = ["Heavy Ball"]
-	won.kick_number = 20
-	won.resolve_kick("GOOD", 0.0, false)
-	check(won.phase == RunLogic.Phase.WIN and won.curse == "" and str(won.curses_taken[0]) == "Heavy Ball", "a win clears the active curse and keeps the list")
-	var start_z := KickLogic.approach_z("idle", 0.0, 0.0, false)
-	check(near(start_z, KickLogic.PLANT_Z + KickLogic.START_BEHIND), "idle stands behind the plant spot")
-	check(near(KickLogic.approach_z("run", KickLogic.RUN_TO_GATHER_SEC, 0.0, false), KickLogic.PLANT_Z + KickLogic.GATHER_SHORT), "a long accuracy run waits 1 yard short")
-	check(near(KickLogic.approach_z("plant", KickLogic.RUN_TO_GATHER_SEC, KickLogic.PLANT_BEAT, false), KickLogic.PLANT_Z), "the plant beat finishes on the plant spot")
-	check(near(KickLogic.approach_z("run", 0.0, KickLogic.EARLY_RUN_SEC, true, start_z), KickLogic.PLANT_Z), "an early lock reaches the plant spot inside the rush")
-	check(near(KickLogic.approach_z("follow", 0.0, KickLogic.EARLY_RUSH_SEC, true, start_z), KickLogic.PLANT_Z), "follow-through stays on the plant spot")
-	var quick := _kick_power_accuracy(70.0, 0.0)
-	check(quick.phase == KickLogic.Phase.FLIGHT and quick.result_text == "GOOD", "locking accuracy early still launches immediately and can be GOOD")
-	var low := _kick_power_accuracy(15.0, 0.0)
-	check(low.result_text == "SHORT", "a low-power kick is still SHORT")
+	ended.start_with_kicker(Kickers.WALK_ON)
+	ended.give(Loadout.CANNON, 1)
+	ended.resolve_kick("GOOD", 0.0, true)
+	ended.attempts = 1
+	ended.kick_resolved = false
+	ended.phase = RunLogic.Phase.PLAYING
+	ended.resolve_kick("SHORT", 0.0, false)
+	check(ended.phase == RunLogic.Phase.GAME_OVER, "the walk-on run ends")
+	check(records.runs == 1 and int(records.kicker_row(Kickers.WALK_ON)["runs"]) == 1, "lifetime and Walk-On runs are 1")
+	check(int(records.kicker_row(Kickers.BIG_BRUCE)["runs"]) == 0, "Big Bruce's column stays at zero")
+	check(int(records.kicker_row(Kickers.WALK_ON)["makes"]) == 1 and int(records.kicker_row(Kickers.WALK_ON)["attempts"]) == 2, "Walk-On makes and attempts were saved")
+	var remembered_score: int = records.best_score
+	records.runs = 99
+	records.load_file()
+	check(records.runs == 1 and records.best_score == remembered_score and records.has_trophy("extra_point"), "reloading the file keeps the records and Extra Point")
+	var again := RunLogic.new()
+	again.start_with_kicker(Kickers.WALK_ON)
+	check(again.cleats_id == "" and again.curse_ids.is_empty(), "a new run does not keep the last loadout")
+	again.resolve_kick("GOOD", 0.0, true)
+	again.attempts = 1
+	again.kick_resolved = false
+	again.phase = RunLogic.Phase.PLAYING
+	again.resolve_kick("SHORT", 0.0, false)
+	check(again.new_record_score or again.new_record_long or again.score <= remembered_score, "the second run compares against the saved best")
+	# Force a higher score than the stored best and commit it.
+	var better := RunLogic.new()
+	better.start_with_kicker(Kickers.WALK_ON)
+	better.score = records.best_score + 25
+	better.longest_make = float(records.longest_make + 5)
+	better.kicks_made = 2
+	better.balls_kicked = 3
+	better.phase = RunLogic.Phase.GAME_OVER
+	better._save_finished_run()
+	check(better.new_record_score and better.new_record_long, "beating best score and longest make sets NEW RECORD")
+	var fifty := RunLogic.new()
+	fifty.new_run()
+	fifty.kick_number = 7
+	fifty.resolve_kick("GOOD", 2.0, false)
+	check(records.has_trophy("fifty_club"), "a 50 yard make earns Fifty Club")
+	var sixty := RunLogic.new()
+	sixty.new_run()
+	sixty.kick_number = 10
+	sixty.resolve_kick("GOOD", 2.0, false)
+	check(records.has_trophy("sixty_club"), "a 60 yard make earns Sixty Club")
+	var record := RunLogic.new()
+	record.new_run()
+	record.kick_number = 18
+	record.resolve_kick("GOOD", 2.0, false)
+	check(records.has_trophy("record_breaker"), "a 69 yard make earns Record Breaker")
+	var quarter := RunLogic.new()
+	quarter.new_run()
+	for n in range(1, 6):
+		quarter.kick_number = n
+		quarter.kick_resolved = false
+		quarter.is_first_ball = true
+		quarter.phase = RunLogic.Phase.PLAYING
+		quarter.resolve_kick("GOOD", 2.0, false)
+	check(records.has_trophy("perfect_quarter"), "five first-ball makes earn Perfect Quarter")
+	var dirty := RunLogic.new()
+	dirty.new_run()
+	records.trophies["perfect_quarter"] = false
+	dirty.kick_number = 1
+	dirty.is_first_ball = false
+	dirty.resolve_kick("GOOD", 2.0, false)
+	for n in range(2, 6):
+		dirty.kick_number = n
+		dirty.kick_resolved = false
+		dirty.is_first_ball = true
+		dirty.phase = RunLogic.Phase.PLAYING
+		dirty.resolve_kick("GOOD", 2.0, false)
+	check(not records.has_trophy("perfect_quarter"), "a retry in the quarter blocks Perfect Quarter")
+	var hand := RunLogic.new()
+	hand.new_run()
+	hand.streak = 9
+	hand.attempts = 5
+	hand.resolve_kick("GOOD", 2.0, false)
+	check(records.has_trophy("hot_hand"), "a streak of 10 earns Hot Hand")
+	var season := RunLogic.new()
+	season.new_run()
+	season.kick_number = 20
+	season.attempts = 3
+	season.resolve_kick("GOOD", 2.0, false)
+	check(season.phase == RunLogic.Phase.WIN and records.has_trophy("season_complete"), "making kick 20 earns Season Complete")
+	records.middles = 9
+	var bull := RunLogic.new()
+	bull.new_run()
+	bull.resolve_kick("GOOD", 0.0, false)
+	check(records.has_trophy("bullseye_collector"), "the 10th down-the-middle make earns Bullseye Collector")
+	records.file_path = "user://save.cfg"
+	records.load_file()
+

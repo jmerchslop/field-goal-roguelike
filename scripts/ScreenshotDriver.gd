@@ -66,13 +66,8 @@ func _ready() -> void:
 	if not await _capture("hud_upgrades.png"):
 		get_tree().quit(1)
 		return
-	board.run.grant("sweet_spot")
+	board.run.give(Loadout.PINPOINT, 1)
 	if not await _capture("sweet_spot_meter.png"):
-		get_tree().quit(1)
-		return
-	board.run.grant("mulligan")
-	board.run.begin_mulligan("WIDE LEFT", -4.0, false)
-	if not await _capture("mulligan_prompt.png"):
 		get_tree().quit(1)
 		return
 	board.highlight = 0
@@ -145,9 +140,7 @@ func _ready() -> void:
 		print("miss retry drifted")
 		get_tree().quit(1)
 		return
-	board.run.grant(Upgrades.BIG_LEG)
-	board.run.grant(Upgrades.BIG_LEG)
-	board.run.grant(Upgrades.BIG_LEG)
+	board.run.give(Loadout.CANNON, 3)
 	if not await _capture("big_leg_stacks.png"):
 		get_tree().quit(1)
 		return
@@ -169,13 +162,12 @@ func _ready() -> void:
 		return
 	board.load_current_kick()
 	board.set_wind(10.0, 90.0)
-	board.run.grant(Upgrades.FLAG_READER)
-	board.run.grant(Upgrades.LASER_LINE)
+	board.run.give(Loadout.WIND_VISOR, 2)
 	board.logic.aim_degrees = 4.0
 	if not await _capture("flag_laser.png"):
 		get_tree().quit(1)
 		return
-	board.run.grant(Upgrades.STORM_CHASER)
+	board.run.give(Loadout.STORM_CHASER, 1)
 	board.load_current_kick()
 	board.set_wind(10.0, 90.0)
 	_finish_centered_power(50.0)
@@ -348,87 +340,116 @@ func _ready() -> void:
 	if not await _capture("weather_monsoon.png"):
 		get_tree().quit(1)
 		return
-	board.run.grant(Upgrades.BIG_LEG)
+	board.run.give(Loadout.CANNON, 1)
 	board.force_weather(RunLogic.BIG_GAME)
 	if not await _capture("weather_big_game.png"):
 		get_tree().quit(1)
 		return
-	board.run.force_cursed_offer()
-	board.run.roll_offer()
-	if not await _capture("cursed_offer.png"):
-		get_tree().quit(1)
-		return
-	board.run.force_offer([
-		{"id": Upgrades.GLASS_LEG, "cursed": false, "curse": "", "doubled": false},
-		{"id": Upgrades.HERO_BALL, "cursed": false, "curse": "", "doubled": false},
-		{"id": Upgrades.BIG_LEG, "cursed": false, "curse": "", "doubled": false},
-	])
-	board.run.roll_offer()
-	if not await _capture("risky_cards.png"):
-		get_tree().quit(1)
-		return
-	board.run.force_offer([
-		{"id": Upgrades.FLAG_READER, "cursed": false, "curse": "", "doubled": false},
-		{"id": Upgrades.LASER_LINE, "cursed": false, "curse": "", "doubled": false},
-		{"id": Upgrades.BIG_LEG, "cursed": false, "curse": "", "doubled": false},
-	])
-	board.run.roll_offer()
-	if not await _capture("rare_cards.png"):
-		get_tree().quit(1)
-		return
-	board.run.rerolls_left = 2
-	board.run.force_cursed_offer()
-	board.run.roll_offer()
-	board.run.reroll_offer()
-	if not await _capture("cursed_reroll.png"):
-		get_tree().quit(1)
-		return
-	board.run.skip_offer()
-	if not await _capture("curse_skipped.png"):
-		get_tree().quit(1)
-		return
-	board.force_weather(RunLogic.CLEAR)
-	board.run.curse = RunLogic.CURSE_HOWLING
-	board.run.curse_end_kick = 5
-	board.run.awaiting_offer = false
-	board.set_wind(10.0, 90.0)
-	board.load_current_kick()
-	if not await _capture("howling_hud.png"):
-		get_tree().quit(1)
-		return
-	var howl_stats: KickerStats = board.logic.stats
-	board.logic.press_space()
-	board.logic.advance(55.0 / howl_stats.power_speed)
-	board.logic.press_space()
-	board.logic.advance(board.logic.power / howl_stats.accuracy_speed)
-	board.logic.press_space()
-	board.logic.advance(board.logic.flight_duration * (30.0 / board.logic.travel_yards))
-	if not await _capture("howling_curve.png"):
-		get_tree().quit(1)
-		return
-	board.run.curse = RunLogic.CURSE_NARROW
-	board.load_current_kick()
-	if not await _capture("narrow_hud.png"):
-		get_tree().quit(1)
-		return
-	board.run.curse = RunLogic.CURSE_HEAVY
-	board.load_current_kick()
-	if not await _capture("heavy_hud.png"):
-		get_tree().quit(1)
-		return
-	board.run.curse = ""
-	board.load_current_kick()
-	board.run.attempts = 3
-	board.run.grant(Upgrades.GLASS_LEG)
-	if not await _capture("glass_leg_cap.png"):
-		get_tree().quit(1)
-		return
-	board.run.curses_taken = ["Howling Wind", "Heavy Ball"]
-	board.run.phase = RunLogic.Phase.GAME_OVER
-	if not await _capture("run_summary.png"):
+	if not await _capture_records_story():
 		get_tree().quit(1)
 		return
 	get_tree().quit()
+
+
+func _capture_records_story() -> bool:
+	SaveData.reset_save()
+	board.open_select()
+	board.showing_records = true
+	board.save_note = ""
+	if not await _capture("records_empty.png"):
+		return false
+	board.showing_records = false
+	board.highlight = 1
+	board.confirm_kicker()
+	_finish_centered_power(50.0)
+	board.run.resolve_kick(board.logic.result_text, board.logic.offset_yards, board.logic.perfect)
+	if not await _capture("trophy_extra_point.png"):
+		return false
+	board.run.roll_offer()
+	if not await _capture("loadout_offer.png"):
+		return false
+	board.run.force_offer([
+		{"id": Loadout.CANNON, "slot": Loadout.CLEATS, "kind": Loadout.EQUIPMENT, "rank": 1},
+		{"id": Loadout.DEEP_BENCH, "slot": Loadout.PERK, "kind": Loadout.PERK, "rank": 1},
+		{"id": Loadout.ICED, "slot": Loadout.CURSE, "kind": Loadout.CURSE, "rank": 1},
+	])
+	board.run.roll_offer()
+	board.run.pick_card(0)
+	board.load_current_kick()
+	if not await _capture("cannon_cleats_hud.png"):
+		return false
+	board.run.force_offer([
+		{"id": Loadout.CANNON, "slot": Loadout.CLEATS, "kind": Loadout.EQUIPMENT, "rank": 2},
+		{"id": Loadout.HOT_STREAK, "slot": Loadout.PERK, "kind": Loadout.PERK, "rank": 1},
+		{"id": Loadout.SHAKY, "slot": Loadout.CURSE, "kind": Loadout.CURSE, "rank": 1},
+	])
+	board.run.roll_offer()
+	if not await _capture("cannon_rankup_offer.png"):
+		return false
+	board.run.skip_offer()
+	board.advance_run()
+	if not await _capture("skip_no_curse.png"):
+		return false
+	board.run.give(Loadout.ICED)
+	board.load_current_kick()
+	board.logic.press_space()
+	board.meter_time = 0.5
+	if not await _capture("iced_hidden_meter.png"):
+		return false
+	board.run.resolve_kick("GOOD", 2.0, false)
+	board.logic.result_text = "GOOD"
+	board.logic.power = 50.0
+	board.logic.max_range = 49.5
+	board.logic.kick_distance = board.run.distance_yards()
+	board.logic.phase = KickLogic.Phase.RESULT
+	if not await _capture("iced_mult.png"):
+		return false
+	board.run.give(Loadout.DEEP_BENCH, 1)
+	board.run.give(Loadout.HOT_STREAK, 1)
+	board.run.force_offer([
+		{"id": Loadout.CANNON, "slot": Loadout.CLEATS, "kind": Loadout.EQUIPMENT, "rank": 2},
+		{"id": Loadout.DEEP_BENCH, "slot": Loadout.PERK, "kind": Loadout.PERK, "rank": 2},
+		{"id": Loadout.NARROW, "slot": Loadout.CURSE, "kind": Loadout.CURSE, "rank": 1},
+	])
+	board.run.roll_offer()
+	if not await _capture("two_perk_lock.png"):
+		return false
+	board.run.skip_offer()
+	board.load_current_kick()
+	if not await _capture("loadout_hud_slots.png"):
+		return false
+	board.run.attempts = 1
+	board.run.kick_resolved = false
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.resolve_kick("SHORT", 0.0, false)
+	board.open_select()
+	board.showing_records = true
+	if not await _capture("records_after_run.png"):
+		return false
+	SaveData.load_file()
+	if not await _capture("persist_reload.png"):
+		return false
+	board.showing_records = false
+	board.highlight = 1
+	board.confirm_kicker()
+	board.run.resolve_kick("GOOD", 0.0, true)
+	board.advance_run()
+	board.run.resolve_kick("GOOD", 0.0, true)
+	board.run.attempts = 1
+	board.run.kick_resolved = false
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.resolve_kick("SHORT", 0.0, false)
+	if not await _capture("new_record.png"):
+		return false
+	board.open_select()
+	board.showing_records = true
+	board.tap_f9()
+	if not await _capture("f9_warning.png"):
+		return false
+	board.tap_f9()
+	if not await _capture("f9_reset.png"):
+		return false
+	return true
 
 
 func _set_accuracy_needle(power_value: float, along: float) -> void:
