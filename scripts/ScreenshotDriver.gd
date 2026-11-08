@@ -12,6 +12,12 @@ func _ready() -> void:
 		print("Could not create ", shot_dir)
 		get_tree().quit(1)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "menu":
+		if not await _capture_menu_and_rerolls():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	board.front.screen = FrontEnd.Screen.SELECT
 	board.selecting = true
 	board.highlight = 0
@@ -388,6 +394,9 @@ func _ready() -> void:
 		get_tree().quit(1)
 		return
 	if not await _capture_ball_sprites():
+		get_tree().quit(1)
+		return
+	if not await _capture_menu_and_rerolls():
 		get_tree().quit(1)
 		return
 	get_tree().quit()
@@ -1844,6 +1853,95 @@ func _capture_m2_kickers() -> bool:
 		board.logic.advance(board.logic.flight_duration)
 	print("CARLOS PERFECT ", board.logic.perfect, " e ", board.logic.accuracy_error, " ", board.logic.result_text)
 	if not await _capture("carlos_numero_dos_perfect.png"):
+		return false
+	return true
+
+
+func _capture_menu_and_rerolls() -> bool:
+	board.showing_records = false
+	board.selecting = false
+	board.front.screen = FrontEnd.Screen.MAIN
+	board.front.lock_message = ""
+	board.front.notice = ""
+	var saved_wins := SaveData.wins
+	SaveData.wins = 0
+	SaveData.trophies["season_complete"] = false
+	var tiles: Array = [
+		[0, "menu_tile_standard.png"],
+		[1, "menu_tile_endless.png"],
+		[2, "menu_tile_trophy.png"],
+		[3, "menu_tile_options.png"],
+	]
+	for tile in tiles:
+		board.front.menu_index = int(tile[0])
+		board.front.lock_message = ""
+		if not await _capture(str(tile[1])):
+			return false
+	board.front.screen = FrontEnd.Screen.OPTIONS
+	board.front.focus = 3
+	board.front.notice = ""
+	board.front.rebinding = ""
+	Settings.set_volume("music", 100, false)
+	Settings.set_volume("crowd", 100, false)
+	Settings.set_volume("sfx", 100, false)
+	if not await _capture("options_selected_plate.png"):
+		return false
+	SaveData.wins = saved_wins
+	board.highlight = 1
+	board.confirm_kicker()
+	board.force_weather(RunLogic.CLEAR)
+	board.run.set_wind(0.0, 0.0)
+	board.run.kick_number = 1
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.kick_resolved = true
+	board.run.last_result_made = true
+	board.run.roll_offer()
+	if board.run.offer.size() != 3:
+		print("Offer did not draw 3 cards")
+		return false
+	var before: Array = board.run.offer.duplicate(true)
+	var charges: int = board.run.rerolls_left
+	print("OFFER BEFORE ", before, " rerolls ", charges)
+	if not await _capture("offer_before_reroll.png"):
+		return false
+	if not board.run.reroll_offer():
+		print("Offer reroll did not spend")
+		return false
+	print("OFFER AFTER ", board.run.offer, " rerolls ", board.run.rerolls_left)
+	if board.run.rerolls_left != charges - 1:
+		print("Reroll charge did not drop by 1")
+		return false
+	var shared := 0
+	for card in board.run.offer:
+		for old in before:
+			if Loadout.card_key(card) == Loadout.card_key(old):
+				shared += 1
+	if shared > 0:
+		print("Reroll kept ", shared, " previous cards")
+		return false
+	if not await _capture("offer_after_reroll.png"):
+		return false
+	board.run.cash = 40
+	board.run.belt[0] = Vitamins.ZINC
+	board.run.belt[1] = ""
+	board.run.open_shop()
+	var stock_before: Array = board.run.shop_stock.duplicate()
+	var belt_before: Array = board.run.belt.duplicate()
+	print("SHOP BEFORE ", stock_before, " belt ", belt_before, " b12 ", board.run.shop_b12_bought)
+	if not await _capture("shop_before_reroll.png"):
+		return false
+	if not board.run.reroll_shop():
+		print("Shop reroll failed")
+		return false
+	print("SHOP AFTER ", board.run.shop_stock, " belt ", board.run.belt, " b12 ", board.run.shop_b12_bought, " price ", board.run.shop_reroll_price)
+	if board.run.belt != belt_before or board.run.shop_b12_bought:
+		print("Shop reroll touched the belt or B12")
+		return false
+	for id in board.run.shop_stock:
+		if stock_before.has(str(id)):
+			print("Shop reroll kept ", id)
+			return false
+	if not await _capture("shop_after_reroll.png"):
 		return false
 	return true
 

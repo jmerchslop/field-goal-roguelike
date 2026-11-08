@@ -47,6 +47,7 @@ func _run() -> void:
 	_check_auto_shank()
 	_check_sfx()
 	_check_ball_art()
+	_check_full_rerolls()
 	_check_m2_kickers()
 
 
@@ -3193,6 +3194,96 @@ func _check_live_kick_sounds() -> void:
 	records.file_path = kept_path
 	records.load_file()
 	settings.set_volume("sfx", saved_sfx, false)
+
+
+func _gd_function(source: String, name: String) -> String:
+	var at := source.find("func %s" % name)
+	if at < 0:
+		return ""
+	var next := source.find("\nfunc ", at + 8)
+	if next < 0:
+		return source.substr(at)
+	return source.substr(at, next - at)
+
+
+func _offer_overlap(left: Array, right: Array) -> int:
+	var keys := {}
+	for card in left:
+		keys[Loadout.card_key(card)] = true
+	var shared := 0
+	for card in right:
+		if keys.has(Loadout.card_key(card)):
+			shared += 1
+	return shared
+
+
+func _check_full_rerolls() -> void:
+	var hud := FileAccess.get_file_as_string("res://scripts/hud.gd")
+	var menu_tile := _gd_function(hud, "_draw_selected_menu_tile")
+	var option_plate := _gd_function(hud, "_draw_selected_option_plate")
+	check(menu_tile.find("_draw_round_outline") >= 0 and menu_tile.find("_whitened_label") >= 0, "the selected menu tile keeps the white outline and turns the painted label white")
+	var trophy_rect := _gd_function(hud, "_menu_label_rect")
+	check(trophy_rect.find("161") >= 0 and trophy_rect.find("106") >= 0, "Trophy Room stays the two-line painted word")
+	check(menu_tile.find("draw_rect") < 0 and trophy_rect.find("draw_rect") < 0, "the selected menu tile does not draw an extra filled box")
+	check(option_plate.find("_draw_round_outline") >= 0 and option_plate.find("draw_rect") < 0, "a selected Options plate is only the white outline")
+	var kept_a_card := false
+	for seed_value in 12:
+		var deal := RunLogic.new()
+		deal.start_with_kicker(Kickers.WALK_ON)
+		deal.set_offer_seed(seed_value + 3)
+		deal.roll_offer()
+		var before: Array = deal.offer.duplicate(true)
+		var charges := deal.rerolls_left
+		var legal := Loadout.legal_equipment(deal.loadout_state()).size() + Loadout.legal_perks(deal.loadout_state(), deal.attempt_cap).size() + Loadout.legal_curses(deal.loadout_state()).size()
+		check(legal > 6 and before.size() == 3, "a fresh Walk-On offer has other legal cards beyond the three showing")
+		check(deal.reroll_offer() and deal.rerolls_left == charges - 1 and deal.offer.size() == 3, "one offer reroll spends one charge and still shows 3 cards")
+		var equip := 0
+		var curses := 0
+		for card in deal.offer:
+			if str(card.get("kind", "")) == Loadout.EQUIPMENT:
+				equip += 1
+			if str(card.get("kind", "")) == Loadout.CURSE:
+				curses += 1
+		check(equip == 1 and curses <= 1, "the rerolled offer still has one equipment card and at most one curse")
+		if _offer_overlap(before, deal.offer) > 0:
+			kept_a_card = true
+	check(not kept_a_card, "an offer reroll does not keep a previous card when other legal cards exist")
+	var tight := _maxed_loadout()
+	tight.cleats_rank = 5
+	tight.perks = [{"id": Loadout.DEEP_BENCH, "rank": 2}, {"id": Loadout.HOT_STREAK, "rank": 2}]
+	tight.curse_ids = [Loadout.HEAVY, Loadout.SHANKY]
+	tight.curses_locked = true
+	tight.rebuild_stats()
+	var only: Array = Loadout.draw_offer(tight.loadout_state(), tight.attempt_cap, RandomNumberGenerator.new())
+	check(only.size() == 3, "three remaining legal cards are all shown, got %s" % only.size())
+	var again: Array = Loadout.draw_offer(tight.loadout_state(), tight.attempt_cap, RandomNumberGenerator.new(), only)
+	check(again.size() == 3 and _offer_overlap(only, again) == 3, "a pool of exactly three cards may come back because nothing else is legal")
+	var shop := RunLogic.new()
+	shop.new_run()
+	shop.open_shop()
+	shop.shop_stock = [Vitamins.PROTEIN, Vitamins.MAGNESIUM, Vitamins.OMEGA]
+	shop.cash = 20
+	shop.belt = [Vitamins.ZINC, ""]
+	shop.shop_b12_bought = false
+	var offer_charges := shop.rerolls_left
+	var before_stock: Array = shop.shop_stock.duplicate()
+	check(shop.reroll_shop() and shop.cash == 18 and shop.shop_reroll_price == 3, "F spends $2 and the next shelf reroll costs $3")
+	check(shop.rerolls_left == offer_charges, "F does not spend a Walk-On or Scout Lid offer reroll")
+	check(str(shop.belt[0]) == Vitamins.ZINC and str(shop.belt[1]) == "" and not shop.shop_b12_bought, "F leaves the belt and B12 alone")
+	check(shop.shop_stock[0] != shop.shop_stock[1] and shop.shop_stock[1] != shop.shop_stock[2] and shop.shop_stock[0] != shop.shop_stock[2], "the new shelves are three different vitamins")
+	var skipped := 0
+	for id in shop.shop_stock:
+		if before_stock.has(str(id)):
+			skipped += 1
+	check(skipped == 0, "F redraws all 3 shelves instead of leaving one or two in place, kept %s" % skipped)
+	var second_before: Array = shop.shop_stock.duplicate()
+	var belt_now: Array = shop.belt.duplicate()
+	check(shop.reroll_shop() and shop.shop_reroll_price == 4 and shop.rerolls_left == offer_charges, "a second F still spends shop cash only")
+	var skipped_again := 0
+	for id in shop.shop_stock:
+		if second_before.has(str(id)):
+			skipped_again += 1
+	check(skipped_again == 0 and shop.belt == belt_now and not shop.shop_b12_bought, "the second F also replaces every shelf and still ignores the belt and B12")
 
 
 func _check_m2_kickers() -> void:

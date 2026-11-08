@@ -729,7 +729,8 @@ func reroll_offer() -> bool:
 	if not awaiting_offer or awaiting_shop or rerolls_left <= 0:
 		return false
 	rerolls_left -= 1
-	offer = Loadout.draw_offer(loadout_state(), attempt_cap, _offer_rng)
+	var previous: Array = offer.duplicate(true)
+	offer = Loadout.draw_offer(loadout_state(), attempt_cap, _offer_rng, previous)
 	awaiting_offer = true
 	return true
 
@@ -871,7 +872,8 @@ func reroll_shop() -> bool:
 	cash -= shop_reroll_price
 	shop_reroll_price += 1
 	shop_flash = ""
-	_fill_shelves(false)
+	var previous: Array = shop_stock.duplicate()
+	_fill_shelves(false, previous)
 	return true
 
 
@@ -1287,8 +1289,8 @@ func _empty_belt() -> int:
 	return -1
 
 
-func _fill_shelves(opening: bool = false) -> void:
-	var picks: Array = Vitamins.draw_three(_shop_rng)
+func _fill_shelves(opening: bool = false, avoid: Array = []) -> void:
+	var picks: Array = Vitamins.draw_three(_shop_rng, [] if opening else avoid)
 	if opening and stats.synchronicity and not shop_guaranteed:
 		shop_guaranteed = true
 		if not picks.has(Vitamins.PROTEIN):

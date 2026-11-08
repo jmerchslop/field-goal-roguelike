@@ -4,6 +4,7 @@ extends Control
 # Meter, attempts, result words. No field drawing in here.
 
 var game
+var _white_labels := {}
 
 
 func _draw() -> void:
@@ -1064,23 +1065,7 @@ func _draw_main_menu(front: FrontEnd) -> void:
 	for index in MenuLayout.TILES.size():
 		if index != front.menu_index:
 			continue
-		var tile: Rect2 = MenuLayout.TILES[index]
-		_draw_round_outline(tile, window, image)
-		var band := Rect2(tile.position.x + 14.0, 612.0, tile.size.x - 28.0, 42.0)
-		if index == 2:
-			band = Rect2(tile.position.x + 18.0, 548.0, tile.size.x - 36.0, 124.0)
-		var label_box := MenuLayout.screen_rect(band, window, image)
-		draw_rect(label_box, Color(0.23, 0.23, 0.25))
-		if index == 2:
-			_text_in_rect("TROPHY", Rect2(label_box.position, Vector2(label_box.size.x, label_box.size.y * 0.5)), 18, Color.WHITE)
-			_text_in_rect("ROOM", Rect2(label_box.position + Vector2(0, label_box.size.y * 0.5), Vector2(label_box.size.x, label_box.size.y * 0.5)), 18, Color.WHITE)
-		else:
-			var word := "STANDARD"
-			if index == 1:
-				word = "ENDLESS"
-			elif index == 3:
-				word = "OPTIONS"
-			_text_in_rect(word, label_box, 18, Color.WHITE)
+		_draw_selected_menu_tile(index, MenuLayout.TILES[index], window, image, art)
 	if front.endless_unlocked() and _menu_texture("endless") == null and art != null:
 		var tile: Rect2 = MenuLayout.TILES[1]
 		var patch := Rect2(tile.position.x + tile.size.x * 0.28, tile.position.y + 18.0, tile.size.x * 0.44, 96.0)
@@ -1122,11 +1107,77 @@ func _draw_options(front: FrontEnd) -> void:
 		var label := "Press a key..." if front.rebinding == action_id else Settings.key_label(action_id)
 		_text_in_rect(label, key_screen, 14, Color(0.94, 0.94, 0.96))
 	if front.focus >= 0 and front.focus < front.focus_count():
-		_draw_round_outline(_focus_pixel_rect(front), window, image)
+		_draw_selected_option_plate(front, window, image)
 	if front.notice != "":
 		var banner := MenuLayout.screen_rect(Rect2(760, 150, 280, 36), window, image)
 		draw_rect(banner, Color(0.35, 0.08, 0.08, 0.92))
 		_text_in_rect(front.notice, banner, 18, Color(1.0, 0.85, 0.4))
+
+
+func _draw_selected_menu_tile(index: int, tile: Rect2, window: Vector2, image: Vector2, art: Texture2D) -> void:
+	# White rounded outline, and the painted word turned white. No filled plate.
+	_draw_round_outline(tile, window, image)
+	var letters := _menu_label_rect(index)
+	var patch := _whitened_label(art, letters)
+	if patch == null:
+		return
+	draw_texture_rect(patch, MenuLayout.screen_rect(letters, window, image), false)
+
+
+func _menu_label_rect(index: int) -> Rect2:
+	# Painted letter bounds. Trophy Room is the two-line word.
+	if index == 1:
+		return Rect2(394, 590, 193, 64)
+	if index == 2:
+		return Rect2(704, 568, 161, 106)
+	if index == 3:
+		return Rect2(1000, 590, 179, 67)
+	return Rect2(88, 590, 215, 64)
+
+
+func _whitened_label(art: Texture2D, letters: Rect2) -> Texture2D:
+	if art == null:
+		return null
+	var key := "%s:%s" % [art.resource_path, letters]
+	if _white_labels.has(key):
+		return _white_labels[key]
+	var source := art.get_image()
+	if source == null:
+		return null
+	var region := Rect2i(int(letters.position.x), int(letters.position.y), int(letters.size.x), int(letters.size.y))
+	var image := source.get_region(region)
+	image.convert(Image.FORMAT_RGBA8)
+	var width := image.get_width()
+	var height := image.get_height()
+	var copy := image.duplicate()
+	for y in height:
+		for x in width:
+			var color := image.get_pixel(x, y)
+			if maxf(color.r, maxf(color.g, color.b)) >= 32.0 / 255.0:
+				continue
+			var near_light := false
+			for dy in range(-2, 3):
+				for dx in range(-2, 3):
+					var xx := x + dx
+					var yy := y + dy
+					if xx < 0 or yy < 0 or xx >= width or yy >= height:
+						continue
+					var other := image.get_pixel(xx, yy)
+					if other.r > 170.0 / 255.0 and other.g > 140.0 / 255.0 and other.b > 140.0 / 255.0:
+						near_light = true
+						break
+				if near_light:
+					break
+			if near_light:
+				copy.set_pixel(x, y, Color.WHITE)
+	var patch := ImageTexture.create_from_image(copy)
+	_white_labels[key] = patch
+	return patch
+
+
+func _draw_selected_option_plate(front: FrontEnd, window: Vector2, image: Vector2) -> void:
+	# The selected Options plate gets the same white outline and no extra fill.
+	_draw_round_outline(_focus_pixel_rect(front), window, image)
 
 
 func _focus_pixel_rect(front: FrontEnd) -> Rect2:

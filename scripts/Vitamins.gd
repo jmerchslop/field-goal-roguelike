@@ -134,8 +134,19 @@ static func sprite_path(id: String) -> String:
 	return ""
 
 
-static func draw_three(rng: RandomNumberGenerator) -> Array:
-	var pool: Array = ALL.duplicate()
+static func draw_three(rng: RandomNumberGenerator, avoid: Array = []) -> Array:
+	var blocked := {}
+	for id in avoid:
+		var name := str(id)
+		if name != "":
+			blocked[name] = true
+	var pool: Array = []
+	for id in ALL:
+		if not blocked.has(str(id)):
+			pool.append(id)
+	# Fewer than 3 other vitamins: a previous one may come back in a full redraw.
+	if pool.size() < 3:
+		pool = ALL.duplicate()
 	var picks: Array = []
 	while picks.size() < 3 and pool.size() > 0:
 		var index := rng.randi_range(0, pool.size() - 1)

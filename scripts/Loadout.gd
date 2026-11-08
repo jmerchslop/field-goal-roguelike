@@ -394,16 +394,57 @@ static func legal_curses(state: Dictionary) -> Array:
 	return cards
 
 
-static func draw_offer(state: Dictionary, attempt_cap: int, rng: RandomNumberGenerator) -> Array:
-	var cards: Array = []
+static func card_key(card) -> String:
+	return "%s|%s" % [str(card.get("id", "")), int(card.get("rank", 0))]
+
+
+static func draw_offer(state: Dictionary, attempt_cap: int, rng: RandomNumberGenerator, avoid: Array = []) -> Array:
 	var equip := legal_equipment(state)
+	var perks := legal_perks(state, attempt_cap)
+	var curses := legal_curses(state)
+	if not avoid.is_empty():
+		var keys := {}
+		for card in avoid:
+			keys[card_key(card)] = true
+		var fresh_equip := _without_keys(equip, keys)
+		# One equipment card is still required when any equipment is legal.
+		# If the previous card was the only one, it may come back.
+		if fresh_equip.is_empty() and not equip.is_empty():
+			fresh_equip = equip
+		var fresh_perks := _without_keys(perks, keys)
+		var fresh_curses := _without_keys(curses, keys)
+		if _pools_can_fill_offer(fresh_equip, fresh_perks, fresh_curses):
+			equip = fresh_equip
+			perks = fresh_perks
+			curses = fresh_curses
+	return _compose_offer(equip, perks, curses, rng)
+
+
+static func _without_keys(cards: Array, keys: Dictionary) -> Array:
+	var kept: Array = []
+	for card in cards:
+		if keys.has(card_key(card)):
+			continue
+		kept.append(card)
+	return kept
+
+
+static func _pools_can_fill_offer(equip: Array, perks: Array, curses: Array) -> bool:
+	var fillers := perks.size() + mini(curses.size(), 1)
+	if equip.size() > 0:
+		fillers += equip.size()
+	return fillers >= 3
+
+
+static func _compose_offer(equip: Array, perks: Array, curses: Array, rng: RandomNumberGenerator) -> Array:
+	var cards: Array = []
 	if equip.size() > 0:
 		var index := rng.randi_range(0, equip.size() - 1)
 		cards.append(equip[index])
 		equip.remove_at(index)
 	var pool: Array = []
-	pool.append_array(legal_perks(state, attempt_cap))
-	pool.append_array(legal_curses(state))
+	pool.append_array(perks)
+	pool.append_array(curses)
 	_fill_offer(cards, pool, rng, true)
 	# Perks and curses can run out while equipment ranks are still legal.
 	if cards.size() < 3 and equip.size() > 0:
