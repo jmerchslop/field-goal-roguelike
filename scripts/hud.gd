@@ -73,6 +73,8 @@ func _draw_meter(logic: KickLogic, run: RunLogic) -> void:
 	var art := _meter_art()
 	if art != null:
 		draw_texture_rect(art, Rect2(origin, Vector2(gauge_w, gauge_h)), false)
+	# One opaque well. The disk stays inside the painted arc so the field still shows around the gear.
+	_draw_well(hub, 276.0 * scale)
 	# Opaque live wedges and the orange fill sit on the painted band. One copy, not a stacked PNG.
 	_draw_annulus(hub, inner, outer, 90.0, float(layout["band_top"]), Color(0.78, 0.1, 0.08, 1.0))
 	_draw_annulus(hub, inner, outer, float(layout["band_top"]), float(layout["perfect_top"]), Color(0.93, 0.74, 0.12, 1.0))
@@ -173,13 +175,14 @@ func _draw_condition(run: RunLogic) -> void:
 		_text_centered("Meter upgrades off", 184.0, 16, KickConstants.COLOR_TEXT)
 
 
-func _draw_band(low: float, high: float, color: Color) -> void:
-	var top := KickConstants.meter_y(high)
-	var bottom := KickConstants.meter_y(low)
-	draw_rect(
-		Rect2(KickConstants.METER_BAR_LEFT, top, KickConstants.METER_BAR_RIGHT - KickConstants.METER_BAR_LEFT, bottom - top),
-		color
-	)
+func _draw_well(hub: Vector2, radius: float) -> void:
+	var steps := 36
+	var points := PackedVector2Array()
+	points.append(hub)
+	for i in steps + 1:
+		var t := float(i) / float(steps)
+		points.append(_gauge_point(hub, radius, lerpf(180.0, 0.0, t)))
+	draw_colored_polygon(points, Color(18.0 / 255.0, 20.0 / 255.0, 24.0 / 255.0, 1.0))
 
 
 func _draw_hud(logic: KickLogic, run: RunLogic) -> void:

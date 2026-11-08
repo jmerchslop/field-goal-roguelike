@@ -109,8 +109,9 @@ static func key_meter_image(source: Image) -> Image:
 		# The painted well is not a perfect circle. Fill the open middle, including
 		# the transparent ring that sits against the inner lip, and cover the
 		# baked needle there. Opaque lip pixels stay.
-		var in_upper := dy <= 4.0 and radius >= WELL_INNER and radius <= 305.0
-		var open_pixel := int(original[offset + 3]) == 0
+		# Soft pixels between the well and the painted arc are the peek-through ring.
+		var in_upper := dy <= 4.0 and radius >= WELL_INNER and radius <= 340.0
+		var open_pixel := int(original[offset + 3]) < 250
 		if in_upper and (radius <= WELL_OUTER or open_pixel):
 			bytes[offset] = 18
 			bytes[offset + 1] = 20

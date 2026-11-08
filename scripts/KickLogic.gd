@@ -22,7 +22,8 @@ const EARLY_RUN_SEC := 0.17
 
 # AIMING   - Left / Right swings the arrow. The needle rests at MAX. Space starts the meter.
 # POWER    - A short flick to the POWER label, then a sweep back toward MAX. Space locks P.
-#            Reaching MAX locks P at 100. Space does nothing during the flick.
+#            Reaching MAX with no Space #2 shanks. Space on that same step locks P=100.
+#            Space does nothing during the flick.
 # ACCURACY - The needle keeps going to MAX if it is not there, then sweeps the right arc.
 #            e is read only on that arc: +15 just after MAX, 0 at the center, -15 at the end.
 #            Space locks e once the needle is on the right half. Finishing the arc locks e=-15.
@@ -77,6 +78,8 @@ var aim_base := 0.0
 var flight_elapsed := 0.0
 var flight_duration := 0.0
 var travel_yards := 0.0
+# True when the power sweep reached MAX with no Space #2. Not a power lock.
+var shanked := false
 
 # Where the ball is right now. Height is 0 on the ground and 1 at mid-flight.
 var ball_forward_yards := 0.0
@@ -117,7 +120,11 @@ func press_space() -> void:
 		windup_left = MeterGauge.WINDUP_SEC
 	elif phase == Phase.POWER:
 		# The flick down to POWER is not a lockable power value.
+		# A press with the needle already on MAX is P=100, not a shank.
 		if windup_left <= 0.0000001:
+			if needle_angle <= MeterGauge.MAX_ANGLE + 0.0001:
+				power_true = KickConstants.METER_MAX
+				needle = _shown_power(power_true)
 			_lock_power(needle)
 	elif phase == Phase.ACCURACY:
 		# Leftover travel on the left arc is not an accuracy reading.
@@ -209,6 +216,7 @@ func reset_kick() -> void:
 	drift_yards = 0.0
 	flight_elapsed = 0.0
 	flight_duration = 0.0
+	shanked = false
 	travel_yards = 0.0
 	ball_forward_yards = 0.0
 	ball_lateral_yards = lateral
@@ -236,6 +244,13 @@ func reset_kick() -> void:
 
 func detail_line() -> String:
 	# Shown after the kick so the range math can be checked against the flight.
+	# A shank is not a power lock, so the line does not print P = 100.
+	if shanked:
+		return "SHANK, full power, max range = %s yd, kick = %s yd, result = %s" % [
+			format_number(max_range),
+			format_number(kick_distance),
+			result_text,
+		]
 	return "P = %s, max range = %s yd, kick = %s yd, result = %s" % [
 		format_number(power),
 		format_number(max_range),
@@ -457,12 +472,13 @@ func _advance_power(delta: float) -> float:
 		needle = _shown_power(power_true)
 		fill_power = power_true
 		return 0.0
-	# Reaching MAX locks P and the leftover time continues onto the right arc.
-	power_true = KickConstants.METER_MAX
+	# Reaching MAX with no Space #2 shanks. Leftover time does not start accuracy.
 	needle_angle = MeterGauge.MAX_ANGLE
+	power_true = KickConstants.METER_MAX
 	needle = _shown_power(power_true)
-	_lock_power(needle)
-	return delta - need
+	fill_power = power_true
+	_shank()
+	return 0.0
 
 
 func _shown_power(true_value: float) -> float:
@@ -529,11 +545,88 @@ func seconds_to_power(power_value: float) -> float:
 	return extra + maxf(angle - target, 0.0) / omega
 
 
+# The needle reached MAX with no Space #2. Full-power wild miss, not a lock.
+func _shank() -> void:
+	shanked = true
+	perfect = false
+	bank_shot = false
+	insured = false
+	power = 0.0
+	var side := -1.0 if _rng.randf() < 0.5 else 1.0
+	var full := 100.0
+	var cross := crosswind_mph(float(wind_speed), wind_direction) - stats.saucer_mph
+	var head := head_tail_mph(float(wind_speed), wind_direction)
+	var blown := sqrt(cross * cross + head * head)
+	var blown_dir := rad_to_deg(atan2(cross, head))
+	if howling_wind:
+		blown *= 1.5
+	drift_yards = drift_at_uprights(blown, blown_dir, kick_distance, 0, 0, stats.ball_type) * stats.drift_factor
+	var wind_range := wind_range_delta(blown, blown_dir, 0, stats.thin_air)
+	if stats.clearance:
+		max_range = kick_distance + 5.0 + (full - 88.0) * 1.25 + stats.range_bonus + wind_range
+	else:
+		max_range = stats.range_base + stats.range_per_power * full + stats.range_bonus + wind_range
+	if snow_range:
+		max_range -= snow_penalty
+	if thin_air_weather:
+		max_range += 4.0
+	if heavy_ball:
+		max_range -= 4.0
+	if max_range < kick_distance:
+		max_range = kick_distance
+	travel_yards = max_range
+	flight_duration = flight_time_seconds(travel_yards)
+	reached_uprights = true
+	var gap := post_half_gap
+	var target := side * (gap + KickConstants.DOINK_BAND_YARDS + 2.0 + absf(drift_yards))
+	var needed := target - start_lateral_yards - drift_yards
+	final_angle_degrees = rad_to_deg(atan(needed / maxf(kick_distance, 0.01)))
+	offset_yards = path_lateral(start_lateral_yards, kick_distance, final_angle_degrees, kick_distance, drift_yards)
+	var judged := judge(max_range, kick_distance, offset_yards, stats.ball_type, gap)
+	if str(judged["text"]) == "GOOD" or str(judged["text"]) == "DOINK" or str(judged["text"]) == "SHORT":
+		offset_yards = side * (gap + KickConstants.DOINK_BAND_YARDS + 2.0)
+		final_angle_degrees = rad_to_deg(atan((offset_yards - start_lateral_yards) / maxf(kick_distance, 0.01)))
+		judged = judge(max_range, kick_distance, offset_yards, stats.ball_type, gap)
+	result_text = str(judged["text"])
+	accuracy_error = side * MeterGauge.ERROR_AT_MAX
+	needle_angle = MeterGauge.MAX_ANGLE
+	needle = KickConstants.METER_MAX
+	fill_power = KickConstants.METER_MAX
+	power_true = KickConstants.METER_MAX
+	flight_elapsed = 0.0
+	phase = Phase.FLIGHT
+
+
 func _advance_flight(delta: float) -> void:
 	flight_elapsed += delta
 	if flight_elapsed >= flight_duration:
 		flight_elapsed = flight_duration
 		phase = Phase.RESULT
+
+
+# A Space #2 that lands on the step where the needle reaches MAX locks P=100.
+# A press earlier on the arc locks the power the needle is on right now.
+# The live frame calls this with that frame's delta so the two events agree.
+func take_power_press(delta: float) -> void:
+	if phase != Phase.POWER or windup_left > 0.0000001:
+		return
+	var omega := _power_omega()
+	if omega <= 0.001:
+		_lock_power(needle)
+		return
+	var need := maxf(needle_angle - MeterGauge.MAX_ANGLE, 0.0) / omega
+	if need <= delta + 0.0000001:
+		needle_angle = MeterGauge.MAX_ANGLE
+		power_true = KickConstants.METER_MAX
+		needle = _shown_power(power_true)
+		_lock_power(needle)
+		var left := delta - need
+		if left > 0.0000001:
+			advance(left)
+		return
+	_lock_power(needle)
+	if delta > 0.0000001:
+		advance(delta)
 
 
 func _lock_power(value: float) -> void:

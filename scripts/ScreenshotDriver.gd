@@ -381,6 +381,9 @@ func _ready() -> void:
 	if not await _capture_roster():
 		get_tree().quit(1)
 		return
+	if not await _capture_shank_meter():
+		get_tree().quit(1)
+		return
 	get_tree().quit()
 
 
@@ -874,10 +877,12 @@ func _swing_meter(power_value: float, error_value: float) -> void:
 	board.logic.press_space()
 	if board.logic.windup_left > 0.0:
 		board.logic.advance(board.logic.windup_left)
-	if power_value > 0.0:
+	if power_value >= KickConstants.METER_MAX - 0.001:
+		board.logic.take_power_press(board.logic.seconds_to_power(power_value))
+	elif power_value > 0.0:
 		board.logic.advance(board.logic.seconds_to_power(power_value))
-	if board.logic.phase == KickLogic.Phase.POWER:
-		board.logic.press_space()
+		if board.logic.phase == KickLogic.Phase.POWER:
+			board.logic.press_space()
 	if board.logic.phase == KickLogic.Phase.ACCURACY:
 		var wait: float = board.logic.seconds_until_error(error_value)
 		if wait > 0.0:
@@ -941,7 +946,7 @@ func _capture_needle() -> bool:
 	board.load_current_kick()
 	board.logic.press_space()
 	board.logic.advance(board.logic.windup_left)
-	board.logic.advance(1.0)
+	board.logic.take_power_press(board.logic.seconds_to_power(100.0))
 	print("NEEDLE p100 P ", board.logic.power, " fill ", board.logic.fill_power, " angle ", board.logic.needle_angle, " phase ", board.logic.phase)
 	if not await _capture("needle_p100_redtip.png"):
 		return false
@@ -1657,6 +1662,108 @@ func _capture_roster() -> bool:
 	print("ROSTER magnesium P ", board.logic.power_true, " speed ", board.logic.stats.power_speed)
 	if not await _capture("meter_magnesium_0_35s.png"):
 		return false
+	return true
+
+
+func _capture_shank_meter() -> bool:
+	board.highlight = 1
+	board.confirm_kicker()
+	board.force_weather(RunLogic.CLEAR)
+	board.run.set_wind(0.0, 0.0)
+	board.load_current_kick()
+	board.logic.set_seed(4)
+	board.logic.press_space()
+	board.logic.advance(board.logic.windup_left)
+	board.logic.advance(board.logic.seconds_to_power(100.0) + 0.02)
+	print("SHANK phase ", board.logic.phase, " result ", board.logic.result_text, " offset ", board.logic.offset_yards, " power ", board.logic.power, " shanked ", board.logic.shanked)
+	if board.logic.phase == KickLogic.Phase.FLIGHT:
+		board.logic.advance(board.logic.flight_duration * 0.45)
+	board.run.unlock_toast = "SHANK  %s" % board.logic.result_text
+	board._pose = "follow"
+	if not await _capture("meter_shank_flight.png"):
+		return false
+	if board.logic.phase == KickLogic.Phase.FLIGHT:
+		board.logic.advance(board.logic.flight_duration - board.logic.flight_elapsed)
+	board._pose = "follow"
+	if not await _capture("meter_shank_result.png"):
+		return false
+	board.run.unlock_toast = ""
+	board.load_current_kick()
+	board.logic.press_space()
+	board.logic.advance(board.logic.windup_left)
+	board.logic.take_power_press(board.logic.seconds_to_power(100.0))
+	board.logic.advance(0.12)
+	print("LOCK MAX phase ", board.logic.phase, " P ", board.logic.power, " angle ", board.logic.needle_angle, " shanked ", board.logic.shanked)
+	board.run.unlock_toast = "P=100 lock"
+	if not await _capture("meter_lock_at_max.png"):
+		return false
+	board.run.unlock_toast = ""
+	board.load_current_kick()
+	board.run.stats.practice_per_quarter = 1
+	board.run.practice_left = 1
+	if not board.run.start_practice():
+		print("practice swing did not start")
+		return false
+	board.logic.set_seed(7)
+	board.logic.press_space()
+	board.logic.advance(board.logic.windup_left)
+	board.logic.advance(board.logic.seconds_to_power(100.0) + 0.02)
+	if board.logic.phase == KickLogic.Phase.FLIGHT:
+		board.logic.advance(board.logic.flight_duration)
+	print("PRACTICE SHANK ", board.logic.result_text, " phase ", board.logic.phase, " practicing ", board.run.practicing)
+	board.run.unlock_toast = "Practice swing  %s" % board.logic.result_text
+	if not await _capture("meter_practice_shank.png"):
+		return false
+	board.run.unlock_toast = ""
+	board.run.end_practice()
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.ACCURACY
+	board.logic.power = 50.0
+	board.logic.fill_power = 50.0
+	board.logic.needle = 0.0
+	board.logic.needle_angle = 45.0
+	board._pose = "idle"
+	board.run.unlock_toast = "POWER to MAX  0.700s"
+	if not await _capture("meter_well_field.png"):
+		return false
+	if not await _capture_gauge_crop("meter_well_close.png"):
+		return false
+	board.run.unlock_toast = ""
+	board.run.give(Loadout.PINPOINT, 1)
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.ACCURACY
+	board.logic.power = 50.0
+	board.logic.fill_power = 50.0
+	board.logic.needle_angle = 45.0
+	board.logic.needle = 0.0
+	print("PINPOINT bands ", board.logic.stats.perfect_band, board.logic.stats.good_band)
+	if not await _capture_gauge_crop("meter_pinpoint_walkon_close.png"):
+		return false
+	board.highlight = 1
+	board.confirm_kicker()
+	board.run.give(Loadout.TIGHT)
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.ACCURACY
+	board.logic.power = 50.0
+	board.logic.fill_power = 50.0
+	board.logic.needle_angle = 45.0
+	board.logic.needle = 0.0
+	print("TIGHT bands ", board.logic.stats.perfect_band, board.logic.stats.good_band)
+	if not await _capture_gauge_crop("meter_tight_walkon_close.png"):
+		return false
+	board.highlight = 0
+	board.confirm_kicker()
+	board.force_weather(RunLogic.CLEAR)
+	board.load_current_kick()
+	board.logic.press_space()
+	board.logic.advance(board.logic.windup_left)
+	board.logic.advance(0.35)
+	board.run.unlock_toast = "0.35s of 0.700s POWER to MAX"
+	board._pose = "run"
+	print("TIMING P ", board.logic.power_true, " expected about 50")
+	if not await _capture("meter_power_timing_0_35s.png"):
+		return false
+	board.run.unlock_toast = ""
 	return true
 
 

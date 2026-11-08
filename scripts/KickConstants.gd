@@ -36,8 +36,8 @@ const debug_unlock_all_kickers := false
 
 const POWER_RISE_PER_SEC := 100.0
 const ACCURACY_FALL_PER_SEC := 120.0
-const PERFECT_BAND := 2.0
-const METER_INNER_BAND := 8.0
+const PERFECT_BAND := 1.5
+const METER_INNER_BAND := 6.0
 const RED_TIP_START := 95.0
 
 # If power lands in the red tip, add a random amount in this range to e.

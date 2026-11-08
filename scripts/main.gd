@@ -31,6 +31,7 @@ var _swing_from := 0.0
 var _early_swing := false
 var _swinging := false
 var _sway_time := 0.0
+var _power_press_queued := false
 
 var _world: Node3D
 var _camera: Camera3D
@@ -341,9 +342,12 @@ func play_locked_kick(power_value: float) -> void:
 	logic.press_space()
 	if logic.windup_left > 0.0:
 		logic.advance(logic.windup_left)
-	logic.advance(logic.seconds_to_power(power_value))
-	if logic.phase == KickLogic.Phase.POWER:
-		logic.press_space()
+	if power_value >= KickConstants.METER_MAX - 0.001:
+		logic.take_power_press(logic.seconds_to_power(power_value))
+	else:
+		logic.advance(logic.seconds_to_power(power_value))
+		if logic.phase == KickLogic.Phase.POWER:
+			logic.press_space()
 	if logic.phase == KickLogic.Phase.ACCURACY:
 		var wait := logic.seconds_until_error(0.0)
 		if wait > 0.0:
@@ -410,7 +414,12 @@ func _process(delta: float) -> void:
 			direction += 1.0
 		if direction != 0.0:
 			logic.aim(direction, delta)
-		logic.advance(delta)
+		if _power_press_queued and logic.phase == KickLogic.Phase.POWER and logic.windup_left <= 0.0000001:
+			_power_press_queued = false
+			logic.take_power_press(delta)
+		else:
+			_power_press_queued = false
+			logic.advance(delta)
 		if logic.insured:
 			run.consume_insurance()
 		settle_kick()
@@ -537,6 +546,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if logic.phase == KickLogic.Phase.RESULT:
 		settle_kick()
+		refresh_view()
+		return
+	if logic.phase == KickLogic.Phase.POWER and logic.windup_left <= 0.0000001:
+		# Resolved in _process with this frame's delta, so a press on the
+		# step that reaches MAX locks P=100 instead of shanking.
+		_power_press_queued = true
 		refresh_view()
 		return
 	logic.press_space()

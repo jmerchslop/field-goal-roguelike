@@ -47,6 +47,7 @@ func _run() -> void:
 	_check_menus()
 	_check_endless_and_farm()
 	_check_new_kickers()
+	_check_auto_shank()
 
 
 func check(ok: bool, label: String) -> void:
@@ -100,8 +101,8 @@ func _check_meter_motion() -> void:
 	var quarter := MeterGauge.omega_power(kick.stats.power_speed, kick.stats.ball_speed_mult) * 0.25 * (100.0 / MeterGauge.OMEGA0)
 	check(near(kick.power_true, quarter), "a quarter second of the new baseline covers %s power, got %s" % [quarter, kick.power_true])
 	kick.advance(0.75)
-	check(kick.phase == KickLogic.Phase.ACCURACY, "reaching MAX starts the accuracy sweep")
-	check(near(kick.power, 100.0), "power locks itself at 100")
+	check(kick.shanked and kick.phase == KickLogic.Phase.FLIGHT, "reaching MAX with no Space #2 shanks")
+	check(kick.power == 0.0 and kick.phase != KickLogic.Phase.ACCURACY, "a missed power click is not a P=100 lock")
 	var during_flight := _kick_power_accuracy(40.0, 0.0)
 	var power_before := during_flight.power
 	check(during_flight.phase == KickLogic.Phase.FLIGHT, "locking accuracy launches the ball")
@@ -131,8 +132,8 @@ func _check_pendulum() -> void:
 	check(near(sweep.power_true, 50.0) and near(sweep.needle_angle, 135.0), "halfway through the power sweep, P is 50 (angle %s, P %s)" % [sweep.needle_angle, sweep.power_true])
 	check(near(started - sweep.needle_angle, MeterGauge.omega_base() * half_time), "accuracy 100 sweeps at ω_ref, not the old ω0")
 	sweep.advance(half_time)
-	check(sweep.phase == KickLogic.Phase.ACCURACY and near(sweep.power, 100.0), "POWER to MAX takes 1/1.15s and locks P=100")
-	check(sweep.needle_angle <= 90.0001, "P=100 begins the right arc, angle %s" % sweep.needle_angle)
+	check(sweep.shanked and sweep.phase == KickLogic.Phase.FLIGHT and sweep.phase != KickLogic.Phase.ACCURACY, "POWER to MAX with no Space #2 shanks instead of locking P=100")
+	check(sweep.needle_angle <= 90.0001 and sweep.power == 0.0, "the shank stops at MAX and does not store a power lock, angle %s" % sweep.needle_angle)
 	var mid := KickLogic.new()
 	mid.press_space()
 	mid.advance(mid.windup_left)
@@ -155,7 +156,9 @@ func _check_pendulum() -> void:
 	var paced := KickLogic.new()
 	paced.press_space()
 	paced.advance(paced.windup_left)
-	paced.advance(MeterGauge.SWEEP_SEC)
+	paced.advance(paced.seconds_to_power(40.0))
+	paced.press_space()
+	paced.advance(paced.seconds_until_error(12.0))
 	for _i in 4:
 		samples.append(paced.needle_angle)
 		paced.advance(0.2)
@@ -225,7 +228,7 @@ func _check_pendulum() -> void:
 	check(near(bruce.stats.accuracy_speed, walk.stats.accuracy_speed), "Big Bruce uses the default accuracy needle")
 	check(near(bruce.stats.red_tip_start, 95.0) and near(walk.stats.red_tip_start, 95.0), "Big Bruce uses the default red tip")
 	check(KickConstants.ACCURACY_DEG_PER_ERROR == 0.35, "degrees per unit of e stay 0.35")
-	check(KickLogic.is_perfect(2.0) and not KickLogic.is_perfect(2.01), "landing inside the perfect band is still PERFECT")
+	check(KickLogic.is_perfect(1.5) and not KickLogic.is_perfect(1.51), "landing inside the perfect band is still PERFECT")
 	var image := Image.create(4, 1, false, Image.FORMAT_RGBA8)
 	image.set_pixel(0, 0, Color8(10, 8, 4, 255))
 	image.set_pixel(1, 0, Color8(16, 16, 16, 255))
@@ -292,8 +295,8 @@ func _check_clean_meter_and_accuracy_speed() -> void:
 	var walk_stats := KickerStats.new()
 	Kickers.apply_to(walk_stats, Kickers.WALK_ON)
 	check(near(bruce_stats.accuracy, 90.0) and near(walk_stats.accuracy, 100.0), "Bruce is accuracy 90 and Walk-On is 100")
-	check(near(bruce_stats.perfect_band, 1.8) and near(bruce_stats.good_band, 7.2), "Bruce bands are ±1.80 / ±7.20")
-	check(near(walk_stats.perfect_band, 2.0) and near(walk_stats.good_band, 8.0), "Walk-On bands stay ±2 / ±8")
+	check(near(bruce_stats.perfect_band, 1.35) and near(bruce_stats.good_band, 5.40), "Bruce bands are ±1.35 / ±5.40")
+	check(near(walk_stats.perfect_band, 1.50) and near(walk_stats.good_band, 6.0), "Walk-On bands are ±1.50 / ±6.00")
 	check(near(bruce_stats.power_floor, 80.0) and bruce_stats.ball_type == "farm_ball", "Farm Strength and The Farm Ball are unchanged")
 	check(walk_stats.rerolls_per_run == 2 and walk_stats.ball_type == "standard", "Walk-On still has 2 rerolls and Team-Issue")
 	var farm := KickLogic.drift_at_uprights(10.0, 90.0, 35.0, 0, 0, "farm_ball")
@@ -398,9 +401,9 @@ func _check_clean_meter_and_accuracy_speed() -> void:
 
 
 func _check_perfect_band() -> void:
-	check(KickLogic.is_perfect(0.0) and KickLogic.is_perfect(2.0) and KickLogic.is_perfect(-2.0), "e inside -2..+2 is PERFECT")
-	check(not KickLogic.is_perfect(2.01) and not KickLogic.is_perfect(-2.01), "e just outside 2 is not PERFECT")
-	check(KickLogic.hook_degrees(2.0) == 0.0 and KickLogic.hook_degrees(-2.0) == 0.0, "a perfect e adds 0 degrees")
+	check(KickLogic.is_perfect(0.0) and KickLogic.is_perfect(1.5) and KickLogic.is_perfect(-1.5), "e inside -1.5..+1.5 is PERFECT")
+	check(not KickLogic.is_perfect(1.51) and not KickLogic.is_perfect(-1.51), "e just outside 1.5 is not PERFECT")
+	check(KickLogic.hook_degrees(1.5) == 0.0 and KickLogic.hook_degrees(-1.5) == 0.0, "a perfect e adds 0 degrees")
 	check(near(KickLogic.hook_degrees(4.0), -4.0 * 0.35), "e=+4 hooks left (negative angle)")
 	check(near(KickLogic.hook_degrees(-4.0), 4.0 * 0.35), "e=-4 slices right (positive angle)")
 
@@ -460,7 +463,7 @@ func _check_2_centered_perfect_press() -> void:
 	var expected := RandomNumberGenerator.new()
 	expected.seed = perfect_seed
 	var expected_error := KickLogic.accuracy_with_red_tip(100.0, 0.0, expected)
-	check(near(made.power, 100.0), "check 2 power reached 100 without a second press")
+	check(near(made.power, 100.0), "check 2 a press as the needle reaches MAX locks P=100")
 	check(near(made.needle, 0.0), "check 2 the press is on the green line, needle=%s" % made.needle)
 	check(made.accuracy_error == expected_error, "check 2 the state machine uses the seeded wobble")
 	check(made.perfect and made.result_text == "GOOD", "check 2 seed %s -> PERFECT and GOOD (e=%s)" % [perfect_seed, made.accuracy_error])
@@ -469,18 +472,16 @@ func _check_2_centered_perfect_press() -> void:
 	check(bumped.result_text == "GOOD", "check 2 a centered red-tip kick is still GOOD at 35 yd, got %s" % bumped.result_text)
 	print("INFO  check 2 kept PERFECT with seed %s, e=%s, result=%s" % [perfect_seed, made.accuracy_error, made.result_text])
 	print("INFO  check 2 lost PERFECT with seed %s, e=%s, result=%s" % [bumped_seed, bumped.accuracy_error, bumped.result_text])
-	print("INFO  check 2: P=100 is in the red tip, so a press on 0 stays PERFECT only when the random add is inside -2..+2. At 35 yd a centered kick is still GOOD.")
+	print("INFO  check 2: P=100 is in the red tip, so a press on 0 stays PERFECT only when the random add is inside the perfect band. At 35 yd a centered kick is still GOOD.")
 
 
 func _drive_check2(seed_value: int) -> KickLogic:
 	var kick := KickLogic.new()
 	kick.set_seed(seed_value)
 	kick.press_space()
-	var guard := 0
-	while kick.phase == KickLogic.Phase.POWER and guard < 600:
-		kick.advance(1.0 / 60.0)
-		guard += 1
-	check(kick.phase == KickLogic.Phase.ACCURACY and near(kick.power, 100.0), "check 2 needle climbed to 100 on its own")
+	kick.advance(kick.windup_left)
+	kick.take_power_press(kick.seconds_to_power(100.0))
+	check(not kick.shanked and kick.phase == KickLogic.Phase.ACCURACY and near(kick.power, 100.0), "check 2 a press on the MAX step locks P=100")
 	kick.advance(kick.seconds_until_error(0.0))
 	check(near(kick.needle, 0.0, 0.02), "check 2 the right-arc center is e=0, got %s" % kick.needle)
 	if kick.phase == KickLogic.Phase.ACCURACY:
@@ -924,7 +925,7 @@ func _check_upgrade_effects() -> void:
 	var pinpoint := RunLogic.new()
 	pinpoint.new_run()
 	pinpoint.give(Loadout.PINPOINT, 1)
-	check(near(pinpoint.stats.perfect_band, 4.0) and near(pinpoint.stats.good_band, 11.0), "Pinpoint Cleats I widens the bands")
+	check(near(pinpoint.stats.perfect_band, 3.5) and near(pinpoint.stats.good_band, 9.0), "Pinpoint Cleats I widens the bands to ±3.5 / ±9")
 	var bench := RunLogic.new()
 	bench.new_run()
 	bench.attempts = 2
@@ -1020,10 +1021,12 @@ func _swing_to(kick: KickLogic, power_value: float, error_value: float) -> void:
 	kick.press_space()
 	if kick.windup_left > 0.0:
 		kick.advance(kick.windup_left)
-	if power_value > 0.0:
+	if power_value >= KickConstants.METER_MAX - 0.001:
+		kick.take_power_press(kick.seconds_to_power(power_value))
+	elif power_value > 0.0:
 		kick.advance(kick.seconds_to_power(power_value))
-	if kick.phase == KickLogic.Phase.POWER:
-		kick.press_space()
+		if kick.phase == KickLogic.Phase.POWER:
+			kick.press_space()
 	if kick.phase == KickLogic.Phase.ACCURACY:
 		var wait := kick.seconds_until_error(error_value)
 		if wait > 0.0:
@@ -1438,7 +1441,7 @@ func _check_weather_and_bosses() -> void:
 	game.prepare_kick_stats()
 	check(near(game.stats.power_speed, KickConstants.POWER_RISE_PER_SEC), "check 9 big game restores base power speed, got %s" % game.stats.power_speed)
 	check(near(game.stats.accuracy_speed, KickConstants.ACCURACY_FALL_PER_SEC), "check 9 Big Bruce keeps the default accuracy speed")
-	check(near(game.stats.perfect_band, 1.8) and near(game.stats.good_band, 7.2), "check 9 Big Game keeps Bruce bands at ±1.80 and ±7.20")
+	check(near(game.stats.perfect_band, 1.35) and near(game.stats.good_band, 5.40), "check 9 Big Game keeps Bruce bands at ±1.35 and ±5.40")
 	check(near(game.stats.red_tip_start, 95.0) and near(game.stats.red_tip_noise, 5.0) and near(game.stats.power_floor, 80.0), "check 9 Big Game keeps Farm Strength and the default red tip")
 	check(not game.stats.ice_veins, "Big Game turns off Ice Cage's red-tip help")
 	check(game.has_ice_cage(), "Ice Cage is still owned on Big Game")
@@ -1802,9 +1805,9 @@ func _check_rank_caps_and_range() -> void:
 	var pins := RunLogic.new()
 	pins.new_run()
 	pins.give(Loadout.PINPOINT, 4)
-	check(near(pins.stats.perfect_band, 2.0 + 8.0) and near(pins.stats.good_band, 8.0 + 12.0), "Pinpoint IV is still +8 PERFECT and +12 good")
+	check(near(pins.stats.perfect_band, 1.5 + 8.0) and near(pins.stats.good_band, 6.0 + 12.0), "Pinpoint IV is still +8 PERFECT and +12 good")
 	pins.give(Loadout.PINPOINT, 6)
-	check(near(pins.stats.perfect_band, 2.0 + 12.0) and near(pins.stats.good_band, 8.0 + 18.0), "Pinpoint VI is +12 PERFECT and +18 good")
+	check(near(pins.stats.perfect_band, 1.5 + 12.0) and near(pins.stats.good_band, 6.0 + 18.0), "Pinpoint VI is +12 PERFECT and +18 good")
 	var anchor := RunLogic.new()
 	anchor.new_run()
 	anchor.give(Loadout.ANCHOR, 4)
@@ -1861,11 +1864,11 @@ func _check_rank_caps_and_range() -> void:
 	var cage := RunLogic.new()
 	cage.new_run()
 	cage.give(Loadout.ICE_CAGE, 4)
-	check(near(cage.stats.perfect_band, 3.0) and near(cage.stats.good_band, 10.0), "Ice Cage IV is still PERFECT +1 and good +2")
+	check(near(cage.stats.perfect_band, 1.5 + 1.0) and near(cage.stats.good_band, 6.0 + 2.0), "Ice Cage IV is still PERFECT +1 and good +2")
 	cage.give(Loadout.ICE_CAGE, 5)
-	check(near(cage.stats.perfect_band, 4.0), "Ice Cage V is PERFECT +2 total")
+	check(near(cage.stats.perfect_band, 1.5 + 2.0), "Ice Cage V is PERFECT +2 total")
 	cage.give(Loadout.ICE_CAGE, 6)
-	check(near(cage.stats.good_band, 12.0), "Ice Cage VI is good +4 total")
+	check(near(cage.stats.good_band, 6.0 + 4.0), "Ice Cage VI is good +4 total")
 	var grip := RunLogic.new()
 	grip.start_with_kicker(Kickers.BIG_BRUCE)
 	grip.give(Loadout.IRON_GRIP, 5)
@@ -2605,9 +2608,9 @@ func _check_new_kickers() -> void:
 	Kickers.apply_to(gary_stats, Kickers.GARY)
 	var vex_stats := KickerStats.new()
 	Kickers.apply_to(vex_stats, Kickers.VEX)
-	check(near(phil_stats.accuracy, 112.0) and near(phil_stats.perfect_band, 2.24) and near(phil_stats.good_band, 8.96), "Phil bands are ±2.24 / ±8.96")
-	check(near(gary_stats.accuracy, 98.0) and near(gary_stats.perfect_band, 1.96) and near(gary_stats.good_band, 7.84), "Gary bands are ±1.96 / ±7.84")
-	check(near(vex_stats.accuracy, 94.0) and near(vex_stats.perfect_band, 1.88) and near(vex_stats.good_band, 7.52), "Vex bands are ±1.88 / ±7.52")
+	check(near(phil_stats.accuracy, 112.0) and near(phil_stats.perfect_band, 1.68) and near(phil_stats.good_band, 6.72), "Phil bands are ±1.68 / ±6.72")
+	check(near(gary_stats.accuracy, 98.0) and near(gary_stats.perfect_band, 1.47) and near(gary_stats.good_band, 5.88), "Gary bands are ±1.47 / ±5.88")
+	check(near(vex_stats.accuracy, 94.0) and near(vex_stats.perfect_band, 1.41) and near(vex_stats.good_band, 5.64), "Vex bands are ±1.41 / ±5.64")
 	check(near(phil_stats.range_base + phil_stats.range_per_power * 100.0, 55.0), "Phil at P=100 with no items is 55 yards")
 	check(near(gary_stats.range_base + gary_stats.range_per_power * 100.0, 65.0), "Gary at P=100 with no items is 65 yards")
 	check(gary_stats.ball_type == "standard" and phil_stats.ball_type == "standard" and vex_stats.ball_type == "standard", "the new kickers use default wind, not the Farm Ball")
@@ -2758,4 +2761,139 @@ func _check_new_kickers() -> void:
 	check(not records.has_unlock(Kickers.PHIL) and not records.has_unlock(Kickers.GARY) and not records.has_unlock(Kickers.VEX), "F9 twice wipes the new unlocks")
 	records.file_path = kept
 	records.load_file()
+
+
+func _measure_accuracy_sweep(id: String) -> float:
+	var kick := KickLogic.new()
+	Kickers.apply_to(kick.stats, id)
+	kick.press_space()
+	kick.advance(kick.windup_left)
+	kick.advance(kick.seconds_to_power(50.0))
+	if kick.phase == KickLogic.Phase.POWER:
+		kick.press_space()
+	kick.advance(kick.seconds_until_error(15.0))
+	var step := 0.0002
+	var elapsed := 0.0
+	while kick.phase == KickLogic.Phase.ACCURACY and elapsed < 3.0:
+		kick.advance(step)
+		elapsed += step
+	return elapsed
+
+
+func _check_auto_shank() -> void:
+	var saw_left := false
+	var saw_right := false
+	for seed_value in 24:
+		var kick := KickLogic.new()
+		kick.set_seed(seed_value)
+		Kickers.apply_to(kick.stats, Kickers.BIG_BRUCE)
+		kick.press_space()
+		kick.advance(kick.windup_left)
+		var saw_accuracy := false
+		var elapsed := 0.0
+		while kick.phase == KickLogic.Phase.POWER and elapsed < 2.0:
+			kick.advance(0.01)
+			elapsed += 0.01
+			if kick.phase == KickLogic.Phase.ACCURACY:
+				saw_accuracy = true
+		check(not saw_accuracy and kick.shanked and kick.phase == KickLogic.Phase.FLIGHT, "seed %s shanks without an accuracy phase" % seed_value)
+		check(kick.result_text.begins_with("WIDE"), "seed %s shank is WIDE, got %s" % [seed_value, kick.result_text])
+		check(absf(kick.offset_yards) > kick.post_half_gap + KickConstants.DOINK_BAND_YARDS, "seed %s misses the posts, offset %s" % [seed_value, kick.offset_yards])
+		check(kick.power == 0.0, "a shank does not store a power lock")
+		var full := kick.stats.range_base + kick.stats.range_per_power * 100.0
+		var floored := kick.stats.range_base + kick.stats.range_per_power * kick.stats.power_floor
+		check(near(kick.max_range, full), "Bruce shank flies at raw P=100 (%s), not a floored lock" % kick.max_range)
+		check(kick.detail_line().begins_with("SHANK, full power"), "the result line does not call a shank a power lock")
+		check(not near(kick.max_range, floored), "Farm Strength does not turn the missed click into a P=80 lock")
+		check(near(absf(kick.accuracy_error), 15.0), "red-tip noise is not applied to a shank")
+		if kick.result_text == "WIDE LEFT":
+			saw_left = true
+		elif kick.result_text == "WIDE RIGHT":
+			saw_right = true
+		if saw_left and saw_right and seed_value > 2:
+			break
+	check(saw_left and saw_right, "shanks pick left and right")
+	var locked := KickLogic.new()
+	Kickers.apply_to(locked.stats, Kickers.WALK_ON)
+	locked.set_seed(3)
+	locked.press_space()
+	locked.advance(locked.windup_left)
+	locked.take_power_press(locked.seconds_to_power(100.0))
+	check(not locked.shanked and locked.phase == KickLogic.Phase.ACCURACY and near(locked.power, 100.0), "Space #2 on the step that reaches MAX locks P=100")
+	var exact := KickLogic.new()
+	exact.press_space()
+	exact.advance(exact.windup_left)
+	exact.needle_angle = MeterGauge.MAX_ANGLE
+	exact.press_space()
+	check(not exact.shanked and exact.phase == KickLogic.Phase.ACCURACY and near(exact.power, 100.0), "Space #2 exactly at MAX is P=100, not a shank")
+	var practice := RunLogic.new()
+	practice.start_with_kicker(Kickers.WALK_ON)
+	practice.stats.practice_per_quarter = 1
+	practice.practice_left = 1
+	var attempts_before := practice.attempts
+	var kick_before := practice.kick_number
+	check(practice.start_practice(), "a practice swing can start")
+	var swing := KickLogic.new()
+	swing.stats = practice.stats
+	swing.press_space()
+	swing.advance(swing.windup_left)
+	swing.advance(swing.seconds_to_power(100.0) + 0.05)
+	check(swing.shanked and swing.phase == KickLogic.Phase.FLIGHT, "practice shank does not enter the accuracy phase")
+	check(swing.result_text.begins_with("WIDE"), "practice shank is a wide miss, got %s" % swing.result_text)
+	practice.end_practice()
+	check(not practice.practicing and practice.attempts == attempts_before and practice.kick_number == kick_before, "ending the practice shank does not spend an attempt or advance")
+	var missed := RunLogic.new()
+	missed.start_with_kicker(Kickers.BIG_BRUCE)
+	missed.streak = 4
+	missed.stats.lucky_ball = true
+	missed.stats.gelcap = true
+	missed.stats.good_as_gold = true
+	missed.active_vitamins[Vitamins.PROTEIN] = 1
+	missed.is_first_ball = true
+	missed.attempts = 2
+	var before_attempts := missed.attempts
+	var shank := KickLogic.new()
+	shank.set_seed(2)
+	shank.stats = missed.stats
+	shank.kick_distance = missed.distance_yards()
+	shank.press_space()
+	shank.advance(shank.windup_left)
+	shank.advance(shank.seconds_to_power(100.0) + 0.02)
+	missed.resolve_kick(shank.result_text, shank.offset_yards, shank.perfect)
+	check(not shank.perfect and missed.streak == 0, "a shank resets the streak and is not perfect")
+	check(missed.attempts == before_attempts - 1, "a shank spends one attempt")
+	check(missed.kick_number == 1 and not missed.last_result_made and not missed.wants_upgrade(), "a shank does not advance and offers no card")
+	check(missed.lucky_stacks == 0 and missed.score == 0 and missed.last_points == 0, "Lucky Ball, Gelcap, and Good As Gold do not pay on a shank")
+	check(missed.phase == RunLogic.Phase.PLAYING and missed.begin_retry() and missed.kick_number == 1, "attempts left means the same kick comes back")
+	var over := RunLogic.new()
+	over.start_with_kicker(Kickers.WALK_ON)
+	over.resolve_kick("WIDE LEFT", -8.0, false)
+	check(over.attempts == 0 and over.phase == RunLogic.Phase.GAME_OVER, "a shank with no attempts left is GAME OVER")
+	var walk := RunLogic.new()
+	walk.start_with_kicker(Kickers.WALK_ON)
+	walk.give(Loadout.PINPOINT, 1)
+	check(near(walk.stats.perfect_band, 3.5) and near(walk.stats.good_band, 9.0), "Pinpoint I on Walk-On is ±3.5 / ±9")
+	var tight := RunLogic.new()
+	tight.start_with_kicker(Kickers.WALK_ON)
+	tight.give(Loadout.TIGHT)
+	check(near(tight.stats.perfect_band, 1.0) and near(tight.stats.good_band, 4.0), "Tight Window on Walk-On is ±1 / ±4")
+	var ratings := {
+		Kickers.PHIL: 112.0,
+		Kickers.WALK_ON: 100.0,
+		Kickers.GARY: 98.0,
+		Kickers.VEX: 94.0,
+		Kickers.BIG_BRUCE: 90.0,
+	}
+	for id in ratings.keys():
+		var stats := KickerStats.new()
+		Kickers.apply_to(stats, id)
+		var accuracy: float = ratings[id]
+		check(near(stats.accuracy, accuracy), "%s accuracy stays %s" % [id, accuracy])
+		check(near(stats.perfect_band, 1.5 * accuracy / 100.0) and near(stats.good_band, 6.0 * accuracy / 100.0), "%s bands follow 1.5 / 6" % id)
+		check(near(_measure_power_sweep(id), 0.700, 0.002), "%s POWER to MAX is still 0.700s" % id)
+	var accuracy_time := _measure_accuracy_sweep(Kickers.WALK_ON)
+	var accuracy_expected := 90.0 / MeterGauge.omega_accuracy(120.0, 1.0)
+	print("ACCURACY_SWEEP Walk-On ", accuracy_time, " current formula ", accuracy_expected)
+	check(near(accuracy_time, accuracy_expected, 0.002), "accuracy-phase time stays on the current formula, measured %s" % accuracy_time)
+	check(near(accuracy_time, 0.700, 0.002), "the current accuracy sweep is 0.700s, not a new target")
 
