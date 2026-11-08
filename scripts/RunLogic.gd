@@ -23,6 +23,9 @@ const SQUEEZE_HALF := 2.585
 const DEBUG_SPOTS: Array = [-6.0, -3.0, 0.0, 3.0, 6.0]
 
 var phase: Phase = Phase.PLAYING
+# "standard" is the 20-kick season. "endless" is stored for a later prompt.
+# This prompt still ends the run after kick 20 either way.
+var run_mode := "standard"
 var kick_number := 1
 var attempts := KickConstants.ATTEMPTS_START
 var attempt_cap := KickConstants.ATTEMPT_CAP

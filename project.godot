@@ -21,6 +21,7 @@ window/stretch/aspect="keep"
 [autoload]
 
 SaveData="*res://scripts/SaveData.gd"
+Settings="*res://scripts/Settings.gd"
 
 [rendering]
 

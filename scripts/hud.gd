@@ -9,7 +9,17 @@ var game
 func _draw() -> void:
 	if game == null:
 		return
-	if game.showing_records:
+	var front: FrontEnd = game.front
+	if front != null and front.screen == FrontEnd.Screen.TITLE:
+		_draw_title(front)
+		return
+	if front != null and front.screen == FrontEnd.Screen.MAIN:
+		_draw_main_menu(front)
+		return
+	if front != null and front.screen == FrontEnd.Screen.OPTIONS:
+		_draw_options(front)
+		return
+	if game.showing_records or (front != null and front.screen == FrontEnd.Screen.RECORDS):
 		_draw_records()
 		_draw_save_note()
 		return
@@ -206,20 +216,22 @@ func _draw_hud(logic: KickLogic, run: RunLogic) -> void:
 			names += Loadout.piece_name(str(id))
 		_text_centered(names, 286.0, 18, Color(0.72, 0.4, 0.95))
 	var hint := ""
-	if run.phase == RunLogic.Phase.GAME_OVER or run.phase == RunLogic.Phase.WIN or run.accepts_restart():
-		hint = "R: choose a kicker"
+	if run.phase == RunLogic.Phase.GAME_OVER or run.phase == RunLogic.Phase.WIN:
+		hint = ""
+	elif run.accepts_restart():
+		hint = "R: choose a kicker    Esc: main menu"
 	elif logic.phase == KickLogic.Phase.AIMING:
-		hint = "Hold Left or Right to aim.   Space starts the meter."
+		hint = "Hold %s or %s to aim.   %s starts the meter." % [Settings.key_label("aim_left"), Settings.key_label("aim_right"), Settings.key_label("confirm")]
 		if run.can_practice():
 			hint += "   P: practice."
 		elif run.practicing:
 			hint += "   Practice swing."
 	elif logic.phase == KickLogic.Phase.POWER:
-		hint = "Space locks power."
+		hint = "%s locks power." % Settings.key_label("confirm")
 	elif logic.phase == KickLogic.Phase.ACCURACY:
-		hint = "Space locks accuracy."
+		hint = "%s locks accuracy." % Settings.key_label("confirm")
 	elif logic.phase == KickLogic.Phase.RESULT:
-		hint = "Space: continue."
+		hint = "%s: continue." % Settings.key_label("confirm")
 	if hint != "" and not run.awaiting_offer and not run.awaiting_mulligan and not run.curse_prompt:
 		_text_centered(hint, 708.0, 18, KickConstants.COLOR_TEXT)
 
@@ -413,7 +425,7 @@ func _draw_offer(run: RunLogic) -> void:
 		_draw_slot_icon(id, rank, slot, Rect2(rect.position + Vector2(14, 28), Vector2(72, 72)), true)
 		_text(rect.position + Vector2(96, 62), Loadout.card_title(id, rank), 18, KickConstants.COLOR_ATTEMPT)
 		_draw_wrapped(Loadout.effect_line(id, rank), Rect2(rect.position + Vector2(96, 84), Vector2(width - 110, 150)), 16)
-	_text_centered("Reroll: %d left    F rerolls    S skips" % run.rerolls_left, 640.0, 18, KickConstants.COLOR_TEXT)
+	_text_centered("Reroll: %d left    %s rerolls    %s skips" % [run.rerolls_left, Settings.key_label("offer_reroll"), Settings.key_label("skip")], 640.0, 18, KickConstants.COLOR_TEXT)
 	_text_centered("Skip takes nothing.", 666.0, 16, KickConstants.COLOR_TEXT)
 
 
@@ -496,7 +508,11 @@ func _draw_end_screen(run: RunLogic) -> void:
 		_text_centered("NEW RECORD!", box.position.y + 150.0, 22, KickConstants.COLOR_ATTEMPT)
 	if run.new_record_long:
 		_text_centered("NEW RECORD!", box.position.y + 230.0, 22, KickConstants.COLOR_ATTEMPT)
-	_text_centered("T: records", box.position.y + 320.0, 16, KickConstants.COLOR_TEXT)
+	var back_line := "%s: trophy room    %s: main menu    R: choose a kicker" % [Settings.key_label("trophy"), Settings.key_label("back")]
+	var back_font := ThemeDB.fallback_font
+	if back_font != null:
+		var back_width := back_font.get_string_size(back_line, HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x
+		_text(Vector2(box.position.x + (box.size.x - back_width) * 0.5, box.position.y + 320.0), back_line, 16, KickConstants.COLOR_TEXT)
 
 
 func _text(at: Vector2, text: String, size: int, color: Color) -> void:
@@ -717,7 +733,7 @@ func _draw_save_note() -> void:
 
 func _draw_records() -> void:
 	draw_rect(Rect2(0, 0, KickConstants.WINDOW_WIDTH, KickConstants.WINDOW_HEIGHT), Color(0.04, 0.07, 0.1, 0.96))
-	_text(Vector2(48, 42), "RECORDS", 32, KickConstants.COLOR_ATTEMPT)
+	_text(Vector2(48, 42), "TROPHY ROOM", 32, KickConstants.COLOR_ATTEMPT)
 	_text(Vector2(48, 78), "Esc: back", 16, KickConstants.COLOR_TEXT)
 	var y := 120.0
 	_text(Vector2(48, y), "Lifetime", 22, KickConstants.COLOR_TEXT)
@@ -869,7 +885,7 @@ func _draw_shop(run: RunLogic) -> void:
 	draw_rect(b12, Color(0.08, 0.08, 0.08, 0.9) if grey else Color(0.16, 0.12, 0.05, 0.92))
 	draw_rect(b12, Color(0.45, 0.45, 0.45) if grey else Color(0.95, 0.82, 0.28), false, 3.0)
 	var b12_price := Color(1.0, 0.3, 0.25) if run.shop_flash == "b12" else (Color(0.7, 0.7, 0.7) if grey else KickConstants.COLOR_ATTEMPT)
-	_text(b12.position + Vector2(16, 32), "4  B12 Shot", 20, Color(0.75, 0.75, 0.75) if grey else KickConstants.COLOR_TEXT)
+	_text(b12.position + Vector2(16, 32), "%s  B12 Shot" % Settings.key_label("buy_b12"), 20, Color(0.75, 0.75, 0.75) if grey else KickConstants.COLOR_TEXT)
 	_text(b12.position + Vector2(16, 64), "$%d" % Vitamins.B12_PRICE, 20, b12_price)
 	_text(b12.position + Vector2(16, 96), Vitamins.effect_line(Vitamins.B12), 16, KickConstants.COLOR_TEXT)
 	if run.shop_b12_bought:
@@ -877,7 +893,214 @@ func _draw_shop(run: RunLogic) -> void:
 	elif run.attempts >= run.attempt_cap:
 		_text(b12.position + Vector2(16, 126), "At cap", 16, Color(0.8, 0.8, 0.8))
 	var reroll_color := Color(1.0, 0.3, 0.25) if run.shop_flash == "reroll" else KickConstants.COLOR_TEXT
-	_text(Vector2(36, 64), "Reroll (F): $%d" % run.shop_reroll_price, 16, reroll_color)
+	_text(Vector2(36, 64), "Reroll (%s): $%d" % [Settings.key_label("shop_reroll"), run.shop_reroll_price], 16, reroll_color)
 	if run.shop_note != "":
 		_text(Vector2(36, 92), run.shop_note, 18, Color(1.0, 0.45, 0.35))
-	_text_centered("1/2/3 buy  4 B12  Z/X sell  F reroll  Space leave", 704.0, 18, KickConstants.COLOR_TEXT)
+	_text_centered("%s/%s/%s buy  %s B12  %s/%s sell  %s reroll  %s leave" % [
+		Settings.key_label("choose_1"), Settings.key_label("choose_2"), Settings.key_label("choose_3"),
+		Settings.key_label("buy_b12"), Settings.key_label("belt_z"), Settings.key_label("belt_x"),
+		Settings.key_label("shop_reroll"), Settings.key_label("confirm"),
+	], 704.0, 18, KickConstants.COLOR_TEXT)
+
+
+var _menu_textures := {}
+
+
+func _menu_window() -> Vector2:
+	if size.x > 2.0 and size.y > 2.0:
+		return size
+	return Vector2(KickConstants.WINDOW_WIDTH, KickConstants.WINDOW_HEIGHT)
+
+
+func _menu_texture(which: String) -> Texture2D:
+	if _menu_textures.has(which):
+		return _menu_textures[which]
+	var names: Array = ["title.png", "title_screen.png", "press_start.png", "overtime_2000_title.png"]
+	if which == "main":
+		names = ["main_menu.png", "menu.png", "menu_background.png"]
+	elif which == "options":
+		names = ["options.png", "options_menu.png"]
+	elif which == "endless":
+		names = ["endless_unlocked.png"]
+	var path := MenuLayout.find_texture_path(names)
+	if path == "":
+		_menu_textures[which] = null
+		return null
+	var loaded := load(path) as Texture2D
+	if which == "options" and loaded != null:
+		var image := loaded.get_image()
+		if image != null:
+			_strip_confirm_outline(image)
+			loaded = ImageTexture.create_from_image(image)
+	_menu_textures[which] = loaded
+	return loaded
+
+
+func _strip_confirm_outline(image: Image) -> void:
+	# The painting bakes a white selection ring on CONFIRM / KICK. Drop only that ring.
+	image.convert(Image.FORMAT_RGBA8)
+	var bytes := image.get_data()
+	var width := image.get_width()
+	var height := image.get_height()
+	for y in range(180, 220):
+		if y < 0 or y >= height:
+			continue
+		for x in range(486, 872):
+			if x < 0 or x >= width:
+				continue
+			if x >= 508 and x <= 846 and y >= 194 and y <= 210:
+				continue
+			var offset := (y * width + x) * 4
+			var red := int(bytes[offset])
+			var green := int(bytes[offset + 1])
+			var blue := int(bytes[offset + 2])
+			if red > 210 and green > 210 and blue > 210:
+				bytes[offset] = 42
+				bytes[offset + 1] = 42
+				bytes[offset + 2] = 46
+	image.set_data(width, height, false, Image.FORMAT_RGBA8, bytes)
+
+
+func _draw_cover(texture: Texture2D) -> void:
+	var window := _menu_window()
+	if texture == null:
+		draw_rect(Rect2(Vector2.ZERO, window), Color(0.03, 0.03, 0.04))
+		return
+	draw_texture_rect(texture, MenuLayout.cover_rect(window, texture.get_size()), false)
+
+
+func _draw_round_outline(pixel_rect: Rect2, window: Vector2, image: Vector2) -> void:
+	var rect := MenuLayout.screen_rect(pixel_rect, window, image)
+	var radius := clampf(minf(rect.size.x, rect.size.y) * 0.08, 6.0, 18.0)
+	var points := PackedVector2Array()
+	var centers := [
+		rect.position + Vector2(radius, radius),
+		rect.position + Vector2(rect.size.x - radius, radius),
+		rect.position + Vector2(rect.size.x - radius, rect.size.y - radius),
+		rect.position + Vector2(radius, rect.size.y - radius),
+	]
+	var starts := [PI, PI * 1.5, 0.0, PI * 0.5]
+	for corner in 4:
+		for step in 7:
+			var angle: float = float(starts[corner]) + (PI * 0.5) * float(step) / 6.0
+			points.append(centers[corner] + Vector2(cos(angle), sin(angle)) * radius)
+	points.append(points[0])
+	draw_polyline(points, Color(0.97, 0.98, 1.0), 3.0, true)
+
+
+func _draw_title(_front: FrontEnd) -> void:
+	var window := _menu_window()
+	var art := _menu_texture("title")
+	_draw_cover(art)
+	var image := MenuLayout.IMAGE_SIZE if art == null else art.get_size()
+	if art == null:
+		_text_centered("OVERTIME 2000", window.y * 0.42, 64, Color(0.9, 0.9, 0.92))
+	# Brighten and dim the painted letters. Do not draw a second copy of the words.
+	var wave := 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.005)
+	var letters := MenuLayout.screen_rect(Rect2(518, 648, 242, 34), window, image)
+	if wave < 0.5:
+		draw_rect(letters, Color(0, 0, 0, (0.5 - wave) * 1.1))
+	else:
+		draw_rect(letters, Color(1, 1, 1, (wave - 0.5) * 0.55))
+	if art == null:
+		_text_in_rect("PRESS START", MenuLayout.screen_rect(MenuLayout.PRESS_START, window, image), 28, Color.WHITE)
+
+
+func _draw_main_menu(front: FrontEnd) -> void:
+	var window := _menu_window()
+	var art := _menu_texture("main")
+	if front.endless_unlocked():
+		var unlocked := _menu_texture("endless")
+		if unlocked != null:
+			art = unlocked
+	_draw_cover(art)
+	var image := MenuLayout.IMAGE_SIZE if art == null else art.get_size()
+	if art == null:
+		_text_centered("OVERTIME 2000", 180, 48, Color(0.9, 0.9, 0.92))
+	for index in MenuLayout.TILES.size():
+		if index != front.menu_index:
+			continue
+		var tile: Rect2 = MenuLayout.TILES[index]
+		_draw_round_outline(tile, window, image)
+		var band := Rect2(tile.position.x + 14.0, 612.0, tile.size.x - 28.0, 42.0)
+		if index == 2:
+			band = Rect2(tile.position.x + 18.0, 548.0, tile.size.x - 36.0, 124.0)
+		var label_box := MenuLayout.screen_rect(band, window, image)
+		draw_rect(label_box, Color(0.23, 0.23, 0.25))
+		if index == 2:
+			_text_in_rect("TROPHY", Rect2(label_box.position, Vector2(label_box.size.x, label_box.size.y * 0.5)), 18, Color.WHITE)
+			_text_in_rect("ROOM", Rect2(label_box.position + Vector2(0, label_box.size.y * 0.5), Vector2(label_box.size.x, label_box.size.y * 0.5)), 18, Color.WHITE)
+		else:
+			var word := "STANDARD"
+			if index == 1:
+				word = "ENDLESS"
+			elif index == 3:
+				word = "OPTIONS"
+			_text_in_rect(word, label_box, 18, Color.WHITE)
+	if front.endless_unlocked() and _menu_texture("endless") == null and art != null:
+		var tile: Rect2 = MenuLayout.TILES[1]
+		var patch := Rect2(tile.position.x + tile.size.x * 0.28, tile.position.y + 18.0, tile.size.x * 0.44, 96.0)
+		var screen_patch := MenuLayout.screen_rect(patch, window, image)
+		draw_rect(screen_patch, Color(0.27, 0.27, 0.29))
+		_text_in_rect("∞", screen_patch, 40, Color(0.95, 0.78, 0.2))
+	if front.lock_message != "":
+		var banner := MenuLayout.screen_rect(Rect2(360, 430, 560, 40), window, image)
+		draw_rect(banner, Color(0.05, 0.05, 0.06, 0.88))
+		_text_in_rect(front.lock_message, banner, 18, Color(1.0, 0.92, 0.45))
+
+
+func _draw_options(front: FrontEnd) -> void:
+	var window := _menu_window()
+	var art := _menu_texture("options")
+	_draw_cover(art)
+	var image := MenuLayout.IMAGE_SIZE if art == null else art.get_size()
+	if art == null:
+		_text_centered("OPTIONS", 48, 32, Color.WHITE)
+	var panel := Color(0.16, 0.16, 0.18, 1.0)
+	for index in 3:
+		var track: Rect2 = MenuLayout.SLIDERS[index]
+		draw_rect(MenuLayout.screen_rect(track, window, image), panel)
+		var which := front.slider_id(index)
+		var value := Settings.volume_of(which)
+		draw_rect(MenuLayout.screen_rect(MenuLayout.slider_fill(index, float(value)), window, image), Color(0.93, 0.72, 0.18))
+		draw_rect(MenuLayout.screen_rect(MenuLayout.slider_handle(index, float(value)), window, image), Color(0.78, 0.78, 0.82))
+		var number: Rect2 = MenuLayout.SLIDER_NUMBERS[index]
+		var number_screen := MenuLayout.screen_rect(number, window, image)
+		draw_rect(number_screen, panel)
+		_text_in_rect(str(value), number_screen, 18, Color(0.98, 0.84, 0.22))
+	for row_index in Settings.ACTION_ROWS.size():
+		var row: Dictionary = Settings.ACTION_ROWS[row_index]
+		var plate := MenuLayout.bind_rect(int(row["column"]), int(row["row"]))
+		var key_box := MenuLayout.key_plate(plate)
+		var key_screen := MenuLayout.screen_rect(key_box, window, image)
+		draw_rect(key_screen, Color(0.22, 0.22, 0.24))
+		var action_id := str(row["id"])
+		var label := "Press a key..." if front.rebinding == action_id else Settings.key_label(action_id)
+		_text_in_rect(label, key_screen, 14, Color(0.94, 0.94, 0.96))
+	if front.focus >= 0 and front.focus < front.focus_count():
+		_draw_round_outline(_focus_pixel_rect(front), window, image)
+	if front.notice != "":
+		var banner := MenuLayout.screen_rect(Rect2(760, 150, 280, 36), window, image)
+		draw_rect(banner, Color(0.35, 0.08, 0.08, 0.92))
+		_text_in_rect(front.notice, banner, 18, Color(1.0, 0.85, 0.4))
+
+
+func _focus_pixel_rect(front: FrontEnd) -> Rect2:
+	var index := front.focus
+	if index < 3:
+		return MenuLayout.SLIDERS[index]
+	if index < 3 + Settings.ACTION_ROWS.size():
+		var row: Dictionary = Settings.ACTION_ROWS[index - 3]
+		return MenuLayout.bind_rect(int(row["column"]), int(row["row"]))
+	if index == front.focus_count() - 2:
+		return MenuLayout.RESET_BUTTON
+	return MenuLayout.BACK_BUTTON
+
+
+func _text_in_rect(text: String, rect: Rect2, size: int, color: Color) -> void:
+	var font := ThemeDB.fallback_font
+	if font == null or text == "":
+		return
+	var width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
+	var at := rect.position + Vector2((rect.size.x - width) * 0.5, rect.size.y * 0.72)
+	_text(at, text, size, color)

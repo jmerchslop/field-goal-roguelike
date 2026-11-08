@@ -44,6 +44,7 @@ func _run() -> void:
 	_check_rank_caps_and_range()
 	_check_vitamin_shop()
 	_check_sprite_scan_and_gauge()
+	_check_menus()
 
 
 func check(ok: bool, label: String) -> void:
@@ -2123,4 +2124,131 @@ func _check_sprite_scan_and_gauge() -> void:
 	check(float(wide["perfect_span"]) > float(plain["perfect_span"]), "a bigger PERFECT band takes a wider wedge")
 	check(float(tight["perfect_span"]) < float(plain["perfect_span"]), "Tight Window draws a tighter PERFECT wedge")
 	check(MeterGauge.is_red_tip(96.0, 95.0) and not MeterGauge.is_red_tip(90.0, 95.0), "the red-tip glow follows the live threshold and does not change the angle math")
+
+
+func _check_menus() -> void:
+	var boot := FrontEnd.new()
+	check(boot.screen == FrontEnd.Screen.TITLE, "boot state is the title screen")
+	boot.confirm_title()
+	check(boot.screen == FrontEnd.Screen.MAIN and boot.menu_index == 0, "confirm on the title opens the main menu")
+	var clicked := FrontEnd.new()
+	clicked.confirm_title()
+	check(clicked.screen == FrontEnd.Screen.MAIN, "a click on the title opens the main menu")
+	var anywhere := FrontEnd.new()
+	anywhere.confirm_title()
+	check(anywhere.screen == FrontEnd.Screen.MAIN, "a click elsewhere on the title opens the main menu")
+	var rooted := FrontEnd.new()
+	rooted.back_title()
+	check(rooted.screen == FrontEnd.Screen.TITLE, "Esc on the title stays on the title")
+	var menu := FrontEnd.new()
+	menu.confirm_title()
+	menu.move_menu(1)
+	check(menu.menu_index == 1, "Right moves from Standard to Endless")
+	menu.move_menu(1)
+	check(menu.menu_index == 2, "Right moves to Trophy Room")
+	menu.move_menu(1)
+	check(menu.menu_index == 3, "Right moves to Options")
+	menu.menu_index = 0
+	check(menu.confirm_menu() == "select" and menu.run_mode == "standard" and menu.screen == FrontEnd.Screen.SELECT, "Standard sets run_mode and opens character select")
+	menu.back_select()
+	check(menu.screen == FrontEnd.Screen.MAIN, "Esc from character select returns to the main menu")
+	menu.back_main()
+	check(menu.screen == FrontEnd.Screen.TITLE, "Esc from the main menu returns to the title")
+	var records = get_root().get_node("SaveData")
+	var kept_path := str(records.file_path)
+	var options: Variant = get_root().get_node("Settings")
+	var kept_settings := str(options.file_path)
+	records.file_path = "user://fg_menu_save.cfg"
+	records.reset_save()
+	options.file_path = "user://fg_menu_settings.cfg"
+	options.music = 100
+	options.crowd = 100
+	options.sfx = 100
+	options.reset_controls()
+	options.save_file()
+	var locked := FrontEnd.new()
+	locked.confirm_title()
+	locked.menu_index = 1
+	check(not locked.endless_unlocked(), "a fresh save keeps Endless locked")
+	check(locked.confirm_menu() == "locked" and locked.screen == FrontEnd.Screen.MAIN, "confirming locked Endless stays on the menu")
+	check(locked.lock_message == FrontEnd.LOCK_TEXT, "locked Endless says to beat Standard mode")
+	records.wins = 1
+	check(locked.endless_unlocked(), "lifetime.wins >= 1 unlocks Endless")
+	locked.menu_index = 1
+	check(locked.confirm_menu() == "select" and locked.run_mode == "endless" and locked.screen == FrontEnd.Screen.SELECT, "unlocked Endless sets run_mode and opens character select")
+	records.wins = 0
+	records.trophies["season_complete"] = true
+	check(FrontEnd.new().endless_unlocked(), "the season_complete trophy unlocks Endless")
+	records.reset_save()
+	check(not FrontEnd.new().endless_unlocked(), "F9 save reset locks Endless again")
+	var season := RunLogic.new()
+	season.run_mode = "endless"
+	season.kick_number = 20
+	season.attempts = 2
+	season.resolve_kick("GOOD", 0.0, true)
+	check(season.phase == RunLogic.Phase.WIN and RunTable.count() == 20, "endless still ends after the 20-kick season")
+	var trophy := FrontEnd.new()
+	trophy.confirm_title()
+	trophy.menu_index = 2
+	check(trophy.confirm_menu() == "records" and trophy.screen == FrontEnd.Screen.RECORDS, "Trophy Room opens the records screen")
+	trophy.back_records()
+	check(trophy.screen == FrontEnd.Screen.MAIN, "Esc from Trophy Room opened at the menu returns to the menu")
+	var over := FrontEnd.new()
+	over.screen = FrontEnd.Screen.PLAY
+	over.open_records(FrontEnd.Screen.PLAY)
+	over.back_records()
+	check(over.screen == FrontEnd.Screen.PLAY, "Esc from Trophy Room opened on GAME OVER returns there")
+	check(options.music == 100 and options.crowd == 100 and options.sfx == 100, "audio defaults are 100/100/100")
+	options.set_volume("music", 40)
+	check(options.music == 40, "Music accepts 40")
+	check(near(options.bus_volume_db("Music"), options.volume_db(40), 0.05), "Music 40 is on the Music bus, got %s" % options.bus_volume_db("Music"))
+	check(not options.bus_is_muted("Music"), "Music 40 is not muted")
+	options.set_volume("music", 0)
+	check(options.bus_is_muted("Music"), "Music 0 mutes the bus")
+	options.set_volume("music", 40)
+	options.load_file()
+	check(options.music == 40 and options.crowd == 100 and options.sfx == 100, "settings.cfg reloads the saved Music volume")
+	check(options.defaults_match_table(), "keybind defaults match the options table")
+	var before := _key_event(KEY_LEFT)
+	check(options.pressed_event(before, "aim_left"), "Aim Left starts on Left")
+	check(options.try_rebind("aim_left", KEY_A) == "ok", "rebinding Aim Left to A is accepted")
+	check(options.key_label("aim_left") == "A", "the Aim Left label shows A")
+	check(options.pressed_event(_key_event(KEY_A), "aim_left"), "InputMap aim_left is now A")
+	check(not options.pressed_event(_key_event(KEY_LEFT), "aim_left"), "Left no longer aims after the rebind")
+	check(options.try_rebind("confirm", KEY_1) == "used", "binding Confirm / Kick to 1 is rejected")
+	check(options.key_label("confirm") == "SPACE", "Confirm stays on Space after the rejection")
+	options.reset_controls()
+	check(options.key_label("aim_left") == "LEFT" and options.pressed_event(_key_event(KEY_LEFT), "aim_left"), "Reset Controls restores Aim Left")
+	records.reset_save()
+	options.load_file()
+	check(options.music == 40 and options.key_label("aim_left") == "LEFT", "F9 does not wipe settings.cfg")
+	var source := FileAccess.get_file_as_string("res://scripts/main.gd")
+	check(source.find("Settings.pressed_event") >= 0 and source.find("Settings.held") >= 0, "gameplay reads InputMap actions")
+	check(source.find("keycode == KEY_SPACE") < 0 and source.find("keycode == KEY_Z") < 0, "meter, belt, and shop keys are not leftover hardcoded checks")
+	check(source.find("KEY_F9") >= 0 and source.find("KEY_C") >= 0 and source.find("KEY_W") >= 0, "debug C, W, and F9 stay hardcoded")
+	var image := MenuLayout.IMAGE_SIZE
+	var gap := Vector2(342.0, 585.0)
+	check(MenuLayout.tile_at(gap, image, image) == -1, "the dark gap between Standard and Endless is not a tile")
+	var wide := Vector2(2000, 720)
+	for index in 4:
+		var center := MenuLayout.screen_rect(MenuLayout.TILES[index], wide, image).get_center()
+		check(MenuLayout.tile_at(center, wide, image) == index, "tile %d still hits after the window widens" % index)
+	var square := Vector2(900, 900)
+	var standard := MenuLayout.screen_rect(MenuLayout.TILES[0], square, image).get_center()
+	check(MenuLayout.tile_at(standard, square, image) == 0, "a square window still hits the Standard plate")
+	check(MenuLayout.find_texture_path(["title.png"]) != "", "title.png is imported")
+	check(MenuLayout.find_texture_path(["main_menu.png"]) != "", "main_menu.png is imported")
+	check(MenuLayout.find_texture_path(["options.png"]) != "", "options.png is imported")
+	records.file_path = kept_path
+	options.file_path = kept_settings
+	options.load_file()
+	options.apply_all()
+
+
+func _key_event(code: Key) -> InputEventKey:
+	var event := InputEventKey.new()
+	event.keycode = code
+	event.pressed = true
+	event.echo = false
+	return event
 

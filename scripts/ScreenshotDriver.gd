@@ -12,6 +12,8 @@ func _ready() -> void:
 		print("Could not create ", shot_dir)
 		get_tree().quit(1)
 		return
+	board.front.screen = FrontEnd.Screen.SELECT
+	board.selecting = true
 	board.highlight = 0
 	if not await _capture("kicker_select.png"):
 		get_tree().quit(1)
@@ -358,6 +360,9 @@ func _ready() -> void:
 		get_tree().quit(1)
 		return
 	if not await _capture_needle():
+		get_tree().quit(1)
+		return
+	if not await _capture_menus():
 		get_tree().quit(1)
 		return
 	get_tree().quit()
@@ -1005,6 +1010,96 @@ func _capture_needle() -> bool:
 	board.logic.needle_angle = MeterGauge.angle_from_error(0.0)
 	print("NEEDLE tight window perfect band ", board.logic.stats.perfect_band, " good ", board.logic.stats.good_band)
 	if not await _capture("needle_tight_window.png"):
+		return false
+	return true
+
+
+func _capture_menus() -> bool:
+	board.showing_records = false
+	board.selecting = false
+	board.front.screen = FrontEnd.Screen.TITLE
+	board.front.menu_index = 0
+	board.front.lock_message = ""
+	board.front.notice = ""
+	board.front.rebinding = ""
+	if not await _capture("title_press_start.png"):
+		return false
+	board.front.confirm_title()
+	board.front.menu_index = 0
+	if not await _capture("menu_standard_highlight.png"):
+		return false
+	var saved_wins := SaveData.wins
+	var saved_trophy := SaveData.has_trophy("season_complete")
+	SaveData.wins = 0
+	SaveData.trophies["season_complete"] = false
+	board.front.menu_index = 1
+	board.front.confirm_menu()
+	print("MENU endless locked ", board.front.lock_message, " screen ", board.front.screen)
+	if not await _capture("menu_endless_locked.png"):
+		return false
+	board.front.lock_message = ""
+	board.front.menu_index = 2
+	if not await _capture("menu_trophy_highlight.png"):
+		return false
+	board.front.menu_index = 3
+	if not await _capture("menu_options_highlight.png"):
+		return false
+	board.front.menu_index = 0
+	board.front.confirm_menu()
+	board.selecting = true
+	board.highlight = 0
+	if not await _capture("select_from_standard.png"):
+		return false
+	board.selecting = false
+	board.front.open_records(FrontEnd.Screen.MAIN)
+	if not await _capture("trophy_room.png"):
+		return false
+	board.front.back_records()
+	board.front.screen = FrontEnd.Screen.OPTIONS
+	board.front.focus = 3
+	board.front.notice = ""
+	board.front.rebinding = ""
+	Settings.reset_controls()
+	Settings.set_volume("music", 100, false)
+	Settings.set_volume("crowd", 100, false)
+	Settings.set_volume("sfx", 100, false)
+	if not await _capture("options_default.png"):
+		return false
+	Settings.set_volume("music", 40)
+	board.front.focus = 0
+	if not await _capture("options_music_40.png"):
+		return false
+	Settings.try_rebind("aim_left", KEY_A)
+	board.front.focus = 4
+	if not await _capture("options_rebind_aim.png"):
+		return false
+	board.front.focus = 3
+	board.front.notice = FrontEnd.USED_TEXT
+	board.front.notice_left = 2.0
+	if not await _capture("options_already_used.png"):
+		return false
+	Settings.reset_controls()
+	board.front.notice = ""
+	board.front.focus = 4
+	if not await _capture("options_reset.png"):
+		return false
+	SaveData.wins = 1
+	board.front.screen = FrontEnd.Screen.MAIN
+	board.front.menu_index = 1
+	board.front.lock_message = ""
+	board.selecting = false
+	print("MENU endless unlocked ", board.front.endless_unlocked())
+	if not await _capture("menu_endless_unlocked.png"):
+		return false
+	SaveData.wins = saved_wins
+	SaveData.trophies["season_complete"] = saved_trophy
+	board.front.screen = FrontEnd.Screen.PLAY
+	board.selecting = false
+	board.showing_records = false
+	board.run.phase = RunLogic.Phase.GAME_OVER
+	board.run.score = 42
+	board.run.kicks_made = 3
+	if not await _capture("game_over_main_menu.png"):
 		return false
 	return true
 

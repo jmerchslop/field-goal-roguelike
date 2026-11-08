@@ -14,8 +14,9 @@ var run := RunLogic.new()
 var _taking_pictures := false
 var _approach_time := 0.0
 var _bank_time := 0.0
-var selecting := true
+var selecting := false
 var showing_records := false
+var front := FrontEnd.new()
 var save_note := ""
 var _note_time := 0.0
 var _trophy_time := 0.0
@@ -57,7 +58,8 @@ func _ready() -> void:
 	_build_uprights()
 	_build_ball()
 	_build_kicker_sprite()
-	selecting = true
+	selecting = false
+	front.screen = FrontEnd.Screen.TITLE
 	highlight = -1
 	if OS.get_environment("FG_SHOTS") != "1":
 		return
@@ -169,7 +171,10 @@ func confirm_kicker() -> void:
 	if id == "":
 		return
 	selecting = false
+	var mode := front.run_mode
 	run.start_with_kicker(id)
+	run.run_mode = mode
+	front.screen = FrontEnd.Screen.PLAY
 	_tint_ball()
 	load_current_kick()
 
@@ -182,6 +187,8 @@ func tap_f9() -> void:
 
 func open_select() -> void:
 	selecting = true
+	showing_records = false
+	front.screen = FrontEnd.Screen.SELECT
 	highlight = -1
 	refresh_view()
 
@@ -203,26 +210,32 @@ func _select_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
 	if not key.pressed or key.echo:
 		return
-	if key.keycode == KEY_T:
-		showing_records = true
-		refresh_view()
-		return
-	if key.keycode == KEY_ESCAPE and showing_records:
-		showing_records = false
-		refresh_view()
-		return
 	if key.keycode == KEY_F9:
 		tap_f9()
 		return
+	if Settings.pressed_event(event, "trophy"):
+		showing_records = true
+		front.records_return = FrontEnd.Screen.SELECT
+		refresh_view()
+		return
+	if Settings.pressed_event(event, "back") and showing_records:
+		showing_records = false
+		refresh_view()
+		return
+	if Settings.pressed_event(event, "back") and not showing_records:
+		selecting = false
+		front.back_select()
+		refresh_view()
+		return
 	if showing_records:
 		return
-	if key.keycode == KEY_1 or key.keycode == KEY_KP_1:
+	if Settings.pressed_event(event, "choose_1"):
 		highlight = 0
 		refresh_view()
-	elif key.keycode == KEY_2 or key.keycode == KEY_KP_2:
+	elif Settings.pressed_event(event, "choose_2"):
 		highlight = 1
 		refresh_view()
-	elif key.keycode == KEY_SPACE:
+	elif Settings.pressed_event(event, "confirm"):
 		confirm_kicker()
 
 
@@ -365,7 +378,8 @@ func _process(delta: float) -> void:
 				_vitamin_time = 0.0
 	if _taking_pictures:
 		return
-	if selecting:
+	front.tick(delta)
+	if front.screen == FrontEnd.Screen.TITLE or front.screen == FrontEnd.Screen.MAIN or front.screen == FrontEnd.Screen.OPTIONS or front.screen == FrontEnd.Screen.RECORDS or selecting:
 		refresh_view()
 		return
 	if logic.phase != KickLogic.Phase.AIMING:
@@ -377,9 +391,9 @@ func _process(delta: float) -> void:
 		_bank_time += delta
 	if run.phase == RunLogic.Phase.PLAYING and logic.phase != KickLogic.Phase.RESULT:
 		var direction := 0.0
-		if Input.is_key_pressed(KEY_LEFT):
+		if Settings.held("aim_left"):
 			direction -= 1.0
-		if Input.is_key_pressed(KEY_RIGHT):
+		if Settings.held("aim_right"):
 			direction += 1.0
 		if direction != 0.0:
 			logic.aim(direction, delta)
@@ -395,6 +409,8 @@ func _process(delta: float) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if _taking_pictures:
 		return
+	if _front_input(event):
+		return
 	if selecting:
 		_select_input(event)
 		return
@@ -408,14 +424,19 @@ func _unhandled_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
 	if not key.pressed or key.echo:
 		return
-	if key.keycode == KEY_ESCAPE and showing_records:
+	if Settings.pressed_event(event, "back") and showing_records:
 		showing_records = false
 		refresh_view()
 		return
-	if key.keycode == KEY_T and (selecting or run.phase == RunLogic.Phase.GAME_OVER or run.phase == RunLogic.Phase.WIN):
+	if Settings.pressed_event(event, "trophy") and (run.phase == RunLogic.Phase.GAME_OVER or run.phase == RunLogic.Phase.WIN):
 		showing_records = true
+		front.records_return = FrontEnd.Screen.PLAY
 		refresh_view()
 		return
+	if Settings.pressed_event(event, "back") and (run.phase == RunLogic.Phase.GAME_OVER or run.phase == RunLogic.Phase.WIN) and not showing_records:
+		_return_to_main_menu()
+		return
+	# R still returns to character select. It is not the offer-reroll action.
 	if key.keycode == KEY_R and run.accepts_restart() and not run.awaiting_offer and not run.awaiting_mulligan and not showing_records:
 		open_select()
 		return
@@ -423,33 +444,33 @@ func _unhandled_input(event: InputEvent) -> void:
 		retake_with_mulligan()
 		return
 	if run.curse_prompt:
-		if key.keycode == KEY_ESCAPE:
+		if Settings.pressed_event(event, "back"):
 			run.cancel_curse_prompt()
 			refresh_view()
-		elif key.keycode == KEY_1 or key.keycode == KEY_KP_1:
+		elif Settings.pressed_event(event, "choose_1"):
 			if run.pick_curse_removal(0):
 				apply_live_vitamins()
-		elif key.keycode == KEY_2 or key.keycode == KEY_KP_2:
+		elif Settings.pressed_event(event, "choose_2"):
 			if run.pick_curse_removal(1):
 				apply_live_vitamins()
 		return
 	if run.awaiting_shop:
-		_shop_input(key)
+		_shop_input(event)
 		return
-	if run.awaiting_offer and (key.keycode == KEY_1 or key.keycode == KEY_KP_1):
+	if run.awaiting_offer and Settings.pressed_event(event, "choose_1"):
 		_choose_card(0)
 		return
-	if run.awaiting_offer and (key.keycode == KEY_2 or key.keycode == KEY_KP_2):
+	if run.awaiting_offer and Settings.pressed_event(event, "choose_2"):
 		_choose_card(1)
 		return
-	if run.awaiting_offer and (key.keycode == KEY_3 or key.keycode == KEY_KP_3):
+	if run.awaiting_offer and Settings.pressed_event(event, "choose_3"):
 		_choose_card(2)
 		return
-	if run.awaiting_offer and key.keycode == KEY_S:
+	if run.awaiting_offer and Settings.pressed_event(event, "skip"):
 		if run.skip_offer():
 			_after_cards()
 		return
-	if run.awaiting_offer and key.keycode == KEY_F:
+	if run.awaiting_offer and Settings.pressed_event(event, "offer_reroll"):
 		run.reroll_offer()
 		refresh_view()
 		return
@@ -467,16 +488,16 @@ func _unhandled_input(event: InputEvent) -> void:
 		logic.wind_direction = run.wind_direction
 		refresh_view()
 		return
-	if key.keycode == KEY_P and logic.phase == KickLogic.Phase.AIMING and not run.awaiting_offer and not run.awaiting_mulligan:
+	if Settings.pressed_event(event, "practice") and logic.phase == KickLogic.Phase.AIMING and not run.awaiting_offer and not run.awaiting_mulligan:
 		if run.start_practice():
 			refresh_view()
 		return
 	if logic.phase == KickLogic.Phase.AIMING and not run.practicing and not run.awaiting_offer and not run.awaiting_mulligan:
-		if key.keycode == KEY_Z and run.use_belt(0):
+		if Settings.pressed_event(event, "belt_z") and run.use_belt(0):
 			_vitamin_time = 0.0
 			apply_live_vitamins()
 			return
-		if key.keycode == KEY_X and run.use_belt(1):
+		if Settings.pressed_event(event, "belt_x") and run.use_belt(1):
 			_vitamin_time = 0.0
 			apply_live_vitamins()
 			return
@@ -485,7 +506,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			_cash_time = 0.0
 			refresh_view()
 			return
-	if key.keycode != KEY_SPACE:
+	if not Settings.pressed_event(event, "confirm"):
 		return
 	if run.awaiting_mulligan:
 		run.accept_pending_miss()
@@ -508,25 +529,192 @@ func _unhandled_input(event: InputEvent) -> void:
 	refresh_view()
 
 
-func _shop_input(key: InputEventKey) -> void:
-	if key.keycode == KEY_1 or key.keycode == KEY_KP_1:
+func _return_to_main_menu() -> void:
+	selecting = false
+	showing_records = false
+	front.screen = FrontEnd.Screen.MAIN
+	front.menu_index = 0
+	front.lock_message = ""
+	refresh_view()
+
+
+func _front_input(event: InputEvent) -> bool:
+	var mode := front.screen
+	if mode != FrontEnd.Screen.TITLE and mode != FrontEnd.Screen.MAIN and mode != FrontEnd.Screen.OPTIONS and mode != FrontEnd.Screen.RECORDS:
+		return false
+	if event is InputEventMouseMotion and mode == FrontEnd.Screen.MAIN:
+		var tile := MenuLayout.tile_at(event.position, _hud._menu_window())
+		if tile >= 0:
+			front.hover_menu(tile)
+			refresh_view()
+		return true
+	if event is InputEventMouseMotion and mode == FrontEnd.Screen.OPTIONS:
+		_options_hover(event.position)
+		if front.dragging != "":
+			_drag_slider(event.position)
+		return true
+	if event is InputEventMouseButton:
+		var mouse := event as InputEventMouseButton
+		if mouse.button_index != MOUSE_BUTTON_LEFT:
+			return true
+		if mode == FrontEnd.Screen.TITLE and mouse.pressed:
+			front.confirm_title()
+			refresh_view()
+		elif mode == FrontEnd.Screen.MAIN and mouse.pressed:
+			var tile := MenuLayout.tile_at(mouse.position, _hud._menu_window())
+			if tile == front.menu_index and tile >= 0:
+				_apply_menu_choice(front.confirm_menu())
+			elif tile >= 0:
+				front.hover_menu(tile)
+			refresh_view()
+		elif mode == FrontEnd.Screen.OPTIONS:
+			if mouse.pressed:
+				_options_click(mouse.position)
+			elif front.dragging != "":
+				Settings.play_preview(front.dragging)
+				front.dragging = ""
+			refresh_view()
+		return true
+	if not event is InputEventKey:
+		return true
+	var key := event as InputEventKey
+	if not key.pressed or key.echo:
+		return true
+	if mode == FrontEnd.Screen.TITLE:
+		if Settings.pressed_event(event, "confirm") or key.keycode == KEY_ENTER or key.keycode == KEY_KP_ENTER:
+			front.confirm_title()
+			refresh_view()
+		return true
+	if mode == FrontEnd.Screen.MAIN:
+		if Settings.pressed_event(event, "menu_left") or Settings.pressed_event(event, "menu_up"):
+			front.move_menu(-1)
+		elif Settings.pressed_event(event, "menu_right") or Settings.pressed_event(event, "menu_down"):
+			front.move_menu(1)
+		elif Settings.pressed_event(event, "back"):
+			front.back_main()
+		elif Settings.pressed_event(event, "confirm") or key.keycode == KEY_ENTER or key.keycode == KEY_KP_ENTER:
+			_apply_menu_choice(front.confirm_menu())
+		refresh_view()
+		return true
+	if mode == FrontEnd.Screen.RECORDS:
+		if Settings.pressed_event(event, "back"):
+			front.back_records()
+			selecting = front.screen == FrontEnd.Screen.SELECT
+			refresh_view()
+		return true
+	return _options_key(event, key)
+
+
+func _apply_menu_choice(choice: String) -> void:
+	if choice == "select":
+		selecting = true
+		highlight = -1
+		showing_records = false
+
+
+func _options_key(event: InputEvent, key: InputEventKey) -> bool:
+	if front.rebinding != "":
+		if key.keycode == KEY_ESCAPE:
+			front.cancel_rebind()
+		else:
+			front.finish_rebind(int(key.keycode))
+		refresh_view()
+		return true
+	if front.focus_kind(front.focus) == "slider" and (Settings.pressed_event(event, "menu_left") or Settings.pressed_event(event, "menu_right")):
+		var step := -1 if Settings.pressed_event(event, "menu_left") else 1
+		if front.nudge_slider(step):
+			Settings.play_preview(front.slider_id(front.focus))
+		refresh_view()
+		return true
+	if Settings.pressed_event(event, "menu_left"):
+		front.move_focus(Vector2(-1, 0))
+	elif Settings.pressed_event(event, "menu_right"):
+		front.move_focus(Vector2(1, 0))
+	elif Settings.pressed_event(event, "menu_up"):
+		front.move_focus(Vector2(0, -1))
+	elif Settings.pressed_event(event, "menu_down"):
+		front.move_focus(Vector2(0, 1))
+	elif Settings.pressed_event(event, "back"):
+		front.back_options()
+	elif Settings.pressed_event(event, "confirm") or key.keycode == KEY_ENTER or key.keycode == KEY_KP_ENTER:
+		var result := front.activate_focus()
+		if result == "back":
+			pass
+	refresh_view()
+	return true
+
+
+func _options_hover(point: Vector2) -> void:
+	var index := _options_index_at(point)
+	if index >= 0 and front.rebinding == "":
+		front.focus = index
+
+
+func _options_click(point: Vector2) -> void:
+	var index := _options_index_at(point)
+	if index < 0:
+		return
+	front.focus = index
+	var kind := front.focus_kind(index)
+	if kind == "slider":
+		front.dragging = front.slider_id(index)
+		_drag_slider(point)
+	elif kind == "bind":
+		front.begin_rebind()
+	elif kind == "reset":
+		Settings.reset_controls()
+	elif kind == "back":
+		front.back_options()
+
+
+func _drag_slider(point: Vector2) -> void:
+	var which := front.dragging
+	var index := 0
+	if which == "crowd":
+		index = 1
+	elif which == "sfx":
+		index = 2
+	var norm: Vector2 = MenuLayout.screen_to_norm(point, _hud._menu_window())
+	Settings.set_volume(which, MenuLayout.slider_value_at(index, norm))
+
+
+func _options_index_at(point: Vector2) -> int:
+	var window: Vector2 = _hud._menu_window()
+	var norm: Vector2 = MenuLayout.screen_to_norm(point, window)
+	for index in 3:
+		if MenuLayout.contains_norm(MenuLayout.SLIDERS[index], norm):
+			return index
+	for index in Settings.ACTION_ROWS.size():
+		var row: Dictionary = Settings.ACTION_ROWS[index]
+		if MenuLayout.contains_norm(MenuLayout.bind_rect(int(row["column"]), int(row["row"])), norm):
+			return 3 + index
+	if MenuLayout.contains_norm(MenuLayout.RESET_BUTTON, norm):
+		return front.focus_count() - 2
+	if MenuLayout.contains_norm(MenuLayout.BACK_BUTTON, norm):
+		return front.focus_count() - 1
+	return -1
+
+
+func _shop_input(event: InputEvent) -> void:
+	var key := event as InputEventKey
+	if Settings.pressed_event(event, "choose_1"):
 		run.buy_shelf(0)
-	elif key.keycode == KEY_2 or key.keycode == KEY_KP_2:
+	elif Settings.pressed_event(event, "choose_2"):
 		run.buy_shelf(1)
-	elif key.keycode == KEY_3 or key.keycode == KEY_KP_3:
+	elif Settings.pressed_event(event, "choose_3"):
 		run.buy_shelf(2)
-	elif key.keycode == KEY_4 or key.keycode == KEY_KP_4:
+	elif Settings.pressed_event(event, "buy_b12"):
 		run.buy_b12()
-	elif key.keycode == KEY_Z:
+	elif Settings.pressed_event(event, "belt_z"):
 		run.sell_belt(0)
-	elif key.keycode == KEY_X:
+	elif Settings.pressed_event(event, "belt_x"):
 		run.sell_belt(1)
-	elif key.keycode == KEY_F:
+	elif Settings.pressed_event(event, "shop_reroll"):
 		run.reroll_shop()
 	elif key.keycode == KEY_C:
 		run.add_debug_cash()
 		_cash_time = 0.0
-	elif key.keycode == KEY_SPACE or key.keycode == KEY_ENTER or key.keycode == KEY_KP_ENTER:
+	elif Settings.pressed_event(event, "confirm") or key.keycode == KEY_ENTER or key.keycode == KEY_KP_ENTER:
 		_leave_shop()
 		return
 	else:
