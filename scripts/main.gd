@@ -170,6 +170,10 @@ func confirm_kicker() -> void:
 	var id := Kickers.id_for_slot(highlight)
 	if id == "":
 		return
+	if not Kickers.is_unlocked(id):
+		save_note = Kickers.unlock_hint(id)
+		refresh_view()
+		return
 	selecting = false
 	var mode := front.run_mode
 	run.start_with_kicker(id)
@@ -234,6 +238,15 @@ func _select_input(event: InputEvent) -> void:
 		refresh_view()
 	elif Settings.pressed_event(event, "choose_2"):
 		highlight = 1
+		refresh_view()
+	elif Settings.pressed_event(event, "choose_3"):
+		highlight = 2
+		refresh_view()
+	elif key.keycode == KEY_4 or key.keycode == KEY_KP_4:
+		highlight = 3
+		refresh_view()
+	elif key.keycode == KEY_5 or key.keycode == KEY_KP_5:
+		highlight = 4
 		refresh_view()
 	elif Settings.pressed_event(event, "confirm"):
 		confirm_kicker()
@@ -1052,20 +1065,16 @@ func pose_for_shot(mode: String) -> void:
 
 
 func _kicker_art_path() -> String:
-	var who := ""
-	if run.kicker_id == Kickers.WALK_ON:
-		who = "walk_on"
-	elif run.kicker_id == Kickers.BIG_BRUCE:
-		who = "big_bruce"
-	if who == "":
+	if run.kicker_id == "":
 		return ""
+	var pose := "idle"
 	if _pose == "run":
-		return "res://art/kickers/%s_run.png" % who
-	if _pose == "plant":
-		return "res://art/kickers/%s_plant.png" % who
-	if _pose == "follow":
-		return "res://art/kickers/%s_follow_through.png" % who
-	return "res://art/kickers/%s_back.png" % who
+		pose = "run"
+	elif _pose == "plant":
+		pose = "plant"
+	elif _pose == "follow":
+		pose = "follow"
+	return Kickers.field_frame(run.kicker_id, pose)
 
 
 func _kicker_behind() -> float:

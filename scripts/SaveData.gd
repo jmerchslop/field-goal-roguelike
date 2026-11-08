@@ -25,6 +25,7 @@ var attempts := 0
 var middles := 0
 var kickers := {}
 var trophies := {}
+var unlocks := {}
 var _f9_at := -10.0
 
 
@@ -50,7 +51,7 @@ func load_file() -> void:
 	makes = _as_int(cfg.get_value("lifetime", "makes", 0))
 	attempts = _as_int(cfg.get_value("lifetime", "attempts", 0))
 	middles = _as_int(cfg.get_value("lifetime", "middles", 0))
-	for id in [Kickers.BIG_BRUCE, Kickers.WALK_ON]:
+	for id in _kicker_ids():
 		var section := "kicker_%s" % id
 		kickers[id] = {
 			"runs": _as_int(cfg.get_value(section, "runs", 0)),
@@ -62,10 +63,12 @@ func load_file() -> void:
 		}
 	for id in TROPHY_IDS:
 		trophies[id] = bool(cfg.get_value("trophies", id, false))
+	for id in [Kickers.PHIL, Kickers.GARY, Kickers.VEX]:
+		unlocks[id] = bool(cfg.get_value("unlocks", id, false))
 
 
 func save_file() -> void:
-	if not kickers.has(Kickers.BIG_BRUCE) or not kickers.has(Kickers.WALK_ON):
+	if not kickers.has(Kickers.BIG_BRUCE) or not kickers.has(Kickers.WALK_ON) or not kickers.has(Kickers.PHIL):
 		var kept: Dictionary = kickers.duplicate(true)
 		_fill_defaults()
 		for id in kept.keys():
@@ -80,7 +83,7 @@ func save_file() -> void:
 	cfg.set_value("lifetime", "makes", makes)
 	cfg.set_value("lifetime", "attempts", attempts)
 	cfg.set_value("lifetime", "middles", middles)
-	for id in [Kickers.BIG_BRUCE, Kickers.WALK_ON]:
+	for id in _kicker_ids():
 		var section := "kicker_%s" % id
 		var row: Dictionary = kickers[id]
 		cfg.set_value(section, "runs", int(row["runs"]))
@@ -91,6 +94,8 @@ func save_file() -> void:
 		cfg.set_value(section, "attempts", int(row["attempts"]))
 	for id in TROPHY_IDS:
 		cfg.set_value("trophies", id, bool(trophies[id]))
+	for id in [Kickers.PHIL, Kickers.GARY, Kickers.VEX]:
+		cfg.set_value("unlocks", id, bool(unlocks.get(id, false)))
 	cfg.save(file_path)
 
 
@@ -112,6 +117,20 @@ func kicker_row(id: String) -> Dictionary:
 	if not kickers.has(id):
 		return {"runs": 0, "wins": 0, "best_score": 0, "longest_make": 0, "makes": 0, "attempts": 0}
 	return kickers[id]
+
+
+func has_unlock(id: String) -> bool:
+	return bool(unlocks.get(id, false))
+
+
+func try_unlock(id: String) -> bool:
+	if id != Kickers.PHIL and id != Kickers.GARY and id != Kickers.VEX:
+		return false
+	if bool(unlocks.get(id, false)):
+		return false
+	unlocks[id] = true
+	save_file()
+	return true
 
 
 func has_trophy(id: String) -> bool:
@@ -219,7 +238,7 @@ func _fill_defaults() -> void:
 	attempts = 0
 	middles = 0
 	kickers = {}
-	for id in [Kickers.BIG_BRUCE, Kickers.WALK_ON]:
+	for id in _kicker_ids():
 		kickers[id] = {
 			"runs": 0,
 			"wins": 0,
@@ -231,6 +250,13 @@ func _fill_defaults() -> void:
 	trophies = {}
 	for id in TROPHY_IDS:
 		trophies[id] = false
+	unlocks = {}
+	for id in [Kickers.PHIL, Kickers.GARY, Kickers.VEX]:
+		unlocks[id] = false
+
+
+func _kicker_ids() -> Array:
+	return [Kickers.BIG_BRUCE, Kickers.WALK_ON, Kickers.PHIL, Kickers.GARY, Kickers.VEX]
 
 
 func _as_int(value) -> int:

@@ -7,6 +7,9 @@ extends RefCounted
 
 const BIG_BRUCE := "big_bruce"
 const WALK_ON := "walk_on"
+const PHIL := "phil"
+const GARY := "gary"
+const VEX := "vex"
 
 const ALL: Array = [
 	{
@@ -18,7 +21,10 @@ const ALL: Array = [
 		"ball_name": "The Farm Ball",
 		"ball_description": "A light hay ball. Wind moves it 10% more than a normal ball. A doink stays a doink.",
 		"ball_type": "farm_ball",
-		"accuracy": 100,
+		"accuracy": 90,
+		"range_line": "65 yd",
+		"kit_line": "Farm Strength",
+		"unlock": "",
 		"color": Color(0.55, 0.09, 0.08),
 		"shape": "square",
 		"portrait_path": "res://art/kickers/big_bruce.png",
@@ -27,15 +33,69 @@ const ALL: Array = [
 		"id": WALK_ON,
 		"name": "The Walk-On",
 		"lore": "Nobody recruited him. He showed up to tryouts in borrowed cleats and never left.",
-		"excels": "No weaknesses.",
+		"excels": "Earns His Spot. 2 rerolls a run.",
 		"downside": "No standout strength.",
 		"ball_name": "Team-Issue",
 		"ball_description": "A normal ball. No special trick.",
 		"ball_type": "standard",
 		"accuracy": 100,
+		"range_line": "60 yd",
+		"kit_line": "Earns His Spot",
+		"unlock": "",
 		"color": Color(0.22, 0.38, 0.82),
 		"shape": "circle",
 		"portrait_path": "res://art/kickers/walk_on.png",
+	},
+	{
+		"id": PHIL,
+		"name": "Phil The Pharmacist",
+		"lore": "He compounds the little things. The shop knows his name, and the gelcap only pays when he actually took it.",
+		"excels": "House Account. Compounding. Shop items are free and 15% stronger.",
+		"downside": "55 yards with nothing on. Rerolls still cost cash.",
+		"ball_name": "The Gelcap",
+		"ball_description": "A vitamin used on this attempt adds +0.5 Mult on a make.",
+		"ball_type": "standard",
+		"accuracy": 112,
+		"range_line": "55 yd",
+		"kit_line": "House Account",
+		"unlock": "Buy something from the Vitamin Shop",
+		"color": Color(0.85, 0.9, 0.95),
+		"shape": "circle",
+		"portrait_path": "res://art/kickers/phil_portrait.png",
+	},
+	{
+		"id": GARY,
+		"name": "Gary the Goat",
+		"lore": "He treats a good kick like gold. First-try makes make his gear a little luckier.",
+		"excels": "Good As Gold. The good band counts as PERFECT.",
+		"downside": "No Farm Strength. A miss still misses.",
+		"ball_name": "Lucky Ball",
+		"ball_description": "Each first-try make boosts item numbers by 3% for the rest of the run.",
+		"ball_type": "standard",
+		"accuracy": 98,
+		"range_line": "65 yd",
+		"kit_line": "Good As Gold",
+		"unlock": "Beat Standard without a miss",
+		"color": Color(0.55, 0.28, 0.12),
+		"shape": "square",
+		"portrait_path": "res://art/kickers/gary_portrait.png",
+	},
+	{
+		"id": VEX,
+		"name": "Vex",
+		"lore": "The saucer does not need a yard cap. It clears the posts, then keeps curving left.",
+		"excels": "Infinite Range & Beyond. 88% power clears by 5 yards.",
+		"downside": "The Flying Saucer always curves left.",
+		"ball_name": "The Flying Saucer",
+		"ball_description": "Curves left like 8 mph of west wind, on top of the real wind.",
+		"ball_type": "standard",
+		"accuracy": 94,
+		"range_line": "Infinite Range & Beyond",
+		"kit_line": "Infinite Range & Beyond",
+		"unlock": "Fail an Endless run past 75 yards",
+		"color": Color(0.75, 0.8, 0.88),
+		"shape": "circle",
+		"portrait_path": "res://art/kickers/vex_portrait.png",
 	},
 ]
 
@@ -76,8 +136,157 @@ static func apply_to(stats: KickerStats, id: String) -> void:
 		return
 	stats.ball_type = str(info["ball_type"])
 	stats.accuracy = float(info.get("accuracy", 100.0))
+	stats.perfect_band = KickConstants.PERFECT_BAND * (stats.accuracy / 100.0)
+	stats.good_band = KickConstants.METER_INNER_BAND * (stats.accuracy / 100.0)
+	stats.ball_speed_mult = 1.0
 	if id == BIG_BRUCE:
 		stats.range_per_power = 0.49
 		stats.power_floor = 80.0
 	elif id == WALK_ON:
 		stats.rerolls_per_run = 2
+	elif id == PHIL:
+		stats.range_per_power = 0.39
+		stats.compounding = true
+		stats.house_account = true
+		stats.gelcap = true
+	elif id == GARY:
+		stats.range_per_power = 0.49
+		stats.good_as_gold = true
+		stats.lucky_ball = true
+	elif id == VEX:
+		stats.clearance = true
+		stats.saucer_mph = 8.0
+		stats.range_base = 0.0
+		stats.range_per_power = 0.0
+
+
+static func unlock_hint(id: String) -> String:
+	return str(get_def(id).get("unlock", ""))
+
+
+static func is_starter(id: String) -> bool:
+	return id == BIG_BRUCE or id == WALK_ON
+
+
+static func is_unlocked(id: String) -> bool:
+	if is_starter(id):
+		return true
+	if KickConstants.debug_unlock_all_kickers and (id == PHIL or id == GARY or id == VEX):
+		return true
+	var data = _save()
+	if data == null:
+		return false
+	return bool(data.has_unlock(id))
+
+
+static func aliases(id: String) -> Array:
+	match id:
+		BIG_BRUCE:
+			return ["big_bruce", "bruce"]
+		WALK_ON:
+			return ["walk_on", "walkon"]
+		PHIL:
+			return ["pharmacist", "phil"]
+		GARY:
+			return ["gary", "goat"]
+		VEX:
+			return ["vex"]
+	return []
+
+
+static func field_frame(id: String, pose: String) -> String:
+	_ensure_art()
+	var mine: Dictionary = _frames.get(id, {})
+	var direct := str(mine.get(pose, ""))
+	if direct != "":
+		return direct
+	if pose != "portrait":
+		for other in ["idle", "run", "plant", "follow", "portrait"]:
+			if str(mine.get(other, "")) != "":
+				return str(mine[other])
+	if id != WALK_ON:
+		var backup: Dictionary = _frames.get(WALK_ON, {})
+		return str(backup.get(pose, ""))
+	return ""
+
+
+static var _art_ready := false
+static var _frames := {}
+
+
+static func _save():
+	var loop := Engine.get_main_loop()
+	if loop == null:
+		return null
+	return loop.root.get_node_or_null("SaveData")
+
+
+static func _ensure_art() -> void:
+	if _art_ready:
+		return
+	_art_ready = true
+	_frames = {}
+	for id in [BIG_BRUCE, WALK_ON, PHIL, GARY, VEX]:
+		_frames[id] = {}
+	var paths: Array = []
+	_walk_pngs("res://", paths)
+	for path in paths:
+		var file_name := str(path).get_file().get_basename().to_lower().replace("-", "_").replace(" ", "_")
+		var hay := "_" + str(path).to_lower().replace("/", "_").replace("-", "_") + "_"
+		var owner := ""
+		var owner_len := 0
+		for id in [BIG_BRUCE, WALK_ON, PHIL, GARY, VEX]:
+			for alias in aliases(id):
+				if hay.find("_" + str(alias) + "_") >= 0 and str(alias).length() > owner_len:
+					owner = id
+					owner_len = str(alias).length()
+		if owner == "":
+			continue
+		var pose := _pose_of(file_name)
+		var row: Dictionary = _frames[owner]
+		var previous := str(row.get(pose, ""))
+		if previous == "" or _pose_score(file_name, pose) > _pose_score(previous.get_file().get_basename().to_lower(), pose):
+			row[pose] = str(path)
+		_frames[owner] = row
+
+
+static func _pose_of(stem: String) -> String:
+	if stem.find("follow") >= 0:
+		return "follow"
+	if stem.find("plant") >= 0:
+		return "plant"
+	if stem.find("run") >= 0:
+		return "run"
+	if stem.find("idle") >= 0 or stem.ends_with("_back"):
+		return "idle"
+	if stem.find("portrait") >= 0:
+		return "portrait"
+	return "portrait"
+
+
+static func _pose_score(stem: String, pose: String) -> int:
+	if pose == "portrait" and stem.find("portrait") >= 0:
+		return 3
+	if pose == "idle" and stem.find("idle") >= 0:
+		return 3
+	if pose == "follow" and stem.find("follow_through") >= 0:
+		return 3
+	return 1
+
+
+static func _walk_pngs(dir_path: String, found: Array) -> void:
+	var dir := DirAccess.open(dir_path)
+	if dir == null:
+		return
+	dir.list_dir_begin()
+	var name := dir.get_next()
+	while name != "":
+		if not name.begins_with("."):
+			var full := dir_path.path_join(name)
+			if dir.current_is_dir():
+				if name != ".godot":
+					_walk_pngs(full, found)
+			elif name.to_lower().ends_with(".png") and not name.to_lower().ends_with(".import"):
+				found.append(full)
+		name = dir.get_next()
+	dir.list_dir_end()

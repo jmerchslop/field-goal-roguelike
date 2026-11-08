@@ -30,12 +30,9 @@ func _ready() -> void:
 		get_tree().quit(1)
 		return
 	board.load_current_kick()
-	board.logic.press_space()
-	board.logic.advance(0.8)
-	board.logic.press_space()
-	board.logic.advance(0.8 / KickConstants.ACCURACY_FALL_PER_SEC * KickConstants.POWER_RISE_PER_SEC)
-	board.logic.press_space()
-	board.logic.advance(board.logic.flight_duration * 0.58)
+	_swing_meter(70.0, 0.0)
+	if board.logic.phase == KickLogic.Phase.FLIGHT:
+		board.logic.advance(board.logic.flight_duration * 0.58)
 	board._approach_time = 0.8
 	if not await _capture("view_flight.png"):
 		get_tree().quit(1)
@@ -45,9 +42,16 @@ func _ready() -> void:
 	if not await _capture("view_result.png"):
 		get_tree().quit(1)
 		return
-	while board.run.kick_number < 10:
-		board.advance_run()
+	var guard := 0
+	while board.run.kick_number < 10 and guard < 40:
+		if not board.run.last_result_made:
+			board.run.phase = RunLogic.Phase.PLAYING
+			board.run.kick_resolved = false
+			board.script_good_kick()
+		if not board.advance_run():
+			break
 		board.script_good_kick()
+		guard += 1
 	board.force_spot_side(1)
 	board.advance_run()
 	if not await _capture("view_wide.png"):
@@ -374,6 +378,9 @@ func _ready() -> void:
 	if not await _capture_clean_meter():
 		get_tree().quit(1)
 		return
+	if not await _capture_roster():
+		get_tree().quit(1)
+		return
 	get_tree().quit()
 
 
@@ -680,10 +687,15 @@ func _capture_meter_row() -> bool:
 		return false
 	board.highlight = 0
 	board.confirm_kicker()
-	while board.run.kick_number < 5:
+	var step_guard := 0
+	while board.run.kick_number < 5 and step_guard < 20:
+		board.run.phase = RunLogic.Phase.PLAYING
+		board.run.kick_resolved = false
 		board.run.resolve_kick("GOOD", 2.0, false)
 		board.run.leave_shop()
-		board.advance_run()
+		if not board.advance_run():
+			break
+		step_guard += 1
 	board.force_weather(RunLogic.ICED)
 	board.load_current_kick()
 	board.logic.phase = KickLogic.Phase.ACCURACY
@@ -980,10 +992,15 @@ func _capture_needle() -> bool:
 		return false
 	board.highlight = 1
 	board.confirm_kicker()
-	while board.run.kick_number < 5:
+	var step_guard := 0
+	while board.run.kick_number < 5 and step_guard < 20:
+		board.run.phase = RunLogic.Phase.PLAYING
+		board.run.kick_resolved = false
 		board.run.resolve_kick("GOOD", 2.0, false)
 		board.run.leave_shop()
-		board.advance_run()
+		if not board.advance_run():
+			break
+		step_guard += 1
 	board.force_weather(RunLogic.ICED)
 	board.load_current_kick()
 	board.logic.phase = KickLogic.Phase.ACCURACY
@@ -1507,6 +1524,138 @@ func _capture_clean_meter() -> bool:
 	print("CLEAN METER magnesium P ", board.logic.power_true, " speed ", board.logic.stats.power_speed)
 	board._pose = "run"
 	if not await _capture("meter_clean_magnesium.png"):
+		return false
+	return true
+
+
+func _capture_roster() -> bool:
+	SaveData.reset_save()
+	board.showing_records = false
+	board.selecting = true
+	board.front.screen = FrontEnd.Screen.SELECT
+	board.highlight = 2
+	if not await _capture("select_locked.png"):
+		return false
+	SaveData.try_unlock(Kickers.PHIL)
+	SaveData.try_unlock(Kickers.GARY)
+	SaveData.try_unlock(Kickers.VEX)
+	board.highlight = 4
+	if not await _capture("select_unlocked.png"):
+		return false
+	board.showing_records = true
+	board.front.screen = FrontEnd.Screen.RECORDS
+	if not await _capture("records_five_kickers.png"):
+		return false
+	board.showing_records = false
+	var roster: Array = [
+		[0, "bruce"],
+		[1, "walkon"],
+		[2, "phil"],
+		[3, "gary"],
+		[4, "vex"],
+	]
+	for entry in roster:
+		board.highlight = int(entry[0])
+		board.confirm_kicker()
+		board.force_weather(RunLogic.CLEAR)
+		board.run.set_wind(0.0, 0.0)
+		board.load_current_kick()
+		board.logic.phase = KickLogic.Phase.AIMING
+		board.logic.needle_angle = MeterGauge.MAX_ANGLE
+		board._pose = "idle"
+		if not await _capture("field_%s_idle.png" % str(entry[1])):
+			return false
+		board._pose = "run"
+		board._run_time = 0.2
+		if not await _capture("field_%s_run.png" % str(entry[1])):
+			return false
+		board._pose = "plant"
+		if not await _capture("field_%s_plant.png" % str(entry[1])):
+			return false
+		board._pose = "follow"
+		if not await _capture("field_%s_follow.png" % str(entry[1])):
+			return false
+		board.logic.phase = KickLogic.Phase.ACCURACY
+		board.logic.power = 50.0
+		board.logic.fill_power = 50.0
+		board.logic.needle = 0.0
+		board.logic.needle_angle = MeterGauge.angle_from_error(0.0)
+		board._pose = "idle"
+		if not await _capture("meter_band_%s.png" % str(entry[1])):
+			return false
+		if not await _capture_gauge_crop("meter_band_%s_close.png" % str(entry[1])):
+			return false
+	board.highlight = 2
+	board.confirm_kicker()
+	board.run.cash = 12
+	board.run.kick_number = 5
+	board.run.last_result_made = true
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.open_shop()
+	board.run.shop_stock = [Vitamins.PROTEIN, Vitamins.OMEGA, Vitamins.MAGNESIUM]
+	board.run.shop_b12_bought = false
+	board.run.attempts = 2
+	if not await _capture("phil_shop_free.png"):
+		return false
+	board.run.leave_shop()
+	board.highlight = 3
+	board.confirm_kicker()
+	board.force_weather(RunLogic.CLEAR)
+	board.run.set_wind(0.0, 0.0)
+	board.load_current_kick()
+	_swing_meter(50.0, 4.0)
+	if board.logic.phase == KickLogic.Phase.FLIGHT:
+		board.logic.advance(board.logic.flight_duration)
+	print("GARY result ", board.logic.result_text, " perfect ", board.logic.perfect, " e ", board.logic.accuracy_error)
+	if not await _capture("gary_good_as_gold.png"):
+		return false
+	board.highlight = 4
+	board.confirm_kicker()
+	board.run.kick_number = 1
+	board.force_weather(RunLogic.CLEAR)
+	board.run.set_wind(0.0, 0.0)
+	board.load_current_kick()
+	_swing_meter(90.0, 0.0)
+	if board.logic.phase == KickLogic.Phase.FLIGHT:
+		board.logic.advance(board.logic.flight_duration * 0.55)
+	print("VEX curve drift ", board.logic.drift_yards, " range ", board.logic.max_range)
+	if not await _capture("vex_curve_left.png"):
+		return false
+	board.load_current_kick()
+	_swing_meter(88.0, 0.0)
+	if board.logic.phase == KickLogic.Phase.FLIGHT:
+		board.logic.advance(board.logic.flight_duration)
+	print("VEX 88 range ", board.logic.max_range, " ", board.logic.result_text)
+	if not await _capture("vex_clear_88.png"):
+		return false
+	board.load_current_kick()
+	_swing_meter(100.0, 0.0)
+	if board.logic.phase == KickLogic.Phase.FLIGHT:
+		board.logic.advance(board.logic.flight_duration)
+	print("VEX 100 range ", board.logic.max_range, " ", board.logic.result_text)
+	if not await _capture("vex_clear_100.png"):
+		return false
+	board.load_current_kick()
+	_swing_meter(80.0, 0.0)
+	if board.logic.phase == KickLogic.Phase.FLIGHT:
+		board.logic.advance(board.logic.flight_duration)
+	print("VEX 80 range ", board.logic.max_range, " ", board.logic.result_text)
+	if not await _capture("vex_short_80.png"):
+		return false
+	board.highlight = 1
+	board.confirm_kicker()
+	board.run.belt = [Vitamins.MAGNESIUM, ""]
+	if not board.run.use_belt(0):
+		print("roster magnesium was not used")
+		return false
+	board.force_weather(RunLogic.CLEAR)
+	board.load_current_kick()
+	board.logic.press_space()
+	board.logic.advance(board.logic.windup_left)
+	board.logic.advance(0.35)
+	board._pose = "run"
+	print("ROSTER magnesium P ", board.logic.power_true, " speed ", board.logic.stats.power_speed)
+	if not await _capture("meter_magnesium_0_35s.png"):
 		return false
 	return true
 

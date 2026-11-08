@@ -502,11 +502,11 @@ func _advance_accuracy(delta: float) -> float:
 
 
 func _power_omega() -> float:
-	return MeterGauge.omega_power(stats.power_speed, stats.accuracy)
+	return MeterGauge.omega_power(stats.power_speed, stats.ball_speed_mult)
 
 
 func _accuracy_omega() -> float:
-	var omega := MeterGauge.omega_accuracy(stats.accuracy_speed, stats.accuracy)
+	var omega := MeterGauge.omega_accuracy(stats.accuracy_speed, stats.ball_speed_mult)
 	if rain_faster:
 		omega *= rain_scale
 	return omega
@@ -559,17 +559,28 @@ func _lock_accuracy(value: float) -> void:
 	perfect = absf(accuracy_error) <= stats.perfect_band
 	if stats.omega and absf(accuracy_error) <= stats.good_band:
 		accuracy_error = 0.0
+	# Good As Gold: the whole good band is a true perfect, including the cash.
+	if stats.good_as_gold and absf(accuracy_error) <= stats.good_band:
+		accuracy_error = 0.0
+		perfect = true
 	var per_unit := KickConstants.ACCURACY_DEG_PER_ERROR * angle_scale
 	var hook := 0.0 if perfect else -accuracy_error * per_unit
 	final_angle_degrees = aim_degrees + hook
-	# Howling Wind multiplies this kick's wind speed. The saved wind number stays put.
-	var blown := float(wind_speed)
+	# The saucer adds 8 mph west, then Howling Wind scales the combined vector.
+	var cross := crosswind_mph(float(wind_speed), wind_direction) - stats.saucer_mph
+	var head := head_tail_mph(float(wind_speed), wind_direction)
+	var blown := sqrt(cross * cross + head * head)
+	var blown_dir := rad_to_deg(atan2(cross, head))
 	if howling_wind:
 		blown *= 1.5
-	drift_yards = drift_at_uprights(blown, wind_direction, kick_distance, 0, 0, stats.ball_type) * stats.drift_factor
-	var wind_range := wind_range_delta(blown, wind_direction, 0, stats.thin_air)
+	drift_yards = drift_at_uprights(blown, blown_dir, kick_distance, 0, 0, stats.ball_type) * stats.drift_factor
+	var wind_range := wind_range_delta(blown, blown_dir, 0, stats.thin_air)
 	var ranged := power_for_range(power, stats.power_floor)
-	max_range = stats.range_base + stats.range_per_power * ranged + stats.range_bonus + wind_range
+	if stats.clearance:
+		var clearance := 5.0 + (ranged - 88.0) * 1.25
+		max_range = kick_distance + clearance + stats.range_bonus + wind_range
+	else:
+		max_range = stats.range_base + stats.range_per_power * ranged + stats.range_bonus + wind_range
 	if snow_range:
 		max_range -= snow_penalty
 	if thin_air_weather:
@@ -578,6 +589,9 @@ func _lock_accuracy(value: float) -> void:
 		max_range -= 4.0
 	if max_range < 0.0:
 		max_range = 0.0
+	# 88% and above clears the posts even if a headwind or a penalty would otherwise leave it short.
+	if stats.clearance and ranged >= 88.0 and max_range < kick_distance:
+		max_range = kick_distance
 	travel_yards = max_range
 	flight_duration = flight_time_seconds(travel_yards)
 	reached_uprights = travel_yards >= kick_distance

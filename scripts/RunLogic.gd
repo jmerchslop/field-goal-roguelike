@@ -87,6 +87,8 @@ var practicing := false
 # Run-only. Never written into SaveData.
 var cash := 0
 var cash_popup := ""
+var unlock_toast := ""
+var lucky_stacks := 0
 var belt: Array = ["", ""]
 var active_vitamins := {}
 var zinc_used := false
@@ -177,6 +179,8 @@ func new_run() -> void:
 	middles_this_run = 0
 	best_streak = 0
 	clean_makes = {}
+	lucky_stacks = 0
+	unlock_toast = ""
 	trophy_name = ""
 	new_record_score = false
 	new_record_long = false
@@ -274,22 +278,28 @@ func resolve_kick(result_text: String, offset: float, perfect: bool) -> void:
 	last_points = 0
 	var score_perfect := perfect and _vitamin_count(Vitamins.OMEGA) == 0
 	var pre := 0.0
+	var gel := 0.0
 	if made:
 		pre = 0.5 * float(_vitamin_count(Vitamins.PREWORKOUT))
+		pre = Loadout.scale_amount(pre, item_effect_scale())
+		if stats.gelcap and _belt_vitamin_active():
+			gel = 0.5
 		var base_mult := current_mult()
 		var storm := storm_bonus()
 		var hero := hero_bonus()
 		var curse_add := curse_bonus()
 		var drill := drill_bonus()
-		var mult := base_mult + storm + hero + curse_add + drill + pre
+		var mult := base_mult + storm + hero + curse_add + drill + pre + gel
 		last_points = points_for(distance, mult, down_the_middle, boss, score_perfect)
 		score += last_points
-		score_line = format_score_line(distance, base_mult, down_the_middle, boss, score_perfect, storm, hero, curse_add, drill, pre)
+		score_line = format_score_line(distance, base_mult, down_the_middle, boss, score_perfect, storm, hero, curse_add, drill, pre + gel)
 		kicks_made += 1
 		if distance > longest_make:
 			longest_make = distance
 		if is_first_ball:
 			clean_makes[kick_number] = true
+			if stats.lucky_ball:
+				lucky_stacks += 1
 		if earns_attempt(kick_number, is_first_ball, perfect, down_the_middle, late_earn_rule):
 			if attempts >= attempt_cap:
 				attempt_note = NOTE_CAP
@@ -319,6 +329,10 @@ func resolve_kick(result_text: String, offset: float, perfect: bool) -> void:
 	cash_popup = "+$%d" % payout if payout > 0 else ""
 	_clear_ball_vitamins()
 	balls_kicked += 1
+	if phase == Phase.WIN and run_mode != "endless" and _standard_was_clean():
+		_try_unlock(Kickers.GARY)
+	if phase == Phase.GAME_OVER and run_mode == "endless" and distance > 75.0:
+		_try_unlock(Kickers.VEX)
 	if phase != Phase.PLAYING:
 		_save_finished_run()
 
@@ -450,6 +464,8 @@ func prepare_kick_stats() -> void:
 	if has_curse(Loadout.TIGHT):
 		stats.perfect_band = maxf(stats.perfect_band - 2.0, 1.0)
 		stats.good_band = maxf(stats.good_band - 2.0, 1.0)
+	if stats.perfect_band > stats.good_band:
+		stats.perfect_band = stats.good_band
 	stats.red_tip_start = base.red_tip_start
 	stats.red_tip_noise = base.red_tip_noise
 	stats.red_tip_off = false
@@ -778,7 +794,7 @@ func buy_shelf(index: int) -> bool:
 	var id := str(shop_stock[index])
 	if id == "":
 		return false
-	if cash < Vitamins.price(id):
+	if cash < item_price(id):
 		shop_flash = str(index)
 		shop_note = ""
 		return false
@@ -786,7 +802,8 @@ func buy_shelf(index: int) -> bool:
 		shop_note = "Belt full: sell first"
 		shop_flash = ""
 		return false
-	cash -= Vitamins.price(id)
+	cash -= item_price(id)
+	_try_unlock(Kickers.PHIL)
 	shop_stock[index] = ""
 	belt[_empty_belt()] = id
 	shop_flash = ""
@@ -800,10 +817,11 @@ func buy_b12() -> bool:
 	if attempts >= attempt_cap:
 		shop_flash = ""
 		return false
-	if cash < Vitamins.B12_PRICE:
+	if cash < item_price(Vitamins.B12):
 		shop_flash = "b12"
 		return false
-	cash -= Vitamins.B12_PRICE
+	cash -= item_price(Vitamins.B12)
+	_try_unlock(Kickers.PHIL)
 	attempts = mini(attempt_cap, attempts + 1)
 	shop_b12_bought = true
 	shop_flash = ""
@@ -812,7 +830,7 @@ func buy_b12() -> bool:
 
 
 func b12_grey() -> bool:
-	return shop_b12_bought or attempts >= attempt_cap or cash < Vitamins.B12_PRICE
+	return shop_b12_bought or attempts >= attempt_cap or cash < item_price(Vitamins.B12)
 
 
 func sell_belt(index: int) -> bool:
@@ -821,7 +839,7 @@ func sell_belt(index: int) -> bool:
 	var id := str(belt[index])
 	if id == "":
 		return false
-	cash += Vitamins.sale_price(id)
+	cash += item_sale_price(id)
 	belt[index] = ""
 	shop_note = ""
 	shop_flash = ""
@@ -1032,7 +1050,7 @@ func rebuild_stats() -> void:
 	stats.reset()
 	if kicker_id != "":
 		Kickers.apply_to(stats, kicker_id)
-	Loadout.apply(stats, loadout_state(), has_curse(Loadout.HOWLING))
+	Loadout.apply(stats, loadout_state(), has_curse(Loadout.HOWLING), item_effect_scale())
 	attempt_cap = mini(stats.attempt_cap, KickConstants.ATTEMPT_CAP_MAX)
 
 
@@ -1260,17 +1278,59 @@ func _fill_shelves() -> void:
 		shop_stock[i] = str(picks[i])
 
 
+func item_effect_scale() -> float:
+	var scale := 1.0
+	if stats.compounding:
+		scale *= 1.15
+	if stats.lucky_ball:
+		scale *= 1.0 + 0.03 * float(lucky_stacks)
+	return scale
+
+
+func item_price(id: String) -> int:
+	if stats.house_account:
+		return 0
+	return Vitamins.price(id)
+
+
+func item_sale_price(id: String) -> int:
+	return int(floor(float(item_price(id)) / 2.0))
+
+
+func _belt_vitamin_active() -> bool:
+	for id in active_vitamins.keys():
+		if int(active_vitamins[id]) > 0:
+			return true
+	return false
+
+
+func _standard_was_clean() -> bool:
+	for n in range(1, RunTable.count() + 1):
+		if not bool(clean_makes.get(n, false)):
+			return false
+	return true
+
+
+func _try_unlock(id: String) -> void:
+	var data = _records()
+	if data == null:
+		return
+	if data.try_unlock(id):
+		unlock_toast = "%s unlocked" % str(Kickers.get_def(id).get("name", id))
+
+
 func _apply_ball_vitamins() -> void:
-	stats.range_bonus += 6.0 * float(_vitamin_count(Vitamins.PROTEIN))
+	var scale := item_effect_scale()
+	stats.range_bonus += Loadout.scale_amount(6.0 * float(_vitamin_count(Vitamins.PROTEIN)), scale)
 	var mag := _vitamin_count(Vitamins.MAGNESIUM)
 	if mag > 0:
 		var factor := pow(0.7, float(mag))
-		stats.power_speed *= factor
-		stats.accuracy_speed *= factor
+		stats.power_speed *= Loadout.scale_gap(factor, scale)
+		stats.accuracy_speed *= Loadout.scale_gap(factor, scale)
 	stats.omega = _vitamin_count(Vitamins.OMEGA) > 0
 	var pickle := _vitamin_count(Vitamins.PICKLE)
 	if pickle > 0:
-		stats.drift_factor *= pow(0.5, float(pickle))
+		stats.drift_factor *= Loadout.scale_gap(pow(0.5, float(pickle)), scale)
 	if _vitamin_count(Vitamins.LUTEIN) > 0:
 		stats.flag_reader = true
 		stats.laser_line = true

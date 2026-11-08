@@ -310,6 +310,18 @@ static func boost_factor(factor: float) -> float:
 	return 1.0 - (1.0 - factor) * 1.15
 
 
+static func scale_gap(factor: float, item_scale: float) -> float:
+	if absf(item_scale - 1.0) < 0.0001:
+		return factor
+	return 1.0 - (1.0 - factor) * item_scale
+
+
+static func scale_amount(amount: float, item_scale: float) -> float:
+	if absf(item_scale - 1.0) < 0.0001:
+		return amount
+	return KickLogic.round_tenth(amount * item_scale)
+
+
 static func empty_state() -> Dictionary:
 	return {
 		"cleats_id": "",
@@ -429,7 +441,7 @@ static func _card(kind: String, slot: String, id: String, rank: int) -> Dictiona
 
 # stats already has the kicker's base kit. This adds the owned pieces.
 # howling makes equipment and perk numbers 15% stronger. Curse upsides are not included.
-static func apply(stats: KickerStats, state: Dictionary, howling: bool) -> void:
+static func apply(stats: KickerStats, state: Dictionary, howling: bool, item_scale: float = 1.0) -> void:
 	var range_add := 0.0
 	var perfect_add := 0.0
 	var good_add := 0.0
@@ -451,12 +463,14 @@ static func apply(stats: KickerStats, state: Dictionary, howling: bool) -> void:
 		var factor := pow(0.85, float(cleat_rank))
 		if howling:
 			factor = boost_factor(factor)
+		factor = scale_gap(factor, item_scale)
 		power_mul *= factor
 		accuracy_mul *= factor
 	elif cleats == STICKER:
 		var factor := pow(0.80, float(cleat_rank))
 		if howling:
 			factor = boost_factor(factor)
+		factor = scale_gap(factor, item_scale)
 		drift_mul *= factor
 	if helmet == WIND_VISOR:
 		stats.flag_reader = helmet_rank >= 1
@@ -472,6 +486,7 @@ static func apply(stats: KickerStats, state: Dictionary, howling: bool) -> void:
 			var factor := 0.90
 			if howling:
 				factor = boost_factor(factor)
+			factor = scale_gap(factor, item_scale)
 			accuracy_mul *= factor
 		var odd := 3
 		while odd <= helmet_rank:
@@ -552,6 +567,7 @@ static func apply(stats: KickerStats, state: Dictionary, howling: bool) -> void:
 			var factor := 0.80
 			if howling:
 				factor = boost_factor(factor)
+			factor = scale_gap(factor, item_scale)
 			power_mul *= factor
 			accuracy_mul *= factor
 		elif id == GLASS_LEG:
@@ -566,6 +582,12 @@ static func apply(stats: KickerStats, state: Dictionary, howling: bool) -> void:
 		hero_add *= 1.15
 		storm *= 1.15
 		drill *= 1.15
+	range_add = scale_amount(range_add, item_scale)
+	perfect_add = scale_amount(perfect_add, item_scale)
+	good_add = scale_amount(good_add, item_scale)
+	hero_add = scale_amount(hero_add, item_scale)
+	storm = scale_amount(storm, item_scale)
+	drill = scale_amount(drill, item_scale)
 	var curse_range := 0.0
 	var curse_mult := 0.0
 	var angle := 1.0
@@ -593,12 +615,16 @@ static func apply(stats: KickerStats, state: Dictionary, howling: bool) -> void:
 	if curses.has(TIGHT):
 		curse_mult += 0.5
 		stats.tight_window = true
+	curse_range = scale_amount(curse_range, item_scale)
+	curse_mult = scale_amount(curse_mult, item_scale)
 	stats.range_bonus += range_add + curse_range
 	stats.perfect_band += perfect_add
 	stats.good_band += good_add
 	if stats.tight_window:
 		stats.perfect_band = maxf(stats.perfect_band - 2.0, 1.0)
 		stats.good_band = maxf(stats.good_band - 2.0, 1.0)
+	if stats.perfect_band > stats.good_band:
+		stats.perfect_band = stats.good_band
 	stats.power_speed *= power_mul
 	stats.accuracy_speed *= accuracy_mul
 	stats.drift_factor = drift_mul

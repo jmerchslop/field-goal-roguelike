@@ -7,9 +7,9 @@ extends RefCounted
 # just after MAX is e=+15, the center is e=0, and the ACCURACY label is e=-15.
 
 # ω0 is the old default: POWER → MAX took 1.0s when power_speed was 100.
-# Played kickers are faster. ω_ref is that old speed times 1.15 (accuracy 100).
+# Every kicker shares a faster baseline. Accuracy sizes the wedges, not the needle.
 const OMEGA0 := 90.0
-const REF_SPEED_SCALE := 1.15
+const SWEEP_SEC := 0.700
 const WINDUP_SEC := 0.08
 const POWER_ANGLE := 180.0
 const MAX_ANGLE := 90.0
@@ -26,23 +26,16 @@ const NEEDLE_OUTER := 410.0
 const NEEDLE_HALF := 9.0
 
 
-static func omega_ref() -> float:
-	return OMEGA0 * REF_SPEED_SCALE
+static func omega_base() -> float:
+	return OMEGA0 * (1.0 / SWEEP_SEC)
 
 
-static func kicker_omega(accuracy: float) -> float:
-	var rating := accuracy
-	if rating <= 0.0:
-		rating = 100.0
-	return omega_ref() * (100.0 / rating)
+static func omega_power(power_speed: float, ball_speed_mult: float = 1.0) -> float:
+	return omega_base() * (power_speed / 100.0) * ball_speed_mult
 
 
-static func omega_power(power_speed: float, accuracy: float = 100.0) -> float:
-	return kicker_omega(accuracy) * (power_speed / 100.0)
-
-
-static func omega_accuracy(accuracy_speed: float, accuracy: float = 100.0) -> float:
-	return kicker_omega(accuracy) * (accuracy_speed / 120.0)
+static func omega_accuracy(accuracy_speed: float, ball_speed_mult: float = 1.0) -> float:
+	return omega_base() * (accuracy_speed / 120.0) * ball_speed_mult
 
 
 static func power_angle(power_value: float) -> float:

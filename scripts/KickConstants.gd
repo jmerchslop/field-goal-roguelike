@@ -31,6 +31,9 @@ const AIM_MAX_DEG := 12.0
 # --- The meter -----------------------------------------------------------------
 const METER_MIN := -15.0
 const METER_MAX := 100.0
+# Playtest switch. Leave false in committed code. True makes Phil, Gary, and Vex selectable.
+const debug_unlock_all_kickers := false
+
 const POWER_RISE_PER_SEC := 100.0
 const ACCURACY_FALL_PER_SEC := 120.0
 const PERFECT_BAND := 2.0

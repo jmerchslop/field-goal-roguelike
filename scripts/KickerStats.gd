@@ -6,8 +6,16 @@ extends RefCounted
 
 var power_speed := KickConstants.POWER_RISE_PER_SEC
 var accuracy_speed := KickConstants.ACCURACY_FALL_PER_SEC
-# Needle baseline only. 100 is ω_ref. Higher is a slower needle. Bands do not read this.
+# Sizes PERFECT and good. 100 is ±2 / ±8. It does not change needle speed.
 var accuracy := 100.0
+var ball_speed_mult := 1.0
+var compounding := false
+var house_account := false
+var gelcap := false
+var good_as_gold := false
+var lucky_ball := false
+var clearance := false
+var saucer_mph := 0.0
 var perfect_band := KickConstants.PERFECT_BAND
 var good_band := KickConstants.METER_INNER_BAND
 var range_base := KickConstants.RANGE_BASE_YARDS
@@ -58,6 +66,14 @@ func reset() -> void:
 	power_speed = KickConstants.POWER_RISE_PER_SEC
 	accuracy_speed = KickConstants.ACCURACY_FALL_PER_SEC
 	accuracy = 100.0
+	ball_speed_mult = 1.0
+	compounding = false
+	house_account = false
+	gelcap = false
+	good_as_gold = false
+	lucky_ball = false
+	clearance = false
+	saucer_mph = 0.0
 	perfect_band = KickConstants.PERFECT_BAND
 	good_band = KickConstants.METER_INNER_BAND
 	range_base = KickConstants.RANGE_BASE_YARDS
