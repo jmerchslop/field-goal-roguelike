@@ -368,6 +368,9 @@ func _ready() -> void:
 	if not await _capture_modes():
 		get_tree().quit(1)
 		return
+	if not await _capture_imported_art():
+		get_tree().quit(1)
+		return
 	get_tree().quit()
 
 
@@ -1331,6 +1334,93 @@ func _capture_modes() -> bool:
 	board.selecting = true
 	board.highlight = 1
 	if not await _capture("walkon_unchanged.png"):
+		return false
+	return true
+
+
+func _capture_imported_art() -> bool:
+	board.showing_records = false
+	board.selecting = false
+	board.front.screen = FrontEnd.Screen.PLAY
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.awaiting_shop = false
+	board.run.awaiting_offer = false
+	board.run.awaiting_mulligan = false
+	board.run.curse_prompt = false
+	board.run.cash_popup = ""
+	board.run.vitamin_note = ""
+	board.run.shop_note = ""
+	var rows: Array = [
+		[Loadout.CANNON, Loadout.WIND_VISOR, Loadout.IRON_GRIP, "art_hud_cannon_visor_grip.png"],
+		[Loadout.PINPOINT, Loadout.ICE_CAGE, Loadout.REPLAY_GLOVES, "art_hud_pinpoint_cage_replay.png"],
+		[Loadout.ANCHOR, Loadout.SCOUT_LID, Loadout.HIGH_AIR, "art_hud_anchor_scout_high_air.png"],
+		[Loadout.STICKER, Loadout.DOINK_CAP, Loadout.WEATHER_WRAPS, "art_hud_sticker_doink_wraps.png"],
+	]
+	for row in rows:
+		board.run.cleats_id = str(row[0])
+		board.run.cleats_rank = 1
+		board.run.helmet_id = str(row[1])
+		board.run.helmet_rank = 1
+		board.run.gloves_id = str(row[2])
+		board.run.gloves_rank = 1
+		board.run.perks = [{"id": Loadout.HERO_BALL, "rank": 1}]
+		board.run.curse_ids = [Loadout.SHANKY]
+		board.run.belt = ["", ""]
+		board.force_weather(RunLogic.CLEAR)
+		board.load_current_kick()
+		board.logic.phase = KickLogic.Phase.AIMING
+		board.pose_for_shot("idle")
+		if not await _capture(str(row[3])):
+			return false
+	board.run.perks = []
+	board.run.curse_ids = []
+	board.run.cleats_id = ""
+	board.run.helmet_id = ""
+	board.run.gloves_id = ""
+	board.run.force_offer([
+		{"id": Loadout.CANNON, "rank": 1},
+		{"id": Loadout.WIND_VISOR, "rank": 1},
+		{"id": Loadout.REPLAY_GLOVES, "rank": 1},
+	])
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.roll_offer()
+	if board.run.offer.size() != 3:
+		print("offer art cards missing ", board.run.offer)
+		return false
+	if not await _capture("art_offer_new_sprites.png"):
+		return false
+	board.run.skip_offer()
+	board.run.kick_number = 5
+	board.run.last_result_made = true
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.cash = 40
+	board.run.attempts = 2
+	board.run.open_shop()
+	board.run.shop_stock = [Vitamins.PICKLE, Vitamins.OMEGA, Vitamins.MAGNESIUM]
+	board.run.belt = [Vitamins.VITAMIN_D, Vitamins.LUTEIN]
+	board.run.shop_b12_bought = false
+	if not await _capture("art_shop_bottles.png"):
+		return false
+	board.run.leave_shop()
+	board.run.kick_number = 6
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.awaiting_offer = false
+	board.run.awaiting_shop = false
+	board.run.cleats_id = Loadout.STICKER
+	board.run.cleats_rank = 2
+	board.run.helmet_id = Loadout.SCOUT_LID
+	board.run.helmet_rank = 1
+	board.run.gloves_id = Loadout.WEATHER_WRAPS
+	board.run.gloves_rank = 1
+	board.run.perks = [{"id": Loadout.TWO_MINUTE, "rank": 1}]
+	board.run.curse_ids = [Loadout.HEAVY]
+	board.run.belt = [Vitamins.B12, Vitamins.PROTEIN]
+	board.run.cash = 12
+	board.force_weather(RunLogic.CLEAR)
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.AIMING
+	board.pose_for_shot("idle")
+	if not await _capture("art_belt_filled.png"):
 		return false
 	return true
 

@@ -835,6 +835,9 @@ func _draw_bottle(id: String, rect: Rect2, empty: bool) -> void:
 	var texture := _icon(path)
 	var bottle := Rect2(rect.position + Vector2(6, 6), Vector2(36, 38))
 	if texture != null:
+		# Shelf and B12 plates are large enough to show the painting. Belt rows stay a small icon beside the name.
+		if minf(rect.size.x, rect.size.y) >= 64.0:
+			bottle = rect.grow(-8)
 		_draw_fit(texture, bottle)
 	else:
 		draw_rect(bottle, Vitamins.bottle_color(id))
@@ -897,6 +900,7 @@ func _draw_shop(run: RunLogic) -> void:
 	_text(b12.position + Vector2(16, 32), "%s  B12 Shot" % Settings.key_label("buy_b12"), 20, Color(0.75, 0.75, 0.75) if grey else KickConstants.COLOR_TEXT)
 	_text(b12.position + Vector2(16, 64), "$%d" % Vitamins.B12_PRICE, 20, b12_price)
 	_text(b12.position + Vector2(16, 96), Vitamins.effect_line(Vitamins.B12), 16, KickConstants.COLOR_TEXT)
+	_draw_bottle(Vitamins.B12, Rect2(b12.position + Vector2(158, 16), Vector2(78, 118)), false)
 	if run.shop_b12_bought:
 		_text(b12.position + Vector2(16, 126), "SOLD", 16, Color(0.8, 0.8, 0.8))
 	elif run.attempts >= run.attempt_cap:

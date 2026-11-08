@@ -1532,10 +1532,23 @@ func _check_curses_and_rarity() -> void:
 
 func _check_loadout_sprites() -> void:
 	check(Loadout.sprite_path(Loadout.SCOUT_LID) == "res://art/loadout/scout_lid.png", "Scout Lid finds its sprite")
+	check(Loadout.sprite_path(Loadout.DOINK_CAP).ends_with("doink_cap.png"), "Doink Cap keeps its old art")
 	check(Loadout.sprite_path(Loadout.HERO_BALL).ends_with("hero_ball.png"), "Hero Ball finds its sprite")
 	check(Loadout.sprite_path(Loadout.ICED).ends_with("iced.png"), "Iced finds its sprite")
-	check(Loadout.sprite_path(Loadout.CANNON) == "", "Cannon Cleats has no sprite and falls back to text")
+	check(Loadout.sprite_path(Loadout.CANNON).ends_with("cannon_cleats.png"), "Cannon Cleats uses cannon_cleats.png")
+	check(Loadout.sprite_path(Loadout.PINPOINT).ends_with("pinpoint_cleats.png"), "Pinpoint Cleats uses pinpoint_cleats.png")
+	check(Loadout.sprite_path(Loadout.ANCHOR).ends_with("anchor_cleats.png"), "Anchor Cleats uses anchor_cleats.png")
+	check(Loadout.sprite_path(Loadout.STICKER).ends_with("sticker_cleats.png"), "Sticker Cleats uses sticker_cleats.png")
+	check(Loadout.sprite_path(Loadout.WIND_VISOR).ends_with("wind_visor_helmet.png"), "Wind Visor uses wind_visor_helmet.png")
+	check(Loadout.sprite_path(Loadout.ICE_CAGE).ends_with("ice_cage_helmet.png"), "Ice Cage uses ice_cage_helmet.png")
+	check(Loadout.sprite_path(Loadout.IRON_GRIP).ends_with("iron_grip_gloves.png"), "Iron Grip uses iron_grip_gloves.png")
+	check(Loadout.sprite_path(Loadout.REPLAY_GLOVES).ends_with("replay_gloves.png"), "Replay Gloves uses replay_gloves.png")
+	check(Loadout.sprite_path(Loadout.HIGH_AIR).ends_with("high_air_gloves.png"), "High-Air Gloves uses high_air_gloves.png")
+	check(Loadout.sprite_path(Loadout.WEATHER_WRAPS).ends_with("weather_wraps_gloves.png"), "Weather Wraps uses weather_wraps_gloves.png")
 	check(Loadout.sprite_path(Loadout.TWO_MINUTE).ends_with("two_minute_drill.png"), "Two-Minute Drill is mapped to a sprite")
+	for vitamin_id in Vitamins.ALL:
+		check(Vitamins.sprite_path(str(vitamin_id)).ends_with(str(vitamin_id) + ".png"), "vitamin %s uses its bottle picture" % str(vitamin_id))
+	check(Vitamins.sprite_path(Vitamins.B12).ends_with("b12_shot.png"), "B12 Shot uses b12_shot.png")
 	check(Loadout.PERK_IDS.has(Loadout.TWO_MINUTE), "Two-Minute Drill is in the perk pool")
 	var offer: Array = Loadout.legal_perks(Loadout.empty_state(), 3)
 	var saw_drill := false
