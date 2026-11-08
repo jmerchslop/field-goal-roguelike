@@ -38,6 +38,18 @@ static func count() -> int:
 	return KICKS.size()
 
 
+static func endless_distance(kick_number: int) -> float:
+	return minf(1000.0, 20.0 + float(kick_number - 1) * 5.0)
+
+
+# Endless kicks 1–20 use that Standard row's wind and spot.
+# Kicks 21+ use Standard 16–19, cycling.
+static func table_kick(mode: String, kick_number: int) -> int:
+	if mode == "endless" and kick_number > 20:
+		return 16 + ((kick_number - 21) % 4)
+	return clampi(kick_number, 1, count())
+
+
 static func row(kick_number: int) -> Dictionary:
 	return KICKS[kick_number - 1]
 

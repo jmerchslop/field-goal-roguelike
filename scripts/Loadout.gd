@@ -44,11 +44,11 @@ const GLOVE_IDS: Array = [IRON_GRIP, REPLAY_GLOVES, HIGH_AIR, WEATHER_WRAPS]
 const PERK_IDS: Array = [DEEP_BENCH, HOT_STREAK, STORM_CHASER, HERO_BALL, GLASS_LEG, TWO_MINUTE]
 const CURSE_IDS: Array = [ICED, SHANKY, HEAVY, HOWLING, SHAKY, NARROW, STONE, TIGHT]
 
-const _ROMAN: Array = ["", "I", "II", "III", "IV", "V", "VI"]
+const _ROMAN: Array = ["", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"]
 
 
 static func rank_label(rank: int) -> String:
-	var index := clampi(rank, 0, 6)
+	var index := clampi(rank, 0, 12)
 	return str(_ROMAN[index])
 
 
@@ -77,14 +77,24 @@ static func kind_of(id: String) -> String:
 	return EQUIPMENT
 
 
-static func max_rank(id: String) -> int:
-	if PERK_IDS.has(id):
+static func _scout_rerolls(rank: int) -> int:
+	if rank <= 3:
+		return rank
+	if rank == 4:
 		return 3
+	if rank == 5:
+		return 4
+	return rank - 1
+
+
+static func max_rank(id: String, mode: String = "standard") -> int:
+	if PERK_IDS.has(id):
+		return 6 if mode == "endless" else 3
 	if CURSE_IDS.has(id):
 		return 1
 	if slot_of(id) == "":
 		return 0
-	return 6
+	return 12 if mode == "endless" else 6
 
 
 static func type_label(slot: String) -> String:
@@ -335,7 +345,7 @@ static func legal_equipment(state: Dictionary) -> Array:
 		if owned_id == "":
 			for id in pool:
 				cards.append(_card(EQUIPMENT, slot_name, str(id), 1))
-		elif rank < max_rank(owned_id):
+		elif rank < max_rank(owned_id, str(state.get("run_mode", "standard"))):
 			cards.append(_card(EQUIPMENT, slot_name, owned_id, rank + 1))
 	return cards
 
@@ -350,7 +360,7 @@ static func legal_perks(state: Dictionary, attempt_cap: int) -> Array:
 		if have == 0:
 			if owned.size() < 2:
 				cards.append(_card(PERK, PERK, str(id), 1))
-		elif have < max_rank(str(id)):
+		elif have < max_rank(str(id), str(state.get("run_mode", "standard"))):
 			cards.append(_card(PERK, PERK, str(id), have + 1))
 	return cards
 
@@ -452,13 +462,9 @@ static func apply(stats: KickerStats, state: Dictionary, howling: bool) -> void:
 		stats.flag_reader = helmet_rank >= 1
 		stats.laser_line = helmet_rank >= 2
 		stats.laser_full = helmet_rank >= 3
-		stats.wind_preview = helmet_rank >= 4
-		if helmet_rank >= 6:
-			stats.wind_preview_count = 7
-		elif helmet_rank >= 5:
-			stats.wind_preview_count = 5
-		elif helmet_rank >= 4:
-			stats.wind_preview_count = 3
+		if helmet_rank >= 4:
+			stats.wind_preview = true
+			stats.wind_preview_count = 2 * helmet_rank - 5
 	elif helmet == ICE_CAGE:
 		stats.ice_cage = true
 		stats.ice_veins = true
@@ -467,27 +473,25 @@ static func apply(stats: KickerStats, state: Dictionary, howling: bool) -> void:
 			if howling:
 				factor = boost_factor(factor)
 			accuracy_mul *= factor
-		if helmet_rank >= 3:
+		var odd := 3
+		while odd <= helmet_rank:
 			perfect_add += 1.0
-		if helmet_rank >= 5:
-			perfect_add += 1.0
-		if helmet_rank >= 4:
+			odd += 2
+		var even := 4
+		while even <= helmet_rank:
 			good_add += 2.0
-		if helmet_rank >= 6:
-			good_add += 2.0
+			even += 2
 	elif helmet == SCOUT_LID:
-		var extra := mini(helmet_rank, 3)
-		if helmet_rank == 5:
-			extra = 4
-		elif helmet_rank >= 6:
-			extra = 5
-		stats.rerolls_per_run += extra
+		stats.rerolls_per_run += _scout_rerolls(helmet_rank)
 		if helmet_rank >= 4:
-			stats.practice_per_quarter += 1
-		if helmet_rank >= 6:
-			stats.practice_per_quarter += 1
+			stats.practice_per_quarter += 1 + int((helmet_rank - 4) / 2.0)
 	elif helmet == DOINK_CAP:
-		stats.doink_per_quarter = mini(helmet_rank, 5)
+		if helmet_rank <= 5:
+			stats.doink_per_quarter = helmet_rank
+		elif helmet_rank == 6:
+			stats.doink_per_quarter = 5
+		else:
+			stats.doink_per_quarter = helmet_rank
 		stats.doink_carry = helmet_rank >= 6
 	if gloves == IRON_GRIP:
 		var cut := 2.0 * float(mini(glove_rank, 2))
@@ -500,7 +504,10 @@ static func apply(stats: KickerStats, state: Dictionary, howling: bool) -> void:
 			stats.red_tip_start += 3.0
 		stats.red_tip_off = glove_rank >= 6
 	elif gloves == REPLAY_GLOVES:
-		stats.practice_per_quarter += mini(glove_rank, 5)
+		if glove_rank >= 7:
+			stats.practice_per_quarter += glove_rank
+		else:
+			stats.practice_per_quarter += mini(glove_rank, 5)
 		stats.practice_carry = glove_rank >= 6
 	elif gloves == HIGH_AIR:
 		range_add += 2.0 * float(glove_rank)
@@ -532,7 +539,7 @@ static func apply(stats: KickerStats, state: Dictionary, howling: bool) -> void:
 			elif rank == 2:
 				stats.streak_step = 0.75
 			else:
-				stats.streak_step = 1.0
+				stats.streak_step = 1.0 + 0.25 * float(rank - 3)
 		elif id == STORM_CHASER:
 			storm += 0.2 * float(rank)
 		elif id == HERO_BALL:
@@ -541,7 +548,7 @@ static func apply(stats: KickerStats, state: Dictionary, howling: bool) -> void:
 			elif rank == 2:
 				hero_add += 1.5
 			else:
-				hero_add += 2.0
+				hero_add += 2.0 + 0.5 * float(rank - 3)
 			var factor := 0.80
 			if howling:
 				factor = boost_factor(factor)

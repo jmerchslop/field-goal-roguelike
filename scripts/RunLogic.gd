@@ -4,7 +4,7 @@ extends RefCounted
 # The rules of one run: 20 kicks, attempts, and score.
 # No drawing. main.gd asks this object what to show.
 
-enum Phase { PLAYING, GAME_OVER, WIN }
+enum Phase { PLAYING, GAME_OVER, WIN, FAR }
 
 const NOTE_EARNED := "+1 ATTEMPT"
 const NOTE_CAP := "AT CAP"
@@ -78,6 +78,8 @@ var wind_speed := 0
 var wind_direction := 0.0
 var weather := CLEAR
 var weather_forced := false
+# Endless boss name kept for that kick number, including a shop preview.
+var endless_bosses := {}
 var _forced_cards: Array = []
 var insurance_left := 0
 var practice_left := 0
@@ -143,6 +145,8 @@ func set_next_side(side: int) -> void:
 
 func new_run() -> void:
 	phase = Phase.PLAYING
+	run_mode = "standard"
+	endless_bosses = {}
 	kick_number = 1
 	attempts = KickConstants.ATTEMPTS_START
 	attempt_cap = mini(KickConstants.ATTEMPT_CAP, KickConstants.ATTEMPT_CAP_MAX)
@@ -202,10 +206,14 @@ func new_run() -> void:
 
 
 func distance_yards() -> float:
+	if run_mode == "endless":
+		return RunTable.endless_distance(kick_number)
 	return float(RunTable.row(kick_number)["distance"])
 
 
 func is_boss() -> bool:
+	if run_mode == "endless":
+		return kick_number >= 10 and kick_number % 10 == 0
 	return str(RunTable.row(kick_number)["conditions"]) == RunTable.BOSS
 
 
@@ -239,13 +247,17 @@ func wants_upgrade() -> bool:
 
 func can_advance() -> bool:
 	# Only a make moves the kick number. A miss retries this same kick.
-	return phase == Phase.PLAYING and kick_resolved and last_result_made and kick_number < RunTable.count()
+	if phase != Phase.PLAYING or not kick_resolved or not last_result_made:
+		return false
+	if run_mode == "endless":
+		return distance_yards() < 1000.0
+	return kick_number < RunTable.count()
 
 
 # R is allowed when the run is over. A miss on kick 20 with attempts left is also over:
 # there is no kick 21, and it is not a win.
 func accepts_restart() -> bool:
-	return phase == Phase.GAME_OVER or phase == Phase.WIN
+	return phase == Phase.GAME_OVER or phase == Phase.WIN or phase == Phase.FAR
 
 
 func resolve_kick(result_text: String, offset: float, perfect: bool) -> void:
@@ -289,7 +301,9 @@ func resolve_kick(result_text: String, offset: float, perfect: bool) -> void:
 			best_streak = streak
 		if down_the_middle:
 			middles_this_run += 1
-		if kick_number >= RunTable.count():
+		if run_mode == "endless" and distance >= 1000.0:
+			phase = Phase.FAR
+		elif run_mode != "endless" and kick_number >= RunTable.count():
 			phase = Phase.WIN
 		_note_trophies(true, distance)
 	else:
@@ -516,10 +530,11 @@ static func weather_pool(kick: int) -> Array:
 	return [CLEAR]
 
 
-static func roll_weather_name(kick: int, previous: String, older: String, rng: RandomNumberGenerator) -> String:
-	var boss := boss_weather(kick)
-	if boss != "":
-		return boss
+static func roll_weather_name(kick: int, previous: String, older: String, rng: RandomNumberGenerator, ignore_fixed_boss: bool = false) -> String:
+	if not ignore_fixed_boss:
+		var boss := boss_weather(kick)
+		if boss != "":
+			return boss
 	var blocked := ""
 	if previous != "" and previous == older:
 		blocked = previous
@@ -700,6 +715,15 @@ func follow_offer() -> String:
 
 
 func next_boss_line() -> String:
+	if run_mode == "endless":
+		var target := 0
+		if kick_number == 5:
+			target = 10
+		elif kick_number == 10 or kick_number == 15:
+			target = 20
+		if target == 0:
+			return ""
+		return "Next boss: %s" % _boss_label(_endless_boss(target))
 	if kick_number == 5:
 		return "Next boss: The Squeeze"
 	if kick_number == 10:
@@ -707,6 +731,27 @@ func next_boss_line() -> String:
 	if kick_number == 15:
 		return "Next boss: Big Game"
 	return ""
+
+
+func _boss_label(name: String) -> String:
+	if name == ICED:
+		return "Iced"
+	if name == SQUEEZE:
+		return "The Squeeze"
+	if name == MONSOON:
+		return "Monsoon"
+	if name == BIG_GAME:
+		return "Big Game"
+	return name
+
+
+func _endless_boss(kick: int) -> String:
+	if endless_bosses.has(kick):
+		return str(endless_bosses[kick])
+	var names: Array[String] = [ICED, SQUEEZE, MONSOON, BIG_GAME]
+	var pick := names[_weather_rng.randi() % names.size()]
+	endless_bosses[kick] = pick
+	return pick
 
 
 func open_shop() -> void:
@@ -890,17 +935,17 @@ func give(id: String, rank: int = 1) -> void:
 	if slot == Loadout.CLEATS:
 		if cleats_id != "" and cleats_id != id:
 			return
-		if rank > Loadout.max_rank(id) or rank <= cleats_rank:
+		if rank > Loadout.max_rank(id, run_mode) or rank <= cleats_rank:
 			return
 	elif slot == Loadout.HELMET:
 		if helmet_id != "" and helmet_id != id:
 			return
-		if rank > Loadout.max_rank(id) or rank <= helmet_rank:
+		if rank > Loadout.max_rank(id, run_mode) or rank <= helmet_rank:
 			return
 	elif slot == Loadout.GLOVES:
 		if gloves_id != "" and gloves_id != id:
 			return
-		if rank > Loadout.max_rank(id) or rank <= gloves_rank:
+		if rank > Loadout.max_rank(id, run_mode) or rank <= gloves_rank:
 			return
 	elif slot == Loadout.PERK:
 		var have := _perk_rank(id)
@@ -908,7 +953,7 @@ func give(id: String, rank: int = 1) -> void:
 			return
 		if id == Loadout.GLASS_LEG and have == 0 and attempt_cap <= 2:
 			return
-		if rank > Loadout.max_rank(id) or rank <= have:
+		if rank > Loadout.max_rank(id, run_mode) or rank <= have:
 			return
 	elif slot == Loadout.CURSE:
 		if curse_ids.has(id) or curse_ids.size() >= 2:
@@ -971,6 +1016,7 @@ func loadout_state() -> Dictionary:
 		"curses": curse_ids.duplicate(),
 		"curses_locked": curses_locked,
 		"banned_curses": banned_curses.duplicate(),
+		"run_mode": run_mode,
 	}
 
 
@@ -1012,9 +1058,9 @@ func upcoming_winds() -> Array:
 	var kn := kick_number
 	for _step in stats.wind_preview_count:
 		kn += 1
-		if kn > RunTable.count():
+		if run_mode != "endless" and kn > RunTable.count():
 			break
-		var info: Dictionary = RunTable.row(kn)
+		var info: Dictionary = RunTable.row(RunTable.table_kick(run_mode, kn))
 		var lo := int(info["wind_min"])
 		var hi := int(info["wind_max"])
 		var speed := _wind_rng.randi_range(lo, hi)
@@ -1036,11 +1082,11 @@ func _refill_quarter() -> void:
 	if kick_number == 1 or kick_number == 6 or kick_number == 11 or kick_number == 16:
 		mulligans_left = 0
 		if stats.doink_carry:
-			insurance_left = stats.doink_per_quarter + mini(maxi(insurance_left, 0), 5)
+			insurance_left = stats.doink_per_quarter + mini(maxi(insurance_left, 0), stats.doink_per_quarter)
 		else:
 			insurance_left = stats.doink_per_quarter
 		if stats.practice_carry:
-			practice_left = stats.practice_per_quarter + mini(maxi(practice_left, 0), 5)
+			practice_left = stats.practice_per_quarter + mini(maxi(practice_left, 0), stats.practice_per_quarter)
 		else:
 			practice_left = stats.practice_per_quarter
 		if stats.bench_spare and attempts < attempt_cap:
@@ -1072,7 +1118,7 @@ func _note_trophies(made: bool, distance: float) -> void:
 		earned = "Record Breaker"
 	if streak >= 10 and data.try_trophy("hot_hand"):
 		earned = "Hot Hand"
-	if phase == Phase.WIN and data.try_trophy("season_complete"):
+	if phase == Phase.WIN and run_mode != "endless" and data.try_trophy("season_complete"):
 		earned = "Season Complete"
 	if int(data.middles) + middles_this_run >= 10 and data.try_trophy("bullseye_collector"):
 		earned = "Bullseye Collector"
@@ -1274,26 +1320,34 @@ func _remove_curse_at(index: int) -> void:
 
 
 func _place_spot() -> void:
-	var spot := str(RunTable.row(kick_number)["spot"])
+	if run_mode == "endless" and kick_number > 20:
+		var side := -1 if kick_number % 2 == 1 else 1
+		spot_yards = RunTable.spot_yards(RunTable.SPOT_WIDE, side)
+		return
+	var spot := str(RunTable.row(RunTable.table_kick(run_mode, kick_number))["spot"])
 	if spot == RunTable.SPOT_CENTER:
 		spot_yards = 0.0
 		return
 	# A center kick does not use up a forced side. The next hash or wide kick does.
-	var side := _next_side
+	var side_pick := _next_side
 	_next_side = 0
-	if side == 0:
-		side = -1 if _rng.randi_range(0, 1) == 0 else 1
-	spot_yards = RunTable.spot_yards(spot, side)
+	if side_pick == 0:
+		side_pick = -1 if _rng.randi_range(0, 1) == 0 else 1
+	spot_yards = RunTable.spot_yards(spot, side_pick)
 
 
 func _roll_weather() -> void:
 	if weather_forced:
 		return
-	weather = roll_weather_name(kick_number, _previous_weather, _older_weather, _weather_rng)
+	if run_mode == "endless" and is_boss():
+		weather = _endless_boss(kick_number)
+		return
+	var template := RunTable.table_kick(run_mode, kick_number)
+	weather = roll_weather_name(template, _previous_weather, _older_weather, _weather_rng, run_mode == "endless")
 
 
 func _roll_wind() -> void:
-	var info := RunTable.row(kick_number)
+	var info := RunTable.row(RunTable.table_kick(run_mode, kick_number))
 	var lo := int(info["wind_min"])
 	var hi := int(info["wind_max"])
 	wind_speed = _wind_rng.randi_range(lo, hi)

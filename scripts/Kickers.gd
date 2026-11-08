@@ -3,7 +3,7 @@ extends RefCounted
 
 # The two kickers. Adding a third one later means adding data here.
 # Kick code never names a kicker. It only reads KickerStats and ball_type.
-# A barn_burner ball multiplies sideways wind drift by 0.7. The kick reads ball_type.
+# farm_ball multiplies sideways wind drift by 1.10. The kick reads ball_type.
 
 const BIG_BRUCE := "big_bruce"
 const WALK_ON := "walk_on"
@@ -12,12 +12,12 @@ const ALL: Array = [
 	{
 		"id": BIG_BRUCE,
 		"name": "Big Bruce",
-		"lore": "A farmer who's been booting fence posts loose since he was nine. He can kick it a mile. Where it lands is between him and the Lord.",
-		"excels": "Huge leg.",
-		"downside": "Shaky accuracy.",
-		"ball_name": "Barn Burner",
-		"ball_description": "A post hit becomes a make when you still have 10 yards of range left.",
-		"ball_type": "barn_burner",
+		"lore": "A farmer who's been booting fence posts loose since he was nine. He can kick it a mile. The hay ball goes where the wind takes it.",
+		"excels": "Farm Strength. A press under 80% still kicks at 80%.",
+		"downside": "The Farm Ball. Wind pushes it 10% more.",
+		"ball_name": "The Farm Ball",
+		"ball_description": "A light hay ball. Wind moves it 10% more than a normal ball. A doink stays a doink.",
+		"ball_type": "farm_ball",
 		"color": Color(0.55, 0.09, 0.08),
 		"shape": "square",
 		"portrait_path": "res://art/kickers/big_bruce.png",
@@ -75,8 +75,6 @@ static func apply_to(stats: KickerStats, id: String) -> void:
 	stats.ball_type = str(info["ball_type"])
 	if id == BIG_BRUCE:
 		stats.range_per_power = 0.49
-		stats.red_tip_start = 90.0
-		stats.red_tip_noise = 7.0
-		stats.accuracy_speed *= 1.1
+		stats.power_floor = 80.0
 	elif id == WALK_ON:
 		stats.rerolls_per_run = 2

@@ -286,8 +286,8 @@ static func head_tail_mph(speed: float, direction_degrees: float) -> float:
 # Yards of sideways drift at the uprights, after resist upgrades and the ball.
 static func drift_at_uprights(speed: float, direction_degrees: float, distance_yards: float, low_drive: int, wind_breaker: int, ball_type: String) -> float:
 	var resist := pow(0.65, float(low_drive)) * pow(0.8, float(wind_breaker))
-	if ball_type == "barn_burner":
-		resist *= 0.7
+	if ball_type == "farm_ball":
+		resist *= 1.10
 	return crosswind_mph(speed, direction_degrees) * 0.0065 * distance_yards * resist
 
 
@@ -359,17 +359,26 @@ static func classify(max_range_yards: float, distance_yards: float, offset: floa
 
 
 # reached is true only when the ball's path gets to the uprights' plane.
-# ball_type "barn_burner" can turn a doink into GOOD when there is range to spare.
-static func judge(max_range_yards: float, distance_yards: float, offset: float, ball_type: String, half_gap: float = -1.0) -> Dictionary:
+# A doink stays a doink. Farm Strength does not turn it into a make.
+static func judge(max_range_yards: float, distance_yards: float, offset: float, _ball_type: String, half_gap: float = -1.0) -> Dictionary:
 	if max_range_yards < distance_yards:
 		return {"text": "SHORT", "bank": false, "reached": false}
 	var gap := KickConstants.POST_HALF_GAP_YARDS if half_gap < 0.0 else half_gap
 	var text := _result_at_plane(offset, gap)
-	var bank := false
-	if ball_type == "barn_burner" and text == "DOINK" and max_range_yards >= distance_yards + 10.0:
-		text = "GOOD"
-		bank = true
-	return {"text": text, "bank": bank, "reached": true}
+	return {"text": text, "bank": false, "reached": true}
+
+
+static func power_for_range(locked_power: float, floor_value: float) -> float:
+	if floor_value > 0.0 and locked_power < floor_value:
+		return floor_value
+	return locked_power
+
+
+# Kicks past 75 yards stay in yard-space for the rules. The view squeezes the extra.
+static func visual_span(real_yards: float) -> float:
+	if real_yards <= 75.0:
+		return real_yards
+	return 75.0 + (real_yards - 75.0) * 0.02
 
 
 static func _result_at_plane(offset: float, half_gap: float = KickConstants.POST_HALF_GAP_YARDS) -> String:
@@ -538,7 +547,8 @@ func _lock_accuracy(value: float) -> void:
 		blown *= 1.5
 	drift_yards = drift_at_uprights(blown, wind_direction, kick_distance, 0, 0, stats.ball_type) * stats.drift_factor
 	var wind_range := wind_range_delta(blown, wind_direction, 0, stats.thin_air)
-	max_range = stats.range_base + stats.range_per_power * power + stats.range_bonus + wind_range
+	var ranged := power_for_range(power, stats.power_floor)
+	max_range = stats.range_base + stats.range_per_power * ranged + stats.range_bonus + wind_range
 	if snow_range:
 		max_range -= snow_penalty
 	if thin_air_weather:

@@ -45,6 +45,7 @@ func _run() -> void:
 	_check_vitamin_shop()
 	_check_sprite_scan_and_gauge()
 	_check_menus()
+	_check_endless_and_farm()
 
 
 func check(ok: bool, label: String) -> void:
@@ -218,8 +219,8 @@ func _check_pendulum() -> void:
 	Kickers.apply_to(bruce.stats, Kickers.BIG_BRUCE)
 	var walk := KickLogic.new()
 	Kickers.apply_to(walk.stats, Kickers.WALK_ON)
-	check(near(MeterGauge.omega_accuracy(bruce.stats.accuracy_speed), MeterGauge.omega_accuracy(walk.stats.accuracy_speed) * 1.1, 0.001), "Big Bruce's accuracy angular speed is 1.1 times the Walk-On")
-	check(KickConstants.RED_TIP_START == 95.0 and near(bruce.stats.red_tip_start, 90.0), "red-tip thresholds stay 95 and 90")
+	check(near(bruce.stats.accuracy_speed, walk.stats.accuracy_speed), "Big Bruce uses the default accuracy needle")
+	check(near(bruce.stats.red_tip_start, 95.0) and near(walk.stats.red_tip_start, 95.0), "Big Bruce uses the default red tip")
 	check(KickConstants.ACCURACY_DEG_PER_ERROR == 0.35, "degrees per unit of e stay 0.35")
 	check(KickLogic.is_perfect(2.0) and not KickLogic.is_perfect(2.01), "landing inside the perfect band is still PERFECT")
 	var image := Image.create(4, 1, false, Image.FORMAT_RGBA8)
@@ -887,22 +888,16 @@ func _check_kickers_and_fixes() -> void:
 	var bruce := KickerStats.new()
 	Kickers.apply_to(bruce, Kickers.BIG_BRUCE)
 	check(near(bruce.range_per_power, 0.49), "check 1 Big Bruce range per power is 0.49")
-	check(near(bruce.red_tip_start, 90.0) and near(bruce.red_tip_noise, 7.0), "check 2 Big Bruce red tip starts at 90 with noise 7")
-	check(near(bruce.accuracy_speed, KickConstants.ACCURACY_FALL_PER_SEC * 1.1), "Big Bruce accuracy needle is 1.1 times as fast")
-	check(bruce.ball_type == "barn_burner", "Big Bruce kicks a Barn Burner")
-	var quiet := RandomNumberGenerator.new()
-	quiet.seed = 3
-	var calm := KickLogic.accuracy_with_red_tip(89.0, 0.0, quiet, bruce.red_tip_start, bruce.red_tip_noise)
-	check(calm == 0.0, "power 89 is under Big Bruce's red tip")
-	var shaky := RandomNumberGenerator.new()
-	shaky.seed = 3
-	var wild := KickLogic.accuracy_with_red_tip(92.0, 0.0, shaky, bruce.red_tip_start, bruce.red_tip_noise)
-	check(wild != 0.0 and absf(wild) <= 7.0, "check 2 power 92 adds a wobble of at most 7, got %s" % wild)
-	var posts := KickLogic.judge(76.0, 35.0, 3.08, "barn_burner")
-	check(bool(posts["bank"]) and str(posts["text"]) == "GOOD", "check 3 a post hit with range to spare is a BANK SHOT and GOOD")
-	var barely := KickLogic.judge(36.0, 35.0, 3.08, "barn_burner")
-	check(not bool(barely["bank"]) and str(barely["text"]) == "DOINK", "check 3 a post hit with barely enough range stays a DOINK")
-	check(str(KickLogic.judge(20.0, 35.0, 0.0, "barn_burner")["text"]) == "SHORT", "Barn Burner does not save a short kick")
+	check(near(bruce.red_tip_start, 95.0) and near(bruce.red_tip_noise, 5.0), "Big Bruce uses the default red tip")
+	check(near(bruce.accuracy_speed, KickConstants.ACCURACY_FALL_PER_SEC), "Big Bruce accuracy needle is the default speed")
+	check(near(bruce.power_floor, 80.0), "Farm Strength floors power at 80")
+	check(bruce.ball_type == "farm_ball", "Big Bruce kicks The Farm Ball")
+	var bruce_text := str(Kickers.get_def(Kickers.BIG_BRUCE))
+	check(bruce_text.find("Farm Strength") >= 0 and bruce_text.find("The Farm Ball") >= 0, "Bruce's card names Farm Strength and The Farm Ball")
+	check(bruce_text.find("Barn Burner") < 0 and bruce_text.find("bank") < 0, "Barn Burner is gone from Bruce's card")
+	var posts := KickLogic.judge(76.0, 35.0, 3.08, "farm_ball")
+	check(not bool(posts["bank"]) and str(posts["text"]) == "DOINK", "a doink with range to spare stays a DOINK")
+	check(str(KickLogic.judge(20.0, 35.0, 0.0, "farm_ball")["text"]) == "SHORT", "Farm Strength does not save a kick that is still short of the posts")
 	var walk := KickerStats.new()
 	Kickers.apply_to(walk, Kickers.WALK_ON)
 	check(near(walk.red_tip_start, 95.0) and near(walk.range_per_power, 0.44) and walk.ball_type == "standard", "check 4 The Walk-On keeps the normal meter and ball")
@@ -1074,8 +1069,8 @@ func _check_wind_and_pool() -> void:
 	calm.go_to_next_kick()
 	check(calm.kick_number == before_kick + 1 and not (calm.wind_speed == 10 and near(calm.wind_direction, 90.0)), "check 5 the next kick rolls a new wind")
 	var walk_drift := KickLogic.drift_at_uprights(10.0, 90.0, 35.0, 0, 0, "standard")
-	var bruce_drift := KickLogic.drift_at_uprights(10.0, 90.0, 35.0, 0, 0, "barn_burner")
-	check(walk_drift > 2.0 and near(bruce_drift, walk_drift * 0.7), "check 6 Barn Burner drift is 0.7 times The Walk-On")
+	var bruce_drift := KickLogic.drift_at_uprights(10.0, 90.0, 35.0, 0, 0, "farm_ball")
+	check(walk_drift > 2.0 and near(bruce_drift, walk_drift * 1.10), "The Farm Ball drifts 1.10 times The Walk-On")
 	var curve := KickLogic.new()
 	curve.wind_speed = 10
 	curve.wind_direction = 90.0
@@ -1282,9 +1277,9 @@ func _check_weather_and_bosses() -> void:
 	game.force_weather(RunLogic.BIG_GAME)
 	game.prepare_kick_stats()
 	check(near(game.stats.power_speed, KickConstants.POWER_RISE_PER_SEC), "check 9 big game restores base power speed, got %s" % game.stats.power_speed)
-	check(near(game.stats.accuracy_speed, KickConstants.ACCURACY_FALL_PER_SEC * 1.1), "check 9 Big Bruce keeps his base accuracy speed")
+	check(near(game.stats.accuracy_speed, KickConstants.ACCURACY_FALL_PER_SEC), "check 9 Big Bruce keeps the default accuracy speed")
 	check(near(game.stats.perfect_band, 2.0) and near(game.stats.good_band, 8.0), "check 9 the bands are back to ±2 and ±8")
-	check(near(game.stats.red_tip_start, 90.0) and near(game.stats.red_tip_noise, 7.0), "check 9 the red tip is the kicker's base tip")
+	check(near(game.stats.red_tip_start, 95.0) and near(game.stats.red_tip_noise, 5.0) and near(game.stats.power_floor, 80.0), "check 9 Big Game keeps Farm Strength and the default red tip")
 	check(not game.stats.ice_veins, "Big Game turns off Ice Cage's red-tip help")
 	check(game.has_ice_cage(), "Ice Cage is still owned on Big Game")
 	check(near(game.stats.range_bonus, 6.0), "Cannon Cleats still adds range on Big Game")
@@ -1701,12 +1696,12 @@ func _check_rank_caps_and_range() -> void:
 	var grip := RunLogic.new()
 	grip.start_with_kicker(Kickers.BIG_BRUCE)
 	grip.give(Loadout.IRON_GRIP, 5)
-	check(near(grip.stats.red_tip_start, 99.0) and near(grip.stats.red_tip_noise, 3.0), "Iron Grip V pushes Bruce's red tip from 90 to 99")
+	check(near(grip.stats.red_tip_start, 104.0) and near(grip.stats.red_tip_noise, 1.0), "Iron Grip V pushes Bruce's red tip from 95 to 104")
 	grip.give(Loadout.IRON_GRIP, 6)
 	check(grip.stats.red_tip_off, "Iron Grip VI turns the red tip off")
 	grip.force_weather(RunLogic.BIG_GAME)
 	grip.prepare_kick_stats()
-	check(not grip.stats.red_tip_off and near(grip.stats.red_tip_start, 90.0), "Big Game turns Iron Grip's red-tip help off")
+	check(not grip.stats.red_tip_off and near(grip.stats.red_tip_start, 95.0), "Big Game turns Iron Grip's red-tip help off")
 	var walk_grip := RunLogic.new()
 	walk_grip.start_with_kicker(Kickers.WALK_ON)
 	walk_grip.give(Loadout.IRON_GRIP, 4)
@@ -2186,7 +2181,7 @@ func _check_menus() -> void:
 	season.kick_number = 20
 	season.attempts = 2
 	season.resolve_kick("GOOD", 0.0, true)
-	check(season.phase == RunLogic.Phase.WIN and RunTable.count() == 20, "endless still ends after the 20-kick season")
+	check(season.phase == RunLogic.Phase.PLAYING and RunTable.count() == 20, "Endless kick 20 keeps playing; Standard's table is still 20 kicks")
 	var trophy := FrontEnd.new()
 	trophy.confirm_title()
 	trophy.menu_index = 2
@@ -2251,4 +2246,168 @@ func _key_event(code: Key) -> InputEventKey:
 	event.pressed = true
 	event.echo = false
 	return event
+
+
+func _check_endless_and_farm() -> void:
+	var standard := RunLogic.new()
+	check(near(standard.distance_yards(), 35.0) and not standard.is_boss(), "Standard kick 1 is still 35 yards")
+	standard.kick_number = 5
+	check(standard.is_boss() and near(standard.distance_yards(), 48.0), "Standard kick 5 is still the 48-yard boss")
+	standard.kick_number = 10
+	check(standard.is_boss(), "Standard kick 10 is still a boss")
+	standard.kick_number = 15
+	check(standard.is_boss(), "Standard kick 15 is still a boss")
+	standard.kick_number = 20
+	standard.attempts = 3
+	standard.resolve_kick("GOOD", 0.0, true)
+	check(standard.phase == RunLogic.Phase.WIN and near(standard.distance_yards(), 75.0), "Standard kick 20 is still a WIN at 75 yards")
+	check(Loadout.max_rank(Loadout.CANNON) == 6 and Loadout.max_rank(Loadout.HERO_BALL) == 3, "Standard caps stay equipment VI and perk III")
+	var capped := RunLogic.new()
+	capped.give(Loadout.CANNON, 6)
+	capped.give(Loadout.CANNON, 7)
+	capped.give(Loadout.HERO_BALL, 3)
+	capped.give(Loadout.HERO_BALL, 4)
+	check(capped.cleats_rank == 6 and capped._perk_rank(Loadout.HERO_BALL) == 3, "a Standard offer cannot rank past VI or perk III")
+	var endless := RunLogic.new()
+	endless.run_mode = "endless"
+	check(near(endless.distance_yards(), 20.0) and not endless.is_boss(), "Endless kick 1 is 20 yards and not a boss")
+	endless.kick_number = 2
+	check(near(endless.distance_yards(), 25.0), "Endless kick 2 is 25 yards")
+	endless.kick_number = 3
+	check(near(endless.distance_yards(), 30.0), "Endless kick 3 is 30 yards")
+	endless.kick_number = 5
+	check(not endless.is_boss(), "Endless kick 5 is not a boss")
+	endless.kick_number = 10
+	check(endless.is_boss() and near(endless.distance_yards(), 65.0), "Endless kick 10 is a 65-yard boss")
+	endless.kick_number = 15
+	check(not endless.is_boss(), "Endless kick 15 is not a boss")
+	endless.kick_number = 20
+	check(endless.is_boss() and near(endless.distance_yards(), 115.0), "Endless kick 20 is a 115-yard boss")
+	endless.kick_number = 30
+	check(endless.is_boss(), "Endless kick 30 is a boss")
+	endless.kick_number = 37
+	check(near(endless.distance_yards(), 200.0) and not endless.is_boss(), "Endless kick 37 is 200 yards")
+	endless.kick_number = 197
+	check(near(endless.distance_yards(), 1000.0), "Endless distance caps at 1000 yards")
+	var seen := {}
+	for seed_value in 40:
+		var rolled := RunLogic.new()
+		rolled.run_mode = "endless"
+		rolled.kick_number = 10
+		rolled._weather_rng.seed = seed_value
+		rolled._roll_weather()
+		var kept := rolled.weather
+		rolled._roll_weather()
+		check(rolled.weather == kept, "an Endless boss stays the same when the kick is rolled again")
+		if not rolled.is_boss():
+			check(false, "Endless kick 10 rolled as a boss")
+		seen[kept] = true
+	check(seen.has(RunLogic.ICED) and seen.has(RunLogic.SQUEEZE) and seen.has(RunLogic.MONSOON) and seen.has(RunLogic.BIG_GAME), "Endless bosses are drawn from all four")
+	var shop := RunLogic.new()
+	shop.run_mode = "endless"
+	shop.kick_number = 5
+	var preview := shop.next_boss_line()
+	check(preview.begins_with("Next boss: ") and shop.endless_bosses.has(10), "the kick 5 shop previews kick 10's boss, got %s" % preview)
+	shop.kick_number = 10
+	shop._roll_weather()
+	check(shop.weather == str(shop.endless_bosses[10]), "kick 10 keeps the previewed boss")
+	var later := shop.next_boss_line()
+	check(later.begins_with("Next boss: ") and shop.endless_bosses.has(20), "the kick 10 shop previews kick 20")
+	shop.kick_number = 15
+	check(shop.next_boss_line() == later, "the kick 15 shop previews the same kick 20 boss")
+	check(not shop.opens_shop() or shop.kick_number == 15, "shops are still decided by kick number")
+	shop.last_result_made = true
+	shop.phase = RunLogic.Phase.PLAYING
+	check(shop.opens_shop(), "making Endless kick 15 still opens the shop")
+	shop.kick_number = 16
+	check(not shop.opens_shop(), "Endless does not open a shop after kick 15")
+	var ranked := RunLogic.new()
+	ranked.run_mode = "endless"
+	ranked.give(Loadout.CANNON, 12)
+	ranked.give(Loadout.HOT_STREAK, 6)
+	check(ranked.cleats_rank == 12 and Loadout.rank_badge(Loadout.CANNON, 12) == "XII", "Endless equipment ranks to XII")
+	check(ranked._perk_rank(Loadout.HOT_STREAK) == 6 and Loadout.rank_badge(Loadout.HOT_STREAK, 4) == "IV" and Loadout.rank_badge(Loadout.HOT_STREAK, 7) == "VII", "Endless perk badges reach IV and equipment badges reach VII")
+	check(near(ranked.stats.range_bonus, 72.0), "Cannon XII is +72 yards")
+	check(near(ranked.stats.streak_step, 1.75), "Hot Streak VI is +1.75")
+	var bruce := RunLogic.new()
+	bruce.start_with_kicker(Kickers.BIG_BRUCE)
+	bruce.run_mode = "endless"
+	check(near(bruce.stats.range_base + bruce.stats.range_per_power * 100.0, 65.0), "Bruce with no items is still 65 yards at full power")
+	bruce.kick_number = 11
+	check(near(bruce.distance_yards(), 70.0), "Endless kick 11 is 70 yards")
+	check(KickLogic.classify(65.0, 70.0, 0.0) == "SHORT", "65 yards is SHORT of a 70-yard kick")
+	bruce.give(Loadout.CANNON, 12)
+	bruce.give(Loadout.HIGH_AIR, 12)
+	bruce.give(Loadout.GLASS_LEG, 6)
+	bruce.give(Loadout.STONE)
+	bruce.give(Loadout.SHAKY)
+	var piled := bruce.stats.range_base + bruce.stats.range_per_power * 100.0 + bruce.stats.range_bonus
+	check(piled >= 200.0 and near(piled, 221.0), "Bruce's range pile reaches about 221 yards, got %s" % piled)
+	var walk := RunLogic.new()
+	walk.start_with_kicker(Kickers.WALK_ON)
+	walk.give(Loadout.CANNON, 12)
+	check(walk.cleats_rank == 0, "Walk-On in Standard cannot take Cannon XII")
+	walk.run_mode = "endless"
+	walk.give(Loadout.CANNON, 12)
+	walk.give(Loadout.HIGH_AIR, 12)
+	walk.give(Loadout.GLASS_LEG, 6)
+	walk.give(Loadout.STONE)
+	walk.give(Loadout.SHAKY)
+	var walk_pile := walk.stats.range_base + walk.stats.range_per_power * 100.0 + walk.stats.range_bonus
+	check(walk_pile >= 200.0 and near(walk_pile, 216.0), "Walk-On's range pile reaches about 216 yards, got %s" % walk_pile)
+	var howl := RunLogic.new()
+	howl.start_with_kicker(Kickers.BIG_BRUCE)
+	howl.run_mode = "endless"
+	howl.give(Loadout.CANNON, 12)
+	howl.give(Loadout.HIGH_AIR, 12)
+	howl.give(Loadout.GLASS_LEG, 6)
+	howl.give(Loadout.HOWLING)
+	var howled := howl.stats.range_base + howl.stats.range_per_power * 100.0 + howl.stats.range_bonus
+	check(near(howled, 65.0 + (72.0 + 24.0 + 48.0) * 1.15), "Howling Wind multiplies the Endless range bonuses, got %s" % howled)
+	var low := KickLogic.new()
+	Kickers.apply_to(low.stats, Kickers.BIG_BRUCE)
+	low.kick_distance = 48.0
+	_swing_to(low, 20.0, 0.0)
+	check(near(low.power, 20.0) and near(low.max_range, 55.2), "a raw press of 20 still shows, and the kick uses 55.2 yards")
+	check(low.result_text == "GOOD", "Farm Strength makes a 48-yard kick GOOD from a weak press")
+	var sixty := KickLogic.new()
+	Kickers.apply_to(sixty.stats, Kickers.BIG_BRUCE)
+	sixty.kick_distance = 60.0
+	_swing_to(sixty, 20.0, 0.0)
+	check(sixty.result_text == "SHORT" and near(sixty.max_range, 55.2), "the same weak press is SHORT at 60 yards")
+	var ninety := KickLogic.new()
+	Kickers.apply_to(ninety.stats, Kickers.BIG_BRUCE)
+	_swing_to(ninety, 90.0, 0.0)
+	check(near(ninety.power, 90.0) and near(ninety.max_range, 60.1), "P=90 stays 90 and reaches 60.1 yards")
+	var full := KickLogic.new()
+	Kickers.apply_to(full.stats, Kickers.BIG_BRUCE)
+	_swing_to(full, 100.0, 0.0)
+	check(near(full.max_range, 65.0), "P=100 is still 65 yards")
+	var iced := RunLogic.new()
+	iced.start_with_kicker(Kickers.BIG_BRUCE)
+	iced.give(Loadout.ICED)
+	iced.force_weather(RunLogic.BIG_GAME)
+	iced.prepare_kick_stats()
+	check(near(iced.stats.power_floor, 80.0), "Farm Strength stays on during Big Game and the Iced curse")
+	var missed := RunLogic.new()
+	missed.run_mode = "endless"
+	missed.attempts = 1
+	missed.resolve_kick("SHORT", 0.0, false)
+	check(missed.phase == RunLogic.Phase.GAME_OVER, "Endless still ends when attempts hit 0")
+	var records = get_root().get_node("SaveData")
+	var kept_path := str(records.file_path)
+	records.file_path = "user://fg_endless_save.cfg"
+	records.reset_save()
+	var deep := RunLogic.new()
+	deep.run_mode = "endless"
+	deep.kick_number = 20
+	deep.attempts = 3
+	deep.resolve_kick("GOOD", 0.0, true)
+	check(deep.phase == RunLogic.Phase.PLAYING and not records.has_trophy("season_complete"), "Endless kick 20 is not a Standard win and does not grant Season Complete")
+	deep.kick_number = 197
+	deep.kick_resolved = false
+	deep.resolve_kick("GOOD", 0.0, false)
+	check(deep.phase == RunLogic.Phase.FAR and near(deep.longest_make, 1000.0), "making the 1000-yard kick finishes with THAT'S FAR ENOUGH")
+	check(records.longest_make >= 1000, "the 1000-yard make is saved in the records")
+	records.file_path = kept_path
 

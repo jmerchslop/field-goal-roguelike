@@ -44,7 +44,7 @@ func _draw() -> void:
 		_draw_mulligan()
 	elif run.awaiting_offer:
 		_draw_offer(run)
-	elif run.phase == RunLogic.Phase.GAME_OVER or run.phase == RunLogic.Phase.WIN:
+	elif run.phase == RunLogic.Phase.GAME_OVER or run.phase == RunLogic.Phase.WIN or run.phase == RunLogic.Phase.FAR:
 		_draw_end_screen(run)
 	elif logic.phase == KickLogic.Phase.RESULT:
 		_draw_result(logic, run)
@@ -179,7 +179,10 @@ func _draw_hud(logic: KickLogic, run: RunLogic) -> void:
 	draw_rect(Rect2(12, 64, 390, 248), Color(0.02, 0.05, 0.08, 0.42))
 	var x := 24.0
 	var y := 86.0
-	_text(Vector2(x, y), "Kick %d of %d" % [run.kick_number, RunTable.count()], 22, KickConstants.COLOR_TEXT)
+	var kick_line := "Kick %d" % run.kick_number
+	if run.run_mode != "endless":
+		kick_line = "Kick %d of %d" % [run.kick_number, RunTable.count()]
+	_text(Vector2(x, y), kick_line, 22, KickConstants.COLOR_TEXT)
 	y += 26.0
 	_text(Vector2(x, y), "%s yd" % KickLogic.format_number(run.distance_yards()), 20, KickConstants.COLOR_TEXT)
 	y += 22.0
@@ -216,7 +219,7 @@ func _draw_hud(logic: KickLogic, run: RunLogic) -> void:
 			names += Loadout.piece_name(str(id))
 		_text_centered(names, 286.0, 18, Color(0.72, 0.4, 0.95))
 	var hint := ""
-	if run.phase == RunLogic.Phase.GAME_OVER or run.phase == RunLogic.Phase.WIN:
+	if run.phase == RunLogic.Phase.GAME_OVER or run.phase == RunLogic.Phase.WIN or run.phase == RunLogic.Phase.FAR:
 		hint = ""
 	elif run.accepts_restart():
 		hint = "R: choose a kicker    Esc: main menu"
@@ -488,9 +491,15 @@ func _draw_result(logic: KickLogic, run: RunLogic) -> void:
 func _draw_end_screen(run: RunLogic) -> void:
 	var box := Rect2(KickConstants.RESULT_LEFT, KickConstants.RESULT_TOP, KickConstants.RESULT_WIDTH, KickConstants.RESULT_HEIGHT + 56.0)
 	draw_rect(box, KickConstants.COLOR_RESULT_SCRIM)
-	var title := "WIN" if run.phase == RunLogic.Phase.WIN else "GAME OVER"
-	var title_color := KickConstants.COLOR_GOOD if run.phase == RunLogic.Phase.WIN else KickConstants.COLOR_MISS
-	_text_centered(title, box.position.y + 70.0, 64, title_color)
+	var title := "GAME OVER"
+	var title_color := KickConstants.COLOR_MISS
+	if run.phase == RunLogic.Phase.WIN:
+		title = "WIN"
+		title_color = KickConstants.COLOR_GOOD
+	elif run.phase == RunLogic.Phase.FAR:
+		title = "THAT'S FAR ENOUGH"
+		title_color = KickConstants.COLOR_GOOD
+	_text_centered(title, box.position.y + 70.0, 40 if run.phase == RunLogic.Phase.FAR else 64, title_color)
 	_text_centered("Score %d" % run.score, box.position.y + 130.0, 32, KickConstants.COLOR_TEXT)
 	_text_centered("Kicks made %d" % run.kicks_made, box.position.y + 172.0, 28, KickConstants.COLOR_TEXT)
 	_text_centered("Longest make %s yd" % KickLogic.format_number(run.longest_make), box.position.y + 210.0, 28, KickConstants.COLOR_TEXT)

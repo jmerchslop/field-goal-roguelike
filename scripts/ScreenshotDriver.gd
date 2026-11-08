@@ -365,6 +365,9 @@ func _ready() -> void:
 	if not await _capture_menus():
 		get_tree().quit(1)
 		return
+	if not await _capture_modes():
+		get_tree().quit(1)
+		return
 	get_tree().quit()
 
 
@@ -1100,6 +1103,234 @@ func _capture_menus() -> bool:
 	board.run.score = 42
 	board.run.kicks_made = 3
 	if not await _capture("game_over_main_menu.png"):
+		return false
+	return true
+
+
+func _capture_modes() -> bool:
+	board.showing_records = false
+	board.front.screen = FrontEnd.Screen.PLAY
+	board.selecting = false
+	board.highlight = 0
+	board.front.run_mode = "endless"
+	board.confirm_kicker()
+	board.run.run_mode = "endless"
+	board.run.set_wind(0.0, 0.0)
+	board.run.force_weather(RunLogic.CLEAR)
+	board.load_current_kick()
+	print("ENDLESS kick 1 ", board.run.distance_yards(), " boss ", board.run.is_boss())
+	if not await _capture("endless_kick1_20.png"):
+		return false
+	board.run.kick_number = 2
+	board.load_current_kick()
+	print("ENDLESS kick 2 ", board.run.distance_yards())
+	if not await _capture("endless_kick2_25.png"):
+		return false
+	board.run.kick_number = 5
+	board.run.force_weather(RunLogic.CLEAR)
+	board.load_current_kick()
+	print("ENDLESS kick 5 boss ", board.run.is_boss(), " dist ", board.run.distance_yards())
+	if not await _capture("endless_kick5_not_boss.png"):
+		return false
+	board.run.kick_number = 10
+	board.run.weather_forced = false
+	board.run.endless_bosses = {}
+	board.run._weather_rng.seed = 4
+	board.run._roll_weather()
+	board.load_current_kick()
+	print("ENDLESS kick 10 ", board.run.weather, " dist ", board.run.distance_yards())
+	if not await _capture("endless_kick10_boss.png"):
+		return false
+	board.run.kick_number = 15
+	board.run.force_weather(RunLogic.CLEAR)
+	board.load_current_kick()
+	print("ENDLESS kick 15 boss ", board.run.is_boss())
+	if not await _capture("endless_kick15_not_boss.png"):
+		return false
+	board.run.kick_number = 20
+	board.run.weather_forced = false
+	board.run._weather_rng.seed = 9
+	board.run._roll_weather()
+	board.load_current_kick()
+	print("ENDLESS kick 20 ", board.run.weather, " phase ", board.run.phase)
+	if not await _capture("endless_kick20_boss.png"):
+		return false
+	board.run.kick_number = 5
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.last_result_made = true
+	board.run.kick_resolved = true
+	board.run.endless_bosses = {}
+	board.run._weather_rng.seed = 4
+	board.run.open_shop()
+	print("ENDLESS shop preview ", board.run.next_boss_line())
+	if not await _capture("endless_shop5_preview.png"):
+		return false
+	board.run.leave_shop()
+	board.run.force_weather(RunLogic.CLEAR)
+	board.run.set_wind(0.0, 0.0)
+	board.run.give(Loadout.CANNON, 7)
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.awaiting_shop = false
+	board.load_current_kick()
+	print("ENDLESS cannon rank ", board.run.cleats_rank)
+	if not await _capture("endless_rank_vii.png"):
+		return false
+	board.run.give(Loadout.HOT_STREAK, 4)
+	board.load_current_kick()
+	print("ENDLESS hot streak ", board.run._perk_rank(Loadout.HOT_STREAK))
+	if not await _capture("endless_perk_iv.png"):
+		return false
+	board.front.run_mode = "standard"
+	board.highlight = 1
+	board.confirm_kicker()
+	board.run.kick_resolved = true
+	board.run.last_result_made = true
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.roll_offer()
+	var high := false
+	for card in board.run.offer:
+		var rank := int(card.get("rank", 1))
+		var id := str(card.get("id", ""))
+		if Loadout.kind_of(id) == Loadout.PERK and rank > 3:
+			high = true
+		if Loadout.kind_of(id) == Loadout.EQUIPMENT and rank > 6:
+			high = true
+	print("STANDARD offer high ranks ", high, " cards ", board.run.offer.size())
+	if high:
+		return false
+	if not await _capture("standard_no_high_ranks.png"):
+		return false
+	board.run.skip_offer()
+	board.highlight = 0
+	board.confirm_kicker()
+	board.run.kick_number = 11
+	board.run.run_mode = "endless"
+	board.run.set_wind(0.0, 0.0)
+	board.run.force_weather(RunLogic.CLEAR)
+	board.load_current_kick()
+	_swing_meter(100.0, 0.0)
+	if board.logic.phase == KickLogic.Phase.FLIGHT:
+		board.logic.advance(board.logic.flight_duration)
+	board.run.resolve_kick(board.logic.result_text, board.logic.offset_yards, board.logic.perfect)
+	print("ENDLESS 70yd ", board.logic.result_text, " range ", board.logic.max_range, " dist ", board.run.distance_yards())
+	if board.logic.result_text != "SHORT":
+		return false
+	if not await _capture("endless_bruce_70_short.png"):
+		return false
+	board.run.kick_number = 37
+	board.run.kick_resolved = false
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.run_mode = "endless"
+	board.run.give(Loadout.CANNON, 12)
+	board.run.give(Loadout.HIGH_AIR, 12)
+	board.run.give(Loadout.GLASS_LEG, 6)
+	board.run.give(Loadout.STONE)
+	board.run.give(Loadout.SHAKY)
+	board.run.set_wind(0.0, 0.0)
+	board.run.force_weather(RunLogic.CLEAR)
+	board.load_current_kick()
+	_swing_meter(100.0, 0.0)
+	if board.logic.phase == KickLogic.Phase.FLIGHT:
+		board.logic.advance(board.logic.flight_duration)
+	print("ENDLESS 200 ", board.logic.result_text, " range ", board.logic.max_range)
+	if board.logic.result_text != "GOOD":
+		return false
+	board.run.resolve_kick(board.logic.result_text, board.logic.offset_yards, board.logic.perfect)
+	if not await _capture("endless_200_good.png"):
+		return false
+	SaveData.trophies["season_complete"] = false
+	board.run.kick_number = 20
+	board.run.kick_resolved = false
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.run_mode = "endless"
+	board.run.attempts = 3
+	board.run.resolve_kick("GOOD", 0.0, true)
+	print("ENDLESS kick 20 phase ", board.run.phase, " season ", SaveData.has_trophy("season_complete"))
+	board.showing_records = true
+	board.front.screen = FrontEnd.Screen.RECORDS
+	if not await _capture("endless_no_season_complete.png"):
+		return false
+	board.showing_records = false
+	board.front.screen = FrontEnd.Screen.PLAY
+	board.run.kick_number = 197
+	board.run.kick_resolved = false
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.run_mode = "endless"
+	board.run.resolve_kick("GOOD", 0.0, false)
+	print("ENDLESS far phase ", board.run.phase, " dist ", board.run.distance_yards())
+	if not await _capture("endless_thats_far_enough.png"):
+		return false
+	board.front.screen = FrontEnd.Screen.SELECT
+	board.selecting = true
+	board.showing_records = false
+	board.highlight = 0
+	if not await _capture("bruce_select_kit.png"):
+		return false
+	board.confirm_kicker()
+	board.run.kick_number = 5
+	board.run.set_wind(0.0, 0.0)
+	board.run.force_weather(RunLogic.CLEAR)
+	board.load_current_kick()
+	_swing_meter(20.0, 0.0)
+	if board.logic.phase == KickLogic.Phase.FLIGHT:
+		board.logic.advance(board.logic.flight_duration)
+	print("BRUCE floor 48 ", board.logic.power, " range ", board.logic.max_range, " ", board.logic.result_text)
+	if not await _capture("bruce_floor_low_p.png"):
+		return false
+	board.load_current_kick()
+	board.run.kick_number = 16
+	board.run.set_wind(0.0, 0.0)
+	board.run.force_weather(RunLogic.CLEAR)
+	board.load_current_kick()
+	_swing_meter(20.0, 0.0)
+	if board.logic.phase == KickLogic.Phase.FLIGHT:
+		board.logic.advance(board.logic.flight_duration)
+	print("BRUCE floor 60 ", board.run.distance_yards(), " ", board.logic.result_text, " range ", board.logic.max_range)
+	if not await _capture("bruce_floor_60_short.png"):
+		return false
+	board.run.kick_number = 1
+	board.load_current_kick()
+	_swing_meter(90.0, 0.0)
+	if board.logic.phase == KickLogic.Phase.FLIGHT:
+		board.logic.advance(board.logic.flight_duration)
+	print("BRUCE p90 ", board.logic.power, " range ", board.logic.max_range)
+	if not await _capture("bruce_p90.png"):
+		return false
+	board.run.kick_number = 17
+	board.run.set_wind(0.0, 0.0)
+	board.run.force_weather(RunLogic.CLEAR)
+	board.load_current_kick()
+	_swing_meter(100.0, 0.0)
+	if board.logic.phase == KickLogic.Phase.FLIGHT:
+		board.logic.advance(board.logic.flight_duration)
+	print("BRUCE p100 ", board.logic.max_range, " dist ", board.run.distance_yards(), " ", board.logic.result_text)
+	if not await _capture("bruce_p100_65.png"):
+		return false
+	board.run.set_wind(10.0, 90.0)
+	board.load_current_kick()
+	_swing_meter(80.0, 0.0)
+	if board.logic.phase == KickLogic.Phase.FLIGHT:
+		board.logic.advance(board.logic.flight_duration * 0.7)
+	print("BRUCE wind drift ", board.logic.drift_yards)
+	if not await _capture("bruce_farm_ball_wind.png"):
+		return false
+	board.run.kick_number = 1
+	board.run.set_wind(0.0, 0.0)
+	board.run.force_weather(RunLogic.CLEAR)
+	board.load_current_kick()
+	board.logic.aim_degrees = rad_to_deg(atan(3.08 / 35.0))
+	_swing_meter(94.0, 0.0)
+	if board.logic.phase == KickLogic.Phase.FLIGHT:
+		board.logic.advance(board.logic.flight_duration)
+	print("BRUCE doink ", board.logic.result_text, " range ", board.logic.max_range, " offset ", board.logic.offset_yards)
+	if board.logic.result_text != "DOINK":
+		return false
+	if not await _capture("bruce_doink_no_bank.png"):
+		return false
+	board.front.screen = FrontEnd.Screen.SELECT
+	board.selecting = true
+	board.highlight = 1
+	if not await _capture("walkon_unchanged.png"):
 		return false
 	return true
 

@@ -433,7 +433,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		front.records_return = FrontEnd.Screen.PLAY
 		refresh_view()
 		return
-	if Settings.pressed_event(event, "back") and (run.phase == RunLogic.Phase.GAME_OVER or run.phase == RunLogic.Phase.WIN) and not showing_records:
+	if Settings.pressed_event(event, "back") and (run.phase == RunLogic.Phase.GAME_OVER or run.phase == RunLogic.Phase.WIN or run.phase == RunLogic.Phase.FAR) and not showing_records:
+		_return_to_main_menu()
+		return
+	if Settings.pressed_event(event, "confirm") and run.phase == RunLogic.Phase.FAR:
 		_return_to_main_menu()
 		return
 	# R still returns to character select. It is not the offer-reroll action.
@@ -1087,7 +1090,7 @@ func _place_kicker(tee: Vector3) -> void:
 
 
 func _tee_position() -> Vector3:
-	return Vector3(logic.start_lateral_yards, 0.0, logic.kick_distance)
+	return Vector3(logic.start_lateral_yards, 0.0, KickLogic.visual_span(logic.kick_distance))
 
 
 func _ball_position() -> Vector3:
@@ -1112,7 +1115,9 @@ func _ball_position() -> Vector3:
 	var y := height
 	if y < 0.2:
 		y = 0.22
-	return Vector3(lateral, y, logic.kick_distance - forward)
+	var real := maxf(logic.kick_distance, 0.001)
+	var span := KickLogic.visual_span(real)
+	return Vector3(lateral, y, span - forward * (span / real))
 
 
 func _arc_height(forward: float) -> float:
@@ -1149,7 +1154,7 @@ func _place_camera() -> void:
 	# The camera rides with the tee. It looks along the tee's line, not at the posts,
 	# so a left spot leaves the posts on the right of the screen and a right spot does the opposite.
 	var spot := logic.start_lateral_yards
-	var dist := logic.kick_distance
+	var dist := KickLogic.visual_span(logic.kick_distance)
 	var extra := 0.0
 	if dist > 48.0:
 		extra = (dist - 48.0) * 0.11
