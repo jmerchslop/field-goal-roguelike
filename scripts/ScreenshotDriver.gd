@@ -354,6 +354,9 @@ func _ready() -> void:
 	if not await _capture_vitamin_shop():
 		get_tree().quit(1)
 		return
+	if not await _capture_meter_row():
+		get_tree().quit(1)
+		return
 	get_tree().quit()
 
 
@@ -569,6 +572,96 @@ func _capture_range_hotfix() -> bool:
 		return false
 	if not board.run.skip_offer():
 		print("empty offer did not skip")
+		return false
+	return true
+
+
+func _capture_meter_row() -> bool:
+	board.showing_records = false
+	board.save_note = ""
+	board.run.trophy_name = ""
+	board.highlight = 1
+	board.confirm_kicker()
+	board.run.cash_popup = ""
+	board.run.vitamin_note = ""
+	if not await _capture("meter_row_fresh.png"):
+		return false
+	board.logic.phase = KickLogic.Phase.POWER
+	board.logic.needle = 48.0
+	board.logic.power = 48.0
+	board.meter_time = 0.2
+	if not await _capture("meter_power_mid.png"):
+		return false
+	board.logic.needle = 97.0
+	board.logic.power = 97.0
+	if not await _capture("meter_power_redtip.png"):
+		return false
+	board.logic.phase = KickLogic.Phase.ACCURACY
+	board.logic.power = 80.0
+	board.logic.needle = 6.0
+	if not await _capture("meter_accuracy_good.png"):
+		return false
+	board.logic.needle = 0.0
+	if not await _capture("meter_accuracy_perfect.png"):
+		return false
+	board.run.give(Loadout.PINPOINT, 4)
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.ACCURACY
+	board.logic.power = 80.0
+	board.logic.needle = 0.0
+	if not await _capture("meter_pinpoint_wide.png"):
+		return false
+	board.run.give(Loadout.TIGHT)
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.ACCURACY
+	board.logic.power = 80.0
+	board.logic.needle = 0.0
+	if not await _capture("meter_tight_window.png"):
+		return false
+	board.run.force_offer([
+		{"id": Loadout.SCOUT_LID, "slot": Loadout.HELMET, "kind": Loadout.EQUIPMENT, "rank": 1},
+		{"id": Loadout.HERO_BALL, "slot": Loadout.PERK, "kind": Loadout.PERK, "rank": 1},
+		{"id": Loadout.SHANKY, "slot": Loadout.CURSE, "kind": Loadout.CURSE, "rank": 1},
+	])
+	board.run.roll_offer()
+	if not await _capture("meter_offer_sprites.png"):
+		return false
+	board.run.skip_offer()
+	board.run.give(Loadout.CANNON, 1)
+	board.run.give(Loadout.SCOUT_LID, 1)
+	board.run.give(Loadout.HERO_BALL, 1)
+	board.run.give(Loadout.SHANKY)
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.AIMING
+	if not await _capture("meter_row_filled.png"):
+		return false
+	board.run.give(Loadout.SCOUT_LID, 2)
+	board.load_current_kick()
+	if not await _capture("meter_rank_badge.png"):
+		return false
+	board.highlight = 1
+	board.confirm_kicker()
+	board.run.give(Loadout.ICED)
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.POWER
+	board.logic.needle = 40.0
+	board.logic.power = 40.0
+	board.meter_time = 0.5
+	if not await _capture("meter_iced_curse_hidden.png"):
+		return false
+	board.highlight = 0
+	board.confirm_kicker()
+	while board.run.kick_number < 5:
+		board.run.resolve_kick("GOOD", 2.0, false)
+		board.run.leave_shop()
+		board.advance_run()
+	board.force_weather(RunLogic.ICED)
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.ACCURACY
+	board.logic.power = 80.0
+	board.logic.needle = 65.0
+	board.meter_time = 0.3
+	if not await _capture("meter_iced_boss_needle.png"):
 		return false
 	return true
 

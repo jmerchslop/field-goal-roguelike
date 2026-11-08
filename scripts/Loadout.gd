@@ -603,68 +603,256 @@ static func apply(stats: KickerStats, state: Dictionary, howling: bool) -> void:
 	stats.attempt_cap = clampi(stats.attempt_cap, 1, KickConstants.ATTEMPT_CAP_MAX)
 
 
-const _SPRITE_DIR := "res://art/loadout/"
+static var _sprite_ready := false
+static var _item_paths := {}
+static var _empty_paths := {}
+static var _unmatched: Array = []
 
-# File names for the sprites Jordan provided. Missing items stay "".
+const _SLOT_WORDS: Array = ["cleats", "gloves", "helmet", "curse", "perk"]
+const _RANK_TOKENS: Array = ["_viii", "_vii", "_vi", "_iv", "_iii", "_ii", "_ix", "_v", "_i", "_10", "_9", "_8", "_7", "_6", "_5", "_4", "_3", "_2", "_1"]
+
+
 static func sprite_path(id: String) -> String:
-	var file := ""
-	match id:
-		SCOUT_LID:
-			file = "scout_lid.png"
-		DOINK_CAP:
-			file = "doink_cap.png"
-		DEEP_BENCH:
-			file = "deep_bench.png"
-		HOT_STREAK:
-			file = "hot_streak.png"
-		STORM_CHASER:
-			file = "storm_chaser.png"
-		HERO_BALL:
-			file = "hero_ball.png"
-		GLASS_LEG:
-			file = "glass_leg.png"
-		TWO_MINUTE:
-			file = "two_minute_drill.png"
-		ICED:
-			file = "iced.png"
-		SHANKY:
-			file = "shanky_cleats.png"
-		HEAVY:
-			file = "heavy_ball.png"
-		HOWLING:
-			file = "howling_wind.png"
-		SHAKY:
-			file = "shaky_arrow.png"
-		NARROW:
-			file = "narrow_posts.png"
-		STONE:
-			file = "stone_toe.png"
-		TIGHT:
-			file = "tight_window.png"
-	if file == "":
-		return ""
-	var path := _SPRITE_DIR + file
-	if ResourceLoader.exists(path):
-		return path
-	return ""
+	_ensure_sprites()
+	return str(_item_paths.get(id, ""))
 
 
 static func empty_slot_path(slot: String) -> String:
-	var file := ""
+	_ensure_sprites()
+	return str(_empty_paths.get(slot, ""))
+
+
+static func ensure_sprites() -> void:
+	_ensure_sprites()
+
+
+static func print_sprite_map() -> void:
+	_ensure_sprites()
+	print("LOADOUT SPRITES")
+	for id in _catalog_ids():
+		var path := str(_item_paths.get(id, ""))
+		if path == "":
+			print("  ", piece_name(id), ": MISSING")
+		else:
+			print("  ", piece_name(id), ": ", path)
+	print("EMPTY FRAMES")
+	for slot in [CLEATS, HELMET, GLOVES, PERK, CURSE]:
+		var path := str(_empty_paths.get(slot, ""))
+		if path == "":
+			print("  ", slot, ": MISSING")
+		else:
+			print("  ", slot, ": ", path)
+	if _unmatched.is_empty():
+		print("UNMATCHED LOADOUT FILES")
+		print("  none")
+	else:
+		print("UNMATCHED LOADOUT FILES")
+		for path in _unmatched:
+			print("  ", path)
+
+
+# Test hook. Does not replace the live scan.
+static func map_sprite_files(paths: Array) -> Dictionary:
+	var items := {}
+	var empty := {}
+	var unmatched: Array = []
+	_fill_sprite_maps(paths, items, empty, unmatched)
+	return {"items": items, "empty": empty, "unmatched": unmatched}
+
+
+static func _ensure_sprites() -> void:
+	if _sprite_ready:
+		return
+	_sprite_ready = true
+	_item_paths = {}
+	_empty_paths = {}
+	_unmatched = []
+	_fill_sprite_maps(_collect_images("res://"), _item_paths, _empty_paths, _unmatched)
+
+
+static func _collect_images(root: String) -> Array:
+	var found: Array = []
+	_walk_images(root, found)
+	return found
+
+
+static func _walk_images(dir_path: String, found: Array) -> void:
+	var dir := DirAccess.open(dir_path)
+	if dir == null:
+		return
+	dir.list_dir_begin()
+	var name := dir.get_next()
+	while name != "":
+		if not name.begins_with("."):
+			var full := dir_path.path_join(name)
+			if dir.current_is_dir():
+				_walk_images(full, found)
+			else:
+				var lower := name.to_lower()
+				var image := lower.ends_with(".png") or lower.ends_with(".webp") or lower.ends_with(".jpg") or lower.ends_with(".jpeg")
+				if image and not lower.ends_with(".import"):
+					found.append(full)
+		name = dir.get_next()
+	dir.list_dir_end()
+
+
+static func _fill_sprite_maps(paths: Array, items: Dictionary, empty: Dictionary, unmatched: Array) -> void:
+	var best := {}
+	var empty_best := {}
+	for path in paths:
+		var file_name := str(path).get_file()
+		var stem := _normalize_stem(file_name.get_basename())
+		if _skip_untyped(str(path), stem):
+			continue
+		var empty_slot := _empty_slot_of(stem)
+		if empty_slot != "":
+			var score := 2 if stem == "empty_" + empty_slot else 1
+			if not empty_best.has(empty_slot) or int(empty_best[empty_slot]["score"]) < score:
+				empty_best[empty_slot] = {"path": str(path), "score": score}
+			continue
+		var parsed := _split_slot(stem)
+		var suffix := str(parsed["suffix"])
+		var name_part := str(parsed["name"])
+		var hit := ""
+		if suffix != "":
+			var slot_ids := _ids_for_word(suffix)
+			hit = _match_ids(slot_ids, name_part)
+			if hit == "":
+				hit = _match_ids(slot_ids, name_part + "_" + suffix)
+			if hit == "":
+				hit = _match_ids(_catalog_ids(), stem)
+			if hit == "":
+				hit = _match_ids(_catalog_ids(), name_part)
+			if hit == "":
+				unmatched.append(str(path))
+				continue
+		else:
+			hit = _match_ids(_catalog_ids(), stem)
+			if hit == "":
+				continue
+		var score := 0
+		if suffix != "":
+			score = 2 if _word_for_slot(slot_of(hit)) == suffix else 1
+		if not best.has(hit) or int(best[hit]["score"]) < score:
+			best[hit] = {"path": str(path), "score": score}
+	for id in best.keys():
+		items[id] = str(best[id]["path"])
+	for slot in empty_best.keys():
+		empty[slot] = str(empty_best[slot]["path"])
+
+
+static func _catalog_ids() -> Array:
+	var ids: Array = []
+	ids.append_array(CLEAT_IDS)
+	ids.append_array(HELMET_IDS)
+	ids.append_array(GLOVE_IDS)
+	ids.append_array(PERK_IDS)
+	ids.append_array(CURSE_IDS)
+	return ids
+
+
+static func _ids_for_word(word: String) -> Array:
+	if word == "cleats":
+		return CLEAT_IDS
+	if word == "helmet":
+		return HELMET_IDS
+	if word == "gloves":
+		return GLOVE_IDS
+	if word == "perk":
+		return PERK_IDS
+	if word == "curse":
+		return CURSE_IDS
+	return []
+
+
+static func _word_for_slot(slot: String) -> String:
 	if slot == CLEATS:
-		file = "empty_cleats.png"
-	elif slot == HELMET:
-		file = "empty_helmet.png"
-	elif slot == GLOVES:
-		file = "empty_gloves.png"
-	elif slot == CURSE:
-		file = "empty_curse.png"
-	if file == "":
-		return ""
-	var path := _SPRITE_DIR + file
-	if ResourceLoader.exists(path):
-		return path
+		return "cleats"
+	if slot == HELMET:
+		return "helmet"
+	if slot == GLOVES:
+		return "gloves"
+	if slot == PERK:
+		return "perk"
+	if slot == CURSE:
+		return "curse"
 	return ""
+
+
+static func _normalize_stem(raw: String) -> String:
+	var stem := raw.to_lower().replace("-", "_").replace(" ", "_")
+	while stem.find("__") >= 0:
+		stem = stem.replace("__", "_")
+	return stem
+
+
+static func _strip_rank(stem: String) -> String:
+	for token in _RANK_TOKENS:
+		if stem.ends_with(token) and stem.length() > token.length():
+			return stem.substr(0, stem.length() - token.length())
+	return stem
+
+
+static func _split_slot(stem: String) -> Dictionary:
+	var bare := _strip_rank(stem)
+	for word in _SLOT_WORDS:
+		var slot_word := str(word)
+		var mark := "_" + slot_word
+		if bare.ends_with(mark) and bare.length() > mark.length():
+			return {"suffix": slot_word, "name": bare.substr(0, bare.length() - mark.length())}
+	return {"suffix": "", "name": bare}
+
+
+static func _empty_slot_of(stem: String) -> String:
+	var bare := _strip_rank(stem)
+	if not bare.begins_with("empty_"):
+		return ""
+	var rest := bare.substr(6)
+	if _SLOT_WORDS.has(rest):
+		return rest
+	return ""
+
+
+static func _skip_untyped(path: String, stem: String) -> bool:
+	if _empty_slot_of(stem) != "" or str(_split_slot(stem)["suffix"]) != "":
+		return false
+	var lower := path.to_lower()
+	if lower.find("/kickers/") >= 0 or lower.find("/field/") >= 0 or lower.find("/shop/") >= 0 or lower.find("/ui/") >= 0 or lower.find("/vitamins/") >= 0:
+		return true
+	if stem.begins_with("big_bruce") or stem.begins_with("walk_on"):
+		return true
+	if stem == "kick_meter" or stem == "meter" or stem == "power_accuracy_meter" or stem == "vitamin_shop" or stem == "football" or stem == "crowd":
+		return true
+	return false
+
+
+static func _match_ids(ids: Array, token: String) -> String:
+	var want := _normalize_stem(token)
+	if want == "":
+		return ""
+	for id in ids:
+		for alias in _aliases(str(id)):
+			if alias == want:
+				return str(id)
+	return ""
+
+
+static func _aliases(id: String) -> Array:
+	var full := _normalize_stem(piece_name(id))
+	var aliases: Array = [full]
+	for word in _SLOT_WORDS:
+		var slot_word := str(word)
+		var mark := "_" + slot_word
+		if full.ends_with(mark):
+			aliases.append(full.substr(0, full.length() - mark.length()))
+	if id == HIGH_AIR:
+		aliases.append("highair")
+	if id == TWO_MINUTE:
+		aliases.append("two_minute")
+		aliases.append("twominute")
+	if id == SHANKY:
+		aliases.append("shanky")
+	return aliases
 
 
 # Equipment shows I–VI. Perks show I–III. Curses and empty slots show nothing.

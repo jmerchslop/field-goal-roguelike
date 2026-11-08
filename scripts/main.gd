@@ -46,6 +46,7 @@ var _hud
 
 
 func _ready() -> void:
+	Loadout.print_sprite_map()
 	logic.stats = run.stats
 	_world = $World
 	_camera = $Camera3D

@@ -47,58 +47,99 @@ func _draw() -> void:
 
 
 func _draw_meter(logic: KickLogic, run: RunLogic) -> void:
-	var panel := Rect2(
-		KickConstants.METER_PANEL_LEFT,
-		KickConstants.METER_PANEL_TOP,
-		KickConstants.METER_PANEL_RIGHT - KickConstants.METER_PANEL_LEFT,
-		KickConstants.METER_PANEL_BOTTOM - KickConstants.METER_PANEL_TOP
-	)
-	draw_rect(panel, KickConstants.COLOR_METER_PANEL)
-	var bar := Rect2(
-		KickConstants.METER_BAR_LEFT,
-		KickConstants.METER_BAR_TOP,
-		KickConstants.METER_BAR_RIGHT - KickConstants.METER_BAR_LEFT,
-		KickConstants.METER_BAR_BOTTOM - KickConstants.METER_BAR_TOP
-	)
-	draw_rect(bar, KickConstants.COLOR_METER_TRACK)
+	var gauge_w := 420.0
+	var gauge_h := gauge_w * 625.0 / 1003.0
+	var origin := Vector2(KickConstants.WINDOW_WIDTH - 10.0 - gauge_w, KickConstants.WINDOW_HEIGHT - 6.0 - gauge_h)
+	var art := _icon("res://art/ui/kick_meter.png")
+	if art != null:
+		draw_texture_rect(art, Rect2(origin, Vector2(gauge_w, gauge_h)), false)
+	var scale := gauge_w / 1003.0
+	var hub := origin + Vector2(504.0, 510.0) * scale
+	var inner := 292.0 * scale
+	var outer := 404.0 * scale
+	# Cover the painted fill, wedges, and the art's needle. The metal frame and its labels stay.
+	draw_circle(hub, inner + 4.0, Color(0.01, 0.01, 0.012, 1.0))
+	_draw_annulus(hub, inner - 2.0, outer + 2.0, 182.0, -2.0, Color(0.01, 0.01, 0.012, 1.0))
 	var stats: KickerStats = logic.stats
-	_draw_band(-stats.good_band, stats.good_band, KickConstants.COLOR_INNER_BAND)
-	_draw_band(-stats.perfect_band, stats.perfect_band, KickConstants.COLOR_PERFECT_BAND)
-	_draw_band(stats.red_tip_start, KickConstants.METER_MAX, KickConstants.COLOR_RED_TIP)
-	var zero_y := KickConstants.meter_y(0.0)
-	draw_line(
-		Vector2(KickConstants.METER_BAR_LEFT, zero_y),
-		Vector2(KickConstants.METER_BAR_RIGHT, zero_y),
-		KickConstants.COLOR_ZERO,
-		3.0,
-		true
-	)
-	var needle_y := KickConstants.meter_y(logic.needle)
-	var needle_color := KickConstants.COLOR_NEEDLE
-	if logic.phase == KickLogic.Phase.POWER and logic.needle >= logic.stats.red_tip_start:
-		needle_color = KickConstants.COLOR_RED_TIP
-	elif logic.phase == KickLogic.Phase.ACCURACY and absf(logic.needle) <= KickConstants.PERFECT_BAND:
-		needle_color = KickConstants.COLOR_ZERO
-	var fade := RunLogic.iced_needle_alpha(run.needle_fades(), logic.phase == KickLogic.Phase.ACCURACY, logic.power, logic.needle)
-	needle_color.a = fade
-	if fade > 0.02:
-		draw_line(
-		Vector2(KickConstants.METER_BAR_LEFT - 10.0, needle_y),
-		Vector2(KickConstants.METER_BAR_RIGHT + 8.0, needle_y),
-		needle_color,
-		3.0,
-		true
-		)
-	var title := "METER"
+	var layout := MeterGauge.accuracy_layout(stats.perfect_band, stats.good_band)
+	_draw_annulus(hub, inner, outer, 90.0, float(layout["band_top"]), Color(0.78, 0.1, 0.08, 0.95))
+	_draw_annulus(hub, inner, outer, float(layout["band_top"]), float(layout["perfect_top"]), Color(0.93, 0.74, 0.12, 0.95))
+	_draw_annulus(hub, inner, outer, float(layout["perfect_top"]), float(layout["perfect_bottom"]), Color(0.2, 0.78, 0.28, 0.96))
+	_draw_annulus(hub, inner, outer, float(layout["perfect_bottom"]), float(layout["band_bottom"]), Color(0.93, 0.74, 0.12, 0.95))
+	_draw_annulus(hub, inner, outer, float(layout["band_bottom"]), 0.0, Color(0.78, 0.1, 0.08, 0.95))
+	var shown := 0.0
 	if logic.phase == KickLogic.Phase.POWER:
-		title = "POWER"
-	elif logic.phase == KickLogic.Phase.ACCURACY:
-		title = "ACCURACY"
-	_text(Vector2(panel.position.x + 16.0, panel.position.y + 28.0), title, 18, KickConstants.COLOR_TEXT)
-	_text(Vector2(panel.position.x + 12.0, zero_y - 8.0), "PERFECT", 14, KickConstants.COLOR_PERFECT_TEXT)
-	_text(Vector2(KickConstants.METER_BAR_RIGHT + 8.0, KickConstants.meter_y(100.0) + 5.0), "100", 14, KickConstants.COLOR_TEXT)
-	_text(Vector2(KickConstants.METER_BAR_RIGHT + 8.0, zero_y + 5.0), "0", 14, KickConstants.COLOR_TEXT)
-	_text(Vector2(KickConstants.METER_BAR_RIGHT + 8.0, KickConstants.meter_y(-15.0) + 5.0), "-15", 14, KickConstants.COLOR_TEXT)
+		shown = logic.needle
+	elif logic.phase != KickLogic.Phase.AIMING:
+		shown = logic.power
+	if shown > 0.5:
+		var tip := stats.red_tip_start
+		var orange_to := minf(shown, tip)
+		_draw_annulus(hub, inner, outer, 180.0, MeterGauge.power_angle(orange_to), Color(1.0, 0.48, 0.05, 0.94))
+		if shown > tip:
+			var pulse := 0.72 + 0.28 * sin(float(Time.get_ticks_msec()) * 0.012)
+			var danger_from := MeterGauge.power_angle(tip)
+			var danger_to := MeterGauge.power_angle(shown)
+			if danger_from - danger_to < 14.0:
+				danger_from = danger_to + 14.0
+			_draw_annulus(hub, inner, outer, danger_from, danger_to, Color(0.95, 0.05, 0.04, pulse))
+	for tick in 5:
+		var mark := MeterGauge.power_angle(float(tick) * 20.0)
+		var a := _gauge_point(hub, inner + 4.0, mark)
+		var b := _gauge_point(hub, inner + 16.0, mark)
+		draw_line(a, b, Color(1, 0.86, 0.55, 0.8), 2.0, true)
+	_draw_wedge_label(hub, (inner + outer) * 0.5, 45.0, "PERFECT")
+	_draw_wedge_label(hub, (inner + outer) * 0.5, (float(layout["band_top"]) + float(layout["perfect_top"])) * 0.5, "GOOD")
+	_draw_wedge_label(hub, (inner + outer) * 0.5, (float(layout["band_bottom"]) + float(layout["perfect_bottom"])) * 0.5, "GOOD")
+	var sweeping := logic.phase == KickLogic.Phase.ACCURACY or logic.phase == KickLogic.Phase.FLIGHT or logic.phase == KickLogic.Phase.RESULT
+	if sweeping:
+		var fade := RunLogic.iced_needle_alpha(run.needle_fades(), logic.phase == KickLogic.Phase.ACCURACY, logic.power, logic.needle)
+		if fade > 0.02:
+			var angle := MeterGauge.accuracy_angle(logic.needle, stats.perfect_band, stats.good_band)
+			_draw_gauge_needle(hub, inner - 10.0, angle, fade)
+	draw_circle(hub, 18.0 * scale, Color(0.16, 0.16, 0.18, 1.0))
+	draw_circle(hub, 8.0 * scale, Color(0.55, 0.55, 0.58, 1.0))
+
+
+func _gauge_point(hub: Vector2, radius: float, degrees: float) -> Vector2:
+	var rad := deg_to_rad(degrees)
+	return hub + Vector2(cos(rad), -sin(rad)) * radius
+
+
+func _draw_annulus(hub: Vector2, inner: float, outer: float, from_deg: float, to_deg: float, color: Color) -> void:
+	if absf(from_deg - to_deg) < 0.2:
+		return
+	var steps := maxi(int(absf(from_deg - to_deg) / 4.0), 2)
+	var points := PackedVector2Array()
+	for i in steps + 1:
+		var t := float(i) / float(steps)
+		points.append(_gauge_point(hub, outer, lerpf(from_deg, to_deg, t)))
+	for i in steps + 1:
+		var t := float(steps - i) / float(steps)
+		points.append(_gauge_point(hub, inner, lerpf(from_deg, to_deg, t)))
+	draw_colored_polygon(points, color)
+
+
+func _draw_gauge_needle(hub: Vector2, length: float, degrees: float, alpha: float) -> void:
+	var rad := deg_to_rad(degrees)
+	var dir := Vector2(cos(rad), -sin(rad))
+	var side := Vector2(-dir.y, dir.x)
+	var color := Color(0.86, 0.88, 0.9, alpha)
+	var points := PackedVector2Array([
+		hub + side * 5.0,
+		hub - side * 5.0,
+		hub + dir * length,
+	])
+	draw_colored_polygon(points, color)
+
+
+func _draw_wedge_label(hub: Vector2, radius: float, degrees: float, text: String) -> void:
+	var at := _gauge_point(hub, radius, degrees)
+	var font := ThemeDB.fallback_font
+	if font == null:
+		return
+	var width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
+	draw_string(font, at + Vector2(-width * 0.5, 4.0), text, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.97, 0.98, 0.95, 0.95))
 
 
 func _draw_weather_tint(run: RunLogic) -> void:
@@ -136,9 +177,9 @@ func _draw_band(low: float, high: float, color: Color) -> void:
 
 
 func _draw_hud(logic: KickLogic, run: RunLogic) -> void:
-	draw_rect(Rect2(12, 8, 420, 280), Color(0.02, 0.05, 0.08, 0.42))
+	draw_rect(Rect2(12, 64, 390, 248), Color(0.02, 0.05, 0.08, 0.42))
 	var x := 24.0
-	var y := 28.0
+	var y := 86.0
 	_text(Vector2(x, y), "Kick %d of %d" % [run.kick_number, RunTable.count()], 22, KickConstants.COLOR_TEXT)
 	y += 26.0
 	_text(Vector2(x, y), "%s yd" % KickLogic.format_number(run.distance_yards()), 20, KickConstants.COLOR_TEXT)
@@ -363,14 +404,15 @@ func _draw_offer(run: RunLogic) -> void:
 	var count := run.offer.size()
 	if count == 0:
 		_text_centered("Nothing left to pick — press S to continue.", 430.0, 28, KickConstants.COLOR_TEXT)
-	var width := 250.0
-	var gap := 16.0
+	var width := 220.0
+	var gap := 12.0
 	var total := float(count) * width + float(maxi(count - 1, 0)) * gap
-	var left := (KickConstants.WINDOW_WIDTH - total) * 0.5
-	if count > 0 and left > 430.0:
-		left = 430.0
+	var meter_left := KickConstants.WINDOW_WIDTH - 16.0 - 420.0
+	var left := 260.0
+	if count > 0 and left + total > meter_left - 16.0:
+		left = maxf(16.0, meter_left - 16.0 - total)
 	for i in count:
-		var rect := Rect2(left + float(i) * (width + gap), 360.0, width, 250.0)
+		var rect := Rect2(left + float(i) * (width + gap), 318.0, width, 210.0)
 		card_rects.append(rect)
 		var card: Dictionary = run.offer[i]
 		var id := str(card.get("id", ""))
@@ -485,7 +527,7 @@ func _text_centered(text: String, baseline_y: float, size: int, color: Color) ->
 	if font == null or text == "":
 		return
 	var width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
-	var field_width := KickConstants.METER_PANEL_LEFT
+	var field_width := KickConstants.WINDOW_WIDTH - 500.0
 	var x := (field_width - width) * 0.5
 	_text(Vector2(x, baseline_y), text, size, color)
 
@@ -529,12 +571,30 @@ func _draw_loadout_rail(run: RunLogic) -> void:
 		if i < run.curse_ids.size():
 			curse_id = str(run.curse_ids[i])
 		entries.append({"name": "Curse", "id": curse_id, "rank": 0, "slot": Loadout.CURSE})
-	# Just left of the meter, clear of the score panel and the offer cards.
-	var origin := Vector2(1040, 40)
-	var step := 56.0
+	# One row at the top: equipment, then perks, then curses, with a gap between groups.
+	var slot_w := 48.0
+	var inner_gap := 8.0
+	var group_gap := 22.0
+	var equip_w := slot_w * 3.0 + inner_gap * 2.0
+	var pair_w := slot_w * 2.0 + inner_gap
+	var total := equip_w + group_gap + pair_w + group_gap + pair_w
+	var cursor := (KickConstants.WINDOW_WIDTH - total) * 0.5
+	var row_y := 8.0
+	var xs: Array = []
+	for i in 3:
+		xs.append(cursor)
+		cursor += slot_w + inner_gap
+	cursor += group_gap - inner_gap
+	for i in 2:
+		xs.append(cursor)
+		cursor += slot_w + inner_gap
+	cursor += group_gap - inner_gap
+	for i in 2:
+		xs.append(cursor)
+		cursor += slot_w + inner_gap
 	for i in entries.size():
 		var entry: Dictionary = entries[i]
-		var rect := Rect2(origin.x, origin.y + float(i) * step, 52, 52)
+		var rect := Rect2(float(xs[i]), row_y, slot_w, slot_w)
 		slot_hits.append({
 			"rect": rect,
 			"id": str(entry["id"]),
@@ -609,7 +669,9 @@ func _draw_slot_tooltip() -> void:
 		lines.append(title)
 		lines.append(Loadout.effect_line(id, rank if rank > 0 else 1))
 	var anchor: Rect2 = hit["rect"]
-	var box := Rect2(anchor.position + Vector2(-288, 0), Vector2(280, 18.0 + float(lines.size()) * 20.0))
+	var box := Rect2(anchor.position + Vector2(0, anchor.size.y + 8.0), Vector2(240, 18.0 + float(lines.size()) * 20.0))
+	if box.position.x + box.size.x > KickConstants.WINDOW_WIDTH - 8.0:
+		box.position.x = KickConstants.WINDOW_WIDTH - 8.0 - box.size.x
 	draw_rect(box, Color(0.05, 0.08, 0.1, 0.94))
 	draw_rect(box, KickConstants.COLOR_ATTEMPT, false, 2.0)
 	var y := box.position.y + 18.0

@@ -42,6 +42,7 @@ func _run() -> void:
 	_check_loadout_sprites()
 	_check_rank_caps_and_range()
 	_check_vitamin_shop()
+	_check_sprite_scan_and_gauge()
 
 
 func check(ok: bool, label: String) -> void:
@@ -1933,4 +1934,45 @@ func _check_vitamin_shop() -> void:
 	cancel.use_belt(0)
 	cancel.cancel_curse_prompt()
 	check(not cancel.curse_prompt and cancel.curse_ids.size() == 2 and str(cancel.belt[0]) == Vitamins.TART, "Esc cancels the curse pick and does not consume Tart Cherry")
+
+
+func _check_sprite_scan_and_gauge() -> void:
+	var mapped: Dictionary = Loadout.map_sprite_files([
+		"res://art/loadout/shanky_cleats.png",
+		"res://art/loadout/shanky_cleats_curse.png",
+		"res://art/loadout/cannon_cleats.png",
+		"res://art/loadout/high-air_gloves.png",
+		"res://art/loadout/highair.png",
+		"res://art/loadout/scout_lid.png",
+		"res://art/loadout/scout_lid_helmet.png",
+		"res://art/loadout/hero_ball_perk.png",
+		"res://art/loadout/wind_visor_helmet_ii.png",
+		"res://art/ui/kick_meter.png",
+		"res://art/shop/vitamin_shop.png",
+		"res://art/kickers/big_bruce.png",
+		"res://art/loadout/mystery_cleats.png",
+		"res://art/loadout/empty_perk.png",
+	])
+	var items: Dictionary = mapped["items"]
+	check(str(items.get(Loadout.SHANKY, "")).ends_with("shanky_cleats_curse.png"), "Shanky Cleats maps to the curse file, not the cleat name")
+	check(str(items.get(Loadout.CANNON, "")).ends_with("cannon_cleats.png"), "cannon_cleats.png maps to Cannon Cleats")
+	check(str(items.get(Loadout.HIGH_AIR, "")).ends_with("high-air_gloves.png"), "high-air and highair both mean High-Air Gloves, and the suffix wins")
+	check(str(items.get(Loadout.SCOUT_LID, "")).ends_with("scout_lid_helmet.png"), "an explicit helmet suffix beats the old short name")
+	check(str(items.get(Loadout.HERO_BALL, "")).ends_with("hero_ball_perk.png"), "hero_ball_perk.png maps to Hero Ball")
+	check(str(items.get(Loadout.WIND_VISOR, "")).ends_with("wind_visor_helmet_ii.png"), "a trailing rank token still maps the helmet")
+	check(not items.has(Loadout.IRON_GRIP), "a vitamin or meter image is not forced onto a loadout item")
+	var unmatched: Array = mapped["unmatched"]
+	check(unmatched.has("res://art/loadout/mystery_cleats.png"), "a cleat-shaped name that is not in the catalog is reported")
+	check(not unmatched.has("res://art/ui/kick_meter.png") and not unmatched.has("res://art/shop/vitamin_shop.png"), "the meter and the shop art are not loadout icons")
+	check(str(mapped["empty"].get(Loadout.PERK, "")).ends_with("empty_perk.png"), "empty_perk.png is the empty perk frame")
+	check(near(MeterGauge.power_angle(0.0), 180.0) and near(MeterGauge.power_angle(100.0), 90.0) and near(MeterGauge.power_angle(50.0), 135.0), "power fills from the left edge toward MAX")
+	check(near(MeterGauge.accuracy_angle(0.0, 2.0, 8.0), 45.0), "accuracy error 0 sits in the middle of the right arc")
+	check(MeterGauge.accuracy_angle(100.0, 2.0, 8.0) > 80.0, "a high accuracy value starts just after MAX")
+	check(MeterGauge.accuracy_angle(-15.0, 2.0, 8.0) < 5.0, "the finished needle reaches the ACCURACY end of the arc")
+	var plain: Dictionary = MeterGauge.accuracy_layout(2.0, 8.0)
+	var wide: Dictionary = MeterGauge.accuracy_layout(10.0, 20.0)
+	var tight: Dictionary = MeterGauge.accuracy_layout(1.0, 6.0)
+	check(float(wide["perfect_span"]) > float(plain["perfect_span"]), "a bigger PERFECT band takes a wider wedge")
+	check(float(tight["perfect_span"]) < float(plain["perfect_span"]), "Tight Window draws a tighter PERFECT wedge")
+	check(MeterGauge.is_red_tip(96.0, 95.0) and not MeterGauge.is_red_tip(90.0, 95.0), "the red-tip glow follows the live threshold and does not change the angle math")
 
