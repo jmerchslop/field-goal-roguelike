@@ -553,19 +553,20 @@ static func _weighted_weather(kick: int, rng: RandomNumberGenerator) -> String:
 	return CLEAR
 
 
-# How far the accuracy needle has fallen from the locked power toward the bottom, 0 to 1.
+# How far the accuracy needle has traveled down the right arc, 0 to 1.
+# 0 is just after MAX (e=+15). 1 is the ACCURACY label (e=-15).
 # The iced needle fades out over the first 18% of that trip and is fully back by halfway.
+# A needle value above +15 is still the locked power, on the leftover left-side travel.
 const ICED_FADE_OUT := 0.18
 const ICED_VISIBLE_AT := 0.5
 
 
-static func iced_needle_alpha(fades: bool, on_accuracy: bool, power: float, needle: float) -> float:
+static func iced_needle_alpha(fades: bool, on_accuracy: bool, _power: float, needle: float) -> float:
 	if not fades or not on_accuracy:
 		return 1.0
-	var span := power - KickConstants.METER_MIN
-	if span <= 0.001:
+	if needle > MeterGauge.ERROR_AT_MAX:
 		return 1.0
-	var along := clampf((power - needle) / span, 0.0, 1.0)
+	var along := clampf((MeterGauge.ERROR_AT_MAX - needle) / (MeterGauge.ERROR_AT_MAX * 2.0), 0.0, 1.0)
 	if along <= 0.0:
 		return 1.0
 	if along < ICED_FADE_OUT:

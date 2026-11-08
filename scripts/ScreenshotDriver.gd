@@ -357,6 +357,9 @@ func _ready() -> void:
 	if not await _capture_meter_row():
 		get_tree().quit(1)
 		return
+	if not await _capture_needle():
+		get_tree().quit(1)
+		return
 	get_tree().quit()
 
 
@@ -589,33 +592,45 @@ func _capture_meter_row() -> bool:
 	board.logic.phase = KickLogic.Phase.POWER
 	board.logic.needle = 48.0
 	board.logic.power = 48.0
+	board.logic.fill_power = 48.0
+	board.logic.windup_left = 0.0
+	board.logic.needle_angle = MeterGauge.power_angle(48.0)
 	board.meter_time = 0.2
 	if not await _capture("meter_power_mid.png"):
 		return false
 	board.logic.needle = 97.0
 	board.logic.power = 97.0
+	board.logic.fill_power = 97.0
+	board.logic.needle_angle = MeterGauge.power_angle(97.0)
 	if not await _capture("meter_power_redtip.png"):
 		return false
 	board.logic.phase = KickLogic.Phase.ACCURACY
 	board.logic.power = 80.0
+	board.logic.fill_power = 80.0
 	board.logic.needle = 6.0
+	board.logic.needle_angle = MeterGauge.angle_from_error(6.0)
 	if not await _capture("meter_accuracy_good.png"):
 		return false
 	board.logic.needle = 0.0
+	board.logic.needle_angle = MeterGauge.angle_from_error(0.0)
 	if not await _capture("meter_accuracy_perfect.png"):
 		return false
 	board.run.give(Loadout.PINPOINT, 4)
 	board.load_current_kick()
 	board.logic.phase = KickLogic.Phase.ACCURACY
 	board.logic.power = 80.0
+	board.logic.fill_power = 80.0
 	board.logic.needle = 0.0
+	board.logic.needle_angle = MeterGauge.angle_from_error(0.0)
 	if not await _capture("meter_pinpoint_wide.png"):
 		return false
 	board.run.give(Loadout.TIGHT)
 	board.load_current_kick()
 	board.logic.phase = KickLogic.Phase.ACCURACY
 	board.logic.power = 80.0
+	board.logic.fill_power = 80.0
 	board.logic.needle = 0.0
+	board.logic.needle_angle = MeterGauge.angle_from_error(0.0)
 	if not await _capture("meter_tight_window.png"):
 		return false
 	board.run.force_offer([
@@ -659,7 +674,9 @@ func _capture_meter_row() -> bool:
 	board.load_current_kick()
 	board.logic.phase = KickLogic.Phase.ACCURACY
 	board.logic.power = 80.0
-	board.logic.needle = 65.0
+	board.logic.fill_power = 80.0
+	board.logic.needle = 11.4
+	board.logic.needle_angle = MeterGauge.angle_from_error(11.4)
 	board.meter_time = 0.3
 	if not await _capture("meter_iced_boss_needle.png"):
 		return false
@@ -791,13 +808,7 @@ func _shoot_power_result(kick_number: int, file_name: String, expect: String, ex
 
 
 func _finish_full_power() -> void:
-	var stats: KickerStats = board.logic.stats
-	board.logic.press_space()
-	board.logic.advance(100.0 / stats.power_speed)
-	if board.logic.phase == KickLogic.Phase.ACCURACY:
-		board.logic.advance(board.logic.needle / stats.accuracy_speed)
-		if board.logic.phase == KickLogic.Phase.ACCURACY:
-			board.logic.press_space()
+	_swing_meter(100.0, 0.0)
 	if board.logic.phase == KickLogic.Phase.FLIGHT:
 		board.logic.advance(board.logic.flight_duration)
 
@@ -805,8 +816,10 @@ func _finish_full_power() -> void:
 func _set_accuracy_needle(power_value: float, along: float) -> void:
 	board.logic.phase = KickLogic.Phase.ACCURACY
 	board.logic.power = power_value
-	var span := power_value - KickConstants.METER_MIN
-	board.logic.needle = power_value - along * span
+	board.logic.fill_power = power_value
+	var error := 15.0 - clampf(along, 0.0, 1.0) * 30.0
+	board.logic.needle = error
+	board.logic.needle_angle = MeterGauge.angle_from_error(error)
 
 
 func _log_posts(tag: String) -> void:
@@ -817,29 +830,183 @@ func _log_posts(tag: String) -> void:
 
 
 func _lock_full_power_straight() -> void:
-	var stats: KickerStats = board.logic.stats
 	for seed_value in 40:
 		board.load_current_kick()
 		board.logic.set_seed(seed_value)
-		board.logic.press_space()
-		# Stay under 100 so the rise does not lock itself before the accuracy press.
-		board.logic.advance(99.0 / stats.power_speed)
-		board.logic.press_space()
-		if board.logic.phase == KickLogic.Phase.ACCURACY:
-			board.logic.advance(board.logic.power / stats.accuracy_speed)
-			board.logic.press_space()
+		_swing_meter(99.0, 0.0)
 		if board.logic.result_text == "GOOD" and absf(board.logic.offset_yards) < 1.5:
 			return
 
 
 func _finish_centered_power(power_value: float) -> void:
-	var stats: KickerStats = board.logic.stats
+	_swing_meter(power_value, 0.0)
+	if board.logic.phase == KickLogic.Phase.FLIGHT:
+		board.logic.advance(board.logic.flight_duration)
+
+
+func _swing_meter(power_value: float, error_value: float) -> void:
 	board.logic.press_space()
-	board.logic.advance(power_value / stats.power_speed)
+	if board.logic.windup_left > 0.0:
+		board.logic.advance(board.logic.windup_left)
+	if power_value > 0.0:
+		board.logic.advance(power_value / board.logic.stats.power_speed)
+	if board.logic.phase == KickLogic.Phase.POWER:
+		board.logic.press_space()
+	if board.logic.phase == KickLogic.Phase.ACCURACY:
+		var wait: float = board.logic.seconds_until_error(error_value)
+		if wait > 0.0:
+			board.logic.advance(wait)
+		if board.logic.phase == KickLogic.Phase.ACCURACY:
+			board.logic.press_space()
+
+
+func _capture_needle() -> bool:
+	board.highlight = 1
+	board.confirm_kicker()
+	board.showing_records = false
+	board.save_note = ""
+	board.force_weather(RunLogic.CLEAR)
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.AIMING
+	board.logic.needle_angle = MeterGauge.MAX_ANGLE
+	board.meter_time = 0.0
+	if not await _capture("needle_rest.png"):
+		return false
 	board.logic.press_space()
-	board.logic.advance(board.logic.power / stats.accuracy_speed)
+	board.logic.advance(MeterGauge.WINDUP_SEC)
+	board.meter_time = MeterGauge.WINDUP_SEC
+	print("NEEDLE windup angle ", board.logic.needle_angle, " P ", board.logic.power_true)
+	if not await _capture("needle_windup.png"):
+		return false
+	board.logic.advance(0.5)
+	board.meter_time = MeterGauge.WINDUP_SEC + 0.5
+	print("NEEDLE power mid t=0.50s after POWER P=", board.logic.power_true, " angle ", board.logic.needle_angle)
+	if not await _capture("needle_power_mid.png"):
+		return false
+	var locked: float = board.logic.needle_angle
 	board.logic.press_space()
-	board.logic.advance(board.logic.flight_duration)
+	board.logic.advance(0.15)
+	print("NEEDLE lock continue fill ", board.logic.fill_power, " from angle ", locked, " to ", board.logic.needle_angle)
+	if not await _capture("needle_power_lock_continue.png"):
+		return false
+	board.logic.advance(board.logic.seconds_until_error(6.0))
+	print("NEEDLE good wedge e ", board.logic.needle, " angle ", board.logic.needle_angle)
+	if not await _capture("needle_accuracy_good.png"):
+		return false
+	board.logic.advance(board.logic.seconds_until_error(0.0))
+	board.logic.press_space()
+	if board.logic.phase == KickLogic.Phase.FLIGHT:
+		board.logic.advance(board.logic.flight_duration)
+	board.run.resolve_kick(board.logic.result_text, board.logic.offset_yards, board.logic.perfect)
+	print("NEEDLE perfect result ", board.logic.result_text, " perfect ", board.logic.perfect, " e ", board.logic.accuracy_error)
+	if not await _capture("needle_accuracy_perfect.png"):
+		return false
+	board.load_current_kick()
+	board.logic.press_space()
+	board.logic.advance(board.logic.windup_left)
+	board.logic.advance(0.45)
+	board.logic.press_space()
+	board.logic.advance(board.logic.seconds_until_error(-15.0) + 0.02)
+	if board.logic.phase == KickLogic.Phase.FLIGHT:
+		board.logic.advance(board.logic.flight_duration)
+	print("NEEDLE timeout e ", board.logic.accuracy_error, " result ", board.logic.result_text, " angle ", board.logic.needle_angle)
+	if not await _capture("needle_accuracy_timeout.png"):
+		return false
+	board.load_current_kick()
+	board.logic.press_space()
+	board.logic.advance(board.logic.windup_left)
+	board.logic.advance(1.0)
+	print("NEEDLE p100 P ", board.logic.power, " fill ", board.logic.fill_power, " angle ", board.logic.needle_angle, " phase ", board.logic.phase)
+	if not await _capture("needle_p100_redtip.png"):
+		return false
+	board.highlight = 1
+	board.confirm_kicker()
+	board.run.give(Loadout.HERO_BALL, 1)
+	board.load_current_kick()
+	board.logic.press_space()
+	board.logic.advance(board.logic.windup_left)
+	board.logic.advance(0.5)
+	print("NEEDLE hero t=0.50s P=", board.logic.power_true, " speed ", board.logic.stats.power_speed, " (plain would be 50)")
+	if not await _capture("needle_hero_slow.png"):
+		return false
+	board.highlight = 1
+	board.confirm_kicker()
+	board.run.give(Loadout.STONE)
+	board.load_current_kick()
+	board.logic.press_space()
+	board.logic.advance(board.logic.windup_left)
+	board.logic.advance(0.5)
+	print("NEEDLE stone toe t=0.50s P=", board.logic.power_true, " speed ", board.logic.stats.power_speed, " (plain would be 50)")
+	if not await _capture("needle_stone_toe_fast.png"):
+		return false
+	board.highlight = 1
+	board.confirm_kicker()
+	board.force_weather(RunLogic.RAIN)
+	board.load_current_kick()
+	board.logic.press_space()
+	board.logic.advance(board.logic.windup_left)
+	board.logic.advance(0.55)
+	board.logic.press_space()
+	board.logic.advance(board.logic.seconds_until_error(15.0))
+	board.logic.advance(0.75)
+	print("NEEDLE rain t=0.75s after MAX e=", board.logic.needle, " (clear would be about -7.5) angle ", board.logic.needle_angle)
+	if not await _capture("needle_rain_acc_fast.png"):
+		return false
+	board.highlight = 1
+	board.confirm_kicker()
+	board.run.give(Loadout.ICED)
+	board.force_weather(RunLogic.CLEAR)
+	board.load_current_kick()
+	board.logic.press_space()
+	board.logic.advance(board.logic.windup_left)
+	board.logic.advance(0.2)
+	board.meter_time = 0.5
+	print("NEEDLE iced curse hidden ", board.run.meter_hidden(true, board.meter_time))
+	if not await _capture("needle_iced_curse.png"):
+		return false
+	board.highlight = 1
+	board.confirm_kicker()
+	while board.run.kick_number < 5:
+		board.run.resolve_kick("GOOD", 2.0, false)
+		board.run.leave_shop()
+		board.advance_run()
+	board.force_weather(RunLogic.ICED)
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.ACCURACY
+	board.logic.power = 80.0
+	board.logic.fill_power = 80.0
+	board.logic.needle = 11.4
+	board.logic.needle_angle = MeterGauge.angle_from_error(11.4)
+	board.meter_time = 0.3
+	print("NEEDLE iced boss fade ", RunLogic.iced_needle_alpha(board.run.needle_fades(), true, 80.0, 11.4))
+	if not await _capture("needle_iced_boss.png"):
+		return false
+	board.highlight = 1
+	board.confirm_kicker()
+	board.force_weather(RunLogic.CLEAR)
+	board.run.give(Loadout.PINPOINT, 4)
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.ACCURACY
+	board.logic.power = 70.0
+	board.logic.fill_power = 70.0
+	board.logic.needle = 0.0
+	board.logic.needle_angle = MeterGauge.angle_from_error(0.0)
+	print("NEEDLE pinpoint perfect band ", board.logic.stats.perfect_band, " good ", board.logic.stats.good_band)
+	if not await _capture("needle_pinpoint_wide.png"):
+		return false
+	board.highlight = 1
+	board.confirm_kicker()
+	board.run.give(Loadout.TIGHT)
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.ACCURACY
+	board.logic.power = 70.0
+	board.logic.fill_power = 70.0
+	board.logic.needle = 0.0
+	board.logic.needle_angle = MeterGauge.angle_from_error(0.0)
+	print("NEEDLE tight window perfect band ", board.logic.stats.perfect_band, " good ", board.logic.stats.good_band)
+	if not await _capture("needle_tight_window.png"):
+		return false
+	return true
 
 
 func _capture(file_name: String) -> bool:

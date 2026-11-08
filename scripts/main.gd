@@ -313,11 +313,19 @@ func set_wind(speed: float, direction: float) -> void:
 
 func play_locked_kick(power_value: float) -> void:
 	logic.press_space()
-	logic.advance(power_value / KickConstants.POWER_RISE_PER_SEC)
-	logic.press_space()
-	logic.advance(power_value / KickConstants.ACCURACY_FALL_PER_SEC)
-	logic.press_space()
-	logic.advance(logic.flight_duration)
+	if logic.windup_left > 0.0:
+		logic.advance(logic.windup_left)
+	logic.advance(power_value / logic.stats.power_speed)
+	if logic.phase == KickLogic.Phase.POWER:
+		logic.press_space()
+	if logic.phase == KickLogic.Phase.ACCURACY:
+		var wait := logic.seconds_until_error(0.0)
+		if wait > 0.0:
+			logic.advance(wait)
+		if logic.phase == KickLogic.Phase.ACCURACY:
+			logic.press_space()
+	if logic.phase == KickLogic.Phase.FLIGHT:
+		logic.advance(logic.flight_duration)
 
 
 func script_good_kick() -> void:
@@ -798,17 +806,24 @@ func pose_for_shot(mode: String) -> void:
 		_pose = "idle"
 		logic.phase = KickLogic.Phase.AIMING if mode == "idle" else KickLogic.Phase.POWER
 		logic.needle = 55.0
+		logic.needle_angle = 90.0 if mode == "idle" else MeterGauge.power_angle(55.0)
+		logic.fill_power = 0.0 if mode == "idle" else 55.0
+		logic.windup_left = 0.0
 	elif mode == "high":
 		_pose = "idle"
 		logic.phase = KickLogic.Phase.ACCURACY
 		logic.power = 80.0
+		logic.fill_power = 80.0
 		logic.needle = 70.0
+		logic.needle_angle = MeterGauge.power_angle(70.0)
 	elif mode == "run":
 		_pose = "run"
 		_run_time = 0.18
 		logic.phase = KickLogic.Phase.ACCURACY
 		logic.power = 80.0
+		logic.fill_power = 80.0
 		logic.needle = 30.0
+		logic.needle_angle = MeterGauge.angle_from_error(0.0)
 	elif mode == "plant":
 		_pose = "plant"
 		_swinging = true

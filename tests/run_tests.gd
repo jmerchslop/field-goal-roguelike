@@ -22,6 +22,7 @@ func _run() -> void:
 	print("Godot ", version.get("string", ""))
 	_check_layout()
 	_check_meter_motion()
+	_check_pendulum()
 	_check_perfect_band()
 	_check_red_tip()
 	_check_2_centered_perfect_press()
@@ -85,23 +86,154 @@ func _check_layout() -> void:
 
 func _check_meter_motion() -> void:
 	var kick := KickLogic.new()
+	check(near(kick.needle_angle, MeterGauge.MAX_ANGLE), "the needle rests at MAX")
 	kick.press_space()
-	check(kick.phase == KickLogic.Phase.POWER and near(kick.needle, 0.0), "space starts the needle at 0")
-	kick.advance(0.25)
-	check(near(kick.needle, 25.0), "needle rises at 100 per second, got %s" % kick.needle)
+	check(kick.phase == KickLogic.Phase.POWER and kick.windup_left > 0.0, "space starts the flick toward POWER")
 	var locked_aim := kick.aim_degrees
 	kick.aim(-1.0, 3.0)
 	check(near(kick.aim_degrees, locked_aim), "aim locks once the meter starts")
-	kick.advance(1.0)
-	check(kick.phase == KickLogic.Phase.ACCURACY, "reaching 100 starts the accuracy swing")
-	check(near(kick.power, 100.0) and near(kick.needle, 100.0), "power locks itself at 100")
-	kick.advance(0.5)
-	check(near(kick.needle, 40.0), "after 100 the needle falls, got %s" % kick.needle)
+	kick.advance(kick.windup_left)
+	kick.advance(0.25)
+	check(near(kick.power_true, 25.0), "the power sweep still covers 25 in a quarter second, got %s" % kick.power_true)
+	kick.advance(0.75)
+	check(kick.phase == KickLogic.Phase.ACCURACY, "reaching MAX starts the accuracy sweep")
+	check(near(kick.power, 100.0), "power locks itself at 100")
 	var during_flight := _kick_power_accuracy(40.0, 0.0)
 	var power_before := during_flight.power
 	check(during_flight.phase == KickLogic.Phase.FLIGHT, "locking accuracy launches the ball")
 	during_flight.press_space()
 	check(during_flight.phase == KickLogic.Phase.FLIGHT and near(during_flight.power, power_before), "space during flight does nothing")
+
+
+func _check_pendulum() -> void:
+	var rest := KickLogic.new()
+	check(near(rest.needle_angle, 90.0) and rest.phase == KickLogic.Phase.AIMING, "rest needle angle is MAX")
+	rest.press_space()
+	rest.advance(MeterGauge.WINDUP_SEC)
+	check(rest.windup_left <= 0.0001 and near(rest.needle_angle, 180.0), "the wind-up reaches POWER in 0.08s")
+	check(rest.phase == KickLogic.Phase.POWER and near(rest.power, 0.0), "the flick itself does not lock power")
+	var flick := KickLogic.new()
+	flick.press_space()
+	flick.advance(0.04)
+	flick.press_space()
+	check(flick.phase == KickLogic.Phase.POWER and near(flick.power, 0.0), "space during the flick does not lock power")
+	check(flick.needle_angle > 90.0 and flick.needle_angle < 180.0, "the flick is halfway to POWER at 0.04s, angle %s" % flick.needle_angle)
+	var sweep := KickLogic.new()
+	sweep.press_space()
+	sweep.advance(sweep.windup_left)
+	var started := sweep.needle_angle
+	sweep.advance(0.5)
+	check(near(sweep.power_true, 50.0) and near(sweep.needle_angle, 135.0), "halfway through the power sweep, P is 50 (angle %s, P %s)" % [sweep.needle_angle, sweep.power_true])
+	check(near(started - sweep.needle_angle, MeterGauge.OMEGA0 * 0.5), "default power sweep moves at ω0")
+	sweep.advance(0.5)
+	check(sweep.phase == KickLogic.Phase.ACCURACY and near(sweep.power, 100.0), "POWER to MAX takes 1.0s and locks P=100")
+	check(sweep.needle_angle <= 90.0001, "P=100 begins the right arc, angle %s" % sweep.needle_angle)
+	var mid := KickLogic.new()
+	mid.press_space()
+	mid.advance(mid.windup_left)
+	mid.advance(0.5)
+	var locked_angle := mid.needle_angle
+	mid.press_space()
+	check(near(mid.power, 50.0) and near(mid.fill_power, 50.0), "a halfway press locks P=50 and freezes the fill")
+	check(near(mid.needle_angle, locked_angle), "locking power does not jump the needle")
+	mid.press_space()
+	check(mid.phase == KickLogic.Phase.ACCURACY and near(mid.power, 50.0), "space on the leftover left arc does not lock accuracy")
+	var before := mid.needle_angle
+	mid.advance(0.1)
+	check(near(mid.fill_power, 50.0), "the fill stays frozen after the lock")
+	check(mid.needle_angle < before - 8.0 and mid.needle_angle > 90.0, "the needle continues toward MAX, angle %s" % mid.needle_angle)
+	mid.advance(mid.seconds_until_error(15.0))
+	check(near(mid.needle_angle, 90.0, 0.05) and near(mid.needle, 15.0, 0.05), "just after MAX, e=+15 (angle %s, e %s)" % [mid.needle_angle, mid.needle])
+	mid.advance(mid.seconds_until_error(0.0))
+	check(near(mid.needle_angle, 45.0, 0.05) and near(mid.needle, 0.0, 0.05), "the center of the right arc is e=0")
+	var samples: Array[float] = []
+	var paced := KickLogic.new()
+	paced.press_space()
+	paced.advance(paced.windup_left)
+	paced.advance(1.0)
+	for _i in 4:
+		samples.append(paced.needle_angle)
+		paced.advance(0.2)
+	var rates: Array[float] = []
+	for index in range(1, samples.size()):
+		rates.append((samples[index - 1] - samples[index]) / 0.2)
+	check(absf(rates[0] - rates[1]) < 0.02 and absf(rates[1] - rates[2]) < 0.02, "right-arc angular speed stays constant %s" % str(rates))
+	check(absf(rates[0] - MeterGauge.OMEGA0) < 0.05, "default accuracy sweep uses the same ω0, rate %s" % rates[0])
+	var timeout := KickLogic.new()
+	timeout.press_space()
+	timeout.advance(timeout.windup_left)
+	timeout.advance(0.4)
+	timeout.press_space()
+	timeout.advance(timeout.seconds_until_error(-15.0) + 0.01)
+	check(timeout.phase == KickLogic.Phase.FLIGHT and near(timeout.accuracy_error, -15.0), "finishing the right arc kicks with e=-15, phase %s e %s" % [timeout.phase, timeout.accuracy_error])
+	var stone := KickLogic.new()
+	stone.stats.power_speed = 120.0
+	stone.press_space()
+	stone.advance(stone.windup_left)
+	var stone_start := stone.needle_angle
+	stone.advance(0.4)
+	var stone_rate := (stone_start - stone.needle_angle) / 0.4
+	check(near(stone_rate, MeterGauge.omega_power(120.0), 0.05), "Stone Toe power speed is ω0 * (power_speed / 100), got %s" % stone_rate)
+	stone.press_space()
+	stone.advance(stone.seconds_until_error(15.0))
+	var stone_acc := stone.needle_angle
+	stone.advance(0.3)
+	var stone_acc_rate := (stone_acc - stone.needle_angle) / 0.3
+	check(near(stone_acc_rate, MeterGauge.omega_accuracy(120.0), 0.05), "Stone Toe does not speed the accuracy sweep, got %s" % stone_acc_rate)
+	var rainy := KickLogic.new()
+	rainy.rain_faster = true
+	rainy.press_space()
+	rainy.advance(rainy.windup_left)
+	rainy.advance(0.5)
+	rainy.press_space()
+	rainy.advance(rainy.seconds_until_error(15.0))
+	var rain_at := rainy.needle_angle
+	rainy.advance(0.3)
+	var clear_rate := MeterGauge.omega_accuracy(120.0)
+	var rain_rate := (rain_at - rainy.needle_angle) / 0.3
+	check(near(rain_rate, clear_rate * rainy.rain_scale, 0.05) and rain_rate > clear_rate + 5.0, "rain speeds only the accuracy sweep, got %s" % rain_rate)
+	var hero := KickLogic.new()
+	hero.stats.power_speed = 80.0
+	hero.stats.accuracy_speed = 96.0
+	hero.press_space()
+	hero.advance(hero.windup_left)
+	var hero_start := hero.needle_angle
+	hero.advance(0.4)
+	check(near((hero_start - hero.needle_angle) / 0.4, MeterGauge.omega_power(80.0), 0.05), "Hero Ball slows the power sweep")
+	hero.press_space()
+	hero.advance(hero.seconds_until_error(15.0))
+	var hero_acc := hero.needle_angle
+	hero.advance(0.3)
+	check(near((hero_acc - hero.needle_angle) / 0.3, MeterGauge.omega_accuracy(96.0), 0.05), "Hero Ball slows the accuracy sweep")
+	var mag := KickLogic.new()
+	mag.stats.power_speed = 70.0
+	mag.stats.accuracy_speed = 84.0
+	mag.press_space()
+	mag.advance(mag.windup_left)
+	var mag_start := mag.needle_angle
+	mag.advance(0.4)
+	check(near((mag_start - mag.needle_angle) / 0.4, MeterGauge.OMEGA0 * 0.7, 0.05), "Magnesium slows the power sweep to 0.7 ω0")
+	var bruce := KickLogic.new()
+	Kickers.apply_to(bruce.stats, Kickers.BIG_BRUCE)
+	var walk := KickLogic.new()
+	Kickers.apply_to(walk.stats, Kickers.WALK_ON)
+	check(near(MeterGauge.omega_accuracy(bruce.stats.accuracy_speed), MeterGauge.omega_accuracy(walk.stats.accuracy_speed) * 1.1, 0.001), "Big Bruce's accuracy angular speed is 1.1 times the Walk-On")
+	check(KickConstants.RED_TIP_START == 95.0 and near(bruce.stats.red_tip_start, 90.0), "red-tip thresholds stay 95 and 90")
+	check(KickConstants.ACCURACY_DEG_PER_ERROR == 0.35, "degrees per unit of e stay 0.35")
+	check(KickLogic.is_perfect(2.0) and not KickLogic.is_perfect(2.01), "landing inside the perfect band is still PERFECT")
+	var image := Image.create(4, 1, false, Image.FORMAT_RGBA8)
+	image.set_pixel(0, 0, Color8(10, 8, 4, 255))
+	image.set_pixel(1, 0, Color8(16, 16, 16, 255))
+	image.set_pixel(2, 0, Color8(17, 17, 17, 255))
+	image.set_pixel(3, 0, Color8(90, 86, 84, 255))
+	var keyed := MeterGauge.key_meter_image(image)
+	check(keyed.get_pixel(0, 0).a == 0.0 and keyed.get_pixel(1, 0).a == 0.0, "RGB at or under 16 is keyed out")
+	check(keyed.get_pixel(2, 0).a > 0.9 and keyed.get_pixel(3, 0).a > 0.9, "dark gray metal is not keyed out")
+	var wide: Dictionary = MeterGauge.accuracy_layout(10.0, 20.0)
+	var plain: Dictionary = MeterGauge.accuracy_layout(2.0, 8.0)
+	var tight: Dictionary = MeterGauge.accuracy_layout(1.0, 6.0)
+	check(float(wide["perfect_span"]) > float(plain["perfect_span"]) and float(tight["perfect_span"]) < float(plain["perfect_span"]), "Pinpoint widens the live wedge and Tight Window tightens it")
+	check(near(MeterGauge.accuracy_angle(0.0, 10.0, 20.0), 45.0) and near(MeterGauge.accuracy_angle(0.0, 1.0, 6.0), 45.0), "e=0 stays at the center no matter how wide the wedge is")
 
 
 func _check_perfect_band() -> void:
@@ -188,11 +320,8 @@ func _drive_check2(seed_value: int) -> KickLogic:
 		kick.advance(1.0 / 60.0)
 		guard += 1
 	check(kick.phase == KickLogic.Phase.ACCURACY and near(kick.power, 100.0), "check 2 needle climbed to 100 on its own")
-	guard = 0
-	while kick.phase == KickLogic.Phase.ACCURACY and kick.needle > 0.0 and guard < 600:
-		kick.advance(1.0 / 60.0)
-		guard += 1
-	check(guard < 600 and near(kick.needle, 0.0), "check 2 needle fell through 0")
+	kick.advance(kick.seconds_until_error(0.0))
+	check(near(kick.needle, 0.0, 0.02), "check 2 the right-arc center is e=0, got %s" % kick.needle)
 	if kick.phase == KickLogic.Phase.ACCURACY:
 		kick.press_space()
 	return kick
@@ -203,9 +332,10 @@ func _check_3_full_left() -> void:
 	kick.aim(-1.0, 5.0)
 	check(near(kick.aim_degrees, -12.0), "check 3 holding Left reaches -12, got %s" % kick.aim_degrees)
 	kick.press_space()
+	kick.advance(kick.windup_left)
 	kick.advance(0.8)
 	kick.press_space()
-	kick.advance(80.0 / 120.0)
+	kick.advance(kick.seconds_until_error(0.0))
 	kick.press_space()
 	check(kick.perfect, "check 3 accuracy on 0 is PERFECT")
 	check(near(kick.final_angle_degrees, -12.0), "check 3 perfect adds no extra angle, got %s" % kick.final_angle_degrees)
@@ -247,6 +377,7 @@ func _check_5_late_accuracy() -> void:
 	check(result == "DOINK", "check 5 the written rules say DOINK, got " + result)
 	var kick := KickLogic.new()
 	kick.press_space()
+	kick.advance(kick.windup_left)
 	kick.advance(0.8)
 	kick.press_space()
 	var guard := 0
@@ -313,9 +444,10 @@ func _check_flight_and_reset() -> void:
 	again.kick_distance = 42.0
 	again.aim(-1.0, 0.4)
 	again.press_space()
+	again.advance(again.windup_left)
 	again.advance(0.5)
 	again.press_space()
-	again.advance(0.4)
+	again.advance(again.seconds_until_error(0.0))
 	again.press_space()
 	again.advance(10.0)
 	check(again.phase == KickLogic.Phase.RESULT, "the sample kick reached a result")
@@ -508,9 +640,10 @@ func _check_run_late_earn_and_spot_in_the_kick() -> void:
 	hash_kick.kick_distance = 44.0
 	hash_kick.start_lateral_yards = 3.0
 	hash_kick.press_space()
+	hash_kick.advance(hash_kick.windup_left)
 	hash_kick.advance(0.8)
 	hash_kick.press_space()
-	hash_kick.advance(80.0 / 120.0)
+	hash_kick.advance(hash_kick.seconds_until_error(0.0))
 	hash_kick.press_space()
 	hash_kick.advance(hash_kick.flight_duration * 0.5)
 	check(near(hash_kick.offset_yards, 3.0), "aiming straight from +3 yd still arrives 3 yd off, got %s" % hash_kick.offset_yards)
@@ -697,12 +830,7 @@ func _aimed_power(power_value: float, aim: float, insure: bool) -> KickLogic:
 	kick.reset_kick()
 	kick.kick_distance = 35.0
 	kick.aim_degrees = aim
-	kick.press_space()
-	kick.advance(power_value / kick.stats.power_speed)
-	kick.press_space()
-	kick.advance(kick.power / kick.stats.accuracy_speed)
-	if kick.phase == KickLogic.Phase.ACCURACY:
-		kick.press_space()
+	_swing_to(kick, power_value, 0.0)
 	return kick
 
 
@@ -710,26 +838,42 @@ func _lock_power_at(kick: KickLogic, power_value: float, distance: float = 35.0)
 	kick.reset_kick()
 	kick.kick_distance = distance
 	kick.start_lateral_yards = 0.0
+	_swing_to(kick, power_value, 0.0)
+
+
+func _park_on_right_arc(kick: KickLogic, power_value: float = 40.0) -> void:
+	kick.reset_kick()
 	kick.press_space()
+	if kick.windup_left > 0.0:
+		kick.advance(kick.windup_left)
 	kick.advance(power_value / kick.stats.power_speed)
-	# Full power locks itself. Drop the accuracy needle before the second press.
 	if kick.phase == KickLogic.Phase.POWER:
 		kick.press_space()
 	if kick.phase == KickLogic.Phase.ACCURACY:
-		kick.advance(maxf(kick.needle, 0.0) / kick.stats.accuracy_speed)
+		var wait := kick.seconds_until_error(15.0)
+		if wait > 0.0:
+			kick.advance(wait)
+
+
+func _swing_to(kick: KickLogic, power_value: float, error_value: float) -> void:
+	kick.press_space()
+	if kick.windup_left > 0.0:
+		kick.advance(kick.windup_left)
+	if power_value > 0.0:
+		kick.advance(power_value / kick.stats.power_speed)
+	if kick.phase == KickLogic.Phase.POWER:
+		kick.press_space()
+	if kick.phase == KickLogic.Phase.ACCURACY:
+		var wait := kick.seconds_until_error(error_value)
+		if wait > 0.0:
+			kick.advance(wait)
 		if kick.phase == KickLogic.Phase.ACCURACY:
 			kick.press_space()
 
 
 func _kick_power_accuracy(power_value: float, needle_at_lock: float) -> KickLogic:
 	var kick := KickLogic.new()
-	kick.press_space()
-	kick.advance(power_value / KickConstants.POWER_RISE_PER_SEC)
-	kick.press_space()
-	var drop := power_value - needle_at_lock
-	kick.advance(drop / KickConstants.ACCURACY_FALL_PER_SEC)
-	if kick.phase == KickLogic.Phase.ACCURACY:
-		kick.press_space()
+	_swing_to(kick, power_value, needle_at_lock)
 	return kick
 
 
@@ -1067,10 +1211,10 @@ func _check_weather_and_bosses() -> void:
 	var rain := KickLogic.new()
 	var plain := KickLogic.new()
 	rain.rain_faster = true
-	_lock_power_at(rain, 40.0)
-	_lock_power_at(plain, 40.0)
-	rain.advance(0.25)
-	plain.advance(0.25)
+	_park_on_right_arc(rain)
+	_park_on_right_arc(plain)
+	rain.advance(0.7)
+	plain.advance(0.7)
 	check(rain.needle < plain.needle - 4.0, "check 1 rain makes the accuracy needle fall faster (%s vs %s)" % [rain.needle, plain.needle])
 	var clear_kick := KickLogic.new()
 	_lock_power_at(clear_kick, 50.0)
@@ -1107,15 +1251,16 @@ func _check_weather_and_bosses() -> void:
 	both.thin_air_weather = true
 	_lock_power_at(both, 50.0)
 	check(near(both.max_range, clear_kick.max_range + 6.0 + 4.0), "check 5 thin air weather stacks on top of the upgrade (%s)" % both.max_range)
-	var just_locked := RunLogic.iced_needle_alpha(true, true, 80.0, 80.0)
-	check(near(just_locked, 1.0), "ICED needle is still visible at the power lock")
-	var fading := RunLogic.iced_needle_alpha(true, true, 80.0, 80.0 - 0.12 * (80.0 - KickConstants.METER_MIN))
+	var just_locked := RunLogic.iced_needle_alpha(true, true, 80.0, 15.0)
+	check(near(just_locked, 1.0), "ICED needle is still visible just after MAX")
+	check(near(RunLogic.iced_needle_alpha(true, true, 80.0, 80.0), 1.0), "ICED needle stays up during leftover travel before the right arc")
+	var fading := RunLogic.iced_needle_alpha(true, true, 80.0, 15.0 - 0.12 * 30.0)
 	check(fading < 0.55 and fading > 0.0, "ICED needle is fading out just after the power lock, alpha %s" % fading)
-	var gone := RunLogic.iced_needle_alpha(true, true, 80.0, 80.0 - RunLogic.ICED_FADE_OUT * (80.0 - KickConstants.METER_MIN))
-	check(gone < 0.05, "ICED needle is gone before halfway down, alpha %s" % gone)
-	var back := RunLogic.iced_needle_alpha(true, true, 80.0, 80.0 - 0.5 * (80.0 - KickConstants.METER_MIN))
-	check(near(back, 1.0), "ICED needle is fully visible again halfway down")
-	var later := RunLogic.iced_needle_alpha(true, true, 80.0, 10.0)
+	var gone := RunLogic.iced_needle_alpha(true, true, 80.0, 15.0 - RunLogic.ICED_FADE_OUT * 30.0)
+	check(gone < 0.05, "ICED needle is gone before halfway down the right arc, alpha %s" % gone)
+	var back := RunLogic.iced_needle_alpha(true, true, 80.0, 0.0)
+	check(near(back, 1.0), "ICED needle is fully visible again halfway down the right arc")
+	var later := RunLogic.iced_needle_alpha(true, true, 80.0, -8.0)
 	check(near(later, 1.0), "ICED needle stays visible after halfway")
 	check(near(RunLogic.iced_needle_alpha(false, true, 80.0, 40.0), 1.0), "Ice Veins never fades the needle")
 	check(near(RunLogic.iced_needle_alpha(false, true, 80.0, 40.0), 1.0), "a normal kick keeps the needle opaque")
@@ -1282,8 +1427,10 @@ func _check_curses_and_rarity() -> void:
 	shank.angle_scale = 1.5
 	shank.aim_degrees = 0.0
 	shank.press_space()
+	shank.advance(shank.windup_left)
 	shank.advance(30.0 / shank.stats.power_speed)
 	shank.press_space()
+	shank.needle_angle = MeterGauge.angle_from_error(10.0)
 	shank.needle = 10.0
 	shank.press_space()
 	check(near(shank.final_angle_degrees, -10.0 * 0.35 * 1.5, 0.02), "Shanky Cleats makes the angle error 1.5 times, got %s" % shank.final_angle_degrees)
@@ -1827,9 +1974,10 @@ func _check_vitamin_shop() -> void:
 	# Drop the accuracy needle to e=6, inside the good band and outside PERFECT.
 	omega.reset_kick()
 	omega.press_space()
+	omega.advance(omega.windup_left)
 	omega.advance(40.0 / omega.stats.power_speed)
 	omega.press_space()
-	omega.advance((40.0 - 6.0) / omega.stats.accuracy_speed)
+	omega.advance(omega.seconds_until_error(6.0))
 	omega.press_space()
 	check(near(omega.accuracy_error, 0.0) and not omega.perfect, "Omega-3 wipes a good-band press and does not call it PERFECT")
 	var paid := RunLogic.new()
@@ -1966,9 +2114,9 @@ func _check_sprite_scan_and_gauge() -> void:
 	check(not unmatched.has("res://art/ui/kick_meter.png") and not unmatched.has("res://art/shop/vitamin_shop.png"), "the meter and the shop art are not loadout icons")
 	check(str(mapped["empty"].get(Loadout.PERK, "")).ends_with("empty_perk.png"), "empty_perk.png is the empty perk frame")
 	check(near(MeterGauge.power_angle(0.0), 180.0) and near(MeterGauge.power_angle(100.0), 90.0) and near(MeterGauge.power_angle(50.0), 135.0), "power fills from the left edge toward MAX")
+	check(near(MeterGauge.accuracy_angle(15.0, 2.0, 8.0), 90.0), "e=+15 sits just after MAX")
 	check(near(MeterGauge.accuracy_angle(0.0, 2.0, 8.0), 45.0), "accuracy error 0 sits in the middle of the right arc")
-	check(MeterGauge.accuracy_angle(100.0, 2.0, 8.0) > 80.0, "a high accuracy value starts just after MAX")
-	check(MeterGauge.accuracy_angle(-15.0, 2.0, 8.0) < 5.0, "the finished needle reaches the ACCURACY end of the arc")
+	check(near(MeterGauge.accuracy_angle(-15.0, 2.0, 8.0), 0.0), "e=-15 reaches the ACCURACY end of the arc")
 	var plain: Dictionary = MeterGauge.accuracy_layout(2.0, 8.0)
 	var wide: Dictionary = MeterGauge.accuracy_layout(10.0, 20.0)
 	var tight: Dictionary = MeterGauge.accuracy_layout(1.0, 6.0)

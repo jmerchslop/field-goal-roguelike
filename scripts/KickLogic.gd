@@ -20,9 +20,12 @@ const PLANT_Z := 1.15
 # The run portion of a compressed approach. The last 0.08s is the plant sprite.
 const EARLY_RUN_SEC := 0.17
 
-# AIMING   - Left / Right swings the arrow. Space starts the meter.
-# POWER    - The needle rises. Space locks power. At 100 it locks itself.
-# ACCURACY - The needle falls. Space locks accuracy. At -15 it locks itself.
+# AIMING   - Left / Right swings the arrow. The needle rests at MAX. Space starts the meter.
+# POWER    - A short flick to the POWER label, then a sweep back toward MAX. Space locks P.
+#            Reaching MAX locks P at 100. Space does nothing during the flick.
+# ACCURACY - The needle keeps going to MAX if it is not there, then sweeps the right arc.
+#            e is read only on that arc: +15 just after MAX, 0 at the center, -15 at the end.
+#            Space locks e once the needle is on the right half. Finishing the arc locks e=-15.
 # FLIGHT   - The ball is in the air. Space does nothing.
 # RESULT   - The words are on screen. Space on this object sets up the same kick again.
 #            The run (main.gd) does not use that. It moves on to the next kick.
@@ -30,6 +33,11 @@ const EARLY_RUN_SEC := 0.17
 var phase: Phase = Phase.AIMING
 var aim_degrees := 0.0
 var needle := 0.0
+# Live needle, in screen degrees. 180 is POWER, 90 is MAX, 0 is the ACCURACY label.
+var needle_angle := MeterGauge.MAX_ANGLE
+var windup_left := 0.0
+# Orange fill. It follows the sweep, then freezes at the locked power.
+var fill_power := 0.0
 var power := 0.0
 var accuracy_error := 0.0
 var kick_distance := KickConstants.KICK_DISTANCE_YARDS
@@ -104,10 +112,17 @@ func press_space() -> void:
 		phase = Phase.POWER
 		needle = 0.0
 		power_true = 0.0
+		fill_power = 0.0
+		needle_angle = MeterGauge.MAX_ANGLE
+		windup_left = MeterGauge.WINDUP_SEC
 	elif phase == Phase.POWER:
-		_lock_power(needle)
+		# The flick down to POWER is not a lockable power value.
+		if windup_left <= 0.0000001:
+			_lock_power(needle)
 	elif phase == Phase.ACCURACY:
-		_lock_accuracy(needle)
+		# Leftover travel on the left arc is not an accuracy reading.
+		if needle_angle <= MeterGauge.MAX_ANGLE + 0.0001:
+			_lock_accuracy(MeterGauge.error_from_angle(needle_angle))
 	elif phase == Phase.RESULT:
 		reset_kick()
 	# A press during the run-up or the flight does nothing.
@@ -119,14 +134,12 @@ func advance(delta: float) -> void:
 		return
 	var left := delta
 	var guard := 0
-	while left > 0.0000001 and guard < 4:
+	while left > 0.0000001 and guard < 6:
 		guard += 1
 		if phase == Phase.POWER:
-			_advance_power(left)
-			left = 0.0
+			left = _advance_power(left)
 		elif phase == Phase.ACCURACY:
-			_advance_accuracy(left)
-			left = 0.0
+			left = _advance_accuracy(left)
 		elif phase == Phase.FLIGHT:
 			var remain := flight_duration - flight_elapsed
 			var fly := minf(left, maxf(remain, 0.0))
@@ -138,6 +151,25 @@ func advance(delta: float) -> void:
 		else:
 			left = 0.0
 	_update_ball()
+
+
+# Seconds from the current needle to an accuracy error on the right arc.
+# Leftover left-side travel uses the power-phase angular speed. The right arc uses
+# the accuracy-phase speed. Neither side eases.
+func seconds_until_error(target_error: float) -> float:
+	var target := MeterGauge.angle_from_error(target_error)
+	var time := 0.0
+	var angle := needle_angle
+	if phase == Phase.POWER and windup_left > 0.0:
+		time += windup_left
+		angle = MeterGauge.POWER_ANGLE
+	if angle > MeterGauge.MAX_ANGLE + 0.0001:
+		var omega := MeterGauge.omega_power(stats.power_speed)
+		time += (angle - MeterGauge.MAX_ANGLE) / omega
+		angle = MeterGauge.MAX_ANGLE
+	if angle > target + 0.0001:
+		time += (angle - target) / _accuracy_omega()
+	return time
 
 
 func reset_kick() -> void:
@@ -161,6 +193,9 @@ func reset_kick() -> void:
 	phase = Phase.AIMING
 	aim_degrees = 0.0
 	needle = 0.0
+	needle_angle = MeterGauge.MAX_ANGLE
+	windup_left = 0.0
+	fill_power = 0.0
 	power = 0.0
 	accuracy_error = 0.0
 	final_angle_degrees = 0.0
@@ -389,34 +424,79 @@ static func round_tenth(value: float) -> float:
 	return ceilf(scaled - 0.5 - 0.0000001) / 10.0
 
 
-func _advance_power(delta: float) -> void:
-	power_true += stats.power_speed * delta
-	if power_true < KickConstants.METER_MAX:
+func _advance_power(delta: float) -> float:
+	if windup_left > 0.0:
+		var step := minf(delta, windup_left)
+		windup_left -= step
+		var done := 1.0 - windup_left / MeterGauge.WINDUP_SEC
+		needle_angle = lerpf(MeterGauge.MAX_ANGLE, MeterGauge.POWER_ANGLE, clampf(done, 0.0, 1.0))
+		needle = 0.0
+		power_true = 0.0
+		fill_power = 0.0
+		if windup_left > 0.0000001:
+			return 0.0
+		needle_angle = MeterGauge.POWER_ANGLE
+		return delta - step
+	var omega := MeterGauge.omega_power(stats.power_speed)
+	if omega <= 0.001:
+		return 0.0
+	var room := needle_angle - MeterGauge.MAX_ANGLE
+	var need := room / omega
+	if delta < need - 0.0000001:
+		needle_angle -= omega * delta
+		power_true = MeterGauge.power_from_angle(needle_angle)
 		needle = _shown_power(power_true)
-		return
-	# The fall starts on the next step. One frame at 100 is too small to see.
+		fill_power = power_true
+		return 0.0
+	# Reaching MAX locks P and the leftover time continues onto the right arc.
 	power_true = KickConstants.METER_MAX
+	needle_angle = MeterGauge.MAX_ANGLE
 	needle = _shown_power(power_true)
 	_lock_power(needle)
+	return delta - need
 
 
 func _shown_power(true_value: float) -> float:
-	# Mud jitters the shown needle. The jitter is new every frame and is not kept.
+	# Mud jitters the lockable power. The jitter is new every frame and is not kept.
+	# The needle angle itself stays smooth.
 	var shown := true_value
 	if mud_power:
 		shown += _rng.randf_range(-mud_span, mud_span)
 	return clampf(shown, 0.0, KickConstants.METER_MAX)
 
 
-func _advance_accuracy(delta: float) -> void:
-	var fall := stats.accuracy_speed
-	if rain_faster:
-		fall *= rain_scale
-	needle -= fall * delta
-	if needle > KickConstants.METER_MIN:
-		return
+func _advance_accuracy(delta: float) -> float:
+	if needle_angle > MeterGauge.MAX_ANGLE + 0.0001:
+		var omega := MeterGauge.omega_power(stats.power_speed)
+		var room := needle_angle - MeterGauge.MAX_ANGLE
+		var need := room / omega
+		if delta < need - 0.0000001:
+			needle_angle -= omega * delta
+			needle = power
+			return 0.0
+		needle_angle = MeterGauge.MAX_ANGLE
+		needle = MeterGauge.ERROR_AT_MAX
+		return delta - need
+	var omega_acc := _accuracy_omega()
+	if omega_acc <= 0.001:
+		return 0.0
+	var room_acc := needle_angle - MeterGauge.ACCURACY_ANGLE
+	var need_acc := room_acc / omega_acc
+	if delta < need_acc - 0.0000001:
+		needle_angle -= omega_acc * delta
+		needle = MeterGauge.error_from_angle(needle_angle)
+		return 0.0
+	needle_angle = MeterGauge.ACCURACY_ANGLE
 	needle = KickConstants.METER_MIN
 	_lock_accuracy(KickConstants.METER_MIN)
+	return 0.0
+
+
+func _accuracy_omega() -> float:
+	var omega := MeterGauge.omega_accuracy(stats.accuracy_speed)
+	if rain_faster:
+		omega *= rain_scale
+	return omega
 
 
 func _advance_flight(delta: float) -> void:
@@ -427,10 +507,16 @@ func _advance_flight(delta: float) -> void:
 
 
 func _lock_power(value: float) -> void:
-	power = clampf(value, KickConstants.METER_MIN, KickConstants.METER_MAX)
-	needle = power
+	power = clampf(value, 0.0, KickConstants.METER_MAX)
+	fill_power = power
 	power_true = power
 	phase = Phase.ACCURACY
+	# The needle stays where it is. Crossing onto the right arc is what starts e.
+	if needle_angle <= MeterGauge.MAX_ANGLE + 0.0001:
+		needle_angle = MeterGauge.MAX_ANGLE
+		needle = MeterGauge.ERROR_AT_MAX
+	else:
+		needle = power
 
 
 func _lock_accuracy(value: float) -> void:
