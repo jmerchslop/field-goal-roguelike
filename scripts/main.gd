@@ -328,7 +328,7 @@ func play_locked_kick(power_value: float) -> void:
 	logic.press_space()
 	if logic.windup_left > 0.0:
 		logic.advance(logic.windup_left)
-	logic.advance(power_value / logic.stats.power_speed)
+	logic.advance(logic.seconds_to_power(power_value))
 	if logic.phase == KickLogic.Phase.POWER:
 		logic.press_space()
 	if logic.phase == KickLogic.Phase.ACCURACY:

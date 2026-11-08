@@ -444,6 +444,7 @@ func prepare_kick_stats() -> void:
 	# Stone Toe still hurries the power needle. That is a curse downside, not meter help.
 	stats.power_speed = base.power_speed * (1.2 if has_curse(Loadout.STONE) else 1.0)
 	stats.accuracy_speed = base.accuracy_speed
+	stats.accuracy = base.accuracy
 	stats.perfect_band = base.perfect_band
 	stats.good_band = base.good_band
 	if has_curse(Loadout.TIGHT):

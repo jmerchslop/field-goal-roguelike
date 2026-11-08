@@ -371,6 +371,9 @@ func _ready() -> void:
 	if not await _capture_imported_art():
 		get_tree().quit(1)
 		return
+	if not await _capture_clean_meter():
+		get_tree().quit(1)
+		return
 	get_tree().quit()
 
 
@@ -860,7 +863,7 @@ func _swing_meter(power_value: float, error_value: float) -> void:
 	if board.logic.windup_left > 0.0:
 		board.logic.advance(board.logic.windup_left)
 	if power_value > 0.0:
-		board.logic.advance(power_value / board.logic.stats.power_speed)
+		board.logic.advance(board.logic.seconds_to_power(power_value))
 	if board.logic.phase == KickLogic.Phase.POWER:
 		board.logic.press_space()
 	if board.logic.phase == KickLogic.Phase.ACCURACY:
@@ -1422,6 +1425,108 @@ func _capture_imported_art() -> bool:
 	board.pose_for_shot("idle")
 	if not await _capture("art_belt_filled.png"):
 		return false
+	return true
+
+
+func _capture_clean_meter() -> bool:
+	board.showing_records = false
+	board.selecting = false
+	board.front.screen = FrontEnd.Screen.PLAY
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.awaiting_shop = false
+	board.run.awaiting_offer = false
+	board.run.awaiting_mulligan = false
+	board.run.curse_prompt = false
+	board.front.run_mode = "standard"
+	board.highlight = 0
+	board.confirm_kicker()
+	board.run.set_wind(0.0, 0.0)
+	board.force_weather(RunLogic.CLEAR)
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.AIMING
+	board.logic.needle_angle = MeterGauge.MAX_ANGLE
+	board._pose = "idle"
+	var bruce := KickLogic.new()
+	Kickers.apply_to(bruce.stats, Kickers.BIG_BRUCE)
+	bruce.press_space()
+	bruce.advance(bruce.windup_left)
+	var bruce_time := 0.0
+	while bruce.phase == KickLogic.Phase.POWER and bruce_time < 3.0:
+		bruce.advance(0.0002)
+		bruce_time += 0.0002
+	var walk := KickLogic.new()
+	Kickers.apply_to(walk.stats, Kickers.WALK_ON)
+	walk.press_space()
+	walk.advance(walk.windup_left)
+	var walk_time := 0.0
+	while walk.phase == KickLogic.Phase.POWER and walk_time < 3.0:
+		walk.advance(0.0002)
+		walk_time += 0.0002
+	print("CLEAN METER POWER to MAX Bruce ", bruce_time, " Walk-On ", walk_time)
+	if not await _capture("meter_clean_idle.png"):
+		return false
+	if not await _capture_gauge_crop("meter_clean_idle_close.png"):
+		return false
+	board.logic.press_space()
+	board.logic.advance(board.logic.windup_left)
+	board.logic.advance(board.logic.seconds_to_power(55.0))
+	board._pose = "run"
+	if not await _capture("meter_clean_power_mid.png"):
+		return false
+	board.logic.press_space()
+	board.logic.advance(board.logic.seconds_until_error(4.0))
+	board._pose = "run"
+	if not await _capture("meter_clean_accuracy.png"):
+		return false
+	board.highlight = 1
+	board.confirm_kicker()
+	board.force_weather(RunLogic.CLEAR)
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.AIMING
+	board.logic.needle_angle = MeterGauge.MAX_ANGLE
+	board._pose = "idle"
+	if not await _capture("meter_clean_walkon_idle.png"):
+		return false
+	board.logic.press_space()
+	board.logic.advance(board.logic.windup_left)
+	board.logic.advance(0.35)
+	board._pose = "run"
+	if not await _capture("meter_clean_walkon_sweep.png"):
+		return false
+	board.highlight = 0
+	board.confirm_kicker()
+	board.run.belt = [Vitamins.MAGNESIUM, ""]
+	if not board.run.use_belt(0):
+		print("clean meter magnesium was not used")
+		return false
+	board.force_weather(RunLogic.CLEAR)
+	board.load_current_kick()
+	board.logic.press_space()
+	board.logic.advance(board.logic.windup_left)
+	board.logic.advance(0.5)
+	print("CLEAN METER magnesium P ", board.logic.power_true, " speed ", board.logic.stats.power_speed)
+	board._pose = "run"
+	if not await _capture("meter_clean_magnesium.png"):
+		return false
+	return true
+
+
+func _capture_gauge_crop(file_name: String) -> bool:
+	await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+	var image: Image = board.get_viewport().get_texture().get_image()
+	var gauge_w := 360
+	var gauge_h := 250
+	var x := KickConstants.WINDOW_WIDTH - 8 - gauge_w
+	var y := KickConstants.WINDOW_HEIGHT - 8 - gauge_h
+	var crop := image.get_region(Rect2i(x, y, gauge_w, gauge_h))
+	crop.resize(gauge_w * 2, gauge_h * 2, Image.INTERPOLATE_NEAREST)
+	var path := shot_dir.path_join(file_name)
+	var err: Error = crop.save_png(path)
+	if err != OK:
+		print("FAILED to save ", path, " error ", err)
+		return false
+	print("Saved ", path, " ", crop.get_width(), "x", crop.get_height())
 	return true
 
 

@@ -18,6 +18,7 @@ const ALL: Array = [
 		"ball_name": "The Farm Ball",
 		"ball_description": "A light hay ball. Wind moves it 10% more than a normal ball. A doink stays a doink.",
 		"ball_type": "farm_ball",
+		"accuracy": 100,
 		"color": Color(0.55, 0.09, 0.08),
 		"shape": "square",
 		"portrait_path": "res://art/kickers/big_bruce.png",
@@ -31,6 +32,7 @@ const ALL: Array = [
 		"ball_name": "Team-Issue",
 		"ball_description": "A normal ball. No special trick.",
 		"ball_type": "standard",
+		"accuracy": 100,
 		"color": Color(0.22, 0.38, 0.82),
 		"shape": "circle",
 		"portrait_path": "res://art/kickers/walk_on.png",
@@ -73,6 +75,7 @@ static func apply_to(stats: KickerStats, id: String) -> void:
 	if info.is_empty():
 		return
 	stats.ball_type = str(info["ball_type"])
+	stats.accuracy = float(info.get("accuracy", 100.0))
 	if id == BIG_BRUCE:
 		stats.range_per_power = 0.49
 		stats.power_floor = 80.0

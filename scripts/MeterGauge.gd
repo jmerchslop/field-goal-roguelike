@@ -6,21 +6,43 @@ extends RefCounted
 # constant-angular-speed sweep back to MAX. Accuracy is the right half only:
 # just after MAX is e=+15, the center is e=0, and the ACCURACY label is e=-15.
 
+# ω0 is the old default: POWER → MAX took 1.0s when power_speed was 100.
+# Played kickers are faster. ω_ref is that old speed times 1.15 (accuracy 100).
 const OMEGA0 := 90.0
+const REF_SPEED_SCALE := 1.15
 const WINDUP_SEC := 0.08
 const POWER_ANGLE := 180.0
 const MAX_ANGLE := 90.0
 const ACCURACY_ANGLE := 0.0
 const ERROR_AT_MAX := 15.0
-const KEY_LEVEL := 16
+# Source-image geometry of res://art/ui/kick_meter.png. The outside backdrop is
+# already transparent. The open middle is filled; it is not color-keyed.
+const HUB_X := 504.0
+const HUB_Y := 510.0
+const WELL_INNER := 58.0
+const WELL_OUTER := 270.0
+const NEEDLE_INNER := 270.0
+const NEEDLE_OUTER := 410.0
+const NEEDLE_HALF := 9.0
 
 
-static func omega_power(power_speed: float) -> float:
-	return OMEGA0 * (power_speed / 100.0)
+static func omega_ref() -> float:
+	return OMEGA0 * REF_SPEED_SCALE
 
 
-static func omega_accuracy(accuracy_speed: float) -> float:
-	return OMEGA0 * (accuracy_speed / 120.0)
+static func kicker_omega(accuracy: float) -> float:
+	var rating := accuracy
+	if rating <= 0.0:
+		rating = 100.0
+	return omega_ref() * (100.0 / rating)
+
+
+static func omega_power(power_speed: float, accuracy: float = 100.0) -> float:
+	return kicker_omega(accuracy) * (power_speed / 100.0)
+
+
+static func omega_accuracy(accuracy_speed: float, accuracy: float = 100.0) -> float:
+	return kicker_omega(accuracy) * (accuracy_speed / 120.0)
 
 
 static func power_angle(power_value: float) -> float:
@@ -69,47 +91,54 @@ static func is_red_tip(power_value: float, tip_start: float) -> bool:
 	return power_value >= tip_start
 
 
-# Near-pure black (R, G, and B all <= 16) becomes transparent. The baked silver
-# needle is cleared so it cannot sit beside the live needle. Painted orange and
-# wedge colors in the band are cleared too; the live fill and wedges replace them.
-# White labels and the gray frame stay. The source file is not modified.
+# The rectangular backdrop stays transparent. Nothing else is color-keyed:
+# dark frame pixels, wedge pixels, and labels stay opaque. The open middle
+# becomes one flat fill, and the baked needle is painted over so only the
+# live needle remains. The source file is not modified.
 static func key_meter_image(source: Image) -> Image:
 	var image := source.duplicate() as Image
 	image.convert(Image.FORMAT_RGBA8)
 	var width := image.get_width()
 	var height := image.get_height()
-	var bytes := image.get_data()
-	var hub_x := 504.0
-	var hub_y := 510.0
+	if width < 800 or height < 500:
+		return image
+	var original := image.get_data()
+	var bytes := original.duplicate()
 	var count := width * height
+	var step := 0.70710678
 	for i in count:
-		var offset := i * 4
-		var red := int(bytes[offset])
-		var green := int(bytes[offset + 1])
-		var blue := int(bytes[offset + 2])
-		var x := float(i % width)
-		var y := float(int(i / width))
-		var dx := x - hub_x
-		var dy := y - hub_y
+		var x := i % width
+		var y := int(i / width)
+		var dx := float(x) - HUB_X
+		var dy := float(y) - HUB_Y
 		var radius := sqrt(dx * dx + dy * dy)
-		# The baked needle lies on the 45° ray, where dx + dy is 0.
-		var perp := absf(dx + dy) * 0.70710678
-		var clear := false
-		if red <= KEY_LEVEL and green <= KEY_LEVEL and blue <= KEY_LEVEL:
-			clear = true
-		elif radius >= 52.0 and radius <= 275.0:
-			# The open well. Anything left in here is the baked needle.
-			clear = true
-		elif radius >= 250.0 and radius <= 455.0:
-			var high := maxi(red, maxi(green, blue))
-			var low := mini(red, mini(green, blue))
-			var near_white := red > 200 and green > 190 and blue > 170
-			if high - low > 30 and not near_white and high > 40:
-				clear = true
-		# The baked needle also crosses the colored band, including its white highlight.
-		if not clear and radius > 250.0 and radius < 430.0 and perp <= 11.0:
-			clear = true
-		if clear:
-			bytes[offset + 3] = 0
+		var offset := i * 4
+		# The painted well is not a perfect circle. Fill the open middle, including
+		# the transparent ring that sits against the inner lip, and cover the
+		# baked needle there. Opaque lip pixels stay.
+		var in_upper := dy <= 4.0 and radius >= WELL_INNER and radius <= 305.0
+		var open_pixel := int(original[offset + 3]) == 0
+		if in_upper and (radius <= WELL_OUTER or open_pixel):
+			bytes[offset] = 18
+			bytes[offset + 1] = 20
+			bytes[offset + 2] = 24
+			bytes[offset + 3] = 255
+			continue
+		if radius < NEEDLE_INNER or radius > NEEDLE_OUTER:
+			continue
+		var perp := absf(dx + dy) * step
+		if perp > NEEDLE_HALF:
+			continue
+		var sx := int(round(float(x) + 16.0 * step))
+		var sy := int(round(float(y) + 16.0 * step))
+		if sx < 0 or sy < 0 or sx >= width or sy >= height:
+			continue
+		var src := (sy * width + sx) * 4
+		if int(original[src + 3]) == 0:
+			continue
+		bytes[offset] = original[src]
+		bytes[offset + 1] = original[src + 1]
+		bytes[offset + 2] = original[src + 2]
+		bytes[offset + 3] = 255
 	image.set_data(width, height, false, Image.FORMAT_RGBA8, bytes)
 	return image

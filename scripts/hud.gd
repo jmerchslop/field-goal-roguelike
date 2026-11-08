@@ -63,21 +63,25 @@ func _draw_meter(logic: KickLogic, run: RunLogic) -> void:
 	var origin := Vector2(KickConstants.WINDOW_WIDTH - 18.0 - gauge_w, KickConstants.WINDOW_HEIGHT - 14.0 - gauge_h)
 	var scale := gauge_w / 1003.0
 	var hub := origin + Vector2(504.0, 510.0) * scale
-	var inner := 300.0 * scale
-	var outer := 392.0 * scale
+	# Inset so the live color covers the painted band and leaves the metal bezel alone.
+	var inner := 308.0 * scale
+	var outer := 386.0 * scale
 	var stats: KickerStats = logic.stats
 	var layout := MeterGauge.accuracy_layout(stats.perfect_band, stats.good_band)
-	# Live wedges and the orange fill sit under the keyed frame so the labels stay on top.
-	_draw_annulus(hub, inner, outer, 90.0, float(layout["band_top"]), Color(0.78, 0.1, 0.08, 0.94))
-	_draw_annulus(hub, inner, outer, float(layout["band_top"]), float(layout["perfect_top"]), Color(0.93, 0.74, 0.12, 0.94))
-	_draw_annulus(hub, inner, outer, float(layout["perfect_top"]), float(layout["perfect_bottom"]), Color(0.2, 0.78, 0.28, 0.96))
-	_draw_annulus(hub, inner, outer, float(layout["perfect_bottom"]), float(layout["band_bottom"]), Color(0.93, 0.74, 0.12, 0.94))
-	_draw_annulus(hub, inner, outer, float(layout["band_bottom"]), 0.0, Color(0.78, 0.1, 0.08, 0.94))
+	var art := _meter_art()
+	if art != null:
+		draw_texture_rect(art, Rect2(origin, Vector2(gauge_w, gauge_h)), false)
+	# Opaque live wedges and the orange fill sit on the painted band. One copy, not a stacked PNG.
+	_draw_annulus(hub, inner, outer, 90.0, float(layout["band_top"]), Color(0.78, 0.1, 0.08, 1.0))
+	_draw_annulus(hub, inner, outer, float(layout["band_top"]), float(layout["perfect_top"]), Color(0.93, 0.74, 0.12, 1.0))
+	_draw_annulus(hub, inner, outer, float(layout["perfect_top"]), float(layout["perfect_bottom"]), Color(0.2, 0.78, 0.28, 1.0))
+	_draw_annulus(hub, inner, outer, float(layout["perfect_bottom"]), float(layout["band_bottom"]), Color(0.93, 0.74, 0.12, 1.0))
+	_draw_annulus(hub, inner, outer, float(layout["band_bottom"]), 0.0, Color(0.78, 0.1, 0.08, 1.0))
 	var shown := logic.fill_power
 	if shown > 0.5:
 		var tip := stats.red_tip_start
 		var orange_to := minf(shown, tip)
-		_draw_annulus(hub, inner, outer, 180.0, MeterGauge.power_angle(orange_to), Color(1.0, 0.48, 0.05, 0.94))
+		_draw_annulus(hub, inner, outer, 180.0, MeterGauge.power_angle(orange_to), Color(1.0, 0.48, 0.05, 1.0))
 		if shown > tip:
 			var pulse := 0.72 + 0.28 * sin(float(Time.get_ticks_msec()) * 0.012)
 			var danger_from := MeterGauge.power_angle(tip)
@@ -85,11 +89,12 @@ func _draw_meter(logic: KickLogic, run: RunLogic) -> void:
 			if danger_from - danger_to < 10.0:
 				danger_from = danger_to + 10.0
 			_draw_annulus(hub, inner, outer, danger_from, danger_to, Color(0.95, 0.05, 0.04, pulse))
-	var art := _meter_art()
-	if art != null:
-		draw_texture_rect(art, Rect2(origin, Vector2(gauge_w, gauge_h)), false)
-	# The baked needle crossed the painted PERFECT word. Draw it again so the label stays whole.
-	_draw_wedge_label(hub, (inner + outer) * 0.5, 45.0, "PERFECT")
+	var label_r := (inner + outer) * 0.5
+	var good_high := (float(layout["band_top"]) + float(layout["perfect_top"])) * 0.5
+	var good_low := (float(layout["perfect_bottom"]) + float(layout["band_bottom"])) * 0.5
+	_draw_wedge_label(hub, label_r, good_high, "GOOD")
+	_draw_wedge_label(hub, label_r, 45.0, "PERFECT")
+	_draw_wedge_label(hub, label_r, good_low, "GOOD")
 	var fade_sample := logic.needle
 	if logic.needle_angle > MeterGauge.MAX_ANGLE:
 		fade_sample = 100.0

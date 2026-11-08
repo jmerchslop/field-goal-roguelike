@@ -164,7 +164,7 @@ func seconds_until_error(target_error: float) -> float:
 		time += windup_left
 		angle = MeterGauge.POWER_ANGLE
 	if angle > MeterGauge.MAX_ANGLE + 0.0001:
-		var omega := MeterGauge.omega_power(stats.power_speed)
+		var omega := _power_omega()
 		time += (angle - MeterGauge.MAX_ANGLE) / omega
 		angle = MeterGauge.MAX_ANGLE
 	if angle > target + 0.0001:
@@ -446,7 +446,7 @@ func _advance_power(delta: float) -> float:
 			return 0.0
 		needle_angle = MeterGauge.POWER_ANGLE
 		return delta - step
-	var omega := MeterGauge.omega_power(stats.power_speed)
+	var omega := _power_omega()
 	if omega <= 0.001:
 		return 0.0
 	var room := needle_angle - MeterGauge.MAX_ANGLE
@@ -476,7 +476,7 @@ func _shown_power(true_value: float) -> float:
 
 func _advance_accuracy(delta: float) -> float:
 	if needle_angle > MeterGauge.MAX_ANGLE + 0.0001:
-		var omega := MeterGauge.omega_power(stats.power_speed)
+		var omega := _power_omega()
 		var room := needle_angle - MeterGauge.MAX_ANGLE
 		var need := room / omega
 		if delta < need - 0.0000001:
@@ -501,11 +501,32 @@ func _advance_accuracy(delta: float) -> float:
 	return 0.0
 
 
+func _power_omega() -> float:
+	return MeterGauge.omega_power(stats.power_speed, stats.accuracy)
+
+
 func _accuracy_omega() -> float:
-	var omega := MeterGauge.omega_accuracy(stats.accuracy_speed)
+	var omega := MeterGauge.omega_accuracy(stats.accuracy_speed, stats.accuracy)
 	if rain_faster:
 		omega *= rain_scale
 	return omega
+
+
+# Seconds of power-phase sweep from the current needle to this power.
+# Includes a wind-up that has not finished yet. Linear, no easing.
+func seconds_to_power(power_value: float) -> float:
+	var target := MeterGauge.power_angle(power_value)
+	if target < MeterGauge.MAX_ANGLE:
+		target = MeterGauge.MAX_ANGLE
+	var omega := _power_omega()
+	if omega <= 0.001:
+		return 0.0
+	var angle := needle_angle
+	var extra := 0.0
+	if phase == Phase.POWER and windup_left > 0.0:
+		extra = windup_left
+		angle = MeterGauge.POWER_ANGLE
+	return extra + maxf(angle - target, 0.0) / omega
 
 
 func _advance_flight(delta: float) -> void:

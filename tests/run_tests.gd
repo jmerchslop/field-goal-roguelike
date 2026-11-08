@@ -96,7 +96,8 @@ func _check_meter_motion() -> void:
 	check(near(kick.aim_degrees, locked_aim), "aim locks once the meter starts")
 	kick.advance(kick.windup_left)
 	kick.advance(0.25)
-	check(near(kick.power_true, 25.0), "the power sweep still covers 25 in a quarter second, got %s" % kick.power_true)
+	var quarter := MeterGauge.omega_power(kick.stats.power_speed, kick.stats.accuracy) * 0.25 * (100.0 / MeterGauge.OMEGA0)
+	check(near(kick.power_true, quarter), "a quarter second of the new baseline covers %s power, got %s" % [quarter, kick.power_true])
 	kick.advance(0.75)
 	check(kick.phase == KickLogic.Phase.ACCURACY, "reaching MAX starts the accuracy sweep")
 	check(near(kick.power, 100.0), "power locks itself at 100")
@@ -124,16 +125,17 @@ func _check_pendulum() -> void:
 	sweep.press_space()
 	sweep.advance(sweep.windup_left)
 	var started := sweep.needle_angle
-	sweep.advance(0.5)
+	var half_time := 0.5 / MeterGauge.REF_SPEED_SCALE
+	sweep.advance(half_time)
 	check(near(sweep.power_true, 50.0) and near(sweep.needle_angle, 135.0), "halfway through the power sweep, P is 50 (angle %s, P %s)" % [sweep.needle_angle, sweep.power_true])
-	check(near(started - sweep.needle_angle, MeterGauge.OMEGA0 * 0.5), "default power sweep moves at ω0")
-	sweep.advance(0.5)
-	check(sweep.phase == KickLogic.Phase.ACCURACY and near(sweep.power, 100.0), "POWER to MAX takes 1.0s and locks P=100")
+	check(near(started - sweep.needle_angle, MeterGauge.kicker_omega(100.0) * half_time), "accuracy 100 sweeps at ω_ref, not the old ω0")
+	sweep.advance(half_time)
+	check(sweep.phase == KickLogic.Phase.ACCURACY and near(sweep.power, 100.0), "POWER to MAX takes 1/1.15s and locks P=100")
 	check(sweep.needle_angle <= 90.0001, "P=100 begins the right arc, angle %s" % sweep.needle_angle)
 	var mid := KickLogic.new()
 	mid.press_space()
 	mid.advance(mid.windup_left)
-	mid.advance(0.5)
+	mid.advance(mid.seconds_to_power(50.0))
 	var locked_angle := mid.needle_angle
 	mid.press_space()
 	check(near(mid.power, 50.0) and near(mid.fill_power, 50.0), "a halfway press locks P=50 and freezes the fill")
@@ -152,7 +154,7 @@ func _check_pendulum() -> void:
 	var paced := KickLogic.new()
 	paced.press_space()
 	paced.advance(paced.windup_left)
-	paced.advance(1.0)
+	paced.advance(1.0 / MeterGauge.REF_SPEED_SCALE)
 	for _i in 4:
 		samples.append(paced.needle_angle)
 		paced.advance(0.2)
@@ -160,7 +162,7 @@ func _check_pendulum() -> void:
 	for index in range(1, samples.size()):
 		rates.append((samples[index - 1] - samples[index]) / 0.2)
 	check(absf(rates[0] - rates[1]) < 0.02 and absf(rates[1] - rates[2]) < 0.02, "right-arc angular speed stays constant %s" % str(rates))
-	check(absf(rates[0] - MeterGauge.OMEGA0) < 0.05, "default accuracy sweep uses the same ω0, rate %s" % rates[0])
+	check(absf(rates[0] - MeterGauge.kicker_omega(100.0)) < 0.05, "default accuracy sweep uses kicker_omega, rate %s" % rates[0])
 	var timeout := KickLogic.new()
 	timeout.press_space()
 	timeout.advance(timeout.windup_left)
@@ -175,7 +177,7 @@ func _check_pendulum() -> void:
 	var stone_start := stone.needle_angle
 	stone.advance(0.4)
 	var stone_rate := (stone_start - stone.needle_angle) / 0.4
-	check(near(stone_rate, MeterGauge.omega_power(120.0), 0.05), "Stone Toe power speed is ω0 * (power_speed / 100), got %s" % stone_rate)
+	check(near(stone_rate, MeterGauge.omega_power(120.0, 100.0), 0.05), "Stone Toe is kicker_omega * (power_speed / 100), got %s" % stone_rate)
 	stone.press_space()
 	stone.advance(stone.seconds_until_error(15.0))
 	var stone_acc := stone.needle_angle
@@ -214,7 +216,7 @@ func _check_pendulum() -> void:
 	mag.advance(mag.windup_left)
 	var mag_start := mag.needle_angle
 	mag.advance(0.4)
-	check(near((mag_start - mag.needle_angle) / 0.4, MeterGauge.OMEGA0 * 0.7, 0.05), "Magnesium slows the power sweep to 0.7 ω0")
+	check(near((mag_start - mag.needle_angle) / 0.4, MeterGauge.kicker_omega(100.0) * 0.7, 0.05), "Magnesium slows the power sweep to 0.7 of kicker_omega")
 	var bruce := KickLogic.new()
 	Kickers.apply_to(bruce.stats, Kickers.BIG_BRUCE)
 	var walk := KickLogic.new()
@@ -229,13 +231,168 @@ func _check_pendulum() -> void:
 	image.set_pixel(2, 0, Color8(17, 17, 17, 255))
 	image.set_pixel(3, 0, Color8(90, 86, 84, 255))
 	var keyed := MeterGauge.key_meter_image(image)
-	check(keyed.get_pixel(0, 0).a == 0.0 and keyed.get_pixel(1, 0).a == 0.0, "RGB at or under 16 is keyed out")
+	check(keyed.get_pixel(0, 0).a > 0.9 and keyed.get_pixel(1, 0).a > 0.9, "a dark pixel is not keyed out just because it is dark")
 	check(keyed.get_pixel(2, 0).a > 0.9 and keyed.get_pixel(3, 0).a > 0.9, "dark gray metal is not keyed out")
+	_check_clean_meter_and_accuracy_speed()
 	var wide: Dictionary = MeterGauge.accuracy_layout(10.0, 20.0)
 	var plain: Dictionary = MeterGauge.accuracy_layout(2.0, 8.0)
 	var tight: Dictionary = MeterGauge.accuracy_layout(1.0, 6.0)
 	check(float(wide["perfect_span"]) > float(plain["perfect_span"]) and float(tight["perfect_span"]) < float(plain["perfect_span"]), "Pinpoint widens the live wedge and Tight Window tightens it")
 	check(near(MeterGauge.accuracy_angle(0.0, 10.0, 20.0), 45.0) and near(MeterGauge.accuracy_angle(0.0, 1.0, 6.0), 45.0), "e=0 stays at the center no matter how wide the wedge is")
+
+
+func _measure_power_sweep(id: String) -> float:
+	var kick := KickLogic.new()
+	Kickers.apply_to(kick.stats, id)
+	kick.press_space()
+	kick.advance(kick.windup_left)
+	var step := 0.0002
+	var elapsed := 0.0
+	while kick.phase == KickLogic.Phase.POWER and elapsed < 3.0:
+		kick.advance(step)
+		elapsed += step
+	return elapsed
+
+
+func _power_rate(kick: KickLogic) -> float:
+	kick.press_space()
+	kick.advance(kick.windup_left)
+	var started := kick.needle_angle
+	kick.advance(0.2)
+	return (started - kick.needle_angle) / 0.2
+
+
+func _accuracy_rate(kick: KickLogic) -> float:
+	if kick.phase == KickLogic.Phase.AIMING:
+		kick.press_space()
+		kick.advance(kick.windup_left)
+	if kick.phase == KickLogic.Phase.POWER:
+		kick.advance(kick.seconds_to_power(40.0))
+		if kick.phase == KickLogic.Phase.POWER:
+			kick.press_space()
+	kick.advance(kick.seconds_until_error(15.0))
+	var started := kick.needle_angle
+	kick.advance(0.2)
+	return (started - kick.needle_angle) / 0.2
+
+
+func _check_clean_meter_and_accuracy_speed() -> void:
+	var expect := 1.0 / MeterGauge.REF_SPEED_SCALE
+	var bruce_time := _measure_power_sweep(Kickers.BIG_BRUCE)
+	var walk_time := _measure_power_sweep(Kickers.WALK_ON)
+	print("POWER_TO_MAX Bruce ", bruce_time, " Walk-On ", walk_time, " expected ", expect)
+	check(near(bruce_time, expect, 0.002), "Bruce with no items sweeps POWER to MAX in 1/1.15s, got %s" % bruce_time)
+	check(near(walk_time, expect, 0.002), "Walk-On with no items sweeps POWER to MAX in 1/1.15s, got %s" % walk_time)
+	check(near(bruce_time, walk_time, 0.002), "Bruce and Walk-On match each other")
+	check(near(MeterGauge.omega_ref(), MeterGauge.OMEGA0 * 1.15), "ω_ref is the old ω0 times 1.15")
+	check(near(MeterGauge.kicker_omega(100.0), MeterGauge.omega_ref()), "accuracy 100 runs at ω_ref")
+	check(near(MeterGauge.kicker_omega(50.0), MeterGauge.omega_ref() * 2.0), "half the accuracy rating doubles the baseline needle speed")
+	var bruce_stats := KickerStats.new()
+	Kickers.apply_to(bruce_stats, Kickers.BIG_BRUCE)
+	var walk_stats := KickerStats.new()
+	Kickers.apply_to(walk_stats, Kickers.WALK_ON)
+	check(near(bruce_stats.accuracy, 100.0) and near(walk_stats.accuracy, 100.0), "both kickers store accuracy 100")
+	check(near(bruce_stats.power_floor, 80.0) and bruce_stats.ball_type == "farm_ball", "Farm Strength and The Farm Ball are unchanged")
+	check(walk_stats.rerolls_per_run == 2 and walk_stats.ball_type == "standard", "Walk-On still has 2 rerolls and Team-Issue")
+	var farm := KickLogic.drift_at_uprights(10.0, 90.0, 35.0, 0, 0, "farm_ball")
+	var plain_drift := KickLogic.drift_at_uprights(10.0, 90.0, 35.0, 0, 0, "standard")
+	check(near(farm, plain_drift * 1.10), "The Farm Ball is still 1.10 drift")
+	var hero := RunLogic.new()
+	hero.new_run()
+	hero.start_with_kicker(Kickers.BIG_BRUCE)
+	hero.give(Loadout.HERO_BALL, 1)
+	hero.prepare_kick_stats()
+	check(near(MeterGauge.omega_power(hero.stats.power_speed, hero.stats.accuracy), MeterGauge.kicker_omega(100.0) * 0.8), "Hero Ball slows power on top of kicker_omega")
+	check(near(MeterGauge.omega_accuracy(hero.stats.accuracy_speed, hero.stats.accuracy), MeterGauge.kicker_omega(100.0) * 0.8), "Hero Ball slows accuracy on top of kicker_omega")
+	var anchor := RunLogic.new()
+	anchor.new_run()
+	anchor.start_with_kicker(Kickers.WALK_ON)
+	anchor.give(Loadout.ANCHOR, 1)
+	anchor.prepare_kick_stats()
+	check(near(MeterGauge.omega_power(anchor.stats.power_speed, anchor.stats.accuracy), MeterGauge.kicker_omega(100.0) * 0.85), "Anchor Cleats slows power on top of kicker_omega")
+	check(near(MeterGauge.omega_accuracy(anchor.stats.accuracy_speed, anchor.stats.accuracy), MeterGauge.kicker_omega(100.0) * 0.85), "Anchor Cleats slows accuracy on top of kicker_omega")
+	var mag := RunLogic.new()
+	mag.new_run()
+	mag.start_with_kicker(Kickers.BIG_BRUCE)
+	mag.belt[0] = Vitamins.MAGNESIUM
+	check(mag.use_belt(0), "Magnesium can be used")
+	mag.prepare_kick_stats()
+	check(near(mag.stats.power_speed, 70.0) and near(mag.stats.accuracy_speed, 84.0), "Magnesium is 0.7 on both phase speeds")
+	check(near(MeterGauge.omega_power(mag.stats.power_speed, mag.stats.accuracy), MeterGauge.kicker_omega(100.0) * 0.7), "Magnesium slows power on top of kicker_omega")
+	check(near(MeterGauge.omega_accuracy(mag.stats.accuracy_speed, mag.stats.accuracy), MeterGauge.kicker_omega(100.0) * 0.7), "Magnesium slows accuracy on top of kicker_omega")
+	var stone := RunLogic.new()
+	stone.new_run()
+	stone.start_with_kicker(Kickers.WALK_ON)
+	stone.give(Loadout.STONE)
+	stone.prepare_kick_stats()
+	check(near(stone.stats.power_speed, 120.0) and near(stone.stats.accuracy_speed, 120.0), "Stone Toe hurries only the power speed value")
+	check(near(MeterGauge.omega_power(stone.stats.power_speed, stone.stats.accuracy), MeterGauge.kicker_omega(100.0) * 1.2), "Stone Toe power is kicker_omega times 1.2")
+	check(near(MeterGauge.omega_accuracy(stone.stats.accuracy_speed, stone.stats.accuracy), MeterGauge.kicker_omega(100.0)), "Stone Toe leaves the accuracy phase at kicker_omega")
+	var cage := RunLogic.new()
+	cage.new_run()
+	cage.start_with_kicker(Kickers.BIG_BRUCE)
+	cage.give(Loadout.ICE_CAGE, 2)
+	cage.prepare_kick_stats()
+	check(near(cage.stats.power_speed, 100.0) and near(cage.stats.accuracy_speed, 108.0), "Ice Cage II slows only accuracy speed")
+	check(near(MeterGauge.omega_accuracy(cage.stats.accuracy_speed, cage.stats.accuracy), MeterGauge.kicker_omega(100.0) * 0.9), "Ice Cage II is 0.9 on top of kicker_omega")
+	var rain := KickLogic.new()
+	Kickers.apply_to(rain.stats, Kickers.WALK_ON)
+	var rain_flags: Dictionary = RunLogic.weather_kick_flags(RunLogic.RAIN, 0)
+	rain.rain_faster = bool(rain_flags["rain_faster"])
+	rain.rain_scale = float(rain_flags["rain_scale"])
+	var rain_power := _power_rate(rain)
+	check(near(rain_power, MeterGauge.omega_power(100.0, 100.0), 0.05), "rain does not speed the power sweep, got %s" % rain_power)
+	var rain_acc := _accuracy_rate(rain)
+	check(near(rain_acc, MeterGauge.kicker_omega(100.0) * 1.2, 0.05), "rain speeds the accuracy sweep by 1.2 on top of kicker_omega, got %s" % rain_acc)
+	var monsoon := KickLogic.new()
+	Kickers.apply_to(monsoon.stats, Kickers.BIG_BRUCE)
+	var monsoon_flags: Dictionary = RunLogic.weather_kick_flags(RunLogic.MONSOON, 0)
+	monsoon.rain_faster = bool(monsoon_flags["rain_faster"])
+	monsoon.rain_scale = float(monsoon_flags["rain_scale"])
+	check(near(_accuracy_rate(monsoon), MeterGauge.kicker_omega(100.0) * 1.2, 0.05), "Monsoon rain speeds the accuracy sweep the same way")
+	var game := RunLogic.new()
+	game.new_run()
+	game.start_with_kicker(Kickers.BIG_BRUCE)
+	game.give(Loadout.HERO_BALL, 1)
+	game.force_weather(RunLogic.BIG_GAME)
+	game.prepare_kick_stats()
+	check(near(game.stats.power_speed, 100.0) and near(game.stats.accuracy_speed, 120.0), "Big Game turns off Hero Ball's slower needles")
+	check(near(game.stats.accuracy, 100.0) and near(game.stats.power_floor, 80.0), "Big Game keeps the kicker accuracy baseline and Farm Strength")
+	check(near(MeterGauge.omega_power(game.stats.power_speed, game.stats.accuracy), MeterGauge.kicker_omega(100.0)), "Big Game power sweep stays at the new baseline")
+	game.belt[0] = Vitamins.MAGNESIUM
+	check(game.use_belt(0), "Magnesium can be used in Big Game")
+	game.prepare_kick_stats()
+	check(near(game.stats.power_speed, 70.0) and near(game.stats.accuracy, 100.0), "Magnesium still slows both needles in Big Game")
+	check(near(MeterGauge.omega_power(game.stats.power_speed, game.stats.accuracy), MeterGauge.kicker_omega(100.0) * 0.7), "Big Game Magnesium is 0.7 of kicker_omega")
+	var left := KickLogic.new()
+	Kickers.apply_to(left.stats, Kickers.BIG_BRUCE)
+	left.press_space()
+	left.advance(left.windup_left)
+	left.advance(left.seconds_to_power(40.0))
+	left.press_space()
+	var locked := left.needle_angle
+	left.advance(0.15)
+	var moved := locked - left.needle_angle
+	check(left.phase == KickLogic.Phase.ACCURACY and near(left.fill_power, 40.0), "a mid-power lock freezes the fill and keeps sweeping")
+	check(near(moved, MeterGauge.omega_power(100.0, 100.0) * 0.15, 0.05) and left.needle_angle > 90.0, "leftover left-side travel still uses power-phase speed")
+	check(near(MeterGauge.angle_from_error(15.0), 90.0) and near(MeterGauge.angle_from_error(0.0), 45.0) and near(MeterGauge.angle_from_error(-15.0), 0.0), "e mapping on the right arc is unchanged")
+	var texture := load("res://art/ui/kick_meter.png") as Texture2D
+	check(texture != null, "the kick meter painting loads")
+	if texture == null:
+		return
+	var cleaned := MeterGauge.key_meter_image(texture.get_image())
+	var outside := cleaned.get_pixel(0, 0)
+	var well_a := cleaned.get_pixel(504, 360)
+	var well_b := cleaned.get_pixel(420, 400)
+	var covered := cleaned.get_pixel(645, 369)
+	var dark_wedge := cleaned.get_pixel(616, 147)
+	var metal := cleaned.get_pixel(406, 80)
+	check(outside.a == 0.0, "the outside backdrop stays transparent")
+	check(well_a.a > 0.99 and well_b.a > 0.99, "the inner well is opaque")
+	check(near(well_a.r, well_b.r) and near(well_a.g, well_b.g) and near(well_a.b, well_b.b), "the inner well is one flat color")
+	check(near(covered.r, well_a.r) and near(covered.g, well_a.g) and covered.a > 0.99, "the baked needle in the well is covered by that fill")
+	check(dark_wedge.a > 0.99 and dark_wedge.r8 <= 20, "a dark wedge pixel stays opaque instead of being keyed out")
+	check(metal.a > 0.99, "the metal frame stays opaque")
 
 
 func _check_perfect_band() -> void:
@@ -380,7 +537,7 @@ func _check_5_late_accuracy() -> void:
 	var kick := KickLogic.new()
 	kick.press_space()
 	kick.advance(kick.windup_left)
-	kick.advance(0.8)
+	kick.advance(kick.seconds_to_power(80.0))
 	kick.press_space()
 	var guard := 0
 	while kick.phase == KickLogic.Phase.ACCURACY and guard < 600:
@@ -848,7 +1005,7 @@ func _park_on_right_arc(kick: KickLogic, power_value: float = 40.0) -> void:
 	kick.press_space()
 	if kick.windup_left > 0.0:
 		kick.advance(kick.windup_left)
-	kick.advance(power_value / kick.stats.power_speed)
+	kick.advance(kick.seconds_to_power(power_value))
 	if kick.phase == KickLogic.Phase.POWER:
 		kick.press_space()
 	if kick.phase == KickLogic.Phase.ACCURACY:
@@ -862,7 +1019,7 @@ func _swing_to(kick: KickLogic, power_value: float, error_value: float) -> void:
 	if kick.windup_left > 0.0:
 		kick.advance(kick.windup_left)
 	if power_value > 0.0:
-		kick.advance(power_value / kick.stats.power_speed)
+		kick.advance(kick.seconds_to_power(power_value))
 	if kick.phase == KickLogic.Phase.POWER:
 		kick.press_space()
 	if kick.phase == KickLogic.Phase.ACCURACY:
@@ -1235,7 +1392,8 @@ func _check_weather_and_bosses() -> void:
 	again.advance(0.3)
 	var true_before := again.power_true
 	again.advance(0.05)
-	check(near(again.power_true, true_before + again.stats.power_speed * 0.05), "check 3 the true needle ignores the jitter")
+	var sweep_rate := MeterGauge.omega_power(again.stats.power_speed, again.stats.accuracy) * (100.0 / MeterGauge.OMEGA0)
+	check(near(again.power_true, true_before + sweep_rate * 0.05, 0.02), "check 3 the true needle ignores the jitter")
 	check(absf(again.needle - again.power_true) <= 3.01, "check 3 the next frame's jitter is still just ±3")
 	var thin := KickLogic.new()
 	thin.thin_air_weather = true
