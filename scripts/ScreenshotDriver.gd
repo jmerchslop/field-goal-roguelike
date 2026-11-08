@@ -351,6 +351,9 @@ func _ready() -> void:
 	if not await _capture_range_hotfix():
 		get_tree().quit(1)
 		return
+	if not await _capture_vitamin_shop():
+		get_tree().quit(1)
+		return
 	get_tree().quit()
 
 
@@ -566,6 +569,111 @@ func _capture_range_hotfix() -> bool:
 		return false
 	if not board.run.skip_offer():
 		print("empty offer did not skip")
+		return false
+	return true
+
+
+func _capture_vitamin_shop() -> bool:
+	board.showing_records = false
+	board.save_note = ""
+	board.highlight = 1
+	board.confirm_kicker()
+	board.run.cash_popup = ""
+	if not await _capture("shop_hud_zero.png"):
+		return false
+	board.script_good_kick()
+	board.logic.result_text = "GOOD"
+	board.logic.phase = KickLogic.Phase.RESULT
+	if board.run.cash < 3 or board.run.cash_popup == "":
+		print("cash popup missing ", board.run.cash, " ", board.run.cash_popup)
+		return false
+	if not await _capture("shop_cash_popup.png"):
+		return false
+	board.run.kick_number = 5
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.kick_resolved = true
+	board.run.last_result_made = true
+	board.run.cash = 18
+	board.run.set_seed(3)
+	board.run.open_shop()
+	board.run.shop_stock = [Vitamins.PROTEIN, Vitamins.LUTEIN, Vitamins.TART]
+	if board.run.next_boss_line() != "Next boss: The Squeeze":
+		print("missing squeeze line")
+		return false
+	if not await _capture("shop_kick5.png"):
+		return false
+	board.run.buy_shelf(0)
+	if str(board.run.belt[0]) != Vitamins.PROTEIN or str(board.run.shop_stock[0]) != "":
+		print("buy did not fill Z")
+		return false
+	if not await _capture("shop_bought.png"):
+		return false
+	board.run.buy_shelf(1)
+	board.run.buy_shelf(2)
+	if board.run.shop_note != "Belt full: sell first":
+		print("belt full note missing ", board.run.shop_note)
+		return false
+	if not await _capture("shop_belt_full.png"):
+		return false
+	board.run.sell_belt(0)
+	if not await _capture("shop_after_sell.png"):
+		return false
+	board.run.leave_shop()
+	board.run.kick_number = 10
+	board.run.last_result_made = true
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.open_shop()
+	if not await _capture("shop_kick10.png"):
+		return false
+	board.run.leave_shop()
+	board.run.kick_number = 15
+	board.run.last_result_made = true
+	board.run.open_shop()
+	if not await _capture("shop_kick15.png"):
+		return false
+	board.run.leave_shop()
+	board.run.kick_number = 1
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.kick_resolved = false
+	board.run.last_result_made = false
+	board.run.trophy_name = ""
+	board.run.cash_popup = ""
+	board.run.belt = [Vitamins.PROTEIN, ""]
+	board.run.cash_popup = ""
+	board.run.vitamin_note = ""
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.AIMING
+	if not board.run.use_belt(0):
+		print("protein was not used")
+		return false
+	board.apply_live_vitamins()
+	if not await _capture("shop_protein_used.png"):
+		return false
+	board.run.belt = [Vitamins.LUTEIN, ""]
+	board.run.vitamin_note = ""
+	board.set_wind(10.0, 90.0)
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.AIMING
+	board.logic.aim_degrees = 4.0
+	if not board.run.use_belt(0):
+		print("lutein was not used")
+		return false
+	board.apply_live_vitamins()
+	if not board.logic.stats.laser_full or not board.logic.stats.flag_reader:
+		print("lutein path flags missing")
+		return false
+	if not await _capture("shop_lutein_path.png"):
+		return false
+	board.run._clear_ball_vitamins()
+	board.run.give(Loadout.ICED)
+	board.run.give(Loadout.SHANKY)
+	board.run.belt = [Vitamins.TART, ""]
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.AIMING
+	if not board.run.use_belt(0) or not board.run.curse_prompt:
+		print("tart prompt missing")
+		return false
+	if not await _capture("shop_tart_prompt.png"):
 		return false
 	return true
 

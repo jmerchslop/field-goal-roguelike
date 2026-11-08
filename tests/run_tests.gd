@@ -41,6 +41,7 @@ func _run() -> void:
 	_check_curses_and_rarity()
 	_check_loadout_sprites()
 	_check_rank_caps_and_range()
+	_check_vitamin_shop()
 
 
 func check(ok: bool, label: String) -> void:
@@ -1684,4 +1685,252 @@ func _maxed_loadout() -> RunLogic:
 	run.rebuild_stats()
 	run.attempt_cap = run.stats.attempt_cap
 	return run
+
+
+func _check_vitamin_shop() -> void:
+	var fresh := RunLogic.new()
+	fresh.new_run()
+	check(fresh.cash == 0 and str(fresh.belt[0]) == "" and str(fresh.belt[1]) == "", "a fresh run starts at $0 with an empty belt")
+	fresh.resolve_kick("GOOD", 2.0, false)
+	check(fresh.cash == 3 and fresh.cash_popup == "+$3", "a plain make pays $3")
+	var stacked := RunLogic.new()
+	stacked.new_run()
+	stacked.kick_number = 5
+	stacked.resolve_kick("GOOD", 0.0, true)
+	check(stacked.cash == 7 and stacked.cash_popup == "+$7", "a perfect middle boss make pays $7")
+	var miss := RunLogic.new()
+	miss.new_run()
+	miss.attempts = 2
+	miss.resolve_kick("SHORT", 0.0, false)
+	check(miss.cash == 0 and miss.cash_popup == "", "a miss pays $0")
+	check(not miss.opens_shop(), "a miss never opens the shop")
+	var early := RunLogic.new()
+	early.new_run()
+	early.resolve_kick("SHORT", 0.0, false)
+	check(early.phase == RunLogic.Phase.GAME_OVER and not early.opens_shop(), "game over before kick 5 never opens a shop")
+	var again := RunLogic.new()
+	again.new_run()
+	check(again.cash == 0 and str(again.belt[0]) == "", "a new run wipes cash and the belt")
+	var saved := RunLogic.new()
+	saved.start_with_kicker(Kickers.WALK_ON)
+	saved.cash = 40
+	saved.belt[0] = Vitamins.PROTEIN
+	saved.kick_number = 20
+	saved.resolve_kick("GOOD", 2.0, false)
+	check(saved.phase == RunLogic.Phase.WIN and not saved.opens_shop(), "making kick 20 does not open a shop")
+	var records = get_root().get_node("SaveData")
+	records.file_path = "user://fg_shop_test.cfg"
+	records.reset_save()
+	saved._save_finished_run()
+	var text := FileAccess.get_file_as_string(records.file_path)
+	check(text.find("cash") < 0 and text.find("protein_shake") < 0, "SaveData does not store cash or the belt")
+	records.file_path = "user://save.cfg"
+	var shop := RunLogic.new()
+	shop.set_seed(11)
+	shop.new_run()
+	shop.kick_number = 5
+	shop.attempts = 2
+	shop.resolve_kick("GOOD", 2.0, false)
+	shop.roll_offer()
+	var held_rerolls := shop.rerolls_left
+	check(shop.skip_offer() and shop.follow_offer() == "shop" and shop.awaiting_shop, "the shop opens after the kick 5 offer closes")
+	check(shop.next_boss_line() == "Next boss: The Squeeze", "the kick 5 shop names The Squeeze")
+	check(shop.shop_stock.size() == 3 and shop.shop_stock[0] != shop.shop_stock[1] and shop.shop_stock[1] != shop.shop_stock[2] and shop.shop_stock[0] != shop.shop_stock[2], "the three shelves are different vitamins")
+	check(not shop.shop_b12_bought and shop.shop_reroll_price == 2, "B12 is for sale and the first reroll costs $2")
+	check(shop.rerolls_left == held_rerolls and not shop.reroll_offer(), "shop F does not spend a loadout reroll")
+	shop.shop_stock = [Vitamins.PROTEIN, Vitamins.MAGNESIUM, Vitamins.OMEGA]
+	shop.cash = 4
+	check(shop.buy_shelf(0) and shop.cash == 0 and str(shop.belt[0]) == Vitamins.PROTEIN and str(shop.shop_stock[0]) == "", "buying a $4 vitamin fills Z and marks the shelf SOLD")
+	shop.cash = 20
+	check(shop.buy_shelf(1) and str(shop.belt[1]) == Vitamins.MAGNESIUM, "the second vitamin fills X")
+	var blocked_cash := shop.cash
+	check(not shop.buy_shelf(2) and shop.shop_note == "Belt full: sell first" and shop.cash == blocked_cash, "a full belt blocks the next buy")
+	var before_sell := shop.cash
+	check(shop.sell_belt(0) and str(shop.belt[0]) == "" and shop.cash == before_sell + 2, "Z sells Protein Shake for $2")
+	check(Vitamins.sale_price(Vitamins.PROTEIN) == 2 and Vitamins.sale_price(Vitamins.OMEGA) == 2 and Vitamins.sale_price(Vitamins.ELECTROLYTE) == 3, "sale prices are floor(price / 2)")
+	check(shop.buy_shelf(2) and str(shop.belt[0]) == Vitamins.OMEGA, "an empty belt slot can buy again")
+	var b12_was := shop.shop_b12_bought
+	var before_reroll := shop.cash
+	check(shop.reroll_shop() and shop.cash == before_reroll - 2 and shop.shop_reroll_price == 3, "the first shelf reroll costs $2 and the next costs $3")
+	check(shop.shop_stock[0] != "" and shop.shop_stock[1] != "" and shop.shop_stock[2] != "" and shop.shop_b12_bought == b12_was, "a reroll refills three vitamins and leaves B12 alone")
+	var price_now := shop.shop_reroll_price
+	var cash_now := shop.cash
+	shop.cash = 0
+	check(not shop.reroll_shop() and shop.shop_flash == "reroll" and shop.shop_reroll_price == price_now, "an unaffordable reroll flashes and does not change the shelves")
+	shop.cash = cash_now
+	shop.attempts = shop.attempt_cap
+	var capped := shop.cash
+	check(shop.b12_grey() and not shop.buy_b12() and shop.cash == capped, "B12 is grey at the attempt cap and does not take cash")
+	shop.attempts = 1
+	shop.cash = 3
+	check(shop.b12_grey() and not shop.buy_b12() and shop.shop_flash == "b12" and shop.cash == 3, "B12 flashes red when it costs more than the cash on hand")
+	shop.cash = 10
+	check(shop.buy_b12() and shop.attempts == 2 and shop.shop_b12_bought and not shop.buy_b12() and shop.cash == 3, "B12 adds one attempt once, then does nothing")
+	shop.leave_shop()
+	check(not shop.awaiting_shop and shop.go_to_next_kick() and shop.kick_number == 6, "leaving the shop starts kick 6")
+	shop.kick_number = 10
+	shop.resolve_kick("GOOD", 2.0, false)
+	shop.follow_offer()
+	check(shop.awaiting_shop and shop.next_boss_line() == "Next boss: Monsoon" and shop.shop_reroll_price == 2, "the kick 10 shop names Monsoon and reroll starts at $2 again")
+	shop.leave_shop()
+	shop.go_to_next_kick()
+	shop.kick_number = 15
+	shop.resolve_kick("GOOD", 2.0, false)
+	shop.follow_offer()
+	check(shop.next_boss_line() == "Next boss: Big Game", "the kick 15 shop names Big Game")
+	var protein := RunLogic.new()
+	protein.new_run()
+	protein.attempts = 3
+	protein.belt[0] = Vitamins.PROTEIN
+	protein.belt[1] = Vitamins.PROTEIN
+	check(protein.use_belt(0) and protein.use_belt(1) and str(protein.belt[0]) == "" and str(protein.belt[1]) == "", "using both shakes empties the belt")
+	protein.prepare_kick_stats()
+	check(near(protein.stats.range_bonus, 12.0), "two Protein Shakes add 12 yards")
+	protein.give(Loadout.HOWLING)
+	protein.prepare_kick_stats()
+	check(near(protein.stats.range_bonus, 12.0), "Howling Wind does not buff Protein Shake")
+	protein.resolve_kick("SHORT", 0.0, false)
+	protein.begin_retry()
+	protein.prepare_kick_stats()
+	check(near(protein.stats.range_bonus, 0.0) and protein.phase == RunLogic.Phase.PLAYING, "the retry does not keep the Protein Shake yards")
+	var mag := RunLogic.new()
+	mag.start_with_kicker(Kickers.WALK_ON)
+	mag.give(Loadout.HERO_BALL, 1)
+	mag.force_weather(RunLogic.BIG_GAME)
+	mag.belt[0] = Vitamins.MAGNESIUM
+	check(mag.use_belt(0), "Magnesium is used before the kick")
+	mag.prepare_kick_stats()
+	check(near(mag.stats.power_speed, 70.0) and near(mag.stats.accuracy_speed, KickConstants.ACCURACY_FALL_PER_SEC * 0.7), "Magnesium slows both needles during Big Game after loadout meter help turns off")
+	check(near(mag.stats.hero_mult, 1.0), "Hero Ball's Mult stays on during Big Game")
+	var tabs := RunLogic.new()
+	tabs.new_run()
+	tabs.attempts = 1
+	tabs.streak = 4
+	tabs.belt[0] = Vitamins.ELECTROLYTE
+	check(tabs.use_belt(0), "Electrolyte Tabs is used")
+	tabs.resolve_kick("SHORT", 0.0, false)
+	check(tabs.streak == 0 and tabs.attempts == 1 and tabs.phase == RunLogic.Phase.PLAYING, "Electrolyte Tabs keeps the last attempt and still resets the streak")
+	tabs.begin_retry()
+	check(not tabs.is_first_ball, "the retry is not a first-try ball")
+	var pre := RunLogic.new()
+	pre.new_run()
+	pre.belt[0] = Vitamins.PREWORKOUT
+	pre.use_belt(0)
+	pre.resolve_kick("GOOD", 2.0, false)
+	check(pre.score_line.find("0.50 pre") >= 0, "Pre-Workout shows +0.5 in the score math, got '%s'" % pre.score_line)
+	check(pre.last_points == RunLogic.points_for(35.0, 1.5, false, false, false), "the +0.5 is added before the rest of the score")
+	var omega := KickLogic.new()
+	omega.stats.omega = true
+	omega.stats.good_band = 8.0
+	omega.stats.perfect_band = 2.0
+	# Drop the accuracy needle to e=6, inside the good band and outside PERFECT.
+	omega.reset_kick()
+	omega.press_space()
+	omega.advance(40.0 / omega.stats.power_speed)
+	omega.press_space()
+	omega.advance((40.0 - 6.0) / omega.stats.accuracy_speed)
+	omega.press_space()
+	check(near(omega.accuracy_error, 0.0) and not omega.perfect, "Omega-3 wipes a good-band press and does not call it PERFECT")
+	var paid := RunLogic.new()
+	paid.new_run()
+	paid.belt[0] = Vitamins.OMEGA
+	paid.use_belt(0)
+	paid.resolve_kick("GOOD", 0.0, true)
+	check(paid.score_line.find("PERFECT") < 0, "Omega-3 does not add the +5 PERFECT score bonus, got '%s'" % paid.score_line)
+	check(paid.cash == 5, "the PERFECT press and the middle still pay cash under Omega-3, got %s" % paid.cash)
+	var rain := RunLogic.new()
+	rain.new_run()
+	rain.force_weather(RunLogic.RAIN)
+	rain.belt[0] = Vitamins.VITAMIN_D
+	rain.use_belt(0)
+	rain.prepare_kick_stats()
+	var rain_flags: Dictionary = rain.weather_flags_now()
+	check(not bool(rain_flags["rain_faster"]), "Vitamin D ignores rain's faster needle")
+	rain.force_weather(RunLogic.SNOW)
+	check(not bool(rain.weather_flags_now()["snow_range"]), "Vitamin D ignores snow")
+	rain.force_weather(RunLogic.MUD)
+	check(not bool(rain.weather_flags_now()["mud_power"]), "Vitamin D ignores mud")
+	rain.force_weather(RunLogic.MONSOON)
+	var storm_flags: Dictionary = rain.weather_flags_now()
+	check(not bool(storm_flags["rain_faster"]) and not bool(storm_flags["mud_power"]) and rain.weather == RunLogic.MONSOON, "Vitamin D also ignores Monsoon's rain and mud")
+	rain.force_weather(RunLogic.THIN_AIR)
+	check(rain.weather == RunLogic.THIN_AIR, "Vitamin D leaves Thin Air in place")
+	rain.force_weather(RunLogic.ICED)
+	check(rain.needle_fades(), "Vitamin D does not stop Iced from hiding the needle")
+	rain.force_weather(RunLogic.SQUEEZE)
+	check(near(rain.post_half_gap(), RunLogic.SQUEEZE_HALF), "Vitamin D does not widen The Squeeze")
+	var plain := KickLogic.drift_at_uprights(10.0, 90.0, 50.0, 0, 0, "standard")
+	check(near(plain, 3.25, 0.02), "10 mph straight right drifts about 3.25 yards on a 50-yard kick")
+	var pickled := KickLogic.new()
+	pickled.wind_speed = 10
+	pickled.wind_direction = 90.0
+	pickled.stats.drift_factor = 0.5
+	_lock_power_at(pickled, 90.0, 50.0)
+	check(near(pickled.offset_yards, plain * 0.5, 0.05), "Pickle Juice halves that drift to about 1.63, got %s" % pickled.offset_yards)
+	var zinc := RunLogic.new()
+	zinc.set_seed(4)
+	zinc.new_run()
+	zinc.kick_number = 6
+	zinc.set_wind(0.0, 0.0)
+	zinc.force_weather(RunLogic.CLEAR)
+	zinc.belt[0] = Vitamins.ZINC
+	zinc.belt[1] = Vitamins.ZINC
+	check(zinc.use_belt(0) and str(zinc.belt[0]) == "", "Zinc on a normal kick is consumed")
+	check(zinc.wind_speed >= 3 and zinc.wind_speed <= 8, "Zinc rerolls kick 6 wind inside 3 to 8, got %s" % zinc.wind_speed)
+	check(zinc.weather == RunLogic.CLEAR or zinc.weather == RunLogic.RAIN, "Zinc rerolls a non-boss weather from that kick's table")
+	var kept_wind := zinc.wind_speed
+	var kept_weather := zinc.weather
+	check(not zinc.use_belt(1) and str(zinc.belt[1]) == Vitamins.ZINC and zinc.vitamin_note == "Already rerolled", "a second Zinc on the same kick stays on the belt")
+	zinc.attempts = 2
+	zinc.resolve_kick("SHORT", 0.0, false)
+	zinc.begin_retry()
+	check(zinc.wind_speed == kept_wind and zinc.weather == kept_weather, "the rerolled wind and weather stay for the retry")
+	var boss_zinc := RunLogic.new()
+	boss_zinc.set_seed(8)
+	boss_zinc.new_run()
+	boss_zinc.kick_number = 5
+	boss_zinc.weather = RunLogic.ICED
+	boss_zinc.set_wind(99.0, 10.0)
+	boss_zinc.belt[0] = Vitamins.ZINC
+	check(boss_zinc.use_belt(0), "Zinc is used on the boss")
+	check(boss_zinc.weather == RunLogic.ICED and boss_zinc.wind_speed >= 0 and boss_zinc.wind_speed <= 5, "a boss keeps Iced and only the wind rerolls")
+	var lutein := RunLogic.new()
+	lutein.new_run()
+	lutein.give(Loadout.WIND_VISOR, 3)
+	check(lutein.stats.flag_reader and lutein.stats.laser_full, "Wind Visor III already shows the full path")
+	lutein.belt[0] = Vitamins.LUTEIN
+	lutein.use_belt(0)
+	lutein.prepare_kick_stats()
+	check(lutein.stats.flag_reader and lutein.stats.laser_line and lutein.stats.laser_full, "Lutein keeps a single wind readout and a single full path")
+	var bare := RunLogic.new()
+	bare.new_run()
+	bare.belt[0] = Vitamins.LUTEIN
+	bare.use_belt(0)
+	bare.prepare_kick_stats()
+	check(bare.stats.flag_reader and bare.stats.laser_full, "Lutein alone turns on the wind numbers and the full path")
+	var tart := RunLogic.new()
+	tart.new_run()
+	tart.belt[0] = Vitamins.TART
+	check(not tart.use_belt(0) and str(tart.belt[0]) == Vitamins.TART and tart.vitamin_note == "No curse to remove", "Tart Cherry is not consumed when there is no curse")
+	tart.give(Loadout.HEAVY)
+	check(tart.use_belt(0) and tart.curse_ids.is_empty() and str(tart.belt[0]) == "", "one curse is removed and Tart Cherry is consumed")
+	tart.prepare_kick_stats()
+	check(not tart.stats.heavy_ball, "the removed curse stops affecting the kick")
+	var pair := RunLogic.new()
+	pair.new_run()
+	pair.give(Loadout.ICED)
+	pair.give(Loadout.SHANKY)
+	check(pair.curses_locked, "two curses lock the curse slots")
+	pair.belt[0] = Vitamins.TART
+	check(pair.use_belt(0) and pair.curse_prompt and str(pair.belt[0]) == Vitamins.TART, "two curses ask which one to remove and keep Tart Cherry")
+	check(pair.pick_curse_removal(0) and pair.curse_ids.size() == 1 and str(pair.belt[0]) == "", "picking 1 removes that curse and consumes Tart Cherry")
+	check(Loadout.legal_curses(pair.loadout_state()).is_empty(), "the curse lock stays after a removal, so no new curse is offered")
+	var cancel := RunLogic.new()
+	cancel.new_run()
+	cancel.give(Loadout.NARROW)
+	cancel.give(Loadout.STONE)
+	cancel.belt[0] = Vitamins.TART
+	cancel.use_belt(0)
+	cancel.cancel_curse_prompt()
+	check(not cancel.curse_prompt and cancel.curse_ids.size() == 2 and str(cancel.belt[0]) == Vitamins.TART, "Esc cancels the curse pick and does not consume Tart Cherry")
 

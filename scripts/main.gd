@@ -19,6 +19,8 @@ var showing_records := false
 var save_note := ""
 var _note_time := 0.0
 var _trophy_time := 0.0
+var _cash_time := 0.0
+var _vitamin_time := 0.0
 var highlight := -1
 var meter_time := 0.0
 var _pose := "idle"
@@ -111,6 +113,7 @@ func settle_kick() -> void:
 	if logic.insured:
 		run.consume_insurance()
 	run.resolve_kick(logic.result_text, logic.offset_yards, logic.perfect)
+	_cash_time = 0.0
 	if run.wants_upgrade():
 		run.roll_offer()
 	elif run.phase == RunLogic.Phase.PLAYING:
@@ -141,10 +144,22 @@ func _choose_card(index: int) -> void:
 
 func _after_cards() -> void:
 	if run.last_result_made:
+		if run.follow_offer() == "shop":
+			refresh_view()
+			return
 		advance_run()
 	else:
 		run.begin_retry()
 		load_current_kick()
+	refresh_view()
+
+
+func _leave_shop() -> void:
+	if not run.awaiting_shop:
+		return
+	run.leave_shop()
+	if run.last_result_made:
+		advance_run()
 	refresh_view()
 
 
@@ -253,8 +268,22 @@ func cycle_spot() -> void:
 	refresh_view()
 
 
+func apply_live_vitamins() -> void:
+	var aim := logic.aim_degrees
+	var phase = logic.phase
+	run.prepare_kick_stats()
+	logic.stats = run.stats
+	logic.wind_speed = run.wind_speed
+	logic.wind_direction = run.wind_direction
+	_copy_weather_onto_kick()
+	logic.aim_degrees = aim
+	logic.phase = phase
+	logic.post_half_gap = run.post_half_gap()
+	refresh_view()
+
+
 func _copy_weather_onto_kick() -> void:
-	var flags: Dictionary = RunLogic.weather_kick_flags(run.weather, run.stats.weather_cut)
+	var flags: Dictionary = run.weather_flags_now()
 	logic.rain_faster = bool(flags["rain_faster"])
 	logic.rain_scale = float(flags["rain_scale"])
 	logic.snow_range = bool(flags["snow_range"])
@@ -292,6 +321,7 @@ func play_locked_kick(power_value: float) -> void:
 
 func script_good_kick() -> void:
 	run.resolve_kick("GOOD", 0.0, false)
+	_cash_time = 0.0
 
 
 func refresh_view() -> void:
@@ -314,6 +344,16 @@ func _process(delta: float) -> void:
 				_trophy_time = 0.0
 		elif _trophy_time != 0.0:
 			_trophy_time = 0.0
+		if run.cash_popup != "":
+			_cash_time += delta
+			if _cash_time >= 1.6:
+				run.cash_popup = ""
+				_cash_time = 0.0
+		if run.vitamin_note != "":
+			_vitamin_time += delta
+			if _vitamin_time >= 1.6:
+				run.vitamin_note = ""
+				_vitamin_time = 0.0
 	if _taking_pictures:
 		return
 	if selecting:
@@ -373,6 +413,20 @@ func _unhandled_input(event: InputEvent) -> void:
 	if key.keycode == KEY_M and run.awaiting_mulligan:
 		retake_with_mulligan()
 		return
+	if run.curse_prompt:
+		if key.keycode == KEY_ESCAPE:
+			run.cancel_curse_prompt()
+			refresh_view()
+		elif key.keycode == KEY_1 or key.keycode == KEY_KP_1:
+			if run.pick_curse_removal(0):
+				apply_live_vitamins()
+		elif key.keycode == KEY_2 or key.keycode == KEY_KP_2:
+			if run.pick_curse_removal(1):
+				apply_live_vitamins()
+		return
+	if run.awaiting_shop:
+		_shop_input(key)
+		return
 	if run.awaiting_offer and (key.keycode == KEY_1 or key.keycode == KEY_KP_1):
 		_choose_card(0)
 		return
@@ -408,6 +462,20 @@ func _unhandled_input(event: InputEvent) -> void:
 		if run.start_practice():
 			refresh_view()
 		return
+	if logic.phase == KickLogic.Phase.AIMING and not run.practicing and not run.awaiting_offer and not run.awaiting_mulligan:
+		if key.keycode == KEY_Z and run.use_belt(0):
+			_vitamin_time = 0.0
+			apply_live_vitamins()
+			return
+		if key.keycode == KEY_X and run.use_belt(1):
+			_vitamin_time = 0.0
+			apply_live_vitamins()
+			return
+		if key.keycode == KEY_C:
+			run.add_debug_cash()
+			_cash_time = 0.0
+			refresh_view()
+			return
 	if key.keycode != KEY_SPACE:
 		return
 	if run.awaiting_mulligan:
@@ -428,6 +496,32 @@ func _unhandled_input(event: InputEvent) -> void:
 	logic.press_space()
 	if logic.insured:
 		run.consume_insurance()
+	refresh_view()
+
+
+func _shop_input(key: InputEventKey) -> void:
+	if key.keycode == KEY_1 or key.keycode == KEY_KP_1:
+		run.buy_shelf(0)
+	elif key.keycode == KEY_2 or key.keycode == KEY_KP_2:
+		run.buy_shelf(1)
+	elif key.keycode == KEY_3 or key.keycode == KEY_KP_3:
+		run.buy_shelf(2)
+	elif key.keycode == KEY_4 or key.keycode == KEY_KP_4:
+		run.buy_b12()
+	elif key.keycode == KEY_Z:
+		run.sell_belt(0)
+	elif key.keycode == KEY_X:
+		run.sell_belt(1)
+	elif key.keycode == KEY_F:
+		run.reroll_shop()
+	elif key.keycode == KEY_C:
+		run.add_debug_cash()
+		_cash_time = 0.0
+	elif key.keycode == KEY_SPACE or key.keycode == KEY_ENTER or key.keycode == KEY_KP_ENTER:
+		_leave_shop()
+		return
+	else:
+		return
 	refresh_view()
 
 

@@ -438,8 +438,11 @@ func _lock_accuracy(value: float) -> void:
 		accuracy_error = value
 	else:
 		accuracy_error = accuracy_with_red_tip(power, value, _rng, stats.red_tip_start, stats.red_tip_noise)
-	# The perfect window comes from the kicker's stats, so Sweet Spot can widen it.
+	# Omega-3 reads the press, including red-tip noise, then can wipe the angle.
+	# perfect stays the original press so cash can still pay. The score bonus is suppressed later.
 	perfect = absf(accuracy_error) <= stats.perfect_band
+	if stats.omega and absf(accuracy_error) <= stats.good_band:
+		accuracy_error = 0.0
 	var per_unit := KickConstants.ACCURACY_DEG_PER_ERROR * angle_scale
 	var hook := 0.0 if perfect else -accuracy_error * per_unit
 	final_angle_degrees = aim_degrees + hook

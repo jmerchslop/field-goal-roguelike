@@ -357,12 +357,14 @@ static func legal_perks(state: Dictionary, attempt_cap: int) -> Array:
 
 static func legal_curses(state: Dictionary) -> Array:
 	var owned: Array = state.get("curses", [])
-	if owned.size() >= 2:
+	# Two curses picked this run locks the type even if Tart Cherry removes one.
+	if bool(state.get("curses_locked", false)) or owned.size() >= 2:
 		return []
+	var banned: Array = state.get("banned_curses", [])
 	var blocked_ice := str(state.get("helmet_id", "")) == ICE_CAGE
 	var cards: Array = []
 	for id in CURSE_IDS:
-		if owned.has(id):
+		if owned.has(id) or banned.has(id):
 			continue
 		if id == ICED and blocked_ice:
 			continue

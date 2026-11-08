@@ -79,6 +79,23 @@ var _forced_cards: Array = []
 var insurance_left := 0
 var practice_left := 0
 var practicing := false
+# Run-only. Never written into SaveData.
+var cash := 0
+var cash_popup := ""
+var belt: Array = ["", ""]
+var active_vitamins := {}
+var zinc_used := false
+var vitamin_note := ""
+var awaiting_shop := false
+var shop_stock: Array = ["", "", ""]
+var shop_b12_bought := false
+var shop_reroll_price := 2
+var shop_flash := ""
+var shop_note := ""
+var curse_prompt := false
+var curse_prompt_slot := -1
+var curses_locked := false
+var banned_curses: Array = []
 
 # 0 means "roll the side". -1 or +1 forces the next hash/wide spot.
 var _next_side := 0
@@ -86,6 +103,7 @@ var _rng := RandomNumberGenerator.new()
 var _wind_rng := RandomNumberGenerator.new()
 var _weather_rng := RandomNumberGenerator.new()
 var _offer_rng := RandomNumberGenerator.new()
+var _shop_rng := RandomNumberGenerator.new()
 var _previous_weather := ""
 var _older_weather := ""
 var _insurance_spent := false
@@ -96,6 +114,7 @@ func _init() -> void:
 	_wind_rng.randomize()
 	_weather_rng.randomize()
 	_offer_rng.randomize()
+	_shop_rng.randomize()
 	new_run()
 
 
@@ -104,6 +123,7 @@ func set_seed(seed_value: int) -> void:
 	# Wind and weather have their own generators so a spot seed still lands on the same hash.
 	_wind_rng.seed = seed_value + 7919
 	_weather_rng.seed = seed_value + 1543
+	_shop_rng.seed = seed_value + 4409
 
 
 func set_offer_seed(seed_value: int) -> void:
@@ -171,6 +191,7 @@ func new_run() -> void:
 	practicing = false
 	_insurance_spent = false
 	attempt_cap = stats.attempt_cap
+	_reset_vitamins()
 	_refill_quarter()
 	_place_spot()
 	_roll_wind()
@@ -236,16 +257,19 @@ func resolve_kick(result_text: String, offset: float, perfect: bool) -> void:
 	attempt_note = ""
 	score_line = ""
 	last_points = 0
+	var score_perfect := perfect and _vitamin_count(Vitamins.OMEGA) == 0
+	var pre := 0.0
 	if made:
+		pre = 0.5 * float(_vitamin_count(Vitamins.PREWORKOUT))
 		var base_mult := current_mult()
 		var storm := storm_bonus()
 		var hero := hero_bonus()
 		var curse_add := curse_bonus()
 		var drill := drill_bonus()
-		var mult := base_mult + storm + hero + curse_add + drill
-		last_points = points_for(distance, mult, down_the_middle, boss, perfect)
+		var mult := base_mult + storm + hero + curse_add + drill + pre
+		last_points = points_for(distance, mult, down_the_middle, boss, score_perfect)
 		score += last_points
-		score_line = format_score_line(distance, base_mult, down_the_middle, boss, perfect, storm, hero, curse_add, drill)
+		score_line = format_score_line(distance, base_mult, down_the_middle, boss, score_perfect, storm, hero, curse_add, drill, pre)
 		kicks_made += 1
 		if distance > longest_make:
 			longest_make = distance
@@ -267,11 +291,16 @@ func resolve_kick(result_text: String, offset: float, perfect: bool) -> void:
 		_note_trophies(true, distance)
 	else:
 		streak = 0
-		attempts -= 1
 		is_first_ball = false
-		if attempts <= 0:
-			attempts = 0
-			phase = Phase.GAME_OVER
+		if _vitamin_count(Vitamins.ELECTROLYTE) == 0:
+			attempts -= 1
+			if attempts <= 0:
+				attempts = 0
+				phase = Phase.GAME_OVER
+	var payout := cash_payout(made, perfect, down_the_middle, boss)
+	cash += payout
+	cash_popup = "+$%d" % payout if payout > 0 else ""
+	_clear_ball_vitamins()
 	balls_kicked += 1
 	if phase != Phase.PLAYING:
 		_save_finished_run()
@@ -290,7 +319,10 @@ func go_to_next_kick() -> bool:
 	last_points = 0
 	awaiting_offer = false
 	awaiting_mulligan = false
+	awaiting_shop = false
 	offer = []
+	zinc_used = false
+	_clear_ball_vitamins()
 	mulligan_used_this_kick = false
 	_insurance_spent = false
 	_older_weather = _previous_weather
@@ -387,6 +419,7 @@ func prepare_kick_stats() -> void:
 			bonus *= 1.15
 		stats.range_bonus += bonus
 	if weather != BIG_GAME:
+		_apply_ball_vitamins()
 		return
 	var base := KickerStats.new()
 	if kicker_id != "":
@@ -403,6 +436,7 @@ func prepare_kick_stats() -> void:
 	stats.red_tip_noise = base.red_tip_noise
 	stats.red_tip_off = false
 	stats.ice_veins = false
+	_apply_ball_vitamins()
 
 
 func cycle_debug_spot() -> void:
@@ -640,12 +674,194 @@ func skip_offer() -> bool:
 
 
 func reroll_offer() -> bool:
-	if not awaiting_offer or rerolls_left <= 0:
+	if not awaiting_offer or awaiting_shop or rerolls_left <= 0:
 		return false
 	rerolls_left -= 1
 	offer = Loadout.draw_offer(loadout_state(), attempt_cap, _offer_rng)
 	awaiting_offer = true
 	return true
+
+
+func opens_shop() -> bool:
+	if phase != Phase.PLAYING or not last_result_made:
+		return false
+	return kick_number == 5 or kick_number == 10 or kick_number == 15
+
+
+func follow_offer() -> String:
+	if opens_shop():
+		open_shop()
+		return "shop"
+	return "next"
+
+
+func next_boss_line() -> String:
+	if kick_number == 5:
+		return "Next boss: The Squeeze"
+	if kick_number == 10:
+		return "Next boss: Monsoon"
+	if kick_number == 15:
+		return "Next boss: Big Game"
+	return ""
+
+
+func open_shop() -> void:
+	awaiting_shop = true
+	awaiting_offer = false
+	cash_popup = ""
+	shop_b12_bought = false
+	shop_reroll_price = Vitamins.REROLL_START
+	shop_flash = ""
+	shop_note = ""
+	_fill_shelves()
+
+
+func leave_shop() -> void:
+	awaiting_shop = false
+	shop_flash = ""
+	shop_note = ""
+
+
+func buy_shelf(index: int) -> bool:
+	if not awaiting_shop or index < 0 or index >= shop_stock.size():
+		return false
+	var id := str(shop_stock[index])
+	if id == "":
+		return false
+	if cash < Vitamins.price(id):
+		shop_flash = str(index)
+		shop_note = ""
+		return false
+	if _empty_belt() < 0:
+		shop_note = "Belt full: sell first"
+		shop_flash = ""
+		return false
+	cash -= Vitamins.price(id)
+	shop_stock[index] = ""
+	belt[_empty_belt()] = id
+	shop_flash = ""
+	shop_note = ""
+	return true
+
+
+func buy_b12() -> bool:
+	if not awaiting_shop or shop_b12_bought:
+		return false
+	if attempts >= attempt_cap:
+		shop_flash = ""
+		return false
+	if cash < Vitamins.B12_PRICE:
+		shop_flash = "b12"
+		return false
+	cash -= Vitamins.B12_PRICE
+	attempts = mini(attempt_cap, attempts + 1)
+	shop_b12_bought = true
+	shop_flash = ""
+	shop_note = ""
+	return true
+
+
+func b12_grey() -> bool:
+	return shop_b12_bought or attempts >= attempt_cap or cash < Vitamins.B12_PRICE
+
+
+func sell_belt(index: int) -> bool:
+	if not awaiting_shop or index < 0 or index >= belt.size():
+		return false
+	var id := str(belt[index])
+	if id == "":
+		return false
+	cash += Vitamins.sale_price(id)
+	belt[index] = ""
+	shop_note = ""
+	shop_flash = ""
+	return true
+
+
+func reroll_shop() -> bool:
+	if not awaiting_shop:
+		return false
+	if cash < shop_reroll_price:
+		shop_flash = "reroll"
+		return false
+	cash -= shop_reroll_price
+	shop_reroll_price += 1
+	shop_flash = ""
+	_fill_shelves()
+	return true
+
+
+func add_debug_cash() -> void:
+	cash += 10
+	cash_popup = "+$10"
+
+
+func use_belt(index: int) -> bool:
+	if awaiting_shop or curse_prompt or awaiting_offer or phase != Phase.PLAYING:
+		return false
+	if index < 0 or index >= belt.size():
+		return false
+	var id := str(belt[index])
+	if id == "":
+		return false
+	if id == Vitamins.ZINC:
+		if zinc_used:
+			vitamin_note = "Already rerolled"
+			return false
+		_reroll_zinc()
+		belt[index] = ""
+		vitamin_note = Vitamins.piece_name(id)
+		return true
+	if id == Vitamins.TART:
+		return _start_tart(index)
+	belt[index] = ""
+	active_vitamins[id] = _vitamin_count(id) + 1
+	vitamin_note = Vitamins.piece_name(id)
+	return true
+
+
+func pick_curse_removal(index: int) -> bool:
+	if not curse_prompt or index < 0 or index >= curse_ids.size():
+		return false
+	_remove_curse_at(index)
+	if curse_prompt_slot >= 0 and curse_prompt_slot < belt.size():
+		belt[curse_prompt_slot] = ""
+	curse_prompt = false
+	curse_prompt_slot = -1
+	vitamin_note = "Curse removed"
+	return true
+
+
+func cancel_curse_prompt() -> void:
+	curse_prompt = false
+	curse_prompt_slot = -1
+	vitamin_note = ""
+
+
+func vitamin_d_active() -> bool:
+	return _vitamin_count(Vitamins.VITAMIN_D) > 0
+
+
+func weather_flags_now() -> Dictionary:
+	var flags := weather_kick_flags(weather, stats.weather_cut)
+	if vitamin_d_active():
+		flags["rain_faster"] = false
+		flags["snow_range"] = false
+		flags["mud_power"] = false
+	return flags
+
+
+static func cash_payout(made: bool, perfect: bool, middle: bool, boss: bool) -> int:
+	if not made:
+		return 0
+	var gain := 3
+	if perfect:
+		gain += 1
+	if middle:
+		gain += 1
+	if boss:
+		gain += 2
+	return gain
 
 
 func _as_loadout_card(item) -> Dictionary:
@@ -718,6 +934,8 @@ func give(id: String, rank: int = 1) -> void:
 			perks.append({"id": id, "rank": rank})
 	elif slot == Loadout.CURSE:
 		curse_ids.append(id)
+		if curse_ids.size() >= 2:
+			curses_locked = true
 	rebuild_stats()
 	var cap_gain := attempt_cap - cap_before
 	if cap_gain > 0:
@@ -747,6 +965,8 @@ func loadout_state() -> Dictionary:
 		"gloves_rank": gloves_rank,
 		"perks": perks.duplicate(true),
 		"curses": curse_ids.duplicate(),
+		"curses_locked": curses_locked,
+		"banned_curses": banned_curses.duplicate(),
 	}
 
 
@@ -912,10 +1132,10 @@ static func raw_points(distance: float, mult: float, middle: bool, boss: bool, p
 	return total
 
 
-static func format_score_line(distance: float, mult: float, middle: bool, boss: bool, perfect: bool, storm: float = 0.0, hero: float = 0.0, curse_add: float = 0.0, drill: float = 0.0) -> String:
-	var product := distance * (mult + storm + hero + curse_add + drill)
+static func format_score_line(distance: float, mult: float, middle: bool, boss: bool, perfect: bool, storm: float = 0.0, hero: float = 0.0, curse_add: float = 0.0, drill: float = 0.0, pre: float = 0.0) -> String:
+	var product := distance * (mult + storm + hero + curse_add + drill + pre)
 	var text := "%s yd × %s" % [_whole(distance), _two_decimals(mult)]
-	if storm > 0.001 or hero > 0.001 or curse_add > 0.001 or drill > 0.001:
+	if storm > 0.001 or hero > 0.001 or curse_add > 0.001 or drill > 0.001 or pre > 0.001:
 		text = "%s yd × (%s" % [_whole(distance), _two_decimals(mult)]
 		if storm > 0.001:
 			text += " + %s wind" % _two_decimals(storm)
@@ -925,6 +1145,8 @@ static func format_score_line(distance: float, mult: float, middle: bool, boss: 
 			text += " + %s curse" % _two_decimals(curse_add)
 		if drill > 0.001:
 			text += " + %s drill" % _two_decimals(drill)
+		if pre > 0.001:
+			text += " + %s pre" % _two_decimals(pre)
 		text += ")"
 	if middle:
 		product *= KickConstants.MIDDLE_MULTIPLIER
@@ -943,6 +1165,108 @@ static func round_whole(value: float) -> int:
 	if value >= 0.0:
 		return int(floorf(value + 0.5))
 	return int(ceilf(value - 0.5))
+
+
+func _reset_vitamins() -> void:
+	cash = 0
+	cash_popup = ""
+	belt = ["", ""]
+	active_vitamins = {}
+	zinc_used = false
+	vitamin_note = ""
+	awaiting_shop = false
+	shop_stock = ["", "", ""]
+	shop_b12_bought = false
+	shop_reroll_price = Vitamins.REROLL_START
+	shop_flash = ""
+	shop_note = ""
+	curse_prompt = false
+	curse_prompt_slot = -1
+	curses_locked = false
+	banned_curses = []
+
+
+func _clear_ball_vitamins() -> void:
+	active_vitamins = {}
+
+
+func _vitamin_count(id: String) -> int:
+	return int(active_vitamins.get(id, 0))
+
+
+func _empty_belt() -> int:
+	if str(belt[0]) == "":
+		return 0
+	if str(belt[1]) == "":
+		return 1
+	return -1
+
+
+func _fill_shelves() -> void:
+	var picks: Array = Vitamins.draw_three(_shop_rng)
+	shop_stock = ["", "", ""]
+	for i in mini(3, picks.size()):
+		shop_stock[i] = str(picks[i])
+
+
+func _apply_ball_vitamins() -> void:
+	stats.range_bonus += 6.0 * float(_vitamin_count(Vitamins.PROTEIN))
+	var mag := _vitamin_count(Vitamins.MAGNESIUM)
+	if mag > 0:
+		var factor := pow(0.7, float(mag))
+		stats.power_speed *= factor
+		stats.accuracy_speed *= factor
+	stats.omega = _vitamin_count(Vitamins.OMEGA) > 0
+	var pickle := _vitamin_count(Vitamins.PICKLE)
+	if pickle > 0:
+		stats.drift_factor *= pow(0.5, float(pickle))
+	if _vitamin_count(Vitamins.LUTEIN) > 0:
+		stats.flag_reader = true
+		stats.laser_line = true
+		stats.laser_full = true
+
+
+func _reroll_zinc() -> void:
+	zinc_used = true
+	var info: Dictionary = RunTable.row(kick_number)
+	var lo := int(info["wind_min"])
+	var hi := int(info["wind_max"])
+	wind_speed = _wind_rng.randi_range(lo, hi)
+	if wind_speed <= 0:
+		wind_speed = 0
+		wind_direction = 0.0
+	else:
+		wind_direction = float(_wind_rng.randi_range(0, 359))
+	if boss_weather(kick_number) != "":
+		return
+	weather_forced = false
+	_roll_weather()
+
+
+func _start_tart(index: int) -> bool:
+	if curse_ids.is_empty():
+		vitamin_note = "No curse to remove"
+		return false
+	if curse_ids.size() == 1:
+		_remove_curse_at(0)
+		belt[index] = ""
+		vitamin_note = "Curse removed"
+		return true
+	curse_prompt = true
+	curse_prompt_slot = index
+	vitamin_note = "Remove which curse?"
+	return true
+
+
+func _remove_curse_at(index: int) -> void:
+	if index < 0 or index >= curse_ids.size():
+		return
+	var id := str(curse_ids[index])
+	if not banned_curses.has(id):
+		banned_curses.append(id)
+	curse_ids.remove_at(index)
+	rebuild_stats()
+	_apply_ball_vitamins()
 
 
 func _place_spot() -> void:

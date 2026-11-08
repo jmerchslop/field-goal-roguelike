@@ -17,6 +17,9 @@ func _draw() -> void:
 		_draw_kicker_select()
 		_draw_save_note()
 		return
+	if game.run.awaiting_shop:
+		_draw_shop(game.run)
+		return
 	var logic: KickLogic = game.logic
 	var run: RunLogic = game.run
 	_draw_weather_tint(run)
@@ -36,6 +39,9 @@ func _draw() -> void:
 	elif logic.phase == KickLogic.Phase.RESULT:
 		_draw_result(logic, run)
 	_draw_trophy(run)
+	_draw_cash_belt(run)
+	if run.curse_prompt:
+		_draw_curse_prompt(run)
 	_draw_save_note()
 	_draw_slot_tooltip()
 
@@ -184,7 +190,7 @@ func _draw_hud(logic: KickLogic, run: RunLogic) -> void:
 		hint = "Space locks accuracy."
 	elif logic.phase == KickLogic.Phase.RESULT:
 		hint = "Space: continue."
-	if hint != "" and not run.awaiting_offer and not run.awaiting_mulligan:
+	if hint != "" and not run.awaiting_offer and not run.awaiting_mulligan and not run.curse_prompt:
 		_text_centered(hint, 708.0, 18, KickConstants.COLOR_TEXT)
 
 
@@ -706,3 +712,106 @@ func _yd_or_dash(yards: int) -> String:
 	if yards <= 0:
 		return "—"
 	return "%d yd" % yards
+
+
+func _draw_cash_belt(run: RunLogic) -> void:
+	# Under the score panel, on a plate so yard numbers do not cover Z and X.
+	var plate := Rect2(16, 500, 230, 210)
+	draw_rect(plate, Color(0.02, 0.05, 0.08, 0.9))
+	var origin := plate.position + Vector2(10, 24)
+	_text(origin, "$%d" % run.cash, 22, KickConstants.COLOR_ATTEMPT)
+	if run.cash_popup != "":
+		_text(origin + Vector2(78, 0), run.cash_popup, 22, Color(1.0, 0.92, 0.4))
+	for i in 2:
+		var key := "Z" if i == 0 else "X"
+		var rect := Rect2(plate.position.x + 10.0, plate.position.y + 36.0 + float(i) * 54.0, 208.0, 48.0)
+		var id := str(run.belt[i]) if i < run.belt.size() else ""
+		_draw_bottle(id, rect, id == "")
+		_text(rect.position + Vector2(8, 30), key, 16, KickConstants.COLOR_ATTEMPT)
+		if id != "":
+			_text(rect.position + Vector2(36, 30), Vitamins.piece_name(id), 14, KickConstants.COLOR_TEXT)
+	if run.vitamin_note != "":
+		_text(plate.position + Vector2(10, 192), run.vitamin_note, 16, Color(1.0, 0.92, 0.45))
+
+
+func _draw_bottle(id: String, rect: Rect2, empty: bool) -> void:
+	draw_rect(rect, Color(0.05, 0.07, 0.08, 0.92))
+	draw_rect(rect, Color(0.75, 0.78, 0.82), false, 2.0)
+	if empty:
+		draw_rect(rect.grow(-10), Color(0.75, 0.78, 0.82, 0.35), false, 2.0)
+		return
+	var path := Vitamins.sprite_path(id)
+	var texture := _icon(path)
+	var bottle := Rect2(rect.position + Vector2(6, 6), Vector2(36, 38))
+	if texture != null:
+		_draw_fit(texture, bottle)
+	else:
+		draw_rect(bottle, Vitamins.bottle_color(id))
+		draw_rect(Rect2(bottle.position + Vector2(10, -2), Vector2(16, 8)), Vitamins.bottle_color(id).darkened(0.25))
+
+
+func _draw_curse_prompt(run: RunLogic) -> void:
+	var box := Rect2(240, 250, 620, 220)
+	draw_rect(box, KickConstants.COLOR_RESULT_SCRIM)
+	_text_centered("Remove which curse?", box.position.y + 48.0, 32, KickConstants.COLOR_ATTEMPT)
+	var names := ""
+	for i in run.curse_ids.size():
+		if names != "":
+			names += "    "
+		names += "%d %s" % [i + 1, Loadout.piece_name(str(run.curse_ids[i]))]
+	_text_centered(names, box.position.y + 110.0, 22, KickConstants.COLOR_TEXT)
+	_text_centered("Esc cancels. Tart Cherry stays on the belt.", box.position.y + 160.0, 18, KickConstants.COLOR_TEXT)
+
+
+func _draw_shop(run: RunLogic) -> void:
+	var backdrop := _icon("res://art/shop/vitamin_shop.png")
+	if backdrop != null:
+		draw_texture_rect(backdrop, Rect2(0, 0, KickConstants.WINDOW_WIDTH, KickConstants.WINDOW_HEIGHT), false)
+	else:
+		draw_rect(Rect2(0, 0, KickConstants.WINDOW_WIDTH, KickConstants.WINDOW_HEIGHT), Color(0.12, 0.08, 0.05))
+	_text(Vector2(36, 32), "VITAMIN SHOP", 28, Color(1.0, 0.95, 0.8))
+	var info := Rect2(132, 250, 190, 210)
+	draw_rect(info, Color(0.05, 0.04, 0.03, 0.82))
+	_text(info.position + Vector2(12, 28), "$%d" % run.cash, 22, KickConstants.COLOR_ATTEMPT)
+	if run.cash_popup != "":
+		_text(info.position + Vector2(90, 28), run.cash_popup, 18, Color(1.0, 0.92, 0.4))
+	_text(info.position + Vector2(12, 58), run.next_boss_line(), 14, KickConstants.COLOR_TEXT)
+	for i in 2:
+		var id := str(run.belt[i]) if i < run.belt.size() else ""
+		var label := "Z" if i == 0 else "X"
+		var slot := Rect2(info.position + Vector2(12, 74 + float(i) * 58), Vector2(166, 50))
+		_draw_bottle(id, slot, id == "")
+		_text(slot.position + Vector2(4, 16), label, 12, KickConstants.COLOR_TEXT)
+		if id != "":
+			_text(slot.position + Vector2(42, 30), Vitamins.piece_name(id), 12, KickConstants.COLOR_TEXT)
+	var frames := [Rect2(344, 488, 132, 132), Rect2(572, 488, 128, 132), Rect2(796, 488, 128, 132)]
+	for i in 3:
+		var id := str(run.shop_stock[i]) if i < run.shop_stock.size() else ""
+		var frame: Rect2 = frames[i]
+		if id == "":
+			_text(frame.position + Vector2(28, 78), "SOLD", 22, Color(0.85, 0.85, 0.88))
+		else:
+			_draw_bottle(id, frame.grow(-18), false)
+			var plate := Rect2(frame.position.x - 8, frame.position.y + frame.size.y + 4, frame.size.x + 16, 52)
+			draw_rect(plate, Color(0.05, 0.04, 0.03, 0.88))
+			var price_color := Color(1.0, 0.3, 0.25) if run.shop_flash == str(i) else KickConstants.COLOR_ATTEMPT
+			_text(plate.position + Vector2(6, 16), "%d  $%d" % [i + 1, Vitamins.price(id)], 14, price_color)
+			_text(plate.position + Vector2(6, 34), Vitamins.piece_name(id), 12, KickConstants.COLOR_TEXT)
+			_text(plate.position + Vector2(6, 48), Vitamins.effect_line(id), 11, KickConstants.COLOR_TEXT)
+	var b12 := Rect2(980, 250, 250, 150)
+	var grey := run.b12_grey()
+	draw_rect(b12, Color(0.08, 0.08, 0.08, 0.9) if grey else Color(0.16, 0.12, 0.05, 0.92))
+	draw_rect(b12, Color(0.45, 0.45, 0.45) if grey else Color(0.95, 0.82, 0.28), false, 3.0)
+	var b12_price := Color(1.0, 0.3, 0.25) if run.shop_flash == "b12" else (Color(0.7, 0.7, 0.7) if grey else KickConstants.COLOR_ATTEMPT)
+	_text(b12.position + Vector2(16, 32), "4  B12 Shot", 20, Color(0.75, 0.75, 0.75) if grey else KickConstants.COLOR_TEXT)
+	_text(b12.position + Vector2(16, 64), "$%d" % Vitamins.B12_PRICE, 20, b12_price)
+	_text(b12.position + Vector2(16, 96), Vitamins.effect_line(Vitamins.B12), 16, KickConstants.COLOR_TEXT)
+	if run.shop_b12_bought:
+		_text(b12.position + Vector2(16, 126), "SOLD", 16, Color(0.8, 0.8, 0.8))
+	elif run.attempts >= run.attempt_cap:
+		_text(b12.position + Vector2(16, 126), "At cap", 16, Color(0.8, 0.8, 0.8))
+	var reroll_color := Color(1.0, 0.3, 0.25) if run.shop_flash == "reroll" else KickConstants.COLOR_TEXT
+	_text(Vector2(36, 64), "Reroll (F): $%d" % run.shop_reroll_price, 16, reroll_color)
+	if run.shop_note != "":
+		_text(Vector2(36, 92), run.shop_note, 18, Color(1.0, 0.45, 0.35))
+	_text_centered("1/2/3 buy  4 B12  Z/X sell  F reroll  Space leave", 704.0, 18, KickConstants.COLOR_TEXT)

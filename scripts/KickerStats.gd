@@ -47,6 +47,7 @@ var practice_per_quarter := 0
 var practice_carry := false
 var bench_spare := false
 var drill_mult := 0.0
+var omega := false
 
 
 func reset() -> void:
@@ -92,3 +93,4 @@ func reset() -> void:
 	practice_carry = false
 	bench_spare = false
 	drill_mult = 0.0
+	omega = false
