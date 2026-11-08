@@ -28,7 +28,6 @@ const HOT_STREAK := "hot_streak"
 const STORM_CHASER := "storm_chaser"
 const HERO_BALL := "hero_ball"
 const GLASS_LEG := "glass_leg"
-# Sprite only. Not offered and not given any stats.
 const TWO_MINUTE := "two_minute_drill"
 const ICED := "iced"
 const SHANKY := "shanky_cleats"
@@ -42,14 +41,14 @@ const TIGHT := "tight_window"
 const CLEAT_IDS: Array = [CANNON, PINPOINT, ANCHOR, STICKER]
 const HELMET_IDS: Array = [WIND_VISOR, ICE_CAGE, SCOUT_LID, DOINK_CAP]
 const GLOVE_IDS: Array = [IRON_GRIP, REPLAY_GLOVES, HIGH_AIR, WEATHER_WRAPS]
-const PERK_IDS: Array = [DEEP_BENCH, HOT_STREAK, STORM_CHASER, HERO_BALL, GLASS_LEG]
+const PERK_IDS: Array = [DEEP_BENCH, HOT_STREAK, STORM_CHASER, HERO_BALL, GLASS_LEG, TWO_MINUTE]
 const CURSE_IDS: Array = [ICED, SHANKY, HEAVY, HOWLING, SHAKY, NARROW, STONE, TIGHT]
 
-const _ROMAN: Array = ["", "I", "II", "III", "IV"]
+const _ROMAN: Array = ["", "I", "II", "III", "IV", "V", "VI"]
 
 
 static func rank_label(rank: int) -> String:
-	var index := clampi(rank, 0, 4)
+	var index := clampi(rank, 0, 6)
 	return str(_ROMAN[index])
 
 
@@ -80,12 +79,12 @@ static func kind_of(id: String) -> String:
 
 static func max_rank(id: String) -> int:
 	if PERK_IDS.has(id):
-		return 2
+		return 3
 	if CURSE_IDS.has(id):
 		return 1
 	if slot_of(id) == "":
 		return 0
-	return 4
+	return 6
 
 
 static func type_label(slot: String) -> String:
@@ -176,7 +175,11 @@ static func effect_line(id: String, rank: int) -> String:
 				return "Also a dotted path for 40% of the flight"
 			if rank == 3:
 				return "The path shows the full flight"
-			return "Also previews wind for the next 3 kicks"
+			if rank == 4:
+				return "Also previews wind for the next 3 kicks"
+			if rank == 5:
+				return "Also previews wind for the next 5 kicks"
+			return "Also previews wind for the next 7 kicks"
 		ICE_CAGE:
 			if rank <= 1:
 				return "No red-tip penalty. Immune to Iced."
@@ -184,20 +187,36 @@ static func effect_line(id: String, rank: int) -> String:
 				return "Also accuracy needle ×0.90"
 			if rank == 3:
 				return "Also PERFECT +1"
-			return "Also good +2"
+			if rank == 4:
+				return "Also good +2"
+			if rank == 5:
+				return "PERFECT +2 total"
+			return "Good +4 total"
 		SCOUT_LID:
-			if rank >= 4:
+			if rank <= 3:
+				return "+%d reroll" % rank
+			if rank == 4:
 				return "+3 rerolls, and one Practice Swing a quarter"
-			return "+%d reroll" % rank
+			if rank == 5:
+				return "+4 rerolls, and one Practice Swing a quarter"
+			return "+5 rerolls, and two Practice Swings a quarter"
 		DOINK_CAP:
+			if rank >= 6:
+				return "5 doink-to-good a quarter, unused carry (max 5)"
 			return "%d doink-to-good a quarter" % rank
 		IRON_GRIP:
 			if rank <= 2:
 				return "Red-tip noise −%d" % (2 * rank)
 			if rank == 3:
 				return "Noise −4 (min ±1), red tip 3 later"
-			return "Noise −4 (min ±1), red tip 6 later"
+			if rank == 4:
+				return "Noise −4 (min ±1), red tip 6 later"
+			if rank == 5:
+				return "Noise −4 (min ±1), red tip 9 later"
+			return "Red tip never triggers"
 		REPLAY_GLOVES:
+			if rank >= 6:
+				return "5 practice swings, unused carry (max 5)"
 			return "%d practice swing a quarter" % rank
 		HIGH_AIR:
 			return "+%d yd, tailwind range ×1.5" % (2 * rank)
@@ -208,19 +227,45 @@ static func effect_line(id: String, rank: int) -> String:
 				return "Rain, snow, and mud penalties ignored"
 			if rank == 3:
 				return "Also ignores Monsoon's rain and mud"
-			return "Penalties ignored, +2 yd unless CLEAR"
+			if rank == 4:
+				return "Penalties ignored, +2 yd unless CLEAR"
+			if rank == 5:
+				return "Penalties ignored, +4 yd unless CLEAR"
+			return "Penalties ignored, +6 yd unless CLEAR"
 		DEEP_BENCH:
+			if rank >= 3:
+				return "Cap stays. +1 attempt now and each quarter if below cap"
 			return "Attempt cap +%d and attempts +%d" % [rank, rank]
 		HOT_STREAK:
-			return "Streak step +%s" % ("0.5" if rank <= 1 else "0.75")
+			if rank <= 1:
+				return "Streak step +0.5"
+			if rank == 2:
+				return "Streak step +0.75"
+			return "Streak step +1.0"
 		STORM_CHASER:
-			return "+%s Mult per mph of crosswind" % ("0.2" if rank <= 1 else "0.4")
+			if rank <= 1:
+				return "+0.2 Mult per mph of crosswind"
+			if rank == 2:
+				return "+0.4 Mult per mph of crosswind"
+			return "+0.6 Mult per mph of crosswind"
 		HERO_BALL:
-			return "+%s Mult, both needles ×0.80" % ("1.0" if rank <= 1 else "1.5")
+			if rank <= 1:
+				return "+1.0 Mult, both needles ×0.80"
+			if rank == 2:
+				return "+1.5 Mult, both needles ×0.80"
+			return "+2.0 Mult, both needles ×0.80"
 		GLASS_LEG:
 			if rank <= 1:
 				return "+8 yd, attempt cap −1"
-			return "+16 yd total, no extra cap loss"
+			if rank == 2:
+				return "+16 yd total, no extra cap loss"
+			return "+24 yd total, no extra cap loss"
+		TWO_MINUTE:
+			if rank <= 1:
+				return "Boss kicks +0.5 Mult, on top of ×1.5"
+			if rank == 2:
+				return "Boss kicks +1.0 Mult, on top of ×1.5"
+			return "Boss kicks +1.5 Mult, on top of ×1.5"
 		ICED:
 			return "Down: meter hides 0.4s after Space. Up: +0.5 Mult"
 		SHANKY:
@@ -290,7 +335,7 @@ static func legal_equipment(state: Dictionary) -> Array:
 		if owned_id == "":
 			for id in pool:
 				cards.append(_card(EQUIPMENT, slot_name, str(id), 1))
-		elif rank < 4:
+		elif rank < max_rank(owned_id):
 			cards.append(_card(EQUIPMENT, slot_name, owned_id, rank + 1))
 	return cards
 
@@ -305,7 +350,7 @@ static func legal_perks(state: Dictionary, attempt_cap: int) -> Array:
 		if have == 0:
 			if owned.size() < 2:
 				cards.append(_card(PERK, PERK, str(id), 1))
-		elif have < 2:
+		elif have < max_rank(str(id)):
 			cards.append(_card(PERK, PERK, str(id), have + 1))
 	return cards
 
@@ -329,18 +374,31 @@ static func draw_offer(state: Dictionary, attempt_cap: int, rng: RandomNumberGen
 	var cards: Array = []
 	var equip := legal_equipment(state)
 	if equip.size() > 0:
-		cards.append(equip[rng.randi_range(0, equip.size() - 1)])
+		var index := rng.randi_range(0, equip.size() - 1)
+		cards.append(equip[index])
+		equip.remove_at(index)
 	var pool: Array = []
 	pool.append_array(legal_perks(state, attempt_cap))
 	pool.append_array(legal_curses(state))
+	_fill_offer(cards, pool, rng, true)
+	# Perks and curses can run out while equipment ranks are still legal.
+	if cards.size() < 3 and equip.size() > 0:
+		_fill_offer(cards, equip, rng, false)
+	return cards
+
+
+static func _fill_offer(cards: Array, pool: Array, rng: RandomNumberGenerator, limit_curses: bool) -> void:
 	var used_curse := false
+	for have in cards:
+		if str(have.get("kind", "")) == CURSE:
+			used_curse = true
 	var guard := 0
-	while cards.size() < 3 and pool.size() > 0 and guard < 24:
+	while cards.size() < 3 and pool.size() > 0 and guard < 40:
 		guard += 1
 		var index := rng.randi_range(0, pool.size() - 1)
 		var card: Dictionary = pool[index]
 		pool.remove_at(index)
-		if str(card.get("kind", "")) == CURSE:
+		if limit_curses and str(card.get("kind", "")) == CURSE:
 			if used_curse:
 				continue
 			used_curse = true
@@ -351,7 +409,6 @@ static func draw_offer(state: Dictionary, attempt_cap: int, rng: RandomNumberGen
 		if duplicate:
 			continue
 		cards.append(card)
-	return cards
 
 
 static func _card(kind: String, slot: String, id: String, rank: int) -> Dictionary:
@@ -394,6 +451,12 @@ static func apply(stats: KickerStats, state: Dictionary, howling: bool) -> void:
 		stats.laser_line = helmet_rank >= 2
 		stats.laser_full = helmet_rank >= 3
 		stats.wind_preview = helmet_rank >= 4
+		if helmet_rank >= 6:
+			stats.wind_preview_count = 7
+		elif helmet_rank >= 5:
+			stats.wind_preview_count = 5
+		elif helmet_rank >= 4:
+			stats.wind_preview_count = 3
 	elif helmet == ICE_CAGE:
 		stats.ice_cage = true
 		stats.ice_veins = true
@@ -404,15 +467,26 @@ static func apply(stats: KickerStats, state: Dictionary, howling: bool) -> void:
 			accuracy_mul *= factor
 		if helmet_rank >= 3:
 			perfect_add += 1.0
+		if helmet_rank >= 5:
+			perfect_add += 1.0
 		if helmet_rank >= 4:
+			good_add += 2.0
+		if helmet_rank >= 6:
 			good_add += 2.0
 	elif helmet == SCOUT_LID:
 		var extra := mini(helmet_rank, 3)
+		if helmet_rank == 5:
+			extra = 4
+		elif helmet_rank >= 6:
+			extra = 5
 		stats.rerolls_per_run += extra
 		if helmet_rank >= 4:
 			stats.practice_per_quarter += 1
+		if helmet_rank >= 6:
+			stats.practice_per_quarter += 1
 	elif helmet == DOINK_CAP:
-		stats.doink_per_quarter = helmet_rank
+		stats.doink_per_quarter = mini(helmet_rank, 5)
+		stats.doink_carry = helmet_rank >= 6
 	if gloves == IRON_GRIP:
 		var cut := 2.0 * float(mini(glove_rank, 2))
 		stats.red_tip_noise = maxf(stats.red_tip_noise - cut, 1.0)
@@ -420,43 +494,69 @@ static func apply(stats: KickerStats, state: Dictionary, howling: bool) -> void:
 			stats.red_tip_start += 3.0
 		if glove_rank >= 4:
 			stats.red_tip_start += 3.0
+		if glove_rank >= 5:
+			stats.red_tip_start += 3.0
+		stats.red_tip_off = glove_rank >= 6
 	elif gloves == REPLAY_GLOVES:
-		stats.practice_per_quarter += glove_rank
+		stats.practice_per_quarter += mini(glove_rank, 5)
+		stats.practice_carry = glove_rank >= 6
 	elif gloves == HIGH_AIR:
 		range_add += 2.0 * float(glove_rank)
 		stats.thin_air = true
 	elif gloves == WEATHER_WRAPS:
-		stats.weather_cut = 1 if glove_rank <= 1 else 2
-		stats.wraps_bonus = glove_rank >= 4
+		if glove_rank <= 1:
+			stats.weather_cut = 1
+		elif glove_rank == 2:
+			stats.weather_cut = 2
+		else:
+			stats.weather_cut = 3
+		if glove_rank >= 4:
+			stats.wraps_yards = 2.0 * float(glove_rank - 3)
 	var hero_add := 0.0
 	var storm := 0.0
+	var drill := 0.0
 	for perk_id in PERK_IDS:
 		var id := str(perk_id)
 		var rank := _perk_rank(state, id)
 		if rank <= 0:
 			continue
 		if id == DEEP_BENCH:
-			stats.attempt_cap = mini(stats.attempt_cap + rank, KickConstants.ATTEMPT_CAP_MAX)
+			var cap_ranks := mini(rank, 2)
+			stats.attempt_cap = mini(stats.attempt_cap + cap_ranks, KickConstants.ATTEMPT_CAP_MAX)
+			stats.bench_spare = rank >= 3
 		elif id == HOT_STREAK:
-			stats.streak_step = 0.5 if rank <= 1 else 0.75
+			if rank <= 1:
+				stats.streak_step = 0.5
+			elif rank == 2:
+				stats.streak_step = 0.75
+			else:
+				stats.streak_step = 1.0
 		elif id == STORM_CHASER:
-			storm += 0.2 if rank <= 1 else 0.4
+			storm += 0.2 * float(rank)
 		elif id == HERO_BALL:
-			hero_add += 1.0 if rank <= 1 else 1.5
+			if rank <= 1:
+				hero_add += 1.0
+			elif rank == 2:
+				hero_add += 1.5
+			else:
+				hero_add += 2.0
 			var factor := 0.80
 			if howling:
 				factor = boost_factor(factor)
 			power_mul *= factor
 			accuracy_mul *= factor
 		elif id == GLASS_LEG:
-			range_add += 16.0 if rank >= 2 else 8.0
+			range_add += 8.0 * float(rank)
 			stats.attempt_cap = maxi(stats.attempt_cap - 1, 1)
+		elif id == TWO_MINUTE:
+			drill += 0.5 * float(rank)
 	if howling:
 		range_add *= 1.15
 		perfect_add *= 1.15
 		good_add *= 1.15
 		hero_add *= 1.15
 		storm *= 1.15
+		drill *= 1.15
 	var curse_range := 0.0
 	var curse_mult := 0.0
 	var angle := 1.0
@@ -495,6 +595,7 @@ static func apply(stats: KickerStats, state: Dictionary, howling: bool) -> void:
 	stats.drift_factor = drift_mul
 	stats.hero_mult = hero_add
 	stats.storm_per_mph = storm
+	stats.drill_mult = drill
 	stats.curse_mult = curse_mult
 	stats.angle_scale = angle
 	stats.attempt_cap = clampi(stats.attempt_cap, 1, KickConstants.ATTEMPT_CAP_MAX)
@@ -564,7 +665,7 @@ static func empty_slot_path(slot: String) -> String:
 	return ""
 
 
-# Equipment and perks show I–IV or I–II. Curses and empty slots show nothing.
+# Equipment shows I–VI. Perks show I–III. Curses and empty slots show nothing.
 static func rank_badge(id: String, rank: int) -> String:
 	if id == "" or rank <= 0:
 		return ""

@@ -40,6 +40,7 @@ func _run() -> void:
 	_check_weather_and_bosses()
 	_check_curses_and_rarity()
 	_check_loadout_sprites()
+	_check_rank_caps_and_range()
 
 
 func check(ok: bool, label: String) -> void:
@@ -220,11 +221,15 @@ func _check_4_short() -> void:
 	var just_over := KickLogic.range_yards(boundary + 0.01)
 	check(just_under < 35.0 and KickLogic.classify(just_under, 35.0, 0.0) == "SHORT", "P just under %s is SHORT (%s yd)" % [boundary, just_under])
 	check(just_over >= 35.0 and KickLogic.classify(just_over, 35.0, 0.0) == "GOOD", "P just over %s reaches (%s yd)" % [boundary, just_over])
-	var at_28 := KickLogic.range_yards(28.0)
-	var at_29 := KickLogic.range_yards(29.0)
-	check(KickLogic.classify(at_28, 35.0, 0.0) == "SHORT", "P=28 range %s is SHORT" % at_28)
-	check(KickLogic.classify(at_29, 35.0, 0.0) == "GOOD", "P=29 range %s reaches and is GOOD when centered" % at_29)
-	print("INFO  check 4 boundary P=%s (range equals 35). P=28 range=%s. P=20 range=%s." % [boundary, at_28, kick.max_range])
+	var under_p := floorf(boundary)
+	var over_p := ceilf(boundary)
+	if over_p <= under_p:
+		over_p = under_p + 1.0
+	var at_under := KickLogic.range_yards(under_p)
+	var at_over := KickLogic.range_yards(over_p)
+	check(KickLogic.classify(at_under, 35.0, 0.0) == "SHORT", "P=%s range %s is SHORT" % [under_p, at_under])
+	check(KickLogic.classify(at_over, 35.0, 0.0) == "GOOD", "P=%s range %s reaches and is GOOD when centered" % [over_p, at_over])
+	print("INFO  check 4 boundary P=%s (range equals 35). P=%s range=%s. P=20 range=%s." % [boundary, under_p, at_under, kick.max_range])
 
 
 func _check_5_late_accuracy() -> void:
@@ -279,11 +284,11 @@ func _check_signs() -> void:
 
 
 func _check_flight_and_reset() -> void:
-	var kick := _kick_power_accuracy(40.0, 0.0)
-	var expected_range := KickLogic.range_yards(40.0)
-	check(near(kick.travel_yards, expected_range), "P=40 flies its max range %s, got %s" % [expected_range, kick.travel_yards])
+	var kick := _kick_power_accuracy(50.0, 0.0)
+	var expected_range := KickLogic.range_yards(50.0)
+	check(near(kick.travel_yards, expected_range), "P=50 flies its max range %s, got %s" % [expected_range, kick.travel_yards])
 	check(near(kick.flight_duration, KickLogic.flight_time_seconds(expected_range)), "flight time follows the yards flown, got %s" % kick.flight_duration)
-	check(kick.result_text == "GOOD", "centered P=40 is GOOD")
+	check(kick.result_text == "GOOD", "centered P=50 is GOOD")
 	kick.advance(kick.flight_duration * 0.5)
 	check(near(kick.ball_height, 1.0), "mid-flight height is 1, got %s" % kick.ball_height)
 	check(near(kick.ball_forward_yards, expected_range * 0.5), "mid-flight is halfway along the flight, got %s" % kick.ball_forward_yards)
@@ -296,7 +301,7 @@ func _check_flight_and_reset() -> void:
 	check(near(kick.ball_height, 0.0, 0.001), "the ball is back on the ground at the end")
 	check(near(kick.ball_forward_yards, expected_range), "the ball finishes at max range, past the posts")
 	var full := KickLogic.range_yards(100.0)
-	check(absf(full - 83.0) < 0.001, "full power range is about 83 yd, got %s" % full)
+	check(absf(full - 60.0) < 0.001, "full power range is 60 yd for The Walk-On, got %s" % full)
 	var short_kick := _kick_power_accuracy(20.0, 0.0)
 	check(near(short_kick.flight_duration, KickLogic.flight_time_seconds(short_kick.max_range)), "a short kick's flight time uses the yards it actually flies")
 	short_kick.advance(short_kick.flight_duration)
@@ -609,11 +614,11 @@ func _check_upgrade_offers() -> void:
 func _check_upgrade_effects() -> void:
 	var kick := KickLogic.new()
 	kick.kick_distance = 35.0
-	_lock_power_at(kick, 25.0)
-	check(kick.result_text == "SHORT", "power 25 from 35 yd is SHORT before Cannon Cleats, range %s" % kick.max_range)
+	_lock_power_at(kick, 40.0)
+	check(kick.result_text == "SHORT", "power 40 from 35 yd is SHORT before Cannon Cleats, range %s" % kick.max_range)
 	kick.stats.range_bonus = 6.0
-	_lock_power_at(kick, 25.0)
-	check(kick.result_text == "GOOD" and kick.max_range >= 35.0, "Cannon Cleats I makes power 25 reach, range %s" % kick.max_range)
+	_lock_power_at(kick, 40.0)
+	check(kick.result_text == "GOOD" and kick.max_range >= 35.0, "Cannon Cleats I makes power 40 reach, range %s" % kick.max_range)
 	var slow := RunLogic.new()
 	slow.new_run()
 	slow.give(Loadout.ANCHOR, 1)
@@ -634,7 +639,7 @@ func _check_upgrade_effects() -> void:
 	var before_cap := bench.attempt_cap
 	var before_attempts := bench.attempts
 	bench.give(Loadout.DEEP_BENCH, 2)
-	check(bench.attempt_cap == before_cap and bench.attempts == before_attempts, "Deep Bench does not rank past II")
+	check(bench.attempt_cap == before_cap and bench.attempts == before_attempts, "giving Deep Bench II again changes nothing")
 	var hot := RunLogic.new()
 	hot.new_run()
 	hot.give(Loadout.HOT_STREAK, 1)
@@ -699,16 +704,19 @@ func _aimed_power(power_value: float, aim: float, insure: bool) -> KickLogic:
 	return kick
 
 
-func _lock_power_at(kick: KickLogic, power_value: float) -> void:
+func _lock_power_at(kick: KickLogic, power_value: float, distance: float = 35.0) -> void:
 	kick.reset_kick()
-	kick.kick_distance = 35.0
+	kick.kick_distance = distance
 	kick.start_lateral_yards = 0.0
 	kick.press_space()
 	kick.advance(power_value / kick.stats.power_speed)
-	kick.press_space()
-	kick.advance(kick.power / kick.stats.accuracy_speed)
-	if kick.phase == KickLogic.Phase.ACCURACY:
+	# Full power locks itself. Drop the accuracy needle before the second press.
+	if kick.phase == KickLogic.Phase.POWER:
 		kick.press_space()
+	if kick.phase == KickLogic.Phase.ACCURACY:
+		kick.advance(maxf(kick.needle, 0.0) / kick.stats.accuracy_speed)
+		if kick.phase == KickLogic.Phase.ACCURACY:
+			kick.press_space()
 
 
 func _kick_power_accuracy(power_value: float, needle_at_lock: float) -> KickLogic:
@@ -731,7 +739,7 @@ func _check_kickers_and_fixes() -> void:
 	check(Kickers.id_for_slot(0) == Kickers.BIG_BRUCE and Kickers.id_for_slot(1) == Kickers.WALK_ON, "the two slots are Big Bruce and The Walk-On")
 	var bruce := KickerStats.new()
 	Kickers.apply_to(bruce, Kickers.BIG_BRUCE)
-	check(near(bruce.range_per_power, 0.75), "check 1 Big Bruce range per power is 0.75")
+	check(near(bruce.range_per_power, 0.49), "check 1 Big Bruce range per power is 0.49")
 	check(near(bruce.red_tip_start, 90.0) and near(bruce.red_tip_noise, 7.0), "check 2 Big Bruce red tip starts at 90 with noise 7")
 	check(near(bruce.accuracy_speed, KickConstants.ACCURACY_FALL_PER_SEC * 1.1), "Big Bruce accuracy needle is 1.1 times as fast")
 	check(bruce.ball_type == "barn_burner", "Big Bruce kicks a Barn Burner")
@@ -750,7 +758,7 @@ func _check_kickers_and_fixes() -> void:
 	check(str(KickLogic.judge(20.0, 35.0, 0.0, "barn_burner")["text"]) == "SHORT", "Barn Burner does not save a short kick")
 	var walk := KickerStats.new()
 	Kickers.apply_to(walk, Kickers.WALK_ON)
-	check(near(walk.red_tip_start, 95.0) and near(walk.range_per_power, 0.67) and walk.ball_type == "standard", "check 4 The Walk-On keeps the normal meter and ball")
+	check(near(walk.red_tip_start, 95.0) and near(walk.range_per_power, 0.44) and walk.ball_type == "standard", "check 4 The Walk-On keeps the normal meter and ball")
 	check(walk.rerolls_per_run == 2, "check 4 The Walk-On gets 2 rerolls")
 	var walked := RunLogic.new()
 	walked.start_with_kicker(Kickers.WALK_ON)
@@ -762,9 +770,9 @@ func _check_kickers_and_fixes() -> void:
 	var carried := RunLogic.new()
 	carried.start_with_kicker(Kickers.BIG_BRUCE)
 	carried.give(Loadout.CANNON, 1)
-	check(near(carried.stats.range_per_power, 0.75) and carried.stats.range_bonus == 6.0, "Big Bruce kept his leg and Cannon Cleats")
+	check(near(carried.stats.range_per_power, 0.49) and carried.stats.range_bonus == 6.0, "Big Bruce kept his leg and Cannon Cleats")
 	carried.start_with_kicker(Kickers.WALK_ON)
-	check(near(carried.stats.range_per_power, 0.67) and carried.stats.range_bonus == 0.0, "check 6 the next kicker does not keep the last stats")
+	check(near(carried.stats.range_per_power, 0.44) and carried.stats.range_bonus == 0.0, "check 6 the next kicker does not keep the last stats")
 	check(carried.rerolls_left == 2 and carried.stats.ball_type == "standard", "check 6 The Walk-On starts clean")
 	var short_kick := KickLogic.new()
 	_lock_power_at(short_kick, 12.0)
@@ -799,35 +807,35 @@ func _check_kickers_and_fixes() -> void:
 func _check_power_flight() -> void:
 	var walk := KickerStats.new()
 	Kickers.apply_to(walk, Kickers.WALK_ON)
-	check(near(walk.range_per_power, 0.67) and walk.range_bonus == 0.0, "Walk-On kick 1 has no range bonus")
+	check(near(walk.range_per_power, 0.44) and walk.range_bonus == 0.0, "Walk-On kick 1 has no range bonus")
 	var low := KickLogic.new()
 	low.stats = walk
 	_lock_power_at(low, 20.0)
-	check(near(low.power, 20.0) and near(low.max_range, 29.4), "check 1 P=20 max range is 29.4, got %s" % low.max_range)
-	check(near(low.travel_yards, 29.4), "check 1 the ball travels 29.4 yards, not a fixed length")
+	check(near(low.power, 20.0) and near(low.max_range, 24.8), "check 1 P=20 max range is 24.8, got %s" % low.max_range)
+	check(near(low.travel_yards, 24.8), "check 1 the ball travels 24.8 yards, not a fixed length")
 	check(low.result_text == "SHORT" and low.perfect and not low.reached_uprights, "check 1 and 4 a dead-center low kick is SHORT, never GOOD")
-	check(near(low.flight_duration, KickLogic.flight_time_seconds(29.4)), "check 1 flight time uses the yards this ball flies")
+	check(near(low.flight_duration, KickLogic.flight_time_seconds(24.8)), "check 1 flight time uses the yards this ball flies")
 	low.advance(low.flight_duration)
-	check(near(low.ball_forward_yards, 29.4) and low.ball_forward_yards < 35.0, "check 1 the ball stops several yards short of the posts")
-	check(low.detail_line() == "P = 20, max range = 29.4 yd, kick = 35 yd, result = SHORT", "check 1 numbers read '%s'" % low.detail_line())
+	check(near(low.ball_forward_yards, 24.8) and low.ball_forward_yards < 35.0, "check 1 the ball stops several yards short of the posts")
+	check(low.detail_line() == "P = 20, max range = 24.8 yd, kick = 35 yd, result = SHORT", "check 1 numbers read '%s'" % low.detail_line())
 	var mid := KickLogic.new()
 	mid.stats = walk
 	_lock_power_at(mid, 50.0)
-	check(near(mid.max_range, 49.5) and near(mid.travel_yards, 49.5), "check 2 P=50 flies 49.5 yards, got %s" % mid.travel_yards)
+	check(near(mid.max_range, 38.0) and near(mid.travel_yards, 38.0), "check 2 P=50 flies 38.0 yards, got %s" % mid.travel_yards)
 	check(mid.result_text == "GOOD" and mid.reached_uprights, "check 2 centered P=50 is GOOD")
 	var at_posts := mid.flight_duration * (35.0 / mid.travel_yards)
 	mid.advance(at_posts)
 	check(near(mid.ball_forward_yards, 35.0, 0.02), "check 2 the moving ball reaches the uprights, got %s" % mid.ball_forward_yards)
 	check(near(mid.ball_lateral_yards, mid.offset_yards, 0.02), "the result offset is the ball's sideways spot at the posts")
 	mid.advance(mid.flight_duration)
-	check(near(mid.ball_forward_yards, 49.5), "check 2 the ball finishes past the posts, at max range")
+	check(near(mid.ball_forward_yards, 38.0), "check 2 the ball finishes past the posts, at max range")
 	check(mid.ball_forward_yards > low.ball_forward_yards, "check 2 P=50 travels farther than P=20")
-	check(mid.detail_line() == "P = 50, max range = 49.5 yd, kick = 35 yd, result = GOOD", "check 2 numbers read '%s'" % mid.detail_line())
+	check(mid.detail_line() == "P = 50, max range = 38 yd, kick = 35 yd, result = GOOD", "check 2 numbers read '%s'" % mid.detail_line())
 	var full := KickLogic.new()
 	full.stats = walk
 	full.set_seed(1)
 	_lock_power_at(full, 100.0)
-	check(near(full.max_range, 83.0) and near(full.travel_yards, 83.0), "check 3 P=100 flies 83 yards, got %s" % full.travel_yards)
+	check(near(full.max_range, 60.0) and near(full.travel_yards, 60.0), "check 3 P=100 flies 60 yards, got %s" % full.travel_yards)
 	check(full.travel_yards > mid.travel_yards, "check 3 full power travels farther than P=50")
 	check(full.flight_duration > mid.flight_duration, "a longer kick takes longer")
 	full.advance(full.flight_duration * 0.7)
@@ -843,9 +851,9 @@ func _check_power_flight() -> void:
 	earlier.stats = run.stats
 	earlier.kick_distance = run.distance_yards()
 	_lock_power_at(earlier, 100.0)
-	check(near(earlier.travel_yards, 83.0), "the previous lock flew 83 yards")
+	check(near(earlier.travel_yards, 60.0), "the previous lock flew 60 yards")
 	_lock_power_at(earlier, 20.0)
-	check(earlier.result_text == "SHORT" and near(earlier.travel_yards, 29.4), "the new lock throws away the old range")
+	check(earlier.result_text == "SHORT" and near(earlier.travel_yards, 24.8), "the new lock throws away the old range")
 	run.resolve_kick(earlier.result_text, earlier.offset_yards, earlier.perfect)
 	check(run.kick_number == 1 and near(run.distance_yards(), 35.0) and run.attempts == 1 and run.phase == RunLogic.Phase.PLAYING, "check 5 a short miss with an attempt left stays on kick 1")
 	check(run.begin_retry() and not run.is_first_ball, "check 5 the retry is still kick 1")
@@ -854,9 +862,9 @@ func _check_power_flight() -> void:
 	again.kick_distance = run.distance_yards()
 	_lock_power_at(again, 20.0)
 	check(run.kick_number == 1 and near(again.kick_distance, 35.0), "check 5 the retry is still 35 yards")
-	check(near(again.max_range, 29.4) and near(again.travel_yards, 29.4) and again.result_text == "SHORT", "check 5 the retry flies on the new P, not the earlier 83")
+	check(near(again.max_range, 24.8) and near(again.travel_yards, 24.8) and again.result_text == "SHORT", "check 5 the retry flies on the new P, not the earlier 60")
 	again.advance(again.flight_duration)
-	check(near(again.ball_forward_yards, 29.4), "check 5 the retry ball stops at 29.4 yards")
+	check(near(again.ball_forward_yards, 24.8), "check 5 the retry ball stops at 24.8 yards")
 
 
 func _check_wind_and_pool() -> void:
@@ -884,14 +892,14 @@ func _check_wind_and_pool() -> void:
 	check(near(leg.stats.range_bonus, before), "rebuilding does not apply Cannon Cleats a second time")
 	var short_before := KickLogic.new()
 	_lock_power_at(short_before, 20.0)
-	check(short_before.result_text == "SHORT" and near(short_before.max_range, 29.4), "P=20 is still SHORT at 29.4 yards")
+	check(short_before.result_text == "SHORT" and near(short_before.max_range, 24.8), "P=20 is still SHORT at 24.8 yards")
 	var reached := KickLogic.new()
 	reached.stats.range_bonus = 18.0
 	_lock_power_at(reached, 20.0)
 	check(reached.max_range > short_before.max_range + 17.0 and reached.result_text == "GOOD", "+18 yards turns that short kick into a make, range %s" % reached.max_range)
 	var solid := KickLogic.new()
 	_lock_power_at(solid, 50.0)
-	check(solid.result_text == "GOOD" and near(solid.max_range, 49.5), "P=50 is still GOOD at 49.5 yards")
+	check(solid.result_text == "GOOD" and near(solid.max_range, 38.0), "P=50 is still GOOD at 38.0 yards")
 	var plant := RunLogic.new()
 	plant.new_run()
 	plant.give(Loadout.ANCHOR, 1)
@@ -1383,10 +1391,13 @@ func _check_loadout_sprites() -> void:
 	check(Loadout.sprite_path(Loadout.ICED).ends_with("iced.png"), "Iced finds its sprite")
 	check(Loadout.sprite_path(Loadout.CANNON) == "", "Cannon Cleats has no sprite and falls back to text")
 	check(Loadout.sprite_path(Loadout.TWO_MINUTE).ends_with("two_minute_drill.png"), "Two-Minute Drill is mapped to a sprite")
-	check(Loadout.PERK_IDS.has(Loadout.TWO_MINUTE) == false, "Two-Minute Drill is not in the offer pool")
+	check(Loadout.PERK_IDS.has(Loadout.TWO_MINUTE), "Two-Minute Drill is in the perk pool")
 	var offer: Array = Loadout.legal_perks(Loadout.empty_state(), 3)
+	var saw_drill := false
 	for card in offer:
-		check(str(card.get("id", "")) != Loadout.TWO_MINUTE, "a legal perk offer never includes Two-Minute Drill")
+		if str(card.get("id", "")) == Loadout.TWO_MINUTE:
+			saw_drill = true
+	check(saw_drill, "a fresh perk list can offer Two-Minute Drill")
 	check(Loadout.empty_slot_path(Loadout.CLEATS).ends_with("empty_cleats.png"), "empty cleats use the empty frame")
 	check(Loadout.empty_slot_path(Loadout.HELMET).ends_with("empty_helmet.png"), "empty helmets use the empty frame")
 	check(Loadout.empty_slot_path(Loadout.GLOVES).ends_with("empty_gloves.png"), "empty gloves use the empty frame")
@@ -1410,4 +1421,267 @@ func _check_loadout_sprites() -> void:
 	check(Loadout.rank_badge(run.helmet_id, run.helmet_rank) == "II", "the rank-up badge is II")
 	run.new_run()
 	check(run.cleats_id == "" and run.helmet_id == "" and run.gloves_id == "" and run.perks.is_empty() and run.curse_ids.is_empty(), "a new run clears every icon")
+
+
+func _check_rank_caps_and_range() -> void:
+	check(Loadout.max_rank(Loadout.CANNON) == 6, "equipment max rank is VI")
+	check(Loadout.max_rank(Loadout.DEEP_BENCH) == 3, "perk max rank is III")
+	check(Loadout.max_rank(Loadout.TWO_MINUTE) == 3, "Two-Minute Drill ranks to III")
+	check(Loadout.max_rank(Loadout.ICED) == 1, "curses still do not rank")
+	check(Loadout.rank_badge(Loadout.CANNON, 5) == "V", "equipment rank V shows a badge")
+	check(Loadout.rank_badge(Loadout.CANNON, 6) == "VI", "equipment rank VI shows a badge")
+	check(Loadout.rank_badge(Loadout.HOT_STREAK, 3) == "III", "perk rank III shows a badge")
+	check(not Loadout.PERK_IDS.has("mulligan") and not Loadout.PERK_IDS.has("hash_marksman"), "Mulligan and Hash Marksman stay out of the pool")
+	var bruce_stats := KickerStats.new()
+	Kickers.apply_to(bruce_stats, Kickers.BIG_BRUCE)
+	check(near(bruce_stats.range_base, 16.0) and near(bruce_stats.range_per_power, 0.49), "Bruce keeps range base 16 and 0.49 per power")
+	check(near(bruce_stats.range_base + bruce_stats.range_per_power * 100.0, 65.0), "Bruce P=100 with no bonuses is 65.0 yards")
+	var kick17 := KickLogic.new()
+	kick17.stats = bruce_stats
+	kick17.set_seed(2)
+	_lock_power_at(kick17, 100.0, 65.0)
+	check(near(kick17.max_range, 65.0) and kick17.result_text == "GOOD", "kick 17 at 65 can be GOOD on Bruce full power, got %s range %s" % [kick17.result_text, kick17.max_range])
+	var kick18 := KickLogic.new()
+	kick18.stats = bruce_stats
+	kick18.set_seed(2)
+	_lock_power_at(kick18, 100.0, 69.0)
+	check(near(kick18.max_range, 65.0) and kick18.result_text == "SHORT", "kick 18 at 69 is SHORT on Bruce full power, got %s" % kick18.result_text)
+	var cannon := RunLogic.new()
+	cannon.start_with_kicker(Kickers.BIG_BRUCE)
+	cannon.give(Loadout.CANNON, 1)
+	check(near(cannon.stats.range_bonus, 6.0), "Cannon Cleats I is still +6 yards")
+	var make69 := KickLogic.new()
+	make69.stats = cannon.stats
+	make69.set_seed(2)
+	_lock_power_at(make69, 100.0, 69.0)
+	check(near(make69.max_range, 71.0) and make69.result_text == "GOOD", "Cannon I lifts Bruce to 71 so kick 18 can be GOOD, got %s range %s" % [make69.result_text, make69.max_range])
+	var miss72 := KickLogic.new()
+	miss72.stats = cannon.stats
+	miss72.set_seed(2)
+	_lock_power_at(miss72, 100.0, 72.0)
+	check(near(miss72.max_range, 71.0) and miss72.result_text == "SHORT", "kick 19 at 72 is still SHORT with Cannon I, got %s" % miss72.result_text)
+	cannon.give(Loadout.CANNON, 4)
+	check(near(cannon.stats.range_bonus, 24.0), "Cannon Cleats IV is still +24 yards")
+	cannon.give(Loadout.CANNON, 5)
+	check(near(cannon.stats.range_bonus, 30.0) and Loadout.rank_badge(cannon.cleats_id, cannon.cleats_rank) == "V", "Cannon Cleats V is +30 yards")
+	cannon.give(Loadout.CANNON, 6)
+	check(near(cannon.stats.range_bonus, 36.0) and Loadout.rank_badge(cannon.cleats_id, cannon.cleats_rank) == "VI", "Cannon Cleats VI is +36 yards")
+	cannon.give(Loadout.CANNON, 7)
+	check(cannon.cleats_rank == 6, "equipment does not rank past VI")
+	var walk_stats := KickerStats.new()
+	Kickers.apply_to(walk_stats, Kickers.WALK_ON)
+	check(near(walk_stats.range_base + walk_stats.range_per_power * 100.0, 60.0), "Walk-On P=100 with no bonuses is 60.0 yards")
+	var kick10 := KickLogic.new()
+	kick10.stats = walk_stats
+	kick10.set_seed(4)
+	_lock_power_at(kick10, 100.0, 60.0)
+	check(near(kick10.max_range, 60.0) and kick10.result_text == "GOOD", "kick 10 at 60 can be GOOD on Walk-On full power, got %s" % kick10.result_text)
+	var kick14 := KickLogic.new()
+	kick14.stats = walk_stats
+	kick14.set_seed(4)
+	_lock_power_at(kick14, 100.0, 65.0)
+	check(near(kick14.max_range, 60.0) and kick14.result_text == "SHORT", "kick 14 at 65 is SHORT on Walk-On full power, got %s" % kick14.result_text)
+	var pins := RunLogic.new()
+	pins.new_run()
+	pins.give(Loadout.PINPOINT, 4)
+	check(near(pins.stats.perfect_band, 2.0 + 8.0) and near(pins.stats.good_band, 8.0 + 12.0), "Pinpoint IV is still +8 PERFECT and +12 good")
+	pins.give(Loadout.PINPOINT, 6)
+	check(near(pins.stats.perfect_band, 2.0 + 12.0) and near(pins.stats.good_band, 8.0 + 18.0), "Pinpoint VI is +12 PERFECT and +18 good")
+	var anchor := RunLogic.new()
+	anchor.new_run()
+	anchor.give(Loadout.ANCHOR, 4)
+	check(near(anchor.stats.power_speed, 100.0 * pow(0.85, 4.0)), "Anchor IV is still 0.85 to the fourth")
+	anchor.give(Loadout.ANCHOR, 6)
+	check(near(anchor.stats.power_speed, 100.0 * pow(0.85, 6.0)), "Anchor VI is 0.85 to the sixth")
+	var hot := RunLogic.new()
+	hot.new_run()
+	hot.give(Loadout.HOT_STREAK, 2)
+	check(near(hot.stats.streak_step, 0.75), "Hot Streak II is still 0.75")
+	hot.give(Loadout.HOT_STREAK, 3)
+	check(near(hot.stats.streak_step, 1.0) and Loadout.rank_badge(Loadout.HOT_STREAK, hot._perk_rank(Loadout.HOT_STREAK)) == "III", "Hot Streak III is 1.0 and shows III")
+	hot.give(Loadout.HOT_STREAK, 4)
+	check(hot._perk_rank(Loadout.HOT_STREAK) == 3, "perks do not rank past III")
+	var storm := RunLogic.new()
+	storm.new_run()
+	storm.give(Loadout.STORM_CHASER, 2)
+	check(near(storm.stats.storm_per_mph, 0.4), "Storm Chaser II is still 0.4")
+	storm.give(Loadout.STORM_CHASER, 3)
+	check(near(storm.stats.storm_per_mph, 0.6), "Storm Chaser III is 0.6")
+	var hero := RunLogic.new()
+	hero.start_with_kicker(Kickers.WALK_ON)
+	hero.give(Loadout.HERO_BALL, 3)
+	check(near(hero.stats.hero_mult, 2.0) and near(hero.stats.power_speed, 80.0), "Hero Ball III is +2 Mult and the same slower needles")
+	hero.force_weather(RunLogic.BIG_GAME)
+	hero.prepare_kick_stats()
+	check(near(hero.stats.power_speed, 100.0) and near(hero.stats.hero_mult, 2.0), "Big Game turns the slower needles off and keeps the Mult")
+	var glass := RunLogic.new()
+	glass.new_run()
+	glass.give(Loadout.GLASS_LEG, 2)
+	check(near(glass.stats.range_bonus, 16.0) and glass.attempt_cap == 2, "Glass Leg II is still +16 and one cap loss")
+	glass.give(Loadout.GLASS_LEG, 3)
+	check(near(glass.stats.range_bonus, 24.0) and glass.attempt_cap == 2, "Glass Leg III is +24 and does not drop the cap again")
+	var bench := RunLogic.new()
+	bench.new_run()
+	bench.attempts = 4
+	bench.give(Loadout.DEEP_BENCH, 2)
+	check(bench.attempt_cap == 5 and bench.attempts == 5, "Deep Bench II still fills up to the hard max")
+	bench.attempts = 4
+	bench.give(Loadout.DEEP_BENCH, 3)
+	check(bench.attempt_cap == 5 and bench.attempts == 5 and bench.stats.bench_spare, "Deep Bench III adds an attempt without raising the cap")
+	bench.attempts = 3
+	bench.kick_number = 6
+	bench._refill_quarter()
+	check(bench.attempts == 4, "Deep Bench III grants an attempt at the next quarter when below cap")
+	var visor := RunLogic.new()
+	visor.new_run()
+	visor.give(Loadout.WIND_VISOR, 4)
+	check(visor.stats.wind_preview_count == 3, "Wind Visor IV still previews 3 kicks")
+	visor.give(Loadout.WIND_VISOR, 5)
+	check(visor.stats.wind_preview_count == 5, "Wind Visor V previews 5 kicks")
+	visor.give(Loadout.WIND_VISOR, 6)
+	check(visor.stats.wind_preview_count == 7 and visor.upcoming_winds().size() == 7, "Wind Visor VI previews 7 kicks")
+	var cage := RunLogic.new()
+	cage.new_run()
+	cage.give(Loadout.ICE_CAGE, 4)
+	check(near(cage.stats.perfect_band, 3.0) and near(cage.stats.good_band, 10.0), "Ice Cage IV is still PERFECT +1 and good +2")
+	cage.give(Loadout.ICE_CAGE, 5)
+	check(near(cage.stats.perfect_band, 4.0), "Ice Cage V is PERFECT +2 total")
+	cage.give(Loadout.ICE_CAGE, 6)
+	check(near(cage.stats.good_band, 12.0), "Ice Cage VI is good +4 total")
+	var grip := RunLogic.new()
+	grip.start_with_kicker(Kickers.BIG_BRUCE)
+	grip.give(Loadout.IRON_GRIP, 5)
+	check(near(grip.stats.red_tip_start, 99.0) and near(grip.stats.red_tip_noise, 3.0), "Iron Grip V pushes Bruce's red tip from 90 to 99")
+	grip.give(Loadout.IRON_GRIP, 6)
+	check(grip.stats.red_tip_off, "Iron Grip VI turns the red tip off")
+	grip.force_weather(RunLogic.BIG_GAME)
+	grip.prepare_kick_stats()
+	check(not grip.stats.red_tip_off and near(grip.stats.red_tip_start, 90.0), "Big Game turns Iron Grip's red-tip help off")
+	var walk_grip := RunLogic.new()
+	walk_grip.start_with_kicker(Kickers.WALK_ON)
+	walk_grip.give(Loadout.IRON_GRIP, 4)
+	check(near(walk_grip.stats.red_tip_start, 101.0), "Iron Grip IV already pushes The Walk-On past 100")
+	var scout := RunLogic.new()
+	scout.start_with_kicker(Kickers.WALK_ON)
+	scout.give(Loadout.SCOUT_LID, 4)
+	check(scout.stats.rerolls_per_run == 5 and scout.stats.practice_per_quarter == 1, "Scout Lid IV is still +3 rerolls and one practice swing")
+	scout.give(Loadout.SCOUT_LID, 6)
+	check(scout.stats.rerolls_per_run == 7 and scout.stats.practice_per_quarter == 2, "Scout Lid VI is +5 rerolls and two practice swings")
+	var doink := RunLogic.new()
+	doink.new_run()
+	doink.give(Loadout.DOINK_CAP, 5)
+	check(doink.stats.doink_per_quarter == 5 and not doink.stats.doink_carry and doink.insurance_left == 5, "Doink Cap V is 5 charges and does not carry")
+	doink.insurance_left = 2
+	doink.kick_number = 6
+	doink._refill_quarter()
+	check(doink.insurance_left == 5, "Doink Cap V refills to 5 and drops unused charges")
+	doink.give(Loadout.DOINK_CAP, 6)
+	check(doink.stats.doink_carry and doink.stats.doink_per_quarter == 5, "Doink Cap VI keeps 5 charges and carries unused ones")
+	doink.insurance_left = 2
+	doink.kick_number = 11
+	doink._refill_quarter()
+	check(doink.insurance_left == 7, "unused Doink charges carry, stored up to 5, on top of the new 5")
+	var replay := RunLogic.new()
+	replay.new_run()
+	replay.give(Loadout.REPLAY_GLOVES, 5)
+	check(replay.stats.practice_per_quarter == 5 and not replay.stats.practice_carry, "Replay Gloves V is 5 swings and does not carry")
+	replay.give(Loadout.REPLAY_GLOVES, 6)
+	replay.practice_left = 3
+	replay.kick_number = 6
+	replay._refill_quarter()
+	check(replay.stats.practice_carry and replay.practice_left == 8, "Replay Gloves VI carries unused swings, stored up to 5")
+	var wraps := RunLogic.new()
+	wraps.new_run()
+	wraps.give(Loadout.WEATHER_WRAPS, 2)
+	var plain: Dictionary = RunLogic.weather_kick_flags(RunLogic.RAIN, wraps.stats.weather_cut)
+	var monsoon: Dictionary = RunLogic.weather_kick_flags(RunLogic.MONSOON, wraps.stats.weather_cut)
+	check(not bool(plain["rain_faster"]) and bool(monsoon["rain_faster"]) and bool(monsoon["mud_power"]), "Weather Wraps II ignores rain but not Monsoon")
+	wraps.give(Loadout.WEATHER_WRAPS, 3)
+	var quiet: Dictionary = RunLogic.weather_kick_flags(RunLogic.MONSOON, wraps.stats.weather_cut)
+	check(not bool(quiet["rain_faster"]) and not bool(quiet["mud_power"]), "Weather Wraps III ignores Monsoon's rain and mud")
+	wraps.give(Loadout.WEATHER_WRAPS, 4)
+	wraps.force_weather(RunLogic.RAIN)
+	wraps.prepare_kick_stats()
+	check(near(wraps.stats.wraps_yards, 2.0) and near(wraps.stats.range_bonus, 2.0), "Weather Wraps IV is still +2 yards outside CLEAR")
+	wraps.give(Loadout.WEATHER_WRAPS, 6)
+	wraps.prepare_kick_stats()
+	check(near(wraps.stats.wraps_yards, 6.0) and near(wraps.stats.range_bonus, 6.0), "Weather Wraps VI is +6 yards outside CLEAR")
+	var drill := RunLogic.new()
+	drill.start_with_kicker(Kickers.WALK_ON)
+	drill.give(Loadout.TWO_MINUTE, 1)
+	drill.kick_number = 5
+	drill.resolve_kick("GOOD", 2.0, false)
+	check(near(drill.stats.drill_mult, 0.5), "Two-Minute Drill I is +0.5 Mult")
+	check(drill.last_points == 108, "boss points include +0.5 on top of ×1.5, got %s" % drill.last_points)
+	check(drill.score_line.find("drill") >= 0 and drill.score_line.find("1.5") >= 0, "the score line shows the drill bonus, got '%s'" % drill.score_line)
+	drill.kick_resolved = false
+	drill.phase = RunLogic.Phase.PLAYING
+	drill.give(Loadout.TWO_MINUTE, 2)
+	check(near(drill.stats.drill_mult, 1.0), "Two-Minute Drill II is +1.0")
+	drill.give(Loadout.TWO_MINUTE, 3)
+	check(near(drill.stats.drill_mult, 1.5), "Two-Minute Drill III is +1.5")
+	var howl := RunLogic.new()
+	howl.new_run()
+	howl.give(Loadout.HOWLING)
+	howl.give(Loadout.TWO_MINUTE, 1)
+	check(near(howl.stats.drill_mult, 0.5 * 1.15), "Howling Wind boosts Two-Minute Drill by 15%")
+	var locked := RunLogic.new()
+	locked.new_run()
+	locked.give(Loadout.DEEP_BENCH, 1)
+	locked.give(Loadout.HOT_STREAK, 1)
+	var blocked := false
+	for card in Loadout.legal_perks(locked.loadout_state(), locked.attempt_cap):
+		if str(card.get("id", "")) == Loadout.TWO_MINUTE and int(card.get("rank", 0)) == 1:
+			blocked = true
+	check(not blocked, "Two-Minute Drill is not a third perk style")
+	var full := _maxed_loadout()
+	var empty_offer: Array = Loadout.draw_offer(full.loadout_state(), full.attempt_cap, RandomNumberGenerator.new())
+	check(empty_offer.is_empty(), "a maxed loadout draws zero cards")
+	full.kick_number = 19
+	full.resolve_kick("GOOD", 2.0, false)
+	full.roll_offer()
+	check(full.awaiting_offer and full.offer.is_empty(), "an empty offer still waits for Skip")
+	check(not full.pick_card(0) and not full.pick_card(1) and not full.pick_card(2), "keys 1, 2, and 3 do nothing when no cards are showing")
+	check(full.awaiting_offer and full.kick_number == 19, "the empty offer does not advance on 1, 2, or 3")
+	var before_score := full.score
+	check(full.skip_offer() and full.score == before_score and not full.awaiting_offer, "Skip on an empty offer takes nothing and continues")
+	check(full.go_to_next_kick() and full.kick_number == 20, "Skip after kick 19 reaches kick 20")
+	var one := _maxed_loadout()
+	one.cleats_rank = 5
+	one.rebuild_stats()
+	var one_cards: Array = Loadout.draw_offer(one.loadout_state(), one.attempt_cap, RandomNumberGenerator.new())
+	check(one_cards.size() == 1 and str(one_cards[0].get("id", "")) == Loadout.CANNON and int(one_cards[0].get("rank", 0)) == 6, "one legal card is still offered")
+	one.kick_number = 19
+	one.phase = RunLogic.Phase.PLAYING
+	one.roll_offer()
+	check(one.offer.size() == 1 and one.awaiting_offer, "a one-card offer stays open")
+	check(not one.pick_card(1) and one.awaiting_offer, "key 2 does nothing when only one card is showing")
+	check(one.skip_offer(), "Skip still works with one card")
+	var two := _maxed_loadout()
+	two.cleats_rank = 5
+	two.perks = [{"id": Loadout.DEEP_BENCH, "rank": 2}, {"id": Loadout.HOT_STREAK, "rank": 3}]
+	two.rebuild_stats()
+	var two_cards: Array = Loadout.draw_offer(two.loadout_state(), two.attempt_cap, RandomNumberGenerator.new())
+	check(two_cards.size() == 2, "two legal cards are both shown, got %s" % two_cards.size())
+	var saw_equip := false
+	for card in two_cards:
+		if str(card.get("kind", "")) == Loadout.EQUIPMENT:
+			saw_equip = true
+	check(saw_equip, "the short offer still keeps a legal equipment card")
+
+
+func _maxed_loadout() -> RunLogic:
+	var run := RunLogic.new()
+	run.new_run()
+	run.cleats_id = Loadout.CANNON
+	run.cleats_rank = 6
+	run.helmet_id = Loadout.WIND_VISOR
+	run.helmet_rank = 6
+	run.gloves_id = Loadout.IRON_GRIP
+	run.gloves_rank = 6
+	run.perks = [{"id": Loadout.DEEP_BENCH, "rank": 3}, {"id": Loadout.TWO_MINUTE, "rank": 3}]
+	run.curse_ids = [Loadout.HEAVY, Loadout.SHANKY]
+	run.rebuild_stats()
+	run.attempt_cap = run.stats.attempt_cap
+	return run
 

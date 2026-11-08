@@ -45,9 +45,11 @@ const RED_TIP_ERROR_MAX := 5.0
 # Positive e hooks left. Left is a negative angle, so the kick uses -(e × this).
 const ACCURACY_DEG_PER_ERROR := 0.35
 
-# Max range = 16 + 0.67 × power. Full power is about 83 yards.
+# Max range = 16 + range_per_power × power.
+# The Walk-On uses 0.44, so full power is 60 yards.
+# Big Bruce uses 0.49, so full power is 65 yards.
 const RANGE_BASE_YARDS := 16.0
-const RANGE_PER_POWER := 0.67
+const RANGE_PER_POWER := 0.44
 
 # Flight time = 1.2 + 0.02 × distance. "Distance" is the kick distance.
 const FLIGHT_TIME_BASE_SEC := 1.2

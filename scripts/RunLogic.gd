@@ -202,6 +202,12 @@ func curse_bonus() -> float:
 	return stats.curse_mult
 
 
+func drill_bonus() -> float:
+	if not is_boss():
+		return 0.0
+	return stats.drill_mult
+
+
 func wants_upgrade() -> bool:
 	# Cards only after a make, and not on the win.
 	return phase == Phase.PLAYING and kick_resolved and last_result_made
@@ -235,10 +241,11 @@ func resolve_kick(result_text: String, offset: float, perfect: bool) -> void:
 		var storm := storm_bonus()
 		var hero := hero_bonus()
 		var curse_add := curse_bonus()
-		var mult := base_mult + storm + hero + curse_add
+		var drill := drill_bonus()
+		var mult := base_mult + storm + hero + curse_add + drill
 		last_points = points_for(distance, mult, down_the_middle, boss, perfect)
 		score += last_points
-		score_line = format_score_line(distance, base_mult, down_the_middle, boss, perfect, storm, hero, curse_add)
+		score_line = format_score_line(distance, base_mult, down_the_middle, boss, perfect, storm, hero, curse_add, drill)
 		kicks_made += 1
 		if distance > longest_make:
 			longest_make = distance
@@ -374,8 +381,8 @@ func force_weather(name: String) -> void:
 
 func prepare_kick_stats() -> void:
 	rebuild_stats()
-	if stats.wraps_bonus and weather != CLEAR:
-		var bonus := 2.0
+	if stats.wraps_yards > 0.0 and weather != CLEAR:
+		var bonus := stats.wraps_yards
 		if has_curse(Loadout.HOWLING):
 			bonus *= 1.15
 		stats.range_bonus += bonus
@@ -394,6 +401,7 @@ func prepare_kick_stats() -> void:
 		stats.good_band = maxf(stats.good_band - 2.0, 1.0)
 	stats.red_tip_start = base.red_tip_start
 	stats.red_tip_noise = base.red_tip_noise
+	stats.red_tip_off = false
 	stats.ice_veins = false
 
 
@@ -418,6 +426,33 @@ static func spot_label(yards: float) -> String:
 	if yards > 0.5:
 		return "RIGHT HASH"
 	return "CENTER"
+
+
+# Rank I halves rain, snow, and mud. Rank II ignores those three.
+# Monsoon's rain and mud extras stay until rank III.
+static func weather_kick_flags(weather_name: String, cut: int) -> Dictionary:
+	var monsoon := weather_name == MONSOON
+	var half := cut == 1
+	var ignore_plain := cut >= 2
+	var ignore_monsoon := cut >= 3
+	var rain := false
+	if weather_name == RAIN and not ignore_plain:
+		rain = true
+	elif monsoon and not ignore_monsoon:
+		rain = true
+	var mud := false
+	if weather_name == MUD and not ignore_plain:
+		mud = true
+	elif monsoon and not ignore_monsoon:
+		mud = true
+	return {
+		"rain_faster": rain,
+		"rain_scale": 1.10 if half else 1.20,
+		"snow_range": weather_name == SNOW and not ignore_plain,
+		"snow_penalty": 2.0 if half else 4.0,
+		"mud_power": mud,
+		"mud_span": 1.5 if half else 3.0,
+	}
 
 
 static func boss_weather(kick: int) -> String:
@@ -585,7 +620,7 @@ func roll_offer() -> void:
 		_forced_cards = []
 	else:
 		offer = Loadout.draw_offer(loadout_state(), attempt_cap, _offer_rng)
-	awaiting_offer = offer.size() > 0
+	awaiting_offer = true
 
 
 func pick_card(index: int) -> bool:
@@ -609,7 +644,7 @@ func reroll_offer() -> bool:
 		return false
 	rerolls_left -= 1
 	offer = Loadout.draw_offer(loadout_state(), attempt_cap, _offer_rng)
-	awaiting_offer = offer.size() > 0
+	awaiting_offer = true
 	return true
 
 
@@ -635,17 +670,17 @@ func give(id: String, rank: int = 1) -> void:
 	if slot == Loadout.CLEATS:
 		if cleats_id != "" and cleats_id != id:
 			return
-		if rank > 4 or rank <= cleats_rank:
+		if rank > Loadout.max_rank(id) or rank <= cleats_rank:
 			return
 	elif slot == Loadout.HELMET:
 		if helmet_id != "" and helmet_id != id:
 			return
-		if rank > 4 or rank <= helmet_rank:
+		if rank > Loadout.max_rank(id) or rank <= helmet_rank:
 			return
 	elif slot == Loadout.GLOVES:
 		if gloves_id != "" and gloves_id != id:
 			return
-		if rank > 4 or rank <= gloves_rank:
+		if rank > Loadout.max_rank(id) or rank <= gloves_rank:
 			return
 	elif slot == Loadout.PERK:
 		var have := _perk_rank(id)
@@ -653,7 +688,7 @@ func give(id: String, rank: int = 1) -> void:
 			return
 		if id == Loadout.GLASS_LEG and have == 0 and attempt_cap <= 2:
 			return
-		if rank > 2 or rank <= have:
+		if rank > Loadout.max_rank(id) or rank <= have:
 			return
 	elif slot == Loadout.CURSE:
 		if curse_ids.has(id) or curse_ids.size() >= 2:
@@ -698,6 +733,8 @@ func give(id: String, rank: int = 1) -> void:
 	var practice_gain := stats.practice_per_quarter - practice_before
 	if practice_gain > 0:
 		practice_left += practice_gain
+	if id == Loadout.DEEP_BENCH and rank >= 3 and attempts < attempt_cap:
+		attempts += 1
 
 
 func loadout_state() -> Dictionary:
@@ -744,12 +781,12 @@ func owned_labels() -> Array:
 
 
 func upcoming_winds() -> Array:
-	if not stats.wind_preview:
+	if not stats.wind_preview or stats.wind_preview_count <= 0:
 		return []
 	var saved := _wind_rng.state
 	var lines: Array = []
 	var kn := kick_number
-	for _step in 3:
+	for _step in stats.wind_preview_count:
 		kn += 1
 		if kn > RunTable.count():
 			break
@@ -774,8 +811,16 @@ func _close_offer() -> void:
 func _refill_quarter() -> void:
 	if kick_number == 1 or kick_number == 6 or kick_number == 11 or kick_number == 16:
 		mulligans_left = 0
-		insurance_left = stats.doink_per_quarter
-		practice_left = stats.practice_per_quarter
+		if stats.doink_carry:
+			insurance_left = stats.doink_per_quarter + mini(maxi(insurance_left, 0), 5)
+		else:
+			insurance_left = stats.doink_per_quarter
+		if stats.practice_carry:
+			practice_left = stats.practice_per_quarter + mini(maxi(practice_left, 0), 5)
+		else:
+			practice_left = stats.practice_per_quarter
+		if stats.bench_spare and attempts < attempt_cap:
+			attempts += 1
 		_insurance_spent = false
 
 
@@ -867,10 +912,10 @@ static func raw_points(distance: float, mult: float, middle: bool, boss: bool, p
 	return total
 
 
-static func format_score_line(distance: float, mult: float, middle: bool, boss: bool, perfect: bool, storm: float = 0.0, hero: float = 0.0, curse_add: float = 0.0) -> String:
-	var product := distance * (mult + storm + hero + curse_add)
+static func format_score_line(distance: float, mult: float, middle: bool, boss: bool, perfect: bool, storm: float = 0.0, hero: float = 0.0, curse_add: float = 0.0, drill: float = 0.0) -> String:
+	var product := distance * (mult + storm + hero + curse_add + drill)
 	var text := "%s yd × %s" % [_whole(distance), _two_decimals(mult)]
-	if storm > 0.001 or hero > 0.001 or curse_add > 0.001:
+	if storm > 0.001 or hero > 0.001 or curse_add > 0.001 or drill > 0.001:
 		text = "%s yd × (%s" % [_whole(distance), _two_decimals(mult)]
 		if storm > 0.001:
 			text += " + %s wind" % _two_decimals(storm)
@@ -878,6 +923,8 @@ static func format_score_line(distance: float, mult: float, middle: bool, boss: 
 			text += " + %s hero" % _two_decimals(hero)
 		if curse_add > 0.001:
 			text += " + %s curse" % _two_decimals(curse_add)
+		if drill > 0.001:
+			text += " + %s drill" % _two_decimals(drill)
 		text += ")"
 	if middle:
 		product *= KickConstants.MIDDLE_MULTIPLIER

@@ -434,7 +434,7 @@ func _lock_power(value: float) -> void:
 
 
 func _lock_accuracy(value: float) -> void:
-	if stats.ice_veins:
+	if stats.ice_veins or stats.red_tip_off:
 		accuracy_error = value
 	else:
 		accuracy_error = accuracy_with_red_tip(power, value, _rng, stats.red_tip_start, stats.red_tip_noise)

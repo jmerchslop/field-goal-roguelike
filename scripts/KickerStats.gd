@@ -29,6 +29,8 @@ var flag_reader := false
 var laser_line := false
 var laser_full := false
 var wind_preview := false
+var wind_preview_count := 0
+var red_tip_off := false
 var ice_cage := false
 var ice_veins := false
 var hide_meter := false
@@ -38,9 +40,13 @@ var shaky := false
 var narrow_posts := false
 var tight_window := false
 var weather_cut := 0
-var wraps_bonus := false
+var wraps_yards := 0.0
 var doink_per_quarter := 0
+var doink_carry := false
 var practice_per_quarter := 0
+var practice_carry := false
+var bench_spare := false
+var drill_mult := 0.0
 
 
 func reset() -> void:
@@ -68,6 +74,8 @@ func reset() -> void:
 	laser_line = false
 	laser_full = false
 	wind_preview = false
+	wind_preview_count = 0
+	red_tip_off = false
 	ice_cage = false
 	ice_veins = false
 	hide_meter = false
@@ -77,6 +85,10 @@ func reset() -> void:
 	narrow_posts = false
 	tight_window = false
 	weather_cut = 0
-	wraps_bonus = false
+	wraps_yards = 0.0
 	doink_per_quarter = 0
+	doink_carry = false
 	practice_per_quarter = 0
+	practice_carry = false
+	bench_spare = false
+	drill_mult = 0.0

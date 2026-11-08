@@ -254,13 +254,13 @@ func cycle_spot() -> void:
 
 
 func _copy_weather_onto_kick() -> void:
-	var cut := run.stats.weather_cut
-	logic.rain_faster = run.has_rain() and cut < 2
-	logic.rain_scale = 1.10 if cut == 1 else 1.20
-	logic.snow_range = run.weather == RunLogic.SNOW and cut < 2
-	logic.snow_penalty = 2.0 if cut == 1 else 4.0
-	logic.mud_power = run.has_mud() and cut < 2
-	logic.mud_span = 1.5 if cut == 1 else 3.0
+	var flags: Dictionary = RunLogic.weather_kick_flags(run.weather, run.stats.weather_cut)
+	logic.rain_faster = bool(flags["rain_faster"])
+	logic.rain_scale = float(flags["rain_scale"])
+	logic.snow_range = bool(flags["snow_range"])
+	logic.snow_penalty = float(flags["snow_penalty"])
+	logic.mud_power = bool(flags["mud_power"])
+	logic.mud_span = float(flags["mud_span"])
 	logic.thin_air_weather = run.weather == RunLogic.THIN_AIR
 
 

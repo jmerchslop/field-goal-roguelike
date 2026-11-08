@@ -74,7 +74,7 @@ static func apply_to(stats: KickerStats, id: String) -> void:
 		return
 	stats.ball_type = str(info["ball_type"])
 	if id == BIG_BRUCE:
-		stats.range_per_power = 0.75
+		stats.range_per_power = 0.49
 		stats.red_tip_start = 90.0
 		stats.red_tip_noise = 7.0
 		stats.accuracy_speed *= 1.1

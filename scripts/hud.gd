@@ -356,7 +356,7 @@ func _draw_offer(run: RunLogic) -> void:
 	card_rects = []
 	var count := run.offer.size()
 	if count == 0:
-		_text_centered("Nothing left to take.  S continues.", 430.0, 28, KickConstants.COLOR_TEXT)
+		_text_centered("Nothing left to pick — press S to continue.", 430.0, 28, KickConstants.COLOR_TEXT)
 	var width := 250.0
 	var gap := 16.0
 	var total := float(count) * width + float(maxi(count - 1, 0)) * gap
@@ -553,11 +553,14 @@ func _draw_slot_icon(id: String, rank: int, slot: String, rect: Rect2, show_badg
 		draw_rect(rect.grow(-8), Color(0.2, 0.24, 0.3, 0.9), false, 2.0)
 	var badge := Loadout.rank_badge(id, rank) if show_badge else ""
 	if badge != "":
-		var badge_box := Rect2(rect.position.x + rect.size.x - 28, rect.position.y + rect.size.y - 20, 28, 20)
-		draw_rect(badge_box, Color(0.95, 0.78, 0.16, 0.96))
 		var font := ThemeDB.fallback_font
+		var text_width := 18.0
 		if font != null:
-			var text_width := font.get_string_size(badge, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
+			text_width = font.get_string_size(badge, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
+		var box_w := maxf(28.0, text_width + 8.0)
+		var badge_box := Rect2(rect.position.x + rect.size.x - box_w, rect.position.y + rect.size.y - 20, box_w, 20)
+		draw_rect(badge_box, Color(0.95, 0.78, 0.16, 0.96))
+		if font != null:
 			var at := badge_box.position + Vector2((badge_box.size.x - text_width) * 0.5, 15)
 			draw_string(font, at, badge, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.12, 0.08, 0.02))
 

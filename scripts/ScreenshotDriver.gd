@@ -348,6 +348,9 @@ func _ready() -> void:
 	if not await _capture_records_story():
 		get_tree().quit(1)
 		return
+	if not await _capture_range_hotfix():
+		get_tree().quit(1)
+		return
 	get_tree().quit()
 
 
@@ -492,6 +495,110 @@ func _capture_records_story() -> bool:
 	if not await _capture("f9_reset.png"):
 		return false
 	return true
+
+
+func _capture_range_hotfix() -> bool:
+	board.showing_records = false
+	board.save_note = ""
+	board._note_time = 0.0
+	board.highlight = 0
+	board.confirm_kicker()
+	if not await _shoot_power_result(18, "bruce_p100_kick18_short.png", "SHORT", 65.0):
+		return false
+	board.highlight = 1
+	board.confirm_kicker()
+	if not await _shoot_power_result(14, "walkon_p100_kick14_short.png", "SHORT", 60.0):
+		return false
+	board.highlight = 0
+	board.confirm_kicker()
+	board.run.give(Loadout.CANNON, 1)
+	if not await _shoot_power_result(18, "bruce_cannon_kick18_good.png", "GOOD", 71.0):
+		return false
+	if not await _shoot_power_result(19, "bruce_cannon_kick19_short.png", "SHORT", 71.0):
+		return false
+	board.run.give(Loadout.CANNON, 5)
+	board.load_current_kick()
+	if not await _capture("cannon_rank_v.png"):
+		return false
+	board.run.give(Loadout.CANNON, 6)
+	board.load_current_kick()
+	if not await _capture("cannon_rank_vi.png"):
+		return false
+	board.run.give(Loadout.HOT_STREAK, 3)
+	board.load_current_kick()
+	if not await _capture("perk_rank_iii.png"):
+		return false
+	board.run.kick_number = 19
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.kick_resolved = true
+	board.run.last_result_made = true
+	board.run.force_offer([
+		{"id": Loadout.TWO_MINUTE, "slot": Loadout.PERK, "kind": Loadout.PERK, "rank": 1},
+		{"id": Loadout.STORM_CHASER, "slot": Loadout.PERK, "kind": Loadout.PERK, "rank": 1},
+		{"id": Loadout.SHAKY, "slot": Loadout.CURSE, "kind": Loadout.CURSE, "rank": 1},
+	])
+	board.run.roll_offer()
+	if board.run.offer.size() != 3:
+		print("two minute offer missing")
+		return false
+	if not await _capture("two_minute_offer.png"):
+		return false
+	board.run.skip_offer()
+	board.run.helmet_id = Loadout.WIND_VISOR
+	board.run.helmet_rank = 6
+	board.run.gloves_id = Loadout.IRON_GRIP
+	board.run.gloves_rank = 6
+	board.run.perks = [{"id": Loadout.HOT_STREAK, "rank": 3}, {"id": Loadout.TWO_MINUTE, "rank": 3}]
+	board.run.curse_ids = [Loadout.HEAVY, Loadout.SHANKY]
+	board.run.rebuild_stats()
+	board.run.kick_number = 19
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.kick_resolved = true
+	board.run.last_result_made = true
+	board.run.roll_offer()
+	if not board.run.awaiting_offer or board.run.offer.size() != 0:
+		print("empty offer did not stay open, cards ", board.run.offer.size())
+		return false
+	if not await _capture("offer_empty_skip.png"):
+		return false
+	if board.run.pick_card(0) or board.run.pick_card(1) or board.run.pick_card(2):
+		print("empty offer accepted a number key")
+		return false
+	if not board.run.skip_offer():
+		print("empty offer did not skip")
+		return false
+	return true
+
+
+func _shoot_power_result(kick_number: int, file_name: String, expect: String, expect_range: float) -> bool:
+	board.run.kick_number = kick_number
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.kick_resolved = false
+	board.run.last_result_made = false
+	board.run.awaiting_offer = false
+	board.run.spot_yards = 0.0
+	board.run.attempts = 3
+	board.set_wind(0.0, 0.0)
+	board.force_weather(RunLogic.CLEAR)
+	board.load_current_kick()
+	board.logic.set_seed(3)
+	_finish_full_power()
+	if board.logic.result_text != expect or absf(board.logic.max_range - expect_range) > 0.05:
+		print(file_name, " got ", board.logic.result_text, " range ", board.logic.max_range, " power ", board.logic.power)
+		return false
+	return await _capture(file_name)
+
+
+func _finish_full_power() -> void:
+	var stats: KickerStats = board.logic.stats
+	board.logic.press_space()
+	board.logic.advance(100.0 / stats.power_speed)
+	if board.logic.phase == KickLogic.Phase.ACCURACY:
+		board.logic.advance(board.logic.needle / stats.accuracy_speed)
+		if board.logic.phase == KickLogic.Phase.ACCURACY:
+			board.logic.press_space()
+	if board.logic.phase == KickLogic.Phase.FLIGHT:
+		board.logic.advance(board.logic.flight_duration)
 
 
 func _set_accuracy_needle(power_value: float, along: float) -> void:
