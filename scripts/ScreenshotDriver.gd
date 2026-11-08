@@ -387,6 +387,9 @@ func _ready() -> void:
 	if not await _capture_m2_kickers():
 		get_tree().quit(1)
 		return
+	if not await _capture_ball_sprites():
+		get_tree().quit(1)
+		return
 	get_tree().quit()
 
 
@@ -1842,6 +1845,108 @@ func _capture_m2_kickers() -> bool:
 	print("CARLOS PERFECT ", board.logic.perfect, " e ", board.logic.accuracy_error, " ", board.logic.result_text)
 	if not await _capture("carlos_numero_dos_perfect.png"):
 		return false
+	return true
+
+
+func _capture_ball_sprites() -> bool:
+	SaveData.try_unlock(Kickers.PHIL)
+	SaveData.try_unlock(Kickers.GARY)
+	SaveData.try_unlock(Kickers.VEX)
+	SaveData.try_unlock(Kickers.COLE)
+	SaveData.try_unlock(Kickers.WILLOW)
+	SaveData.try_unlock(Kickers.CARLOS)
+	var roster: Array = [
+		[0, "bruce", "farm_ball"],
+		[1, "walkon", "team_issue"],
+		[2, "phil", "gelcap"],
+		[3, "gary", "lucky_ball"],
+		[4, "vex", "flying_saucer"],
+		[5, "cole", "showtime"],
+		[6, "willow", "chill_ball"],
+		[7, "carlos", "secret_weapon"],
+	]
+	for entry in roster:
+		board.highlight = int(entry[0])
+		board.confirm_kicker()
+		board.force_weather(RunLogic.CLEAR)
+		board.run.set_wind(0.0, 0.0)
+		board.load_current_kick()
+		board.logic.phase = KickLogic.Phase.AIMING
+		board.logic.needle_angle = MeterGauge.MAX_ANGLE
+		board._pose = "idle"
+		var art := Kickers.ball_sprite(board.run.kicker_id)
+		print("BALL ", entry[1], " ", art)
+		if art == "":
+			print("Missing ball sprite for ", entry[1])
+			return false
+		if not await _capture("tee_%s_%s.png" % [str(entry[1]), str(entry[2])]):
+			return false
+		if not await _capture_ball_zoom("tee_%s_%s_close.png" % [str(entry[1]), str(entry[2])], true):
+			return false
+	var flights: Array = [
+		[0, "bruce", "farm_ball"],
+		[6, "willow", "chill_ball"],
+	]
+	for entry in flights:
+		board.highlight = int(entry[0])
+		board.confirm_kicker()
+		board.force_weather(RunLogic.CLEAR)
+		board.run.set_wind(0.0, 0.0)
+		board.load_current_kick()
+		_swing_meter(70.0, 0.0)
+		if board.logic.phase == KickLogic.Phase.FLIGHT:
+			board.logic.advance(board.logic.flight_duration * 0.42)
+		board._step_kick_pose(0.3)
+		if not await _capture("flight_%s_%s.png" % [str(entry[1]), str(entry[2])]):
+			return false
+		if not await _capture_ball_zoom("flight_%s_%s_close.png" % [str(entry[1]), str(entry[2])], false):
+			return false
+	board.highlight = 3
+	board.confirm_kicker()
+	board.force_weather(RunLogic.CLEAR)
+	board.run.set_wind(0.0, 0.0)
+	board.load_current_kick()
+	board.logic.press_space()
+	if board.logic.windup_left > 0.0:
+		board.logic.advance(board.logic.windup_left)
+	board.logic.advance(board.logic.seconds_to_power(100.0))
+	if not board.logic.shanked:
+		print("Expected a shank for the ball shot")
+		return false
+	if board.logic.phase == KickLogic.Phase.FLIGHT:
+		board.logic.advance(minf(0.28, board.logic.flight_duration * 0.2))
+	board._step_kick_pose(0.2)
+	if not await _capture("shank_gary_lucky_ball.png"):
+		return false
+	if not await _capture_ball_zoom("shank_gary_lucky_ball_close.png", false):
+		return false
+	return true
+
+
+func _capture_ball_zoom(file_name: String, with_kicker: bool) -> bool:
+	await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+	var image: Image = board.get_viewport().get_texture().get_image()
+	if image == null or board._ball == null:
+		return false
+	var screen: Vector2 = board.world_to_screen(board._ball.position)
+	var width := 280
+	var height := 320
+	var x := int(screen.x) - 120
+	var y := int(screen.y) - 160
+	if with_kicker:
+		x -= 90
+		width = 380
+	x = clampi(x, 0, maxi(image.get_width() - width, 0))
+	y = clampi(y, 0, maxi(image.get_height() - height, 0))
+	var crop := image.get_region(Rect2i(x, y, width, height))
+	crop.resize(width * 3, height * 3, Image.INTERPOLATE_NEAREST)
+	var path := shot_dir.path_join(file_name)
+	var err: Error = crop.save_png(path)
+	if err != OK:
+		print("FAILED to save ", path, " error ", err)
+		return false
+	print("Saved ", path, " ", crop.get_width(), "x", crop.get_height())
 	return true
 
 

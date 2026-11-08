@@ -289,6 +289,190 @@ static func field_frame(id: String, pose: String) -> String:
 	return ""
 
 
+static func ball_sprite(id: String, place: String = "any") -> String:
+	_ensure_balls()
+	var row: Dictionary = _ball_rows.get(id, {})
+	if row.is_empty():
+		return ""
+	if place == "tee" and str(row.get("tee", "")) != "":
+		return str(row["tee"])
+	if place == "air" and str(row.get("air", "")) != "":
+		return str(row["air"])
+	if str(row.get("any", "")) != "":
+		return str(row["any"])
+	if str(row.get("tee", "")) != "":
+		return str(row["tee"])
+	return str(row.get("air", ""))
+
+
+# Match ball art without touching the disk. A missing kicker returns an empty picture.
+static func match_balls(paths: Array) -> Dictionary:
+	var named: Dictionary = {}
+	var fallback: Dictionary = {}
+	for path in paths:
+		var text := str(path)
+		if _ball_blocked(text):
+			continue
+		var stem := text.get_file().get_basename()
+		var key := _ball_key(stem)
+		var slot := _ball_place(key)
+		var owner := _ball_owner_by_name(key, text)
+		if owner != "":
+			_push_ball(named, owner, text, slot, _ball_name_score(text))
+			continue
+		var backup := _ball_owner_by_kicker(key, text)
+		if backup != "":
+			_push_ball(fallback, backup, text, slot, 1)
+	var rows := {}
+	for id in [BIG_BRUCE, WALK_ON, PHIL, GARY, VEX, COLE, WILLOW, CARLOS]:
+		var hits: Array = named.get(id, [])
+		if hits.is_empty():
+			hits = fallback.get(id, [])
+		rows[id] = _pick_ball_slots(hits)
+	return rows
+
+
+static func _ball_key(stem: String) -> String:
+	var flat := stem.to_lower().replace(" ", "").replace("_", "").replace("-", "")
+	if flat.begins_with("the"):
+		flat = flat.substr(3)
+	return flat
+
+
+static func _ball_blocked(path: String) -> bool:
+	var flat := path.to_lower().replace("-", "_").replace(" ", "_")
+	if flat.find("hero_ball") >= 0 or flat.find("heroball") >= 0:
+		return true
+	if flat.find("/loadout/") >= 0 or flat.find("/vitamins/") >= 0 or flat.find("/shop/") >= 0:
+		return true
+	return false
+
+
+static func _ball_aliases(id: String) -> Array:
+	match id:
+		BIG_BRUCE:
+			return ["farmball"]
+		WALK_ON:
+			return ["teamissue"]
+		PHIL:
+			return ["gelcap"]
+		GARY:
+			return ["luckyball"]
+		VEX:
+			return ["flyingsaucer", "saucer"]
+		COLE:
+			return ["showtime"]
+		WILLOW:
+			return ["chillball"]
+		CARLOS:
+			return ["notsosecretweapon", "secretweapon"]
+	return []
+
+
+static func _ball_owner_by_name(key: String, path: String) -> String:
+	var best := ""
+	var best_len := 0
+	for id in [BIG_BRUCE, WALK_ON, PHIL, GARY, VEX, COLE, WILLOW, CARLOS]:
+		for alias in _ball_aliases(id):
+			var token := str(alias)
+			if token == "" or key.find(token) < 0:
+				continue
+			if token == "saucer" and not _saucer_is_vex(key, path):
+				continue
+			if token.length() > best_len:
+				best = id
+				best_len = token.length()
+	return best
+
+
+static func _saucer_is_vex(key: String, path: String) -> bool:
+	if key.find("flying") >= 0 or key.find("vex") >= 0:
+		return true
+	return path.to_lower().find("vex") >= 0
+
+
+static func _ball_owner_by_kicker(key: String, path: String) -> String:
+	var file_name := path.get_file().get_basename().to_lower()
+	var named_ball := key.find("ball") >= 0 or file_name == "ball"
+	var folder_ball := path.to_lower().find("/ball/") >= 0
+	if not named_ball and not folder_ball:
+		return ""
+	var hay := "_" + path.to_lower().replace("/", "_").replace("-", "_").replace(" ", "_") + "_"
+	var best := ""
+	var best_len := 0
+	for id in [BIG_BRUCE, WALK_ON, PHIL, GARY, VEX, COLE, WILLOW, CARLOS]:
+		for alias in aliases(id):
+			var token := str(alias)
+			if token == "":
+				continue
+			var in_key := key.find(_ball_key(token)) >= 0
+			var in_path := hay.find("_" + token + "_") >= 0
+			if (in_key or in_path) and token.length() > best_len:
+				best = id
+				best_len = token.length()
+	return best
+
+
+static func _ball_place(key: String) -> String:
+	if key.find("tee") >= 0 or key.find("idle") >= 0 or key.find("ground") >= 0:
+		return "tee"
+	if key.find("flight") >= 0 or key.find("air") >= 0 or key.find("side") >= 0:
+		return "air"
+	return "any"
+
+
+static func _ball_name_score(path: String) -> int:
+	var flat := path.to_lower()
+	var score := 1
+	if flat.find("ball") >= 0:
+		score += 4
+	if flat.find("/balls/") >= 0 or flat.find("/ball/") >= 0:
+		score += 2
+	return score
+
+
+static func _push_ball(bucket: Dictionary, id: String, path: String, slot: String, score: int) -> void:
+	if not bucket.has(id):
+		bucket[id] = []
+	var hits: Array = bucket[id]
+	hits.append({"path": path, "slot": slot, "score": score})
+	bucket[id] = hits
+
+
+static func _pick_ball_slots(hits: Array) -> Dictionary:
+	var best := {"tee": "", "air": "", "any": ""}
+	var score := {"tee": -1, "air": -1, "any": -1}
+	var top := -1
+	var top_path := ""
+	for hit in hits:
+		var slot := str(hit.get("slot", "any"))
+		if not score.has(slot):
+			slot = "any"
+		var value := int(hit.get("score", 0))
+		if value > int(score[slot]):
+			score[slot] = value
+			best[slot] = str(hit.get("path", ""))
+		if value > top:
+			top = value
+			top_path = str(hit.get("path", ""))
+	if str(best["any"]) == "":
+		best["any"] = top_path
+	return best
+
+
+static var _balls_ready := false
+static var _ball_rows: Dictionary = {}
+
+
+static func _ensure_balls() -> void:
+	if _balls_ready:
+		return
+	_balls_ready = true
+	var paths: Array = []
+	_walk_pngs("res://", paths)
+	_ball_rows = match_balls(paths)
+
+
 static var _art_ready := false
 static var _frames := {}
 

@@ -302,6 +302,25 @@ func _tint_ball() -> void:
 		_ball.modulate = ink.lerp(Color(0.72, 0.42, 0.18), 0.45)
 
 
+func _apply_ball_sprite() -> void:
+	if _ball == null:
+		return
+	var place := "tee"
+	if logic.phase == KickLogic.Phase.FLIGHT or logic.phase == KickLogic.Phase.RESULT:
+		place = "air"
+	var path := Kickers.ball_sprite(run.kicker_id, place)
+	var custom := path != ""
+	if path == "":
+		path = "res://art/field/football.png"
+	if str(_ball.get_meta("art_path", "")) != path:
+		_fit_sprite(_ball, path)
+		_ball.set_meta("art_path", path)
+	if custom:
+		_ball.modulate = Color(1, 1, 1, 1)
+	else:
+		_tint_ball()
+
+
 func advance_run() -> bool:
 	if not run.go_to_next_kick():
 		return false
@@ -611,7 +630,13 @@ func _unhandled_input(event: InputEvent) -> void:
 		_power_press_queued = true
 		refresh_view()
 		return
+	# Input runs before _process. A Space #3 lock (and a practice swing) is
+	# already FLIGHT by the time the frame samples the phase, so the contact
+	# and airborne cues have to be read from the phase before the press.
+	var phase_before := logic.phase
+	var forward_before := logic.ball_forward_yards
 	logic.press_space()
+	_sync_kick_audio(phase_before, forward_before)
 	if logic.insured:
 		run.consume_insurance()
 	refresh_view()
@@ -1032,6 +1057,7 @@ func _fit_sprite(sprite: Sprite3D, path: String) -> void:
 
 
 func _place_world() -> void:
+	_apply_ball_sprite()
 	var tee := _tee_position()
 	var spot := _ball_position()
 	_ball.position = spot

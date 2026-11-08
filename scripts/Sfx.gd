@@ -23,6 +23,7 @@ const MENU_CONTEXTS: Array[String] = ["title", "menu", "options", "select", "rec
 const UI_CONTEXTS: Array[String] = ["offer", "shop", "belt", "curse", "mulligan"]
 
 var played: Array[Dictionary] = []
+var play_calls := 0
 var kick_footsteps := false
 var kick_contact := false
 var kick_airborne := false
@@ -179,6 +180,7 @@ func play_pool(pool: String) -> String:
 		player.bus = BUS
 		player.pitch_scale = 1.0
 		player.play()
+		play_calls += 1
 	played.append({"pool": pool, "file": path.get_file()})
 	return path.get_file()
 

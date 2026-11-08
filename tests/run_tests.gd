@@ -8,12 +8,9 @@ var failures := 0
 
 func _initialize() -> void:
 	_run()
-	if failures == 0:
-		print("ALL TESTS PASSED")
-		quit(0)
-	else:
-		print("FAILED %d CHECKS" % failures)
-		quit(1)
+	# The live kick has to run after the tree is up. During _initialize the
+	# autoload is not inside the tree yet, so play() would be skipped.
+	call_deferred("_finish_live")
 
 
 func _run() -> void:
@@ -49,7 +46,36 @@ func _run() -> void:
 	_check_new_kickers()
 	_check_auto_shank()
 	_check_sfx()
+	_check_ball_art()
 	_check_m2_kickers()
+
+
+func _finish_live() -> void:
+	_check_live_kick_sounds()
+	_release_sfx()
+	await create_timer(0.6).timeout
+	_release_sfx()
+	if failures == 0:
+		print("ALL TESTS PASSED")
+		quit(0)
+	else:
+		print("FAILED %d CHECKS" % failures)
+		quit(1)
+
+
+func _release_sfx() -> void:
+	var sfx: KickSfx = get_root().get_node_or_null("Sfx")
+	if sfx == null:
+		return
+	if sfx._air != null:
+		sfx._air.stop()
+		sfx._air.stream = null
+	for pool in sfx._players.keys():
+		var player: AudioStreamPlayer = sfx._players[pool]
+		if player != null:
+			player.stop()
+			player.stream = null
+	sfx._streams.clear()
 
 
 func check(ok: bool, label: String) -> void:
@@ -3005,6 +3031,168 @@ func _check_sfx() -> void:
 	var drag_body := source.substr(drag_at, source.find("\nfunc ", drag_at + 10) - drag_at)
 	check(drag_body.find("_cue") < 0, "dragging a volume slider does not click on every move")
 	check(source.find("Sfx.cue(\"meter\")") < 0 and source.find("Sfx.cue(\"practice\")") < 0 and source.find("Sfx.cue(\"aim\")") < 0 and source.find("Sfx.cue(\"debug\")") < 0, "the meter, aim, practice, and debug keys are not click cues")
+
+
+func _check_ball_art() -> void:
+	check(Kickers.ball_sprite(Kickers.BIG_BRUCE).ends_with("farm_ball.png"), "Bruce's ball is farm_ball.png, got %s" % Kickers.ball_sprite(Kickers.BIG_BRUCE))
+	check(Kickers.ball_sprite(Kickers.WALK_ON).ends_with("team_issue.png"), "Walk-On's ball is team_issue.png, got %s" % Kickers.ball_sprite(Kickers.WALK_ON))
+	check(Kickers.ball_sprite(Kickers.PHIL).ends_with("gelcap.png"), "Phil's ball is gelcap.png, got %s" % Kickers.ball_sprite(Kickers.PHIL))
+	check(Kickers.ball_sprite(Kickers.GARY).ends_with("lucky_ball.png"), "Gary's ball is lucky_ball.png, got %s" % Kickers.ball_sprite(Kickers.GARY))
+	check(Kickers.ball_sprite(Kickers.VEX).ends_with("flying_saucer.png"), "Vex's ball is flying_saucer.png, got %s" % Kickers.ball_sprite(Kickers.VEX))
+	check(Kickers.ball_sprite(Kickers.COLE).ends_with("showtime.png"), "Cole's ball is showtime.png, got %s" % Kickers.ball_sprite(Kickers.COLE))
+	check(Kickers.ball_sprite(Kickers.WILLOW).ends_with("chill_ball.png"), "Willow's ball is chill_ball.png, got %s" % Kickers.ball_sprite(Kickers.WILLOW))
+	check(Kickers.ball_sprite(Kickers.CARLOS).ends_with("not_so_secret_weapon.png"), "Carlos's ball is not_so_secret_weapon.png, got %s" % Kickers.ball_sprite(Kickers.CARLOS))
+	check(Kickers.ball_sprite(Kickers.WALK_ON).find("hero") < 0 and Kickers.ball_sprite(Kickers.BIG_BRUCE).find("hero") < 0, "hero_ball is not a kicker ball")
+	check(Kickers.ball_sprite("nobody") == "", "a kicker with no ball file falls back to no sprite path")
+	var blocked := Kickers.match_balls([
+		"res://art/loadout/hero_ball.png",
+		"res://art/vitamins/protein_shake.png",
+		"res://art/balls/farm_ball.png",
+		"res://art/saucer.png",
+	])
+	check(str(blocked[Kickers.BIG_BRUCE]["any"]).ends_with("farm_ball.png"), "a ball-name file wins over unrelated art")
+	check(str(blocked[Kickers.WALK_ON]["any"]) == "", "Walk-On does not inherit hero_ball when team-issue is missing")
+	check(str(blocked[Kickers.VEX]["any"]) == "", "a bare saucer file is not Vex's ball")
+	var loose := Kickers.match_balls([
+		"res://art/The Farm Ball.png",
+		"res://art/phil_gelcap.png",
+		"res://vex/saucer.png",
+		"res://art/carlos_not_so_secret_weapon.png",
+		"res://art/team-issue.png",
+		"res://sprites/lucky ball.png",
+		"res://art/chillball_flight.png",
+		"res://art/chillball_tee.png",
+	])
+	check(str(loose[Kickers.BIG_BRUCE]["any"]).ends_with("The Farm Ball.png"), "spaces and a leading The still match The Farm Ball")
+	check(str(loose[Kickers.PHIL]["any"]).ends_with("phil_gelcap.png"), "phil_gelcap.png counts as The Gelcap")
+	check(str(loose[Kickers.VEX]["any"]).ends_with("saucer.png") and str(loose[Kickers.VEX]["any"]).find("vex") >= 0, "saucer counts only when the path is clearly Vex")
+	check(str(loose[Kickers.CARLOS]["any"]).ends_with("carlos_not_so_secret_weapon.png"), "carlos_not_so_secret_weapon.png counts")
+	check(str(loose[Kickers.WALK_ON]["any"]).ends_with("team-issue.png"), "team-issue ignores the hyphen")
+	check(str(loose[Kickers.GARY]["any"]).ends_with("lucky ball.png"), "lucky ball ignores the space")
+	check(str(loose[Kickers.WILLOW]["tee"]).ends_with("chillball_tee.png") and str(loose[Kickers.WILLOW]["air"]).ends_with("chillball_flight.png"), "tee and flight views stay on the matching kicker")
+	var fallback := Kickers.match_balls(["res://willow/ball.png", "res://art/loadout/hero_ball.png"])
+	check(str(fallback[Kickers.WILLOW]["any"]) == "res://willow/ball.png", "willow/ball.png is the kicker-plus-ball fallback")
+	check(str(fallback[Kickers.WALK_ON]["any"]) == "", "the kicker-plus-ball fallback still ignores hero_ball")
+	var same := Kickers.ball_sprite(Kickers.BIG_BRUCE, "tee")
+	check(same == Kickers.ball_sprite(Kickers.BIG_BRUCE, "air") and same.ends_with("farm_ball.png"), "one picture is used on the tee and in the air")
+
+
+func _space_key() -> InputEventKey:
+	var event := InputEventKey.new()
+	event.keycode = KEY_SPACE
+	event.physical_keycode = KEY_SPACE
+	event.pressed = true
+	event.echo = false
+	return event
+
+
+func _park_open_lock(kick: KickLogic, power_value: float, error_value: float) -> void:
+	kick.press_space()
+	if kick.windup_left > 0.0:
+		kick.advance(kick.windup_left)
+	if power_value >= KickConstants.METER_MAX - 0.001:
+		kick.take_power_press(kick.seconds_to_power(power_value))
+	elif power_value > 0.0:
+		kick.advance(kick.seconds_to_power(power_value))
+		if kick.phase == KickLogic.Phase.POWER:
+			kick.press_space()
+	if kick.phase == KickLogic.Phase.ACCURACY:
+		var wait := kick.seconds_until_error(error_value)
+		if wait > 0.0:
+			kick.advance(wait)
+
+
+func _live_pools_after_space(game, sfx: KickSfx) -> Array:
+	sfx.played.clear()
+	var calls := sfx.play_calls
+	game._unhandled_input(_space_key())
+	game._process(0.016)
+	check(sfx.play_calls >= calls + 2, "a live lock calls play() for contact and airborne, calls %s -> %s" % [calls, sfx.play_calls])
+	return _sfx_pools(sfx)
+
+
+func _check_live_kick_sounds() -> void:
+	var settings: GameSettings = get_root().get_node("Settings")
+	if settings.binds.is_empty():
+		settings._fill_default_binds()
+	settings.apply_binds()
+	settings._ensure_buses()
+	var saved_sfx := settings.sfx
+	settings.set_volume("sfx", 100, false)
+	var sfx: KickSfx = get_root().get_node("Sfx")
+	sfx.scan()
+	sfx._ensure_players()
+	check(sfx.files_of("ballcontact").size() >= 2, "ballcontact files are on disk for the live kick, found %s" % sfx.files_of("ballcontact").size())
+	check(sfx.files_of("air_perfect").size() >= 2 and sfx.files_of("air_good").size() >= 2 and sfx.files_of("air_bad").size() >= 3, "airborne files are on disk for the live kick")
+	check(sfx.files_of("shank").size() >= 2, "shank files are on disk for the live kick")
+	OS.set_environment("FG_SHOTS", "")
+	var packed: PackedScene = load("res://scenes/main.tscn")
+	var game = packed.instantiate()
+	get_root().add_child(game)
+	game._taking_pictures = false
+	game.highlight = 1
+	game.confirm_kicker()
+	game.load_current_kick()
+	_park_open_lock(game.logic, 40.0, 0.0)
+	check(game.logic.phase == KickLogic.Phase.ACCURACY, "the live perfect kick is waiting on Space #3")
+	var perfect_pools := _live_pools_after_space(game, sfx)
+	check(perfect_pools.has("ballcontact") and perfect_pools.has("air_perfect"), "a simulated perfect kick plays contact and the perfect airborne pool, got %s" % str(perfect_pools))
+	check(not perfect_pools.has("air_good") and not perfect_pools.has("air_bad") and not perfect_pools.has("shank"), "a perfect lock does not play good, bad, or shank")
+	var contact_player: AudioStreamPlayer = sfx._players["ballcontact"]
+	var air_player: AudioStreamPlayer = sfx._players["air_perfect"]
+	check(contact_player.stream != null and air_player.stream != null, "contact and airborne players are holding a loaded stream")
+	check(contact_player.bus == "SFX" and air_player.bus == "SFX", "the live kick is routed through the SFX bus")
+	check(is_equal_approx(contact_player.pitch_scale, 1.0) and is_equal_approx(air_player.pitch_scale, 1.0), "kick files are not pitch-shifted")
+	check(contact_player.stream.get_length() > 0.05 and air_player.stream.get_length() > 0.05, "the played kick files have a real duration")
+	var contact_file := ""
+	var air_file := ""
+	for row in sfx.played:
+		if str(row["pool"]) == "ballcontact":
+			contact_file = str(row["file"])
+		if str(row["pool"]) == "air_perfect":
+			air_file = str(row["file"])
+	check(contact_file == "ballcontact1.mp3" or contact_file == "ballcontact2.mp3", "the live contact file is ballcontact1 or ballcontact2, got %s" % contact_file)
+	check(air_file.begins_with("perfectaccuracykick") and air_file.ends_with(".mp3"), "the live perfect airborne file is from the perfect pool, got %s" % air_file)
+	game.load_current_kick()
+	_park_open_lock(game.logic, 40.0, 4.0)
+	var good_pools := _live_pools_after_space(game, sfx)
+	check(good_pools.has("ballcontact") and good_pools.has("air_good") and not good_pools.has("air_perfect") and not good_pools.has("air_bad"), "a good lock plays contact and the good airborne pool, got %s" % str(good_pools))
+	game.load_current_kick()
+	_park_open_lock(game.logic, 40.0, 10.0)
+	var bad_pools := _live_pools_after_space(game, sfx)
+	check(bad_pools.has("ballcontact") and bad_pools.has("air_bad") and not bad_pools.has("air_perfect") and not bad_pools.has("air_good"), "a lock outside the good band plays contact and the bad airborne pool, got %s" % str(bad_pools))
+	var records = get_root().get_node("SaveData")
+	var kept_path := str(records.file_path)
+	records.file_path = "user://fg_live_kick_sfx.cfg"
+	records.reset_save()
+	records.try_unlock(Kickers.CARLOS)
+	game.highlight = 7
+	game.confirm_kicker()
+	game.load_current_kick()
+	_park_open_lock(game.logic, 100.0, 12.0)
+	var dos_pools := _live_pools_after_space(game, sfx)
+	check(game.logic.perfect and dos_pools.has("ballcontact") and dos_pools.has("air_perfect") and not dos_pools.has("air_bad"), "Numero Dos auto-PERFECT uses the perfect airborne pool, got %s" % str(dos_pools))
+	game.highlight = 1
+	game.confirm_kicker()
+	game.load_current_kick()
+	var shank_logic: KickLogic = game.logic
+	shank_logic.press_space()
+	if shank_logic.windup_left > 0.0:
+		shank_logic.advance(shank_logic.windup_left)
+	shank_logic.advance(shank_logic.seconds_to_power(98.0))
+	check(shank_logic.phase == KickLogic.Phase.POWER and not shank_logic.shanked, "the shank test is still on the power arc")
+	sfx.played.clear()
+	var shank_calls := sfx.play_calls
+	game._process(0.25)
+	var shank_pools := _sfx_pools(sfx)
+	check(shank_logic.shanked, "letting the needle reach MAX shanks")
+	check(sfx.play_calls >= shank_calls + 1, "a live shank calls play() on the shank file")
+	check(shank_pools.has("shank"), "a live shank plays the shank pool, got %s" % str(shank_pools))
+	check(not shank_pools.has("ballcontact") and not shank_pools.has("air_bad") and not shank_pools.has("air_good") and not shank_pools.has("air_perfect"), "a live shank does not play contact or airborne, got %s" % str(shank_pools))
+	game.free()
+	records.file_path = kept_path
+	records.load_file()
+	settings.set_volume("sfx", saved_sfx, false)
 
 
 func _check_m2_kickers() -> void:
