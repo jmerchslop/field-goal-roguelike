@@ -39,6 +39,7 @@ func _run() -> void:
 	_check_wind_and_pool()
 	_check_weather_and_bosses()
 	_check_curses_and_rarity()
+	_check_loadout_sprites()
 
 
 func check(ok: bool, label: String) -> void:
@@ -1374,4 +1375,39 @@ func _check_curses_and_rarity() -> void:
 	check(records.has_trophy("bullseye_collector"), "the 10th down-the-middle make earns Bullseye Collector")
 	records.file_path = "user://save.cfg"
 	records.load_file()
+
+
+func _check_loadout_sprites() -> void:
+	check(Loadout.sprite_path(Loadout.SCOUT_LID) == "res://art/loadout/scout_lid.png", "Scout Lid finds its sprite")
+	check(Loadout.sprite_path(Loadout.HERO_BALL).ends_with("hero_ball.png"), "Hero Ball finds its sprite")
+	check(Loadout.sprite_path(Loadout.ICED).ends_with("iced.png"), "Iced finds its sprite")
+	check(Loadout.sprite_path(Loadout.CANNON) == "", "Cannon Cleats has no sprite and falls back to text")
+	check(Loadout.sprite_path(Loadout.TWO_MINUTE).ends_with("two_minute_drill.png"), "Two-Minute Drill is mapped to a sprite")
+	check(Loadout.PERK_IDS.has(Loadout.TWO_MINUTE) == false, "Two-Minute Drill is not in the offer pool")
+	var offer: Array = Loadout.legal_perks(Loadout.empty_state(), 3)
+	for card in offer:
+		check(str(card.get("id", "")) != Loadout.TWO_MINUTE, "a legal perk offer never includes Two-Minute Drill")
+	check(Loadout.empty_slot_path(Loadout.CLEATS).ends_with("empty_cleats.png"), "empty cleats use the empty frame")
+	check(Loadout.empty_slot_path(Loadout.HELMET).ends_with("empty_helmet.png"), "empty helmets use the empty frame")
+	check(Loadout.empty_slot_path(Loadout.GLOVES).ends_with("empty_gloves.png"), "empty gloves use the empty frame")
+	check(Loadout.empty_slot_path(Loadout.CURSE).ends_with("empty_curse.png"), "empty curses use the empty frame")
+	check(Loadout.empty_slot_path(Loadout.PERK) == "", "empty perks have no frame and use a box")
+	check(Loadout.rank_badge(Loadout.SCOUT_LID, 1) == "I", "equipment rank I shows a badge")
+	check(Loadout.rank_badge(Loadout.SCOUT_LID, 4) == "IV", "equipment rank IV shows a badge")
+	check(Loadout.rank_badge(Loadout.DEEP_BENCH, 2) == "II", "a perk rank shows a badge")
+	check(Loadout.rank_badge(Loadout.ICED, 1) == "", "a curse has no rank badge")
+	check(Loadout.sprite_path(Loadout.SCOUT_LID) == Loadout.sprite_path(Loadout.SCOUT_LID), "the offer card and the HUD ask for the same texture")
+	var run := RunLogic.new()
+	run.new_run()
+	run.give(Loadout.SCOUT_LID, 1)
+	var helmet := run.helmet_id
+	var rank := run.helmet_rank
+	run.force_offer([{"id": Loadout.HERO_BALL, "rank": 1}])
+	run.roll_offer()
+	check(run.skip_offer() and run.helmet_id == helmet and run.helmet_rank == rank and run.perks.is_empty(), "skip does not change any slot")
+	run.give(Loadout.SCOUT_LID, 2)
+	check(run.helmet_id == Loadout.SCOUT_LID and run.helmet_rank == 2 and Loadout.sprite_path(run.helmet_id) == Loadout.sprite_path(Loadout.SCOUT_LID), "a rank-up keeps the same sprite")
+	check(Loadout.rank_badge(run.helmet_id, run.helmet_rank) == "II", "the rank-up badge is II")
+	run.new_run()
+	check(run.cleats_id == "" and run.helmet_id == "" and run.gloves_id == "" and run.perks.is_empty() and run.curse_ids.is_empty(), "a new run clears every icon")
 

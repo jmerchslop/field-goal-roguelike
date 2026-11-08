@@ -28,6 +28,8 @@ const HOT_STREAK := "hot_streak"
 const STORM_CHASER := "storm_chaser"
 const HERO_BALL := "hero_ball"
 const GLASS_LEG := "glass_leg"
+# Sprite only. Not offered and not given any stats.
+const TWO_MINUTE := "two_minute_drill"
 const ICED := "iced"
 const SHANKY := "shanky_cleats"
 const HEAVY := "heavy_ball"
@@ -136,6 +138,8 @@ static func piece_name(id: String) -> String:
 			return "Hero Ball"
 		GLASS_LEG:
 			return "Glass Leg"
+		TWO_MINUTE:
+			return "Two-Minute Drill"
 		ICED:
 			return "Iced"
 		SHANKY:
@@ -494,3 +498,76 @@ static func apply(stats: KickerStats, state: Dictionary, howling: bool) -> void:
 	stats.curse_mult = curse_mult
 	stats.angle_scale = angle
 	stats.attempt_cap = clampi(stats.attempt_cap, 1, KickConstants.ATTEMPT_CAP_MAX)
+
+
+const _SPRITE_DIR := "res://art/loadout/"
+
+# File names for the sprites Jordan provided. Missing items stay "".
+static func sprite_path(id: String) -> String:
+	var file := ""
+	match id:
+		SCOUT_LID:
+			file = "scout_lid.png"
+		DOINK_CAP:
+			file = "doink_cap.png"
+		DEEP_BENCH:
+			file = "deep_bench.png"
+		HOT_STREAK:
+			file = "hot_streak.png"
+		STORM_CHASER:
+			file = "storm_chaser.png"
+		HERO_BALL:
+			file = "hero_ball.png"
+		GLASS_LEG:
+			file = "glass_leg.png"
+		TWO_MINUTE:
+			file = "two_minute_drill.png"
+		ICED:
+			file = "iced.png"
+		SHANKY:
+			file = "shanky_cleats.png"
+		HEAVY:
+			file = "heavy_ball.png"
+		HOWLING:
+			file = "howling_wind.png"
+		SHAKY:
+			file = "shaky_arrow.png"
+		NARROW:
+			file = "narrow_posts.png"
+		STONE:
+			file = "stone_toe.png"
+		TIGHT:
+			file = "tight_window.png"
+	if file == "":
+		return ""
+	var path := _SPRITE_DIR + file
+	if ResourceLoader.exists(path):
+		return path
+	return ""
+
+
+static func empty_slot_path(slot: String) -> String:
+	var file := ""
+	if slot == CLEATS:
+		file = "empty_cleats.png"
+	elif slot == HELMET:
+		file = "empty_helmet.png"
+	elif slot == GLOVES:
+		file = "empty_gloves.png"
+	elif slot == CURSE:
+		file = "empty_curse.png"
+	if file == "":
+		return ""
+	var path := _SPRITE_DIR + file
+	if ResourceLoader.exists(path):
+		return path
+	return ""
+
+
+# Equipment and perks show I–IV or I–II. Curses and empty slots show nothing.
+static func rank_badge(id: String, rank: int) -> String:
+	if id == "" or rank <= 0:
+		return ""
+	if CURSE_IDS.has(id):
+		return ""
+	return rank_label(rank)

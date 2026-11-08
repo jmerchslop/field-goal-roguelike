@@ -24,6 +24,7 @@ func _draw() -> void:
 	if not run.meter_hidden(on_meter, game.meter_time):
 		_draw_meter(logic, run)
 	_draw_hud(logic, run)
+	_draw_loadout_rail(run)
 	_draw_wind(logic, run)
 	_draw_laser(logic, run)
 	if run.awaiting_mulligan:
@@ -36,6 +37,7 @@ func _draw() -> void:
 		_draw_result(logic, run)
 	_draw_trophy(run)
 	_draw_save_note()
+	_draw_slot_tooltip()
 
 
 func _draw_meter(logic: KickLogic, run: RunLogic) -> void:
@@ -128,7 +130,7 @@ func _draw_band(low: float, high: float, color: Color) -> void:
 
 
 func _draw_hud(logic: KickLogic, run: RunLogic) -> void:
-	draw_rect(Rect2(12, 8, 420, 430), Color(0.02, 0.05, 0.08, 0.42))
+	draw_rect(Rect2(12, 8, 420, 280), Color(0.02, 0.05, 0.08, 0.42))
 	var x := 24.0
 	var y := 28.0
 	_text(Vector2(x, y), "Kick %d of %d" % [run.kick_number, RunTable.count()], 22, KickConstants.COLOR_TEXT)
@@ -155,8 +157,6 @@ func _draw_hud(logic: KickLogic, run: RunLogic) -> void:
 	else:
 		y += 24.0
 	_text(Vector2(x, y), "Aim %s°   negative is left" % KickLogic.format_angle(logic.aim_degrees), 16, KickConstants.COLOR_TEXT)
-	y += 22.0
-	_draw_loadout(run, x, y)
 	if run.is_boss() and run.phase == RunLogic.Phase.PLAYING:
 		_text_centered("BOSS KICK", 118.0, 28, KickConstants.COLOR_BOSS)
 	_draw_condition(run)
@@ -372,9 +372,10 @@ func _draw_offer(run: RunLogic) -> void:
 		var slot := str(card.get("slot", ""))
 		draw_rect(rect, Color(0.05, 0.08, 0.1, 0.94))
 		draw_rect(rect, _slot_color(slot), false, 4.0)
-		_text(rect.position + Vector2(14, 32), "%d  %s" % [i + 1, Loadout.type_label(slot)], 16, _slot_color(slot))
-		_text(rect.position + Vector2(14, 62), Loadout.card_title(id, rank), 20, KickConstants.COLOR_ATTEMPT)
-		_draw_wrapped(Loadout.effect_line(id, rank), Rect2(rect.position + Vector2(14, 84), Vector2(width - 28, 140)), 16)
+		_text(rect.position + Vector2(96, 32), "%d  %s" % [i + 1, Loadout.type_label(slot)], 16, _slot_color(slot))
+		_draw_slot_icon(id, rank, slot, Rect2(rect.position + Vector2(14, 28), Vector2(72, 72)), true)
+		_text(rect.position + Vector2(96, 62), Loadout.card_title(id, rank), 18, KickConstants.COLOR_ATTEMPT)
+		_draw_wrapped(Loadout.effect_line(id, rank), Rect2(rect.position + Vector2(96, 84), Vector2(width - 110, 150)), 16)
 	_text_centered("Reroll: %d left    F rerolls    S skips" % run.rerolls_left, 640.0, 18, KickConstants.COLOR_TEXT)
 	_text_centered("Skip takes nothing.", 666.0, 16, KickConstants.COLOR_TEXT)
 
@@ -483,32 +484,129 @@ func _text_centered(text: String, baseline_y: float, size: int, color: Color) ->
 	_text(Vector2(x, baseline_y), text, size, color)
 
 
-func _draw_loadout(run: RunLogic, x: float, y: float) -> void:
-	var slots: Array = [
-		["Cleats", run.cleats_id, run.cleats_rank, Loadout.CLEATS],
-		["Helmet", run.helmet_id, run.helmet_rank, Loadout.HELMET],
-		["Gloves", run.gloves_id, run.gloves_rank, Loadout.GLOVES],
+var slot_hits: Array = []
+var hover_slot := -1
+var pinned_slot := -1
+var _icons := {}
+
+
+func _process(_delta: float) -> void:
+	if game == null or game._taking_pictures:
+		return
+	var mouse := get_viewport().get_mouse_position()
+	var next := -1
+	for i in slot_hits.size():
+		var rect: Rect2 = slot_hits[i]["rect"]
+		if rect.has_point(mouse):
+			next = i
+	if next != hover_slot:
+		hover_slot = next
+		queue_redraw()
+
+
+func _draw_loadout_rail(run: RunLogic) -> void:
+	slot_hits = []
+	var entries: Array = [
+		{"name": "Cleats", "id": run.cleats_id, "rank": run.cleats_rank, "slot": Loadout.CLEATS},
+		{"name": "Helmet", "id": run.helmet_id, "rank": run.helmet_rank, "slot": Loadout.HELMET},
+		{"name": "Gloves", "id": run.gloves_id, "rank": run.gloves_rank, "slot": Loadout.GLOVES},
 	]
-	for slot in slots:
-		var label := "%s: —" % str(slot[0])
-		if str(slot[1]) != "":
-			var words := Loadout.piece_name(str(slot[1])).split(" ")
-			label = "%s: %s %s" % [str(slot[0]), str(words[0]), Loadout.rank_label(int(slot[2]))]
-		_text(Vector2(x, y), label, 15, _slot_color(str(slot[3])))
-		y += 18.0
 	for i in 2:
-		var label := "Perk %d: —" % (i + 1)
+		var perk_id := ""
+		var perk_rank := 0
 		if i < run.perks.size():
-			var item: Dictionary = run.perks[i]
-			label = "Perk %d: %s" % [i + 1, Loadout.card_title(str(item.get("id", "")), int(item.get("rank", 1)))]
-		_text(Vector2(x, y), label, 15, _slot_color(Loadout.PERK))
-		y += 18.0
+			perk_id = str(run.perks[i].get("id", ""))
+			perk_rank = int(run.perks[i].get("rank", 1))
+		entries.append({"name": "Perk", "id": perk_id, "rank": perk_rank, "slot": Loadout.PERK})
 	for i in 2:
-		var label := "Curse %d: —" % (i + 1)
+		var curse_id := ""
 		if i < run.curse_ids.size():
-			label = "Curse %d: %s" % [i + 1, Loadout.piece_name(str(run.curse_ids[i]))]
-		_text(Vector2(x, y), label, 15, _slot_color(Loadout.CURSE))
-		y += 18.0
+			curse_id = str(run.curse_ids[i])
+		entries.append({"name": "Curse", "id": curse_id, "rank": 0, "slot": Loadout.CURSE})
+	# Just left of the meter, clear of the score panel and the offer cards.
+	var origin := Vector2(1040, 40)
+	var step := 56.0
+	for i in entries.size():
+		var entry: Dictionary = entries[i]
+		var rect := Rect2(origin.x, origin.y + float(i) * step, 52, 52)
+		slot_hits.append({
+			"rect": rect,
+			"id": str(entry["id"]),
+			"rank": int(entry["rank"]),
+			"slot": str(entry["slot"]),
+			"name": str(entry["name"]),
+		})
+		_draw_slot_icon(str(entry["id"]), int(entry["rank"]), str(entry["slot"]), rect, true)
+
+
+func _draw_slot_icon(id: String, rank: int, slot: String, rect: Rect2, show_badge: bool) -> void:
+	draw_rect(rect, Color(0.05, 0.08, 0.1, 0.9))
+	draw_rect(rect, _slot_color(slot), false, 2.0)
+	var path := Loadout.sprite_path(id) if id != "" else Loadout.empty_slot_path(slot)
+	var texture := _icon(path)
+	if texture != null:
+		_draw_fit(texture, rect.grow(-4))
+	elif id != "":
+		var words := Loadout.piece_name(id).split(" ")
+		_text(rect.position + Vector2(4, 22), str(words[0]), 12, KickConstants.COLOR_TEXT)
+	elif slot == Loadout.PERK:
+		draw_rect(rect.grow(-8), Color(0.2, 0.24, 0.3, 0.9), false, 2.0)
+	var badge := Loadout.rank_badge(id, rank) if show_badge else ""
+	if badge != "":
+		var badge_box := Rect2(rect.position.x + rect.size.x - 28, rect.position.y + rect.size.y - 20, 28, 20)
+		draw_rect(badge_box, Color(0.95, 0.78, 0.16, 0.96))
+		var font := ThemeDB.fallback_font
+		if font != null:
+			var text_width := font.get_string_size(badge, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
+			var at := badge_box.position + Vector2((badge_box.size.x - text_width) * 0.5, 15)
+			draw_string(font, at, badge, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.12, 0.08, 0.02))
+
+
+func _draw_fit(texture: Texture2D, rect: Rect2) -> void:
+	var size := texture.get_size()
+	if size.x <= 0.0 or size.y <= 0.0:
+		return
+	var scale := minf(rect.size.x / size.x, rect.size.y / size.y)
+	var drawn := size * scale
+	var at := rect.position + (rect.size - drawn) * 0.5
+	draw_texture_rect(texture, Rect2(at, drawn), false)
+
+
+func _icon(path: String) -> Texture2D:
+	if path == "":
+		return null
+	if _icons.has(path):
+		return _icons[path]
+	var texture := load(path) as Texture2D
+	_icons[path] = texture
+	return texture
+
+
+func _draw_slot_tooltip() -> void:
+	var index := pinned_slot if pinned_slot >= 0 else hover_slot
+	if index < 0 or index >= slot_hits.size():
+		return
+	var hit: Dictionary = slot_hits[index]
+	var id := str(hit["id"])
+	var rank := int(hit["rank"])
+	var lines: Array = []
+	if id == "":
+		lines.append(str(hit["name"]))
+	else:
+		var title := Loadout.piece_name(id)
+		var badge := Loadout.rank_badge(id, rank)
+		if badge != "":
+			title += " " + badge
+		lines.append(title)
+		lines.append(Loadout.effect_line(id, rank if rank > 0 else 1))
+	var anchor: Rect2 = hit["rect"]
+	var box := Rect2(anchor.position + Vector2(-288, 0), Vector2(280, 18.0 + float(lines.size()) * 20.0))
+	draw_rect(box, Color(0.05, 0.08, 0.1, 0.94))
+	draw_rect(box, KickConstants.COLOR_ATTEMPT, false, 2.0)
+	var y := box.position.y + 18.0
+	for line in lines:
+		_text(Vector2(box.position.x + 8, y), str(line), 14, KickConstants.COLOR_TEXT)
+		y += 20.0
 
 
 func _slot_color(slot: String) -> Color:

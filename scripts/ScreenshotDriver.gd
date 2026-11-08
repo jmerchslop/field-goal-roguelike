@@ -361,12 +361,52 @@ func _capture_records_story() -> bool:
 	board.showing_records = false
 	board.highlight = 1
 	board.confirm_kicker()
+	if not await _capture("slots_empty.png"):
+		return false
 	_finish_centered_power(50.0)
 	board.run.resolve_kick(board.logic.result_text, board.logic.offset_yards, board.logic.perfect)
 	if not await _capture("trophy_extra_point.png"):
 		return false
+	board.run.force_offer([
+		{"id": Loadout.SCOUT_LID, "slot": Loadout.HELMET, "kind": Loadout.EQUIPMENT, "rank": 1},
+		{"id": Loadout.HERO_BALL, "slot": Loadout.PERK, "kind": Loadout.PERK, "rank": 1},
+		{"id": Loadout.ICED, "slot": Loadout.CURSE, "kind": Loadout.CURSE, "rank": 1},
+	])
 	board.run.roll_offer()
 	if not await _capture("loadout_offer.png"):
+		return false
+	if not await _capture("offer_sprite.png"):
+		return false
+	board.run.pick_card(0)
+	if not await _capture("hud_scout.png"):
+		return false
+	board._hud.pinned_slot = 1
+	board.refresh_view()
+	if not await _capture("hud_tooltip.png"):
+		return false
+	board._hud.pinned_slot = -1
+	board.run.force_offer([
+		{"id": Loadout.SCOUT_LID, "slot": Loadout.HELMET, "kind": Loadout.EQUIPMENT, "rank": 2},
+		{"id": Loadout.HERO_BALL, "slot": Loadout.PERK, "kind": Loadout.PERK, "rank": 1},
+		{"id": Loadout.HEAVY, "slot": Loadout.CURSE, "kind": Loadout.CURSE, "rank": 1},
+	])
+	board.run.roll_offer()
+	board.run.pick_card(0)
+	if not await _capture("hud_scout_ii.png"):
+		return false
+	board.run.force_offer([
+		{"id": Loadout.DOINK_CAP, "slot": Loadout.HELMET, "kind": Loadout.EQUIPMENT, "rank": 1},
+		{"id": Loadout.HERO_BALL, "slot": Loadout.PERK, "kind": Loadout.PERK, "rank": 1},
+		{"id": Loadout.ICED, "slot": Loadout.CURSE, "kind": Loadout.CURSE, "rank": 1},
+	])
+	board.run.roll_offer()
+	var before_helmet: String = str(board.run.helmet_id)
+	var before_rank: int = int(board.run.helmet_rank)
+	board.run.skip_offer()
+	if board.run.helmet_id != before_helmet or board.run.helmet_rank != before_rank or board.run.perks.size() != 0:
+		print("skip changed a slot")
+		return false
+	if not await _capture("skip_slots.png"):
 		return false
 	board.run.force_offer([
 		{"id": Loadout.CANNON, "slot": Loadout.CLEATS, "kind": Loadout.EQUIPMENT, "rank": 1},
@@ -432,6 +472,8 @@ func _capture_records_story() -> bool:
 	board.showing_records = false
 	board.highlight = 1
 	board.confirm_kicker()
+	if not await _capture("slots_empty_again.png"):
+		return false
 	board.run.resolve_kick("GOOD", 0.0, true)
 	board.advance_run()
 	board.run.resolve_kick("GOOD", 0.0, true)
