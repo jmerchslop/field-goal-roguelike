@@ -268,12 +268,17 @@ func _draw_kicker_select() -> void:
 	_text_centered("Choose your kicker", 36.0, 28, KickConstants.COLOR_TEXT)
 	kicker_rects = []
 	var count := Kickers.ALL.size()
-	var gap := 12.0
-	var width := minf(236.0, (KickConstants.WINDOW_WIDTH - 32.0 - gap * float(count - 1)) / float(count))
-	var left := (KickConstants.WINDOW_WIDTH - (width * float(count) + gap * float(count - 1))) * 0.5
+	var columns := 4
+	var gap_x := 14.0
+	var gap_y := 10.0
+	var width := (KickConstants.WINDOW_WIDTH - 36.0 - gap_x * float(columns - 1)) / float(columns)
+	var rows := int(ceil(float(count) / float(columns)))
+	var height := minf(300.0, (KickConstants.WINDOW_HEIGHT - 88.0 - gap_y * float(rows - 1)) / float(rows))
 	for i in count:
 		var info: Dictionary = Kickers.ALL[i]
-		var rect := Rect2(left + float(i) * (width + gap), 64.0, width, 600.0)
+		var col := i % columns
+		var row := int(i / columns)
+		var rect := Rect2(18.0 + float(col) * (width + gap_x), 52.0 + float(row) * (height + gap_y), width, height)
 		kicker_rects.append(rect)
 		var picked := int(game.highlight) == i
 		var unlocked := Kickers.is_unlocked(str(info["id"]))
@@ -282,11 +287,11 @@ func _draw_kicker_select() -> void:
 		if picked:
 			border = KickConstants.COLOR_ATTEMPT
 		draw_rect(rect, border, false, 4.0 if picked else 2.0)
-		var portrait := Rect2(rect.position + Vector2(10, 10), Vector2(width - 20, 150))
+		var portrait := Rect2(rect.position + Vector2(8, 8), Vector2(width - 16, minf(110.0, height * 0.36)))
 		_draw_portrait(info, portrait)
 		if not unlocked:
 			draw_rect(portrait, Color(0.02, 0.03, 0.04, 0.55))
-		var y := rect.position.y + 176.0
+		var y := portrait.position.y + portrait.size.y + 18.0
 		_text(Vector2(rect.position.x + 10, y), str(info["name"]), 16, KickConstants.COLOR_ATTEMPT)
 		y += 22.0
 		if unlocked:
@@ -301,7 +306,7 @@ func _draw_kicker_select() -> void:
 			_text(Vector2(rect.position.x + 10, y), "LOCKED", 16, KickConstants.COLOR_MISS)
 			y += 24.0
 			_draw_wrapped_at(str(info.get("unlock", "")), rect.position.x + 10, y, width - 20, 14)
-	_text_centered("1–5 highlight.  Space or click again to start.", 690.0, 18, KickConstants.COLOR_TEXT)
+	_text_centered("1–8 highlight.  Space or click again to start.", 700.0, 18, KickConstants.COLOR_TEXT)
 
 
 var _portraits := {}
@@ -780,36 +785,37 @@ func _draw_records() -> void:
 	y += 24.0
 	_text(Vector2(48, y), "FG%% %s" % SaveData.fg_text(SaveData.makes, SaveData.attempts), 18, KickConstants.COLOR_TEXT)
 	var columns: Array = []
-	var col_w := 240.0
-	var col_gap := 8.0
-	var col_left := 24.0
+	var col_count := 4
+	var col_w := 300.0
+	var col_gap := 12.0
+	var col_left := 28.0
 	for i in Kickers.ALL.size():
-		columns.append([str(Kickers.ALL[i]["id"]), col_left + float(i) * (col_w + col_gap)])
+		var col := i % col_count
+		var row_n := int(i / col_count)
+		columns.append([str(Kickers.ALL[i]["id"]), col_left + float(col) * (col_w + col_gap), 236.0 + float(row_n) * 118.0])
 	for column in columns:
 		var id := str(column[0])
 		var left := float(column[1])
 		var info := Kickers.get_def(id)
 		var tint: Color = info["color"]
-		var box := Rect2(left - 8.0, 250.0, col_w - 4.0, 150.0)
+		var box := Rect2(left - 8.0, float(column[2]), col_w - 4.0, 110.0)
 		draw_rect(box, Color(tint.r, tint.g, tint.b, 0.28))
 		draw_rect(box, tint, false, 3.0)
 		var row: Dictionary = SaveData.kicker_row(id)
-		var line_y := 274.0
+		var line_y := float(column[2]) + 22.0
 		_text(Vector2(left, line_y), str(info["name"]), 14, tint.lightened(0.35))
-		line_y += 32.0
-		_text(Vector2(left, line_y), "Runs %d    Wins %d" % [int(row["runs"]), int(row["wins"])], 16, KickConstants.COLOR_TEXT)
-		line_y += 24.0
-		_text(Vector2(left, line_y), "Best score %d" % int(row["best_score"]), 16, KickConstants.COLOR_TEXT)
-		line_y += 24.0
-		_text(Vector2(left, line_y), "Longest %s" % _yd_or_dash(int(row["longest_make"])), 16, KickConstants.COLOR_TEXT)
-		line_y += 24.0
-		_text(Vector2(left, line_y), "FG%% %s" % SaveData.fg_text(int(row["makes"]), int(row["attempts"])), 16, KickConstants.COLOR_TEXT)
-	_text(Vector2(48, 420), "Trophies", 22, KickConstants.COLOR_TEXT)
+		line_y += 20.0
+		_text(Vector2(left, line_y), "Runs %d    Wins %d" % [int(row["runs"]), int(row["wins"])], 14, KickConstants.COLOR_TEXT)
+		line_y += 18.0
+		_text(Vector2(left, line_y), "Best %d    Long %s" % [int(row["best_score"]), _yd_or_dash(int(row["longest_make"]))], 14, KickConstants.COLOR_TEXT)
+		line_y += 18.0
+		_text(Vector2(left, line_y), "FG%% %s" % SaveData.fg_text(int(row["makes"]), int(row["attempts"])), 14, KickConstants.COLOR_TEXT)
+	_text(Vector2(48, 480), "Trophies", 22, KickConstants.COLOR_TEXT)
 	var index := 0
 	for id in SaveData.TROPHY_IDS:
 		var col := index % 4
 		var row_i := int(index / 4.0)
-		var box := Rect2(48.0 + float(col) * 300.0, 444.0 + float(row_i) * 120.0, 280.0, 100.0)
+		var box := Rect2(48.0 + float(col) * 300.0, 504.0 + float(row_i) * 100.0, 280.0, 92.0)
 		var earned := SaveData.has_trophy(str(id))
 		if earned:
 			draw_rect(box, Color(0.45, 0.32, 0.05, 0.95))

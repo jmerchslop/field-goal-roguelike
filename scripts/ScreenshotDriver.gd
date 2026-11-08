@@ -384,6 +384,9 @@ func _ready() -> void:
 	if not await _capture_shank_meter():
 		get_tree().quit(1)
 		return
+	if not await _capture_m2_kickers():
+		get_tree().quit(1)
+		return
 	get_tree().quit()
 
 
@@ -1764,6 +1767,81 @@ func _capture_shank_meter() -> bool:
 	if not await _capture("meter_power_timing_0_35s.png"):
 		return false
 	board.run.unlock_toast = ""
+	return true
+
+
+func _capture_m2_kickers() -> bool:
+	SaveData.reset_save()
+	board.showing_records = false
+	board.selecting = true
+	board.front.screen = FrontEnd.Screen.SELECT
+	board.highlight = 5
+	if not await _capture("select_eight_locked.png"):
+		return false
+	SaveData.try_unlock(Kickers.COLE)
+	SaveData.try_unlock(Kickers.WILLOW)
+	SaveData.try_unlock(Kickers.CARLOS)
+	var cards: Array = [
+		[5, "cole"],
+		[6, "willow"],
+		[7, "carlos"],
+	]
+	for card in cards:
+		board.highlight = int(card[0])
+		if not await _capture("select_%s_unlocked.png" % str(card[1])):
+			return false
+	var poses: Array = ["idle", "run", "plant", "follow"]
+	for card in cards:
+		board.highlight = int(card[0])
+		board.confirm_kicker()
+		board.force_weather(RunLogic.CLEAR)
+		board.run.set_wind(0.0, 0.0)
+		board.load_current_kick()
+		for pose in poses:
+			board.pose_for_shot(str(pose))
+			if not await _capture("field_%s_%s.png" % [str(card[1]), str(pose)]):
+				return false
+	board.highlight = 5
+	board.confirm_kicker()
+	board.run.kick_number = 5
+	board.run.last_result_made = true
+	board.run.kick_resolved = true
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.roll_offer()
+	board.run.unlock_toast = "Loadout, then no shop"
+	if not await _capture("cole_kick5_loadout.png"):
+		return false
+	board.run.skip_offer()
+	board.run.unlock_toast = "No vitamin shop"
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.AIMING
+	if not await _capture("cole_kick5_no_shop.png"):
+		return false
+	board.run.unlock_toast = ""
+	board.highlight = 6
+	board.confirm_kicker()
+	board.run.kick_number = 5
+	board.run.last_result_made = true
+	board.run.kick_resolved = true
+	board.run.phase = RunLogic.Phase.PLAYING
+	if board.run.follow_offer() != "shop":
+		print("Willow shop did not open")
+		return false
+	print("WILLOW STOCK ", board.run.shop_stock)
+	if not await _capture("willow_first_shop.png"):
+		return false
+	board.run.leave_shop()
+	board.highlight = 7
+	board.confirm_kicker()
+	board.force_weather(RunLogic.CLEAR)
+	board.run.set_wind(0.0, 0.0)
+	board.load_current_kick()
+	_swing_meter(100.0, 12.0)
+	if board.logic.phase == KickLogic.Phase.FLIGHT:
+		board.logic.advance(board.logic.flight_duration)
+	print("CARLOS PERFECT ", board.logic.perfect, " e ", board.logic.accuracy_error, " ", board.logic.result_text)
+	if not await _capture("carlos_numero_dos_perfect.png"):
+		return false
 	return true
 
 

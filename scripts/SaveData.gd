@@ -27,6 +27,7 @@ var kickers := {}
 var trophies := {}
 var unlocks := {}
 var _f9_at := -10.0
+var fresh_unlocks: Array[String] = []
 
 
 func _ready() -> void:
@@ -63,8 +64,9 @@ func load_file() -> void:
 		}
 	for id in TROPHY_IDS:
 		trophies[id] = bool(cfg.get_value("trophies", id, false))
-	for id in [Kickers.PHIL, Kickers.GARY, Kickers.VEX]:
+	for id in _unlock_ids():
 		unlocks[id] = bool(cfg.get_value("unlocks", id, false))
+	_grant_recorded_unlocks()
 
 
 func save_file() -> void:
@@ -94,7 +96,7 @@ func save_file() -> void:
 		cfg.set_value(section, "attempts", int(row["attempts"]))
 	for id in TROPHY_IDS:
 		cfg.set_value("trophies", id, bool(trophies[id]))
-	for id in [Kickers.PHIL, Kickers.GARY, Kickers.VEX]:
+	for id in _unlock_ids():
 		cfg.set_value("unlocks", id, bool(unlocks.get(id, false)))
 	cfg.save(file_path)
 
@@ -124,7 +126,7 @@ func has_unlock(id: String) -> bool:
 
 
 func try_unlock(id: String) -> bool:
-	if id != Kickers.PHIL and id != Kickers.GARY and id != Kickers.VEX:
+	if not _unlock_ids().has(id):
 		return false
 	if bool(unlocks.get(id, false)):
 		return false
@@ -251,12 +253,33 @@ func _fill_defaults() -> void:
 	for id in TROPHY_IDS:
 		trophies[id] = false
 	unlocks = {}
-	for id in [Kickers.PHIL, Kickers.GARY, Kickers.VEX]:
+	for id in _unlock_ids():
 		unlocks[id] = false
 
 
 func _kicker_ids() -> Array:
-	return [Kickers.BIG_BRUCE, Kickers.WALK_ON, Kickers.PHIL, Kickers.GARY, Kickers.VEX]
+	return [Kickers.BIG_BRUCE, Kickers.WALK_ON, Kickers.PHIL, Kickers.GARY, Kickers.VEX, Kickers.COLE, Kickers.WILLOW, Kickers.CARLOS]
+
+
+func _unlock_ids() -> Array:
+	return [Kickers.PHIL, Kickers.GARY, Kickers.VEX, Kickers.COLE, Kickers.WILLOW, Kickers.CARLOS]
+
+
+# Season Complete and a 100-yard record unlock Cole and Carlos the next time the save loads.
+# Willow is not reconstructed from old kicks.
+func _grant_recorded_unlocks() -> void:
+	fresh_unlocks = []
+	var changed := false
+	if bool(trophies.get("season_complete", false)) and not bool(unlocks.get(Kickers.COLE, false)):
+		unlocks[Kickers.COLE] = true
+		fresh_unlocks.append("Cole Lang unlocked")
+		changed = true
+	if longest_make >= 100 and not bool(unlocks.get(Kickers.CARLOS, false)):
+		unlocks[Kickers.CARLOS] = true
+		fresh_unlocks.append("Carlos Hernandez unlocked")
+		changed = true
+	if changed:
+		save_file()
 
 
 func _as_int(value) -> int:

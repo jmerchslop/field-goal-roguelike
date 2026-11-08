@@ -10,6 +10,11 @@ const WALK_ON := "walk_on"
 const PHIL := "phil"
 const GARY := "gary"
 const VEX := "vex"
+const COLE := "cole"
+const WILLOW := "willow"
+const CARLOS := "carlos"
+
+const UNLOCKABLE: Array = [PHIL, GARY, VEX, COLE, WILLOW, CARLOS]
 
 const ALL: Array = [
 	{
@@ -97,6 +102,57 @@ const ALL: Array = [
 		"shape": "circle",
 		"portrait_path": "res://art/kickers/vex_portrait.png",
 	},
+	{
+		"id": COLE,
+		"name": "Cole Lang",
+		"lore": "The brand wants the middle of the posts, not a bottle on the belt.",
+		"excels": "Brand Deal. Loadout offers stay. The Vitamin Shop does not.",
+		"downside": "No vitamins and no B12. The belt stays empty.",
+		"ball_name": "Showtime",
+		"ball_description": "A down-the-middle make doubles stored Mult, and that kick scores with the doubled Mult.",
+		"ball_type": "standard",
+		"accuracy": 120,
+		"range_line": "70 yd",
+		"kit_line": "Brand Deal",
+		"unlock": "Beat Standard",
+		"color": Color(0.85, 0.45, 0.12),
+		"shape": "circle",
+		"portrait_path": "res://art/kickers/cole_portrait.png",
+	},
+	{
+		"id": WILLOW,
+		"name": "Willow Reed",
+		"lore": "She takes her time. The first shop of the run always has something that adds yards.",
+		"excels": "Synchronicity. The first shop opening includes a range vitamin.",
+		"downside": "50 yards with nothing on. The Chill Ball is slow.",
+		"ball_name": "The Chill Ball",
+		"ball_description": "Both needles run at half speed. Items and weather still stack on top.",
+		"ball_type": "standard",
+		"accuracy": 88,
+		"range_line": "50 yd",
+		"kit_line": "Synchronicity",
+		"unlock": "Make a kick with 1 attempt left (kick 5+)",
+		"color": Color(0.2, 0.35, 0.72),
+		"shape": "circle",
+		"portrait_path": "res://art/kickers/willow_portrait.png",
+	},
+	{
+		"id": CARLOS,
+		"name": "Carlos Hernandez",
+		"lore": "Smash the power and the accuracy takes care of itself. The ball does not wait around.",
+		"excels": "Numero Dos. A 95–100 lock is a true PERFECT.",
+		"downside": "94 and below is a normal accuracy swing.",
+		"ball_name": "The Not So Secret Weapon",
+		"ball_description": "Both needles run 15% faster. Items and weather still stack on top.",
+		"ball_type": "standard",
+		"accuracy": 96,
+		"range_line": "66 yd",
+		"kit_line": "Numero Dos",
+		"unlock": "Make a 100-yard field goal",
+		"color": Color(0.93, 0.9, 0.82),
+		"shape": "square",
+		"portrait_path": "res://art/kickers/carlos_portrait.png",
+	},
 ]
 
 
@@ -158,6 +214,19 @@ static func apply_to(stats: KickerStats, id: String) -> void:
 		stats.saucer_mph = 8.0
 		stats.range_base = 0.0
 		stats.range_per_power = 0.0
+	elif id == COLE:
+		stats.range_per_power = 0.54
+		stats.ball_speed_mult = 1.0
+		stats.brand_deal = true
+		stats.showtime = true
+	elif id == WILLOW:
+		stats.range_per_power = 0.34
+		stats.ball_speed_mult = 0.50
+		stats.synchronicity = true
+	elif id == CARLOS:
+		stats.range_per_power = 0.50
+		stats.ball_speed_mult = 1.15
+		stats.numero_dos = true
 
 
 static func unlock_hint(id: String) -> String:
@@ -171,7 +240,7 @@ static func is_starter(id: String) -> bool:
 static func is_unlocked(id: String) -> bool:
 	if is_starter(id):
 		return true
-	if KickConstants.debug_unlock_all_kickers and (id == PHIL or id == GARY or id == VEX):
+	if KickConstants.debug_unlock_all_kickers and UNLOCKABLE.has(id):
 		return true
 	var data = _save()
 	if data == null:
@@ -191,6 +260,12 @@ static func aliases(id: String) -> Array:
 			return ["gary", "goat"]
 		VEX:
 			return ["vex"]
+		COLE:
+			return ["cole", "lang", "bigshot", "big_shot"]
+		WILLOW:
+			return ["willow", "sunshine", "reed"]
+		CARLOS:
+			return ["carlos", "hernandez"]
 	return []
 
 
@@ -200,13 +275,17 @@ static func field_frame(id: String, pose: String) -> String:
 	var direct := str(mine.get(pose, ""))
 	if direct != "":
 		return direct
-	if pose != "portrait":
-		for other in ["idle", "run", "plant", "follow", "portrait"]:
-			if str(mine.get(other, "")) != "":
-				return str(mine[other])
+	for other in ["idle", "run", "plant", "follow", "portrait"]:
+		if other == pose:
+			continue
+		if str(mine.get(other, "")) != "":
+			return str(mine[other])
 	if id != WALK_ON:
 		var backup: Dictionary = _frames.get(WALK_ON, {})
-		return str(backup.get(pose, ""))
+		var matched := str(backup.get(pose, ""))
+		if matched != "":
+			return matched
+		return str(backup.get("portrait", ""))
 	return ""
 
 
@@ -226,7 +305,7 @@ static func _ensure_art() -> void:
 		return
 	_art_ready = true
 	_frames = {}
-	for id in [BIG_BRUCE, WALK_ON, PHIL, GARY, VEX]:
+	for id in [BIG_BRUCE, WALK_ON, PHIL, GARY, VEX, COLE, WILLOW, CARLOS]:
 		_frames[id] = {}
 	var paths: Array = []
 	_walk_pngs("res://", paths)
@@ -235,7 +314,7 @@ static func _ensure_art() -> void:
 		var hay := "_" + str(path).to_lower().replace("/", "_").replace("-", "_") + "_"
 		var owner := ""
 		var owner_len := 0
-		for id in [BIG_BRUCE, WALK_ON, PHIL, GARY, VEX]:
+		for id in [BIG_BRUCE, WALK_ON, PHIL, GARY, VEX, COLE, WILLOW, CARLOS]:
 			for alias in aliases(id):
 				if hay.find("_" + str(alias) + "_") >= 0 and str(alias).length() > owner_len:
 					owner = id

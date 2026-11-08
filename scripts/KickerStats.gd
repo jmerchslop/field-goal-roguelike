@@ -60,6 +60,10 @@ var practice_carry := false
 var bench_spare := false
 var drill_mult := 0.0
 var omega := false
+var brand_deal := false
+var showtime := false
+var synchronicity := false
+var numero_dos := false
 
 
 func reset() -> void:
@@ -116,3 +120,7 @@ func reset() -> void:
 	bench_spare = false
 	drill_mult = 0.0
 	omega = false
+	brand_deal = false
+	showtime = false
+	synchronicity = false
+	numero_dos = false

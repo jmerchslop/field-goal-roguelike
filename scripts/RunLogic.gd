@@ -89,6 +89,8 @@ var cash := 0
 var cash_popup := ""
 var unlock_toast := ""
 var lucky_stacks := 0
+var showtime_mult := 1.0
+var shop_guaranteed := false
 var belt: Array = ["", ""]
 var active_vitamins := {}
 var zinc_used := false
@@ -180,6 +182,8 @@ func new_run() -> void:
 	best_streak = 0
 	clean_makes = {}
 	lucky_stacks = 0
+	showtime_mult = 1.0
+	shop_guaranteed = false
 	unlock_toast = ""
 	trophy_name = ""
 	new_record_score = false
@@ -223,7 +227,7 @@ func is_boss() -> bool:
 
 # The multiplier for the kick you are on, from the streak before this kick.
 func current_mult() -> float:
-	return 1.0 + stats.streak_step * float(streak)
+	return (1.0 + stats.streak_step * float(streak)) * showtime_mult
 
 
 func storm_bonus() -> float:
@@ -268,6 +272,7 @@ func resolve_kick(result_text: String, offset: float, perfect: bool) -> void:
 	if kick_resolved or phase != Phase.PLAYING:
 		return
 	kick_resolved = true
+	var attempts_before := attempts
 	var made := result_text == "GOOD"
 	last_result_made = made
 	var distance := distance_yards()
@@ -285,6 +290,8 @@ func resolve_kick(result_text: String, offset: float, perfect: bool) -> void:
 		if stats.gelcap and _belt_vitamin_active():
 			gel = 0.5
 		var base_mult := current_mult()
+		if stats.showtime and down_the_middle:
+			base_mult *= 2.0
 		var storm := storm_bonus()
 		var hero := hero_bonus()
 		var curse_add := curse_bonus()
@@ -309,6 +316,8 @@ func resolve_kick(result_text: String, offset: float, perfect: bool) -> void:
 		streak += 1
 		if streak > best_streak:
 			best_streak = streak
+		if stats.showtime and down_the_middle:
+			showtime_mult *= 2.0
 		if down_the_middle:
 			middles_this_run += 1
 		if run_mode == "endless" and distance >= 1000.0:
@@ -318,6 +327,7 @@ func resolve_kick(result_text: String, offset: float, perfect: bool) -> void:
 		_note_trophies(true, distance)
 	else:
 		streak = 0
+		showtime_mult = 1.0
 		is_first_ball = false
 		if _vitamin_count(Vitamins.ELECTROLYTE) == 0:
 			attempts -= 1
@@ -329,6 +339,12 @@ func resolve_kick(result_text: String, offset: float, perfect: bool) -> void:
 	cash_popup = "+$%d" % payout if payout > 0 else ""
 	_clear_ball_vitamins()
 	balls_kicked += 1
+	if made and attempts_before == 1 and kick_number >= 5:
+		_try_unlock(Kickers.WILLOW)
+	if made and distance >= 100.0:
+		_try_unlock(Kickers.CARLOS)
+	if phase == Phase.WIN and run_mode != "endless":
+		_try_unlock(Kickers.COLE)
 	if phase == Phase.WIN and run_mode != "endless" and _standard_was_clean():
 		_try_unlock(Kickers.GARY)
 	if phase == Phase.GAME_OVER and run_mode == "endless" and distance > 75.0:
@@ -725,7 +741,7 @@ func opens_shop() -> bool:
 
 
 func follow_offer() -> String:
-	if opens_shop():
+	if opens_shop() and not stats.brand_deal:
 		open_shop()
 		return "shop"
 	return "next"
@@ -779,7 +795,7 @@ func open_shop() -> void:
 	shop_reroll_price = Vitamins.REROLL_START
 	shop_flash = ""
 	shop_note = ""
-	_fill_shelves()
+	_fill_shelves(true)
 
 
 func leave_shop() -> void:
@@ -855,7 +871,7 @@ func reroll_shop() -> bool:
 	cash -= shop_reroll_price
 	shop_reroll_price += 1
 	shop_flash = ""
-	_fill_shelves()
+	_fill_shelves(false)
 	return true
 
 
@@ -1271,8 +1287,12 @@ func _empty_belt() -> int:
 	return -1
 
 
-func _fill_shelves() -> void:
+func _fill_shelves(opening: bool = false) -> void:
 	var picks: Array = Vitamins.draw_three(_shop_rng)
+	if opening and stats.synchronicity and not shop_guaranteed:
+		shop_guaranteed = true
+		if not picks.has(Vitamins.PROTEIN):
+			picks[0] = Vitamins.PROTEIN
 	shop_stock = ["", "", ""]
 	for i in mini(3, picks.size()):
 		shop_stock[i] = str(picks[i])

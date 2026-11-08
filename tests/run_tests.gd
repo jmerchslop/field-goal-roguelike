@@ -49,6 +49,7 @@ func _run() -> void:
 	_check_new_kickers()
 	_check_auto_shank()
 	_check_sfx()
+	_check_m2_kickers()
 
 
 func check(ok: bool, label: String) -> void:
@@ -2591,8 +2592,9 @@ func _check_endless_and_farm() -> void:
 
 func _check_new_kickers() -> void:
 	check(not KickConstants.debug_unlock_all_kickers, "debug_unlock_all_kickers stays false")
-	check(Kickers.ALL.size() == 5, "select has five kickers")
+	check(Kickers.ALL.size() == 8, "select has eight kickers")
 	check(Kickers.id_for_slot(2) == Kickers.PHIL and Kickers.id_for_slot(3) == Kickers.GARY and Kickers.id_for_slot(4) == Kickers.VEX, "Phil, Gary, and Vex follow the starters")
+	check(Kickers.id_for_slot(5) == Kickers.COLE and Kickers.id_for_slot(6) == Kickers.WILLOW and Kickers.id_for_slot(7) == Kickers.CARLOS, "Cole, Willow, and Carlos follow Vex")
 	var records = get_root().get_node("SaveData")
 	var kept := str(records.file_path)
 	records.file_path = "user://fg_kicker_unlocks.cfg"
@@ -3003,4 +3005,198 @@ func _check_sfx() -> void:
 	var drag_body := source.substr(drag_at, source.find("\nfunc ", drag_at + 10) - drag_at)
 	check(drag_body.find("_cue") < 0, "dragging a volume slider does not click on every move")
 	check(source.find("Sfx.cue(\"meter\")") < 0 and source.find("Sfx.cue(\"practice\")") < 0 and source.find("Sfx.cue(\"aim\")") < 0 and source.find("Sfx.cue(\"debug\")") < 0, "the meter, aim, practice, and debug keys are not click cues")
+
+
+func _check_m2_kickers() -> void:
+	check(Kickers.ALL.size() == 8, "the roster has eight kickers")
+	check(Kickers.id_for_slot(0) == Kickers.BIG_BRUCE and Kickers.id_for_slot(1) == Kickers.WALK_ON and Kickers.id_for_slot(2) == Kickers.PHIL and Kickers.id_for_slot(3) == Kickers.GARY and Kickers.id_for_slot(4) == Kickers.VEX and Kickers.id_for_slot(5) == Kickers.COLE and Kickers.id_for_slot(6) == Kickers.WILLOW and Kickers.id_for_slot(7) == Kickers.CARLOS, "select order is Bruce, Walk-On, Phil, Gary, Vex, Cole, Willow, Carlos")
+	check(not KickConstants.debug_unlock_all_kickers, "debug_unlock_all_kickers stays false")
+	check(Kickers.UNLOCKABLE.has(Kickers.COLE) and Kickers.UNLOCKABLE.has(Kickers.WILLOW) and Kickers.UNLOCKABLE.has(Kickers.CARLOS), "debug unlock covers Cole, Willow, and Carlos")
+	check(Kickers.unlock_hint(Kickers.COLE) == "Beat Standard", "Cole's locked card says Beat Standard")
+	check(Kickers.unlock_hint(Kickers.WILLOW) == "Make a kick with 1 attempt left (kick 5+)", "Willow's locked card names the clutch")
+	check(Kickers.unlock_hint(Kickers.CARLOS) == "Make a 100-yard field goal", "Carlos's locked card names the 100-yard kick")
+	var records = get_root().get_node("SaveData")
+	var kept := str(records.file_path)
+	records.file_path = "user://fg_m2_kickers.cfg"
+	records.reset_save()
+	check(not Kickers.is_unlocked(Kickers.COLE) and not Kickers.is_unlocked(Kickers.WILLOW) and not Kickers.is_unlocked(Kickers.CARLOS), "Cole, Willow, and Carlos start locked")
+	records.trophies["season_complete"] = true
+	records.longest_make = 75
+	records.save_file()
+	records.load_file()
+	check(Kickers.is_unlocked(Kickers.COLE) and not Kickers.is_unlocked(Kickers.WILLOW) and not Kickers.is_unlocked(Kickers.CARLOS), "Season Complete grants Cole on load and does not invent Willow or Carlos")
+	check(records.fresh_unlocks.has("Cole Lang unlocked"), "the Cole grant toasts once")
+	records.longest_make = 100
+	records.save_file()
+	records.load_file()
+	check(Kickers.is_unlocked(Kickers.CARLOS) and not Kickers.is_unlocked(Kickers.WILLOW), "a 100-yard record grants Carlos on load and still does not reconstruct Willow")
+	var cole_stats := KickerStats.new()
+	Kickers.apply_to(cole_stats, Kickers.COLE)
+	var willow_stats := KickerStats.new()
+	Kickers.apply_to(willow_stats, Kickers.WILLOW)
+	var carlos_stats := KickerStats.new()
+	Kickers.apply_to(carlos_stats, Kickers.CARLOS)
+	var bruce_stats := KickerStats.new()
+	Kickers.apply_to(bruce_stats, Kickers.BIG_BRUCE)
+	var walk_stats := KickerStats.new()
+	Kickers.apply_to(walk_stats, Kickers.WALK_ON)
+	var phil_stats := KickerStats.new()
+	Kickers.apply_to(phil_stats, Kickers.PHIL)
+	var gary_stats := KickerStats.new()
+	Kickers.apply_to(gary_stats, Kickers.GARY)
+	var vex_stats := KickerStats.new()
+	Kickers.apply_to(vex_stats, Kickers.VEX)
+	check(near(cole_stats.accuracy, 120.0) and near(cole_stats.perfect_band, 1.8) and near(cole_stats.good_band, 7.2) and near(cole_stats.ball_speed_mult, 1.0), "Cole is accuracy 120, bands ±1.80 / ±7.20, and ball_speed_mult 1")
+	check(near(cole_stats.range_base + cole_stats.range_per_power * 100.0, 70.0) and cole_stats.brand_deal and cole_stats.showtime, "Cole's cap is 70 and his kit is Brand Deal plus Showtime")
+	check(near(willow_stats.accuracy, 88.0) and near(willow_stats.perfect_band, 1.32) and near(willow_stats.good_band, 5.28) and near(willow_stats.ball_speed_mult, 0.50), "Willow is accuracy 88, bands ±1.32 / ±5.28, and the Chill Ball is 0.50")
+	check(near(willow_stats.range_base + willow_stats.range_per_power * 100.0, 50.0) and willow_stats.synchronicity, "Willow's cap is 50 and her kit is Synchronicity")
+	check(near(carlos_stats.accuracy, 96.0) and near(carlos_stats.perfect_band, 1.44) and near(carlos_stats.good_band, 5.76) and near(carlos_stats.ball_speed_mult, 1.15), "Carlos is accuracy 96, bands ±1.44 / ±5.76, and the Not So Secret Weapon is 1.15")
+	check(near(carlos_stats.range_base + carlos_stats.range_per_power * 100.0, 66.0) and carlos_stats.numero_dos and not carlos_stats.brand_deal, "Carlos's cap is 66, Numero Dos is on, and the shop is not blocked")
+	check(near(bruce_stats.accuracy, 90.0) and near(bruce_stats.ball_speed_mult, 1.0) and near(bruce_stats.power_floor, 80.0), "Bruce's rating, needle, and Farm Strength are unchanged")
+	check(near(walk_stats.accuracy, 100.0) and near(walk_stats.ball_speed_mult, 1.0) and walk_stats.rerolls_per_run == 2, "Walk-On's rating, needle, and rerolls are unchanged")
+	check(near(phil_stats.accuracy, 112.0) and near(phil_stats.ball_speed_mult, 1.0) and phil_stats.house_account, "Phil's rating, needle, and House Account are unchanged")
+	check(near(gary_stats.accuracy, 98.0) and near(gary_stats.ball_speed_mult, 1.0) and gary_stats.good_as_gold, "Gary's rating, needle, and Good As Gold are unchanged")
+	check(near(vex_stats.accuracy, 94.0) and near(vex_stats.ball_speed_mult, 1.0) and vex_stats.clearance, "Vex's rating, needle, and clearance are unchanged")
+	check(near(_measure_power_sweep(Kickers.COLE), 0.700, 0.004), "Cole's POWER to MAX is still 0.700s")
+	check(near(_measure_power_sweep(Kickers.WILLOW), 1.400, 0.006), "Willow's Chill Ball POWER to MAX is about 1.400s")
+	check(near(_measure_power_sweep(Kickers.CARLOS), 0.700 / 1.15, 0.006), "Carlos's POWER to MAX is about 0.609s")
+	check(Kickers.field_frame(Kickers.COLE, "idle").ends_with("cole_idle_back.png"), "Cole idle uses cole_idle_back.png")
+	check(Kickers.field_frame(Kickers.COLE, "run").ends_with("cole_run.png") and Kickers.field_frame(Kickers.COLE, "plant").ends_with("cole_plant.png") and Kickers.field_frame(Kickers.COLE, "follow").ends_with("cole_follow_through.png"), "Cole run, plant, and follow-through are wired")
+	check(Kickers.field_frame(Kickers.WILLOW, "portrait").ends_with("willow_portrait.png") and Kickers.field_frame(Kickers.CARLOS, "portrait").ends_with("carlos_portrait.png"), "Willow and Carlos portraits are wired")
+	var deal := RunLogic.new()
+	deal.start_with_kicker(Kickers.COLE)
+	deal.kick_number = 5
+	deal.last_result_made = true
+	deal.kick_resolved = true
+	deal.phase = RunLogic.Phase.PLAYING
+	check(deal.wants_upgrade() and deal.follow_offer() == "next" and not deal.awaiting_shop, "Cole still gets the loadout path and skips the shop after kick 5")
+	check(deal.belt[0] == "" and deal.belt[1] == "", "Cole's belt stays empty")
+	deal.kick_number = 10
+	check(deal.follow_offer() == "next", "Cole skips the shop after kick 10")
+	deal.kick_number = 15
+	check(deal.follow_offer() == "next", "Cole skips the shop after kick 15")
+	deal.kick_resolved = false
+	deal.attempts = 3
+	deal.streak = 0
+	deal.showtime_mult = 1.0
+	var yards := deal.distance_yards()
+	deal.resolve_kick("GOOD", 0.0, false)
+	check(deal.showtime_mult == 2.0 and deal.last_points == RunLogic.points_for(yards, 2.0, true, deal.is_boss(), false), "a down-the-middle make doubles Mult and that kick pays the doubled amount")
+	deal.kick_resolved = false
+	deal.phase = RunLogic.Phase.PLAYING
+	deal.resolve_kick("GOOD", 3.0, false)
+	check(deal.showtime_mult == 2.0, "a make that is not down the middle does not double Mult")
+	deal.kick_resolved = false
+	deal.phase = RunLogic.Phase.PLAYING
+	deal.attempts = 2
+	deal.resolve_kick("SHORT", 0.0, false)
+	check(deal.streak == 0 and deal.showtime_mult == 1.0, "a miss resets Showtime's stored Mult with the streak")
+	var willow := RunLogic.new()
+	willow.start_with_kicker(Kickers.WILLOW)
+	willow.kick_number = 5
+	willow.last_result_made = true
+	willow.kick_resolved = true
+	willow.phase = RunLogic.Phase.PLAYING
+	willow.cash = 30
+	check(willow.follow_offer() == "shop" and willow.awaiting_shop, "Willow's first shop still opens")
+	var protein_count := 0
+	for item in willow.shop_stock:
+		if str(item) == Vitamins.PROTEIN:
+			protein_count += 1
+	check(protein_count == 1 and willow.shop_stock.size() == 3, "Willow's opening three include exactly one Protein Shake")
+	var saw_plain := false
+	for _roll in 40:
+		willow._fill_shelves(false)
+		if not willow.shop_stock.has(Vitamins.PROTEIN):
+			saw_plain = true
+			break
+	check(saw_plain, "an F reroll is not forced to include Protein Shake")
+	var saw_later := false
+	for _later in 40:
+		willow._fill_shelves(true)
+		if not willow.shop_stock.has(Vitamins.PROTEIN):
+			saw_later = true
+			break
+	check(saw_later, "a later shop opening is fully random")
+	willow.force_weather(RunLogic.BIG_GAME)
+	willow.prepare_kick_stats()
+	check(near(willow.stats.ball_speed_mult, 0.50) and willow.stats.synchronicity, "Big Game keeps the Chill Ball and Synchronicity")
+	records.unlocks[Kickers.WILLOW] = false
+	records.save_file()
+	var clutch := RunLogic.new()
+	clutch.start_with_kicker(Kickers.WALK_ON)
+	clutch.attempts = 1
+	clutch.kick_number = 1
+	clutch.resolve_kick("GOOD", 0.0, false)
+	check(not Kickers.is_unlocked(Kickers.WILLOW), "kick 1 with the starting attempt does not unlock Willow")
+	records.unlocks[Kickers.WILLOW] = false
+	clutch.kick_resolved = false
+	clutch.phase = RunLogic.Phase.PLAYING
+	clutch.attempts = 1
+	clutch.kick_number = 6
+	clutch.resolve_kick("GOOD", 0.0, true)
+	check(Kickers.is_unlocked(Kickers.WILLOW), "a make with 1 attempt left on kick 5+ unlocks Willow")
+	records.unlocks[Kickers.WILLOW] = false
+	records.save_file()
+	var doomed := RunLogic.new()
+	doomed.start_with_kicker(Kickers.WALK_ON)
+	doomed.attempts = 1
+	doomed.kick_number = 8
+	doomed.resolve_kick("SHORT", 0.0, false)
+	check(doomed.phase == RunLogic.Phase.GAME_OVER and not Kickers.is_unlocked(Kickers.WILLOW), "GAME OVER on the last attempt does not unlock Willow")
+	records.unlocks[Kickers.CARLOS] = false
+	records.save_file()
+	var short_trip := RunLogic.new()
+	short_trip.start_with_kicker(Kickers.BIG_BRUCE)
+	short_trip.kick_number = 1
+	short_trip.resolve_kick("GOOD", 0.0, false)
+	check(near(short_trip.distance_yards(), 35.0) and not Kickers.is_unlocked(Kickers.CARLOS), "a 35-yard make does not unlock Carlos even if the ball could travel 100")
+	var hundred := RunLogic.new()
+	hundred.start_with_kicker(Kickers.WALK_ON)
+	hundred.run_mode = "endless"
+	hundred.kick_number = 17
+	check(near(hundred.distance_yards(), 100.0), "Endless kick 17 is the 100-yard kick")
+	hundred.resolve_kick("GOOD", 0.0, false)
+	check(Kickers.is_unlocked(Kickers.CARLOS), "making the listed 100-yard kick unlocks Carlos")
+	records.unlocks[Kickers.COLE] = false
+	records.save_file()
+	var passed := RunLogic.new()
+	passed.start_with_kicker(Kickers.WALK_ON)
+	passed.run_mode = "endless"
+	passed.kick_number = 16
+	passed.attempts = 1
+	passed.resolve_kick("SHORT", 0.0, false)
+	check(passed.distance_yards() > 75.0 and passed.phase == RunLogic.Phase.GAME_OVER and not Kickers.is_unlocked(Kickers.COLE), "Endless past 75 yards does not unlock Cole")
+	var season := RunLogic.new()
+	season.start_with_kicker(Kickers.WALK_ON)
+	season.kick_number = 20
+	season.resolve_kick("GOOD", 0.0, false)
+	check(season.phase == RunLogic.Phase.WIN and Kickers.is_unlocked(Kickers.COLE), "beating Standard unlocks Cole")
+	var numero := KickLogic.new()
+	Kickers.apply_to(numero.stats, Kickers.CARLOS)
+	numero.set_seed(4)
+	_swing_to(numero, 100.0, 12.0)
+	check(numero.perfect and near(numero.accuracy_error, 0.0), "Numero Dos turns a 100 lock into a true PERFECT even against a bad press and red-tip")
+	var edge := KickLogic.new()
+	Kickers.apply_to(edge.stats, Kickers.CARLOS)
+	edge.set_seed(9)
+	_swing_to(edge, 95.0, 11.0)
+	check(edge.perfect and near(edge.accuracy_error, 0.0), "Numero Dos includes a lock at 95")
+	var normal := KickLogic.new()
+	Kickers.apply_to(normal.stats, Kickers.CARLOS)
+	_swing_to(normal, 94.0, 10.0)
+	check(not normal.perfect and near(absf(normal.accuracy_error), 10.0, 0.05), "94 and below keeps a normal accuracy lock")
+	var shank := KickLogic.new()
+	Kickers.apply_to(shank.stats, Kickers.CARLOS)
+	shank.press_space()
+	shank.advance(shank.windup_left)
+	shank.advance(shank.seconds_to_power(100.0) + 0.02)
+	check(shank.shanked and not shank.perfect and not near(shank.accuracy_error, 0.0), "an auto-shank is not a Numero Dos lock")
+	var big := RunLogic.new()
+	big.start_with_kicker(Kickers.CARLOS)
+	big.force_weather(RunLogic.BIG_GAME)
+	big.prepare_kick_stats()
+	check(near(big.stats.ball_speed_mult, 1.15) and big.stats.numero_dos, "Big Game keeps Numero Dos and the faster ball")
+	records.file_path = kept
+	records.load_file()
 

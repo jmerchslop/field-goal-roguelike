@@ -643,13 +643,20 @@ func _lock_power(value: float) -> void:
 
 
 func _lock_accuracy(value: float) -> void:
-	if stats.ice_veins or stats.red_tip_off:
+	# Numero Dos is a real power lock at 95–100. An auto-shank never reaches here.
+	var numero := stats.numero_dos and power >= 95.0 and power <= 100.0
+	if numero:
+		accuracy_error = 0.0
+	elif stats.ice_veins or stats.red_tip_off:
 		accuracy_error = value
 	else:
 		accuracy_error = accuracy_with_red_tip(power, value, _rng, stats.red_tip_start, stats.red_tip_noise)
 	# Omega-3 reads the press, including red-tip noise, then can wipe the angle.
 	# perfect stays the original press so cash can still pay. The score bonus is suppressed later.
 	perfect = absf(accuracy_error) <= stats.perfect_band
+	if numero:
+		accuracy_error = 0.0
+		perfect = true
 	if stats.omega and absf(accuracy_error) <= stats.good_band:
 		accuracy_error = 0.0
 	# Good As Gold: the whole good band is a true perfect, including the cash.

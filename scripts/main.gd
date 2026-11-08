@@ -62,6 +62,7 @@ func _ready() -> void:
 	selecting = false
 	front.screen = FrontEnd.Screen.TITLE
 	highlight = -1
+	_show_fresh_unlocks()
 	if OS.get_environment("FG_SHOTS") != "1":
 		return
 	_taking_pictures = true
@@ -214,7 +215,15 @@ func open_select() -> void:
 	showing_records = false
 	front.screen = FrontEnd.Screen.SELECT
 	highlight = -1
+	_show_fresh_unlocks()
 	refresh_view()
+
+
+func _show_fresh_unlocks() -> void:
+	if SaveData.fresh_unlocks.is_empty():
+		return
+	save_note = ", ".join(SaveData.fresh_unlocks)
+	_note_time = 0.0
 
 
 func _select_input(event: InputEvent) -> void:
@@ -270,6 +279,15 @@ func _select_input(event: InputEvent) -> void:
 		refresh_view()
 	elif key.keycode == KEY_5 or key.keycode == KEY_KP_5:
 		highlight = 4
+		refresh_view()
+	elif key.keycode == KEY_6 or key.keycode == KEY_KP_6:
+		highlight = 5
+		refresh_view()
+	elif key.keycode == KEY_7 or key.keycode == KEY_KP_7:
+		highlight = 6
+		refresh_view()
+	elif key.keycode == KEY_8 or key.keycode == KEY_KP_8:
+		highlight = 7
 		refresh_view()
 	elif Settings.pressed_event(event, "confirm"):
 		confirm_kicker()
