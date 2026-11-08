@@ -100,6 +100,7 @@ func _copy_run_onto_kick() -> void:
 	logic.angle_scale = run.stats.angle_scale
 	meter_time = 0.0
 	_reset_kick_pose()
+	Sfx.begin_kick()
 
 
 func settle_kick() -> void:
@@ -128,6 +129,7 @@ func settle_kick() -> void:
 func retake_with_mulligan() -> void:
 	if not run.use_mulligan():
 		return
+	_cue("mulligan")
 	var distance := logic.kick_distance
 	var spot := logic.start_lateral_yards
 	logic.reset_kick()
@@ -140,9 +142,25 @@ func retake_with_mulligan() -> void:
 	refresh_view()
 
 
+func _cue(context: String) -> void:
+	Sfx.cue(context)
+
+
+func _sync_kick_audio(phase_before: int, forward_before: float) -> void:
+	# Practice Swing uses this same path. It does not pick a different pool.
+	var flying := logic.phase == KickLogic.Phase.FLIGHT or logic.phase == KickLogic.Phase.RESULT
+	var was_meter := phase_before == KickLogic.Phase.AIMING or phase_before == KickLogic.Phase.POWER or phase_before == KickLogic.Phase.ACCURACY
+	if was_meter and flying:
+		Sfx.struck(logic.shanked, logic.accuracy_error, logic.stats.perfect_band, logic.stats.good_band, logic.perfect)
+	var hits_post := logic.result_text == "DOINK" or logic.bank_shot
+	if hits_post and forward_before < logic.kick_distance and logic.ball_forward_yards >= logic.kick_distance:
+		Sfx.post()
+
+
 func _choose_card(index: int) -> void:
 	if not run.pick_card(index):
 		return
+	_cue("offer")
 	_after_cards()
 
 
@@ -177,6 +195,7 @@ func confirm_kicker() -> void:
 		return
 	selecting = false
 	var mode := front.run_mode
+	_cue("select")
 	run.start_with_kicker(id)
 	run.run_mode = mode
 	front.screen = FrontEnd.Screen.PLAY
@@ -221,15 +240,18 @@ func _select_input(event: InputEvent) -> void:
 	if Settings.pressed_event(event, "trophy"):
 		showing_records = true
 		front.records_return = FrontEnd.Screen.SELECT
+		_cue("records")
 		refresh_view()
 		return
 	if Settings.pressed_event(event, "back") and showing_records:
 		showing_records = false
+		_cue("records")
 		refresh_view()
 		return
 	if Settings.pressed_event(event, "back") and not showing_records:
 		selecting = false
 		front.back_select()
+		_cue("select")
 		refresh_view()
 		return
 	if showing_records:
@@ -404,6 +426,10 @@ func _process(delta: float) -> void:
 	_sway_time += delta
 	logic.sway(_sway_time)
 	_step_kick_pose(delta)
+	if _pose == "run":
+		Sfx.approach()
+	var phase_before := logic.phase
+	var forward_before := logic.ball_forward_yards
 	if logic.bank_shot and logic.phase == KickLogic.Phase.RESULT and _bank_time < 0.3:
 		_bank_time += delta
 	if run.phase == RunLogic.Phase.PLAYING and logic.phase != KickLogic.Phase.RESULT:
@@ -420,6 +446,7 @@ func _process(delta: float) -> void:
 		else:
 			_power_press_queued = false
 			logic.advance(delta)
+		_sync_kick_audio(phase_before, forward_before)
 		if logic.insured:
 			run.consume_insurance()
 		settle_kick()
@@ -453,16 +480,20 @@ func _unhandled_input(event: InputEvent) -> void:
 	if Settings.pressed_event(event, "trophy") and (run.phase == RunLogic.Phase.GAME_OVER or run.phase == RunLogic.Phase.WIN):
 		showing_records = true
 		front.records_return = FrontEnd.Screen.PLAY
+		_cue("records")
 		refresh_view()
 		return
 	if Settings.pressed_event(event, "back") and (run.phase == RunLogic.Phase.GAME_OVER or run.phase == RunLogic.Phase.WIN or run.phase == RunLogic.Phase.FAR) and not showing_records:
+		_cue("menu")
 		_return_to_main_menu()
 		return
 	if Settings.pressed_event(event, "confirm") and run.phase == RunLogic.Phase.FAR:
+		_cue("menu")
 		_return_to_main_menu()
 		return
 	# R still returns to character select. It is not the offer-reroll action.
 	if key.keycode == KEY_R and run.accepts_restart() and not run.awaiting_offer and not run.awaiting_mulligan and not showing_records:
+		_cue("select")
 		open_select()
 		return
 	if key.keycode == KEY_M and run.awaiting_mulligan:
@@ -471,12 +502,15 @@ func _unhandled_input(event: InputEvent) -> void:
 	if run.curse_prompt:
 		if Settings.pressed_event(event, "back"):
 			run.cancel_curse_prompt()
+			_cue("curse")
 			refresh_view()
 		elif Settings.pressed_event(event, "choose_1"):
 			if run.pick_curse_removal(0):
+				_cue("curse")
 				apply_live_vitamins()
 		elif Settings.pressed_event(event, "choose_2"):
 			if run.pick_curse_removal(1):
+				_cue("curse")
 				apply_live_vitamins()
 		return
 	if run.awaiting_shop:
@@ -493,10 +527,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if run.awaiting_offer and Settings.pressed_event(event, "skip"):
 		if run.skip_offer():
+			_cue("offer")
 			_after_cards()
 		return
 	if run.awaiting_offer and Settings.pressed_event(event, "offer_reroll"):
-		run.reroll_offer()
+		if run.reroll_offer():
+			_cue("offer")
 		refresh_view()
 		return
 	if key.shift_pressed and run.phase == RunLogic.Phase.PLAYING and not run.awaiting_offer and not run.awaiting_mulligan:
@@ -520,10 +556,12 @@ func _unhandled_input(event: InputEvent) -> void:
 	if logic.phase == KickLogic.Phase.AIMING and not run.practicing and not run.awaiting_offer and not run.awaiting_mulligan:
 		if Settings.pressed_event(event, "belt_z") and run.use_belt(0):
 			_vitamin_time = 0.0
+			_cue("belt")
 			apply_live_vitamins()
 			return
 		if Settings.pressed_event(event, "belt_x") and run.use_belt(1):
 			_vitamin_time = 0.0
+			_cue("belt")
 			apply_live_vitamins()
 			return
 		if key.keycode == KEY_C:
@@ -535,6 +573,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if run.awaiting_mulligan:
 		run.accept_pending_miss()
+		_cue("mulligan")
 		if run.phase == RunLogic.Phase.PLAYING:
 			run.begin_retry()
 			load_current_kick()
@@ -590,11 +629,13 @@ func _front_input(event: InputEvent) -> bool:
 			return true
 		if mode == FrontEnd.Screen.TITLE and mouse.pressed:
 			front.confirm_title()
+			_cue("menu")
 			refresh_view()
 		elif mode == FrontEnd.Screen.MAIN and mouse.pressed:
 			var tile := MenuLayout.tile_at(mouse.position, _hud._menu_window())
 			if tile == front.menu_index and tile >= 0:
 				_apply_menu_choice(front.confirm_menu())
+				_cue("menu")
 			elif tile >= 0:
 				front.hover_menu(tile)
 			refresh_view()
@@ -604,6 +645,7 @@ func _front_input(event: InputEvent) -> bool:
 			elif front.dragging != "":
 				Settings.play_preview(front.dragging)
 				front.dragging = ""
+				_cue("options")
 			refresh_view()
 		return true
 	if not event is InputEventKey:
@@ -614,6 +656,7 @@ func _front_input(event: InputEvent) -> bool:
 	if mode == FrontEnd.Screen.TITLE:
 		if Settings.pressed_event(event, "confirm") or key.keycode == KEY_ENTER or key.keycode == KEY_KP_ENTER:
 			front.confirm_title()
+			_cue("menu")
 			refresh_view()
 		return true
 	if mode == FrontEnd.Screen.MAIN:
@@ -623,14 +666,17 @@ func _front_input(event: InputEvent) -> bool:
 			front.move_menu(1)
 		elif Settings.pressed_event(event, "back"):
 			front.back_main()
+			_cue("menu")
 		elif Settings.pressed_event(event, "confirm") or key.keycode == KEY_ENTER or key.keycode == KEY_KP_ENTER:
 			_apply_menu_choice(front.confirm_menu())
+			_cue("menu")
 		refresh_view()
 		return true
 	if mode == FrontEnd.Screen.RECORDS:
 		if Settings.pressed_event(event, "back"):
 			front.back_records()
 			selecting = front.screen == FrontEnd.Screen.SELECT
+			_cue("records")
 			refresh_view()
 		return true
 	return _options_key(event, key)
@@ -649,12 +695,14 @@ func _options_key(event: InputEvent, key: InputEventKey) -> bool:
 			front.cancel_rebind()
 		else:
 			front.finish_rebind(int(key.keycode))
+		_cue("options")
 		refresh_view()
 		return true
 	if front.focus_kind(front.focus) == "slider" and (Settings.pressed_event(event, "menu_left") or Settings.pressed_event(event, "menu_right")):
 		var step := -1 if Settings.pressed_event(event, "menu_left") else 1
 		if front.nudge_slider(step):
 			Settings.play_preview(front.slider_id(front.focus))
+			_cue("options")
 		refresh_view()
 		return true
 	if Settings.pressed_event(event, "menu_left"):
@@ -667,10 +715,11 @@ func _options_key(event: InputEvent, key: InputEventKey) -> bool:
 		front.move_focus(Vector2(0, 1))
 	elif Settings.pressed_event(event, "back"):
 		front.back_options()
+		_cue("options")
 	elif Settings.pressed_event(event, "confirm") or key.keycode == KEY_ENTER or key.keycode == KEY_KP_ENTER:
 		var result := front.activate_focus()
-		if result == "back":
-			pass
+		if result == "rebind" or result == "reset" or result == "back":
+			_cue("options")
 	refresh_view()
 	return true
 
@@ -692,10 +741,13 @@ func _options_click(point: Vector2) -> void:
 		_drag_slider(point)
 	elif kind == "bind":
 		front.begin_rebind()
+		_cue("options")
 	elif kind == "reset":
 		Settings.reset_controls()
+		_cue("options")
 	elif kind == "back":
 		front.back_options()
+		_cue("options")
 
 
 func _drag_slider(point: Vector2) -> void:
@@ -729,23 +781,31 @@ func _options_index_at(point: Vector2) -> int:
 func _shop_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
 	if Settings.pressed_event(event, "choose_1"):
-		run.buy_shelf(0)
+		if run.buy_shelf(0):
+			_cue("shop")
 	elif Settings.pressed_event(event, "choose_2"):
-		run.buy_shelf(1)
+		if run.buy_shelf(1):
+			_cue("shop")
 	elif Settings.pressed_event(event, "choose_3"):
-		run.buy_shelf(2)
+		if run.buy_shelf(2):
+			_cue("shop")
 	elif Settings.pressed_event(event, "buy_b12"):
-		run.buy_b12()
+		if run.buy_b12():
+			_cue("shop")
 	elif Settings.pressed_event(event, "belt_z"):
-		run.sell_belt(0)
+		if run.sell_belt(0):
+			_cue("shop")
 	elif Settings.pressed_event(event, "belt_x"):
-		run.sell_belt(1)
+		if run.sell_belt(1):
+			_cue("shop")
 	elif Settings.pressed_event(event, "shop_reroll"):
-		run.reroll_shop()
+		if run.reroll_shop():
+			_cue("shop")
 	elif key.keycode == KEY_C:
 		run.add_debug_cash()
 		_cash_time = 0.0
 	elif Settings.pressed_event(event, "confirm") or key.keycode == KEY_ENTER or key.keycode == KEY_KP_ENTER:
+		_cue("shop")
 		_leave_shop()
 		return
 	else:

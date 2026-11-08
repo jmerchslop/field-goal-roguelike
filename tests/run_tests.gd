@@ -48,6 +48,7 @@ func _run() -> void:
 	_check_endless_and_farm()
 	_check_new_kickers()
 	_check_auto_shank()
+	_check_sfx()
 
 
 func check(ok: bool, label: String) -> void:
@@ -2896,4 +2897,110 @@ func _check_auto_shank() -> void:
 	print("ACCURACY_SWEEP Walk-On ", accuracy_time, " current formula ", accuracy_expected)
 	check(near(accuracy_time, accuracy_expected, 0.002), "accuracy-phase time stays on the current formula, measured %s" % accuracy_time)
 	check(near(accuracy_time, 0.700, 0.002), "the current accuracy sweep is 0.700s, not a new target")
+
+
+func _sfx_pools(board: KickSfx) -> Array:
+	var names: Array = []
+	for row in board.played:
+		names.append(str(row["pool"]))
+	return names
+
+
+func _check_sfx() -> void:
+	check(KickSfx.normalize_stem("approachfootseps1.mp3") == "approachfootsteps1", "footseps counts as footsteps")
+	check(KickSfx.normalize_stem("Approach Footsteps-2") == "approachfootsteps2", "spaces, hyphens, and case are ignored")
+	check(KickSfx.context_pool("meter") == "" and KickSfx.context_pool("aim") == "" and KickSfx.context_pool("practice") == "" and KickSfx.context_pool("debug") == "" and KickSfx.context_pool("slider_drag") == "", "meter, aim, practice, debug, and a held slider do not click")
+	check(KickSfx.context_pool("title") == "menu" and KickSfx.context_pool("menu") == "menu" and KickSfx.context_pool("options") == "menu" and KickSfx.context_pool("select") == "menu" and KickSfx.context_pool("records") == "menu", "title, menu, options, select, and trophy room share the menu click")
+	check(KickSfx.context_pool("offer") == "ui" and KickSfx.context_pool("shop") == "ui" and KickSfx.context_pool("belt") == "ui" and KickSfx.context_pool("curse") == "ui" and KickSfx.context_pool("mulligan") == "ui", "in-game confirms are a separate click event")
+	var sfx := KickSfx.new()
+	sfx.scan()
+	check(sfx.files_of("footsteps").size() == 2, "both footstep files were found, including the footseps typo")
+	check(sfx.files_of("ballcontact").size() == 2, "both ball-contact files were found")
+	check(sfx.files_of("shank").size() == 2, "both shank files were found")
+	check(sfx.files_of("air_bad").size() == 3, "three bad-accuracy files were found")
+	check(sfx.files_of("air_good").size() == 2 and sfx.files_of("air_perfect").size() == 2, "good and perfect airborne files were found")
+	check(sfx.files_of("doink").size() == 1, "the doink file was found")
+	check(sfx.files_of("menu").size() == 3 and sfx.files_of("ui").size() == 3, "menu and in-game clicks use the same three files")
+	var previous := ""
+	for _i in 6:
+		var file := sfx.play_pool("menu")
+		check(file.begins_with("menuclick") and file.ends_with(".mp3"), "a menu click plays exactly one file, got %s" % file)
+		if previous != "":
+			check(file != previous, "menu clicks do not repeat back to back, got %s" % file)
+		previous = file
+	var ui_prev := ""
+	for _j in 4:
+		var ui_file := sfx.play_pool("ui")
+		check(ui_file.begins_with("menuclick"), "an in-game click plays one of the menu files, got %s" % ui_file)
+		if ui_prev != "":
+			check(ui_file != ui_prev, "in-game clicks do not repeat back to back")
+		ui_prev = ui_file
+	var only := str(sfx.files_of("doink")[0]).get_file()
+	check(sfx.play_pool("doink") == only and sfx.play_pool("doink") == only, "a one-file pool may repeat")
+	sfx._pools["crowd"] = []
+	var before_missing := sfx.played.size()
+	check(sfx.play_pool("crowd") == "" and sfx.played.size() == before_missing, "a missing pool is skipped")
+	var kept: Array = sfx.files_of("ballcontact")
+	sfx._pools["ballcontact"] = [kept[0]]
+	check(sfx.play_pool("ballcontact") == str(kept[0]).get_file(), "a pool with one variant still plays that file")
+	sfx._pools["ballcontact"] = kept
+	sfx.begin_kick()
+	var first_step := sfx.approach()
+	check(KickSfx.normalize_stem(first_step).begins_with("approachfootsteps"), "footsteps play one file at the start of the approach, got %s" % first_step)
+	check(sfx.approach() == "", "footsteps do not play again until the next kick")
+	sfx.begin_kick()
+	var second_step := sfx.approach()
+	check(second_step != "" and second_step != first_step, "the next approach uses the other footstep file")
+	sfx.begin_kick()
+	sfx.played.clear()
+	var shank_hit := sfx.struck(true, 15.0, 1.5, 6.0, false)
+	check(shank_hit.begins_with("shankedkick"), "a shank plays the shank pool, got %s" % shank_hit)
+	var shank_pools := _sfx_pools(sfx)
+	check(not shank_pools.has("ballcontact") and not shank_pools.has("air_bad") and not shank_pools.has("air_good") and not shank_pools.has("air_perfect"), "a shank does not play ball contact or an airborne cue")
+	sfx.begin_kick()
+	sfx.played.clear()
+	sfx.struck(true, 0.0, 1.5, 6.0, false)
+	check(not _sfx_pools(sfx).has("air_perfect"), "a practice shank uses the same rule and skips airborne")
+	sfx.begin_kick()
+	sfx.played.clear()
+	sfx.struck(false, 0.0, 1.5, 6.0, true)
+	var perfect_pools := _sfx_pools(sfx)
+	check(perfect_pools.has("ballcontact") and perfect_pools.has("air_perfect") and not perfect_pools.has("air_good") and not perfect_pools.has("air_bad"), "a PERFECT lock picks the perfect airborne pool, not the result label")
+	sfx.begin_kick()
+	sfx.played.clear()
+	sfx.struck(false, 4.0, 1.5, 6.0, false)
+	check(_sfx_pools(sfx).has("air_good") and not _sfx_pools(sfx).has("air_perfect"), "a good lock that is not PERFECT uses the good airborne pool")
+	sfx.begin_kick()
+	sfx.played.clear()
+	sfx.struck(false, 10.0, 1.5, 6.0, false)
+	check(_sfx_pools(sfx).has("air_bad"), "a lock outside the good band uses the bad airborne pool")
+	var count_before_doink := sfx.played.size()
+	check(sfx.post().begins_with("goalpostdoink"), "a doink adds the post sound")
+	check(sfx.played.size() == count_before_doink + 1 and _sfx_pools(sfx).has("ballcontact") and _sfx_pools(sfx).has("air_bad"), "the doink does not replace contact or the airborne cue")
+	check(sfx.post() == "", "the post sound plays once per kick")
+	var stacked := sfx.played.size()
+	sfx.struck(false, 0.0, 1.5, 6.0, true)
+	check(sfx.played.size() == stacked, "a second strike on the same kick does not play another airborne")
+	var stops := sfx.airborne_stops
+	sfx.begin_kick()
+	check(sfx.airborne_stops == stops + 1 and not sfx.kick_airborne, "a new kick stops the previous airborne")
+	sfx.played.clear()
+	sfx.struck(false, 0.0, 1.5, 6.0, true)
+	check(_sfx_pools(sfx).has("air_perfect"), "the new kick can play its own airborne")
+	var settings: GameSettings = get_root().get_node("Settings")
+	var saved_sfx := settings.sfx
+	settings.set_volume("sfx", 0, false)
+	check(settings.bus_is_muted("SFX"), "Special Effects at 0 mutes the SFX bus")
+	get_root().add_child(sfx)
+	check(sfx.player_bus("menu") == "SFX" and sfx.player_bus("ballcontact") == "SFX" and sfx.player_bus("air_perfect") == "SFX", "these sounds are routed through the SFX bus")
+	sfx.free()
+	settings.set_volume("sfx", saved_sfx, false)
+	var source := FileAccess.get_file_as_string("res://scripts/main.gd")
+	var sync_at := source.find("func _sync_kick_audio")
+	var sync_body := source.substr(sync_at, source.find("\nfunc ", sync_at + 10) - sync_at)
+	check(sync_body.find("practicing") < 0, "practice swing does not get a separate sound path")
+	var drag_at := source.find("func _drag_slider")
+	var drag_body := source.substr(drag_at, source.find("\nfunc ", drag_at + 10) - drag_at)
+	check(drag_body.find("_cue") < 0, "dragging a volume slider does not click on every move")
+	check(source.find("Sfx.cue(\"meter\")") < 0 and source.find("Sfx.cue(\"practice\")") < 0 and source.find("Sfx.cue(\"aim\")") < 0 and source.find("Sfx.cue(\"debug\")") < 0, "the meter, aim, practice, and debug keys are not click cues")
 
