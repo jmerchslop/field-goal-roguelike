@@ -1088,26 +1088,8 @@ func owned_labels() -> Array:
 
 
 func upcoming_winds() -> Array:
-	if not stats.wind_preview or stats.wind_preview_count <= 0:
-		return []
-	var saved := _wind_rng.state
-	var lines: Array = []
-	var kn := kick_number
-	for _step in stats.wind_preview_count:
-		kn += 1
-		if run_mode != "endless" and kn > RunTable.count():
-			break
-		var info: Dictionary = RunTable.row(RunTable.table_kick(run_mode, kn))
-		var lo := int(info["wind_min"])
-		var hi := int(info["wind_max"])
-		var speed := _wind_rng.randi_range(lo, hi)
-		if speed <= 0:
-			lines.append("Kick %d: Calm" % kn)
-			continue
-		var direction := float(_wind_rng.randi_range(0, 359))
-		lines.append("Kick %d: %s" % [kn, wind_readout(speed, direction)])
-	_wind_rng.state = saved
-	return lines
+	# Future kicks are not forecast. The visor only describes this kick.
+	return []
 
 
 func _close_offer() -> void:
@@ -1356,7 +1338,7 @@ func _apply_ball_vitamins() -> void:
 	if _vitamin_count(Vitamins.LUTEIN) > 0:
 		stats.flag_reader = true
 		stats.laser_line = true
-		stats.laser_full = true
+		stats.path_percent = maxf(stats.path_percent, 100.0)
 
 
 func _reroll_zinc() -> void:

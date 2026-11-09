@@ -1266,6 +1266,13 @@ func world_to_screen(point: Vector3) -> Vector2:
 	return _camera.unproject_position(point)
 
 
+func project_flight_point(forward: float, lateral: float, travel: float, reached: bool) -> Variant:
+	var point := KickLogic.flight_visual_point(forward, lateral, logic.kick_distance, travel, reached)
+	if _camera == null or _camera.is_position_behind(point):
+		return null
+	return _camera.unproject_position(point)
+
+
 func _place_arrow(tee: Vector3) -> void:
 	var show := logic.phase == KickLogic.Phase.AIMING or logic.phase == KickLogic.Phase.POWER or logic.phase == KickLogic.Phase.ACCURACY
 	_arrow.visible = show

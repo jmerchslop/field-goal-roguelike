@@ -315,6 +315,13 @@ static func wind_range_delta(speed: float, direction_degrees: float, low_drive: 
 	return change
 
 
+# Rank I is 0. Rank II is 40. Each rank through VI adds 15. VII and up stay at 100.
+static func path_percent_for_rank(rank: int) -> float:
+	if rank < 2:
+		return 0.0
+	return 40.0 + 15.0 * float(mini(rank, 6) - 2)
+
+
 # The same line the ball is drawn on. At the posts, the wind term is the full drift.
 static func path_lateral(start_lateral: float, forward: float, angle_degrees: float, distance_yards: float, drift: float) -> float:
 	var along := 0.0
@@ -666,32 +673,10 @@ func _lock_accuracy(value: float) -> void:
 	var per_unit := KickConstants.ACCURACY_DEG_PER_ERROR * angle_scale
 	var hook := 0.0 if perfect else -accuracy_error * per_unit
 	final_angle_degrees = aim_degrees + hook
-	# The saucer adds 8 mph west, then Howling Wind scales the combined vector.
-	var cross := crosswind_mph(float(wind_speed), wind_direction) - stats.saucer_mph
-	var head := head_tail_mph(float(wind_speed), wind_direction)
-	var blown := sqrt(cross * cross + head * head)
-	var blown_dir := rad_to_deg(atan2(cross, head))
-	if howling_wind:
-		blown *= 1.5
-	drift_yards = drift_at_uprights(blown, blown_dir, kick_distance, 0, 0, stats.ball_type) * stats.drift_factor
-	var wind_range := wind_range_delta(blown, blown_dir, 0, stats.thin_air)
 	var ranged := power_for_range(power, stats.power_floor)
-	if stats.clearance:
-		var clearance := 5.0 + (ranged - 88.0) * 1.25
-		max_range = kick_distance + clearance + stats.range_bonus + wind_range
-	else:
-		max_range = stats.range_base + stats.range_per_power * ranged + stats.range_bonus + wind_range
-	if snow_range:
-		max_range -= snow_penalty
-	if thin_air_weather:
-		max_range += 4.0
-	if heavy_ball:
-		max_range -= 4.0
-	if max_range < 0.0:
-		max_range = 0.0
-	# 88% and above clears the posts even if a headwind or a penalty would otherwise leave it short.
-	if stats.clearance and ranged >= 88.0 and max_range < kick_distance:
-		max_range = kick_distance
+	var plan := carry_plan(ranged, final_angle_degrees)
+	drift_yards = float(plan["drift"])
+	max_range = float(plan["travel"])
 	travel_yards = max_range
 	flight_duration = flight_time_seconds(travel_yards)
 	reached_uprights = travel_yards >= kick_distance
@@ -726,3 +711,84 @@ func _update_ball() -> void:
 func sync_tee() -> void:
 	# Puts the ball on its spot. Call this after changing the distance or the spot.
 	_update_ball()
+
+
+# Same wind, ball, and range math the real kick uses. e = 0, so the aim is the intended aim.
+func preview_plan() -> Dictionary:
+	var powered := 100.0
+	if phase == Phase.ACCURACY:
+		powered = power_for_range(power, stats.power_floor)
+	return carry_plan(powered, aim_base)
+
+
+func carry_plan(ranged_power: float, angle_degrees: float) -> Dictionary:
+	# The saucer adds 8 mph west, then Howling Wind scales the combined vector.
+	var cross := crosswind_mph(float(wind_speed), wind_direction) - stats.saucer_mph
+	var head := head_tail_mph(float(wind_speed), wind_direction)
+	var blown := sqrt(cross * cross + head * head)
+	var blown_dir := rad_to_deg(atan2(cross, head))
+	if howling_wind:
+		blown *= 1.5
+	var drift := drift_at_uprights(blown, blown_dir, kick_distance, 0, 0, stats.ball_type) * stats.drift_factor
+	var wind_range := wind_range_delta(blown, blown_dir, 0, stats.thin_air)
+	var travel := 0.0
+	if stats.clearance:
+		var clearance := 5.0 + (ranged_power - 88.0) * 1.25
+		travel = kick_distance + clearance + stats.range_bonus + wind_range
+	else:
+		travel = stats.range_base + stats.range_per_power * ranged_power + stats.range_bonus + wind_range
+	if snow_range:
+		travel -= snow_penalty
+	if thin_air_weather:
+		travel += 4.0
+	if heavy_ball:
+		travel -= 4.0
+	if travel < 0.0:
+		travel = 0.0
+	# 88% and above clears the posts even if a headwind or a penalty would otherwise leave it short.
+	if stats.clearance and ranged_power >= 88.0 and travel < kick_distance:
+		travel = kick_distance
+	return {
+		"travel": travel,
+		"drift": drift,
+		"angle": angle_degrees,
+		"reached": travel >= kick_distance,
+	}
+
+
+# Yard samples of the preview, cropped to path_percent of this flight. Step is 0.5 yards.
+func preview_samples(percent: float) -> Array:
+	var plan := preview_plan()
+	var travel := float(plan["travel"])
+	if travel <= 0.05 or percent <= 0.0:
+		return []
+	var limit := travel * percent / 100.0
+	var drift := float(plan["drift"])
+	var angle := float(plan["angle"])
+	var reached := bool(plan["reached"])
+	var samples: Array = []
+	var forward := 0.0
+	while true:
+		var at := minf(forward, limit)
+		var lateral := path_lateral(start_lateral_yards, at, angle, kick_distance, drift)
+		samples.append(flight_visual_point(at, lateral, kick_distance, travel, reached))
+		if at >= limit - 0.001:
+			break
+		forward += 0.5
+	return samples
+
+
+static func flight_visual_point(forward: float, lateral: float, kick_distance: float, travel: float, reached: bool) -> Vector3:
+	var real := maxf(kick_distance, 0.001)
+	var span := visual_span(real)
+	var trip := maxf(travel, 0.001)
+	var peak := real if reached else trip
+	var height := 0.0
+	if forward <= peak:
+		height = sin(clampf(forward / maxf(peak, 0.001), 0.0, 1.0) * PI * 0.5) * 6.4
+	else:
+		var rest := maxf(trip - peak, 0.001)
+		height = (1.0 - clampf((forward - peak) / rest, 0.0, 1.0)) * 6.4
+	if height < 0.2:
+		height = 0.22
+	return Vector3(lateral, height, span - forward * (span / real))

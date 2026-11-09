@@ -399,30 +399,42 @@ func _draw_wind(logic: KickLogic, run: RunLogic) -> void:
 	if not logic.stats.flag_reader:
 		return
 	_text(anchor + Vector2(-8, 18), RunLogic.wind_readout(shown_speed, run.wind_direction), 16, KickConstants.COLOR_ATTEMPT)
-	var preview_y := 40.0
-	for line in run.upcoming_winds():
-		_text(anchor + Vector2(-8, preview_y), str(line), 14, KickConstants.COLOR_TEXT)
-		preview_y += 16.0
 
 
-func _draw_laser(logic: KickLogic, run: RunLogic) -> void:
-	if not logic.stats.laser_line or logic.phase != KickLogic.Phase.AIMING:
+func _draw_laser(logic: KickLogic, _run: RunLogic) -> void:
+	if logic.stats.path_percent <= 0.0:
 		return
-	var blown := float(logic.wind_speed)
-	if logic.howling_wind:
-		blown *= 1.5
-	var drift := KickLogic.drift_at_uprights(blown, logic.wind_direction, logic.kick_distance, 0, 0, logic.stats.ball_type) * logic.stats.drift_factor
-	var far := logic.kick_distance if logic.stats.laser_full else KickLogic.preview_forward(logic.kick_distance)
-	var previous := Vector2.ZERO
-	var started := false
-	for step in 9:
-		var forward := far * float(step) / 8.0
-		var lateral := KickLogic.path_lateral(logic.start_lateral_yards, forward, logic.aim_degrees, logic.kick_distance, drift)
-		var point: Vector2 = game.world_to_screen(Vector3(lateral, 0.35, logic.kick_distance - forward))
-		if started and step % 2 == 0:
-			draw_line(previous, point, Color(0.95, 0.82, 0.16), 3.0)
-		previous = point
-		started = true
+	if logic.phase != KickLogic.Phase.AIMING and logic.phase != KickLogic.Phase.POWER and logic.phase != KickLogic.Phase.ACCURACY:
+		return
+	var plan := logic.preview_plan()
+	var travel := float(plan["travel"])
+	if travel <= 0.05:
+		return
+	var limit := travel * float(logic.stats.path_percent) / 100.0
+	var drift := float(plan["drift"])
+	var angle := float(plan["angle"])
+	var reached := bool(plan["reached"])
+	var previous: Variant = null
+	var dash := false
+	var forward := 0.0
+	while true:
+		var at := minf(forward, limit)
+		var lateral := KickLogic.path_lateral(logic.start_lateral_yards, at, angle, logic.kick_distance, drift)
+		var screen: Variant = game.project_flight_point(at, lateral, travel, reached)
+		if previous != null and screen != null and dash:
+			var start: Vector2 = previous
+			var finish: Vector2 = screen
+			if start.distance_to(finish) <= 220.0:
+				draw_line(start, finish, Color(0.95, 0.82, 0.16), 3.0)
+		if screen == null:
+			previous = null
+			dash = false
+		else:
+			previous = screen
+			dash = not dash
+		if at >= limit - 0.001:
+			break
+		forward += 0.5
 
 
 func _draw_mulligan() -> void:

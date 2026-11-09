@@ -12,6 +12,12 @@ func _ready() -> void:
 		print("Could not create ", shot_dir)
 		get_tree().quit(1)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "visor":
+		if not await _capture_wind_visor():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "menu":
 		if not await _capture_menu_and_rerolls():
 			get_tree().quit(1)
@@ -397,6 +403,9 @@ func _ready() -> void:
 		get_tree().quit(1)
 		return
 	if not await _capture_menu_and_rerolls():
+		get_tree().quit(1)
+		return
+	if not await _capture_wind_visor():
 		get_tree().quit(1)
 		return
 	get_tree().quit()
@@ -813,7 +822,7 @@ func _capture_vitamin_shop() -> bool:
 		print("lutein was not used")
 		return false
 	board.apply_live_vitamins()
-	if not board.logic.stats.laser_full or not board.logic.stats.flag_reader:
+	if board.logic.stats.path_percent < 100.0 or not board.logic.stats.flag_reader:
 		print("lutein path flags missing")
 		return false
 	if not await _capture("shop_lutein_path.png"):
@@ -1853,6 +1862,114 @@ func _capture_m2_kickers() -> bool:
 		board.logic.advance(board.logic.flight_duration)
 	print("CARLOS PERFECT ", board.logic.perfect, " e ", board.logic.accuracy_error, " ", board.logic.result_text)
 	if not await _capture("carlos_numero_dos_perfect.png"):
+		return false
+	return true
+
+
+func _ready_visor(slot: int, rank: int, wind: float, direction: float, endless_kick: int) -> void:
+	board.highlight = slot
+	board.confirm_kicker()
+	board.showing_records = false
+	board.selecting = false
+	board.front.screen = FrontEnd.Screen.PLAY
+	board.force_weather(RunLogic.CLEAR)
+	board.run.run_mode = "standard"
+	if endless_kick > 0:
+		board.run.run_mode = "endless"
+		board.run.kick_number = endless_kick
+	if rank > 6:
+		board.run.run_mode = "endless"
+	board.run.give(Loadout.WIND_VISOR, rank)
+	board.set_wind(wind, direction)
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.AIMING
+	board.logic.aim_base = 0.0
+	board.logic.aim_degrees = 0.0
+	board._pose = "idle"
+	print("VISOR ", Kickers.id_for_slot(slot), " rank ", rank, " path ", board.logic.stats.path_percent, " wind ", board.logic.wind_speed, " travel ", board.logic.preview_plan()["travel"])
+
+
+func _lock_preview_power(power_value: float) -> void:
+	board.logic.phase = KickLogic.Phase.AIMING
+	board.logic.press_space()
+	if board.logic.windup_left > 0.0:
+		board.logic.advance(board.logic.windup_left)
+	board.logic.advance(board.logic.seconds_to_power(power_value))
+	if board.logic.phase == KickLogic.Phase.POWER:
+		board.logic.press_space()
+	board._pose = "idle"
+
+
+func _capture_wind_visor() -> bool:
+	SaveData.try_unlock(Kickers.VEX)
+	_ready_visor(1, 1, 12.0, 90.0, 0)
+	if board.logic.stats.path_percent > 0.0:
+		print("Rank I drew a path percent")
+		return false
+	if not await _capture("visor_1_readout.png"):
+		return false
+	_ready_visor(1, 2, 12.0, 90.0, 0)
+	if not await _capture("visor_2_path_40.png"):
+		return false
+	_ready_visor(1, 3, 12.0, 90.0, 0)
+	if not await _capture("visor_3_path_55.png"):
+		return false
+	_ready_visor(1, 5, 12.0, 90.0, 0)
+	if not await _capture("visor_5_path_85.png"):
+		return false
+	_ready_visor(1, 6, 12.0, 90.0, 0)
+	if not await _capture("visor_6_full_path.png"):
+		return false
+	_ready_visor(1, 8, 18.0, 80.0, 21)
+	if board.run.upcoming_winds().size() > 0:
+		print("Endless visor listed future winds")
+		return false
+	if not await _capture("visor_endless_rank8_full.png"):
+		return false
+	_ready_visor(0, 6, 14.0, 70.0, 0)
+	if not await _capture("visor_bruce_farm_drift.png"):
+		return false
+	_ready_visor(1, 6, 14.0, 70.0, 0)
+	if not await _capture("visor_walkon_same_wind.png"):
+		return false
+	_ready_visor(4, 6, 0.0, 0.0, 0)
+	if not await _capture("visor_vex_zero_wind.png"):
+		return false
+	_ready_visor(1, 6, 0.0, 0.0, 0)
+	if not await _capture("visor_walkon_no_cleats.png"):
+		return false
+	board.run.give(Loadout.CANNON, 1)
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.AIMING
+	board.logic.aim_base = 0.0
+	board.logic.aim_degrees = 0.0
+	print("VISOR cannon travel ", board.logic.preview_plan()["travel"])
+	if not await _capture("visor_walkon_cannon.png"):
+		return false
+	_ready_visor(1, 6, 0.0, 0.0, 0)
+	_lock_preview_power(60.0)
+	print("VISOR locked 60 phase ", board.logic.phase, " P ", board.logic.power, " travel ", board.logic.preview_plan()["travel"])
+	if not await _capture("visor_locked_power_60.png"):
+		return false
+	_ready_visor(0, 6, 0.0, 0.0, 0)
+	_lock_preview_power(50.0)
+	print("VISOR bruce locked 50 P ", board.logic.power, " floor travel ", board.logic.preview_plan()["travel"])
+	if not await _capture("visor_bruce_farm_strength.png"):
+		return false
+	_ready_visor(1, 6, 28.0, 100.0, 25)
+	if not await _capture("visor_endless_long_wind.png"):
+		return false
+	_ready_visor(1, 2, 10.0, 60.0, 0)
+	board.run.belt[0] = Vitamins.LUTEIN
+	if not board.run.use_belt(0):
+		print("lutein was not used on the visor")
+		return false
+	board.apply_live_vitamins()
+	board.logic.phase = KickLogic.Phase.AIMING
+	print("VISOR lutein path ", board.logic.stats.path_percent)
+	if board.logic.stats.path_percent < 100.0:
+		return false
+	if not await _capture("visor_lutein_one_line.png"):
 		return false
 	return true
 

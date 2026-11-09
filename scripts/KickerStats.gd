@@ -40,6 +40,8 @@ var thin_air := false
 var flag_reader := false
 var laser_line := false
 var laser_full := false
+# Share of this kick's flight the visor draws. 0 draws no path. Lutein raises it to 100.
+var path_percent := 0.0
 var wind_preview := false
 var wind_preview_count := 0
 var red_tip_off := false
@@ -100,6 +102,7 @@ func reset() -> void:
 	flag_reader = false
 	laser_line = false
 	laser_full = false
+	path_percent = 0.0
 	wind_preview = false
 	wind_preview_count = 0
 	red_tip_off = false

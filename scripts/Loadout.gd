@@ -181,15 +181,10 @@ static func effect_line(id: String, rank: int) -> String:
 		WIND_VISOR:
 			if rank <= 1:
 				return "Shows wind mph and an arrow"
-			if rank == 2:
-				return "Also a dotted path for 40% of the flight"
-			if rank == 3:
-				return "The path shows the full flight"
-			if rank == 4:
-				return "Also previews wind for the next 3 kicks"
-			if rank == 5:
-				return "Also previews wind for the next 5 kicks"
-			return "Also previews wind for the next 7 kicks"
+			var shown := int(KickLogic.path_percent_for_rank(rank))
+			if shown >= 100:
+				return "Dotted path for the full flight"
+			return "Dotted path for %d%% of this kick" % shown
 		ICE_CAGE:
 			if rank <= 1:
 				return "No red-tip penalty. Immune to Iced."
@@ -515,11 +510,8 @@ static func apply(stats: KickerStats, state: Dictionary, howling: bool, item_sca
 		drift_mul *= factor
 	if helmet == WIND_VISOR:
 		stats.flag_reader = helmet_rank >= 1
-		stats.laser_line = helmet_rank >= 2
-		stats.laser_full = helmet_rank >= 3
-		if helmet_rank >= 4:
-			stats.wind_preview = true
-			stats.wind_preview_count = 2 * helmet_rank - 5
+		stats.path_percent = KickLogic.path_percent_for_rank(helmet_rank)
+		stats.laser_line = stats.path_percent > 0.0
 	elif helmet == ICE_CAGE:
 		stats.ice_cage = true
 		stats.ice_veins = true

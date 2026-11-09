@@ -48,6 +48,7 @@ func _run() -> void:
 	_check_sfx()
 	_check_ball_art()
 	_check_full_rerolls()
+	_check_wind_visor_path()
 	_check_m2_kickers()
 
 
@@ -1281,11 +1282,10 @@ func _check_wind_and_pool() -> void:
 	check(readout.find("10 mph") >= 0 and readout.find("cross") >= 0 and readout.find("tail") >= 0, "check 7 the readout is '%s'" % readout)
 	check(near(KickLogic.crosswind_mph(10.0, 90.0), 10.0, 0.02) and near(KickLogic.head_tail_mph(10.0, 90.0), 0.0, 0.02), "10 mph at 90° is all crosswind")
 	reader.give(Loadout.WIND_VISOR, 2)
-	check(reader.stats.laser_line, "Wind Visor II draws the aim path")
-	var preview_far := KickLogic.preview_forward(35.0)
-	check(near(preview_far, 14.0), "the preview covers the first 40% of the kick")
-	var preview := KickLogic.path_lateral(0.0, preview_far, 0.0, 35.0, walk_drift)
-	check(near(preview, walk_drift * 0.16, 0.02), "check 7 the preview bends with the wind curve, lateral %s" % preview)
+	check(reader.stats.laser_line and near(reader.stats.path_percent, 40.0), "Wind Visor II draws 40% of this kick")
+	check(reader.upcoming_winds().is_empty(), "Wind Visor II does not list future winds")
+	var preview := KickLogic.path_lateral(0.0, 14.0, 0.0, 35.0, walk_drift)
+	check(near(preview, walk_drift * 0.16, 0.02), "check 7 the wind curve is still quadratic, lateral %s" % preview)
 	var tail_kick := KickLogic.new()
 	tail_kick.wind_speed = 10
 	tail_kick.wind_direction = 0.0
@@ -1885,11 +1885,11 @@ func _check_rank_caps_and_range() -> void:
 	var visor := RunLogic.new()
 	visor.new_run()
 	visor.give(Loadout.WIND_VISOR, 4)
-	check(visor.stats.wind_preview_count == 3, "Wind Visor IV still previews 3 kicks")
+	check(near(visor.stats.path_percent, 70.0) and visor.upcoming_winds().is_empty() and not visor.stats.wind_preview, "Wind Visor IV is 70% of this kick and does not preview later kicks")
 	visor.give(Loadout.WIND_VISOR, 5)
-	check(visor.stats.wind_preview_count == 5, "Wind Visor V previews 5 kicks")
+	check(near(visor.stats.path_percent, 85.0), "Wind Visor V is 85% of this kick")
 	visor.give(Loadout.WIND_VISOR, 6)
-	check(visor.stats.wind_preview_count == 7 and visor.upcoming_winds().size() == 7, "Wind Visor VI previews 7 kicks")
+	check(near(visor.stats.path_percent, 100.0) and visor.upcoming_winds().is_empty(), "Wind Visor VI is the full path and still has no future winds")
 	var cage := RunLogic.new()
 	cage.new_run()
 	cage.give(Loadout.ICE_CAGE, 4)
@@ -2247,17 +2247,17 @@ func _check_vitamin_shop() -> void:
 	var lutein := RunLogic.new()
 	lutein.new_run()
 	lutein.give(Loadout.WIND_VISOR, 3)
-	check(lutein.stats.flag_reader and lutein.stats.laser_full, "Wind Visor III already shows the full path")
+	check(lutein.stats.flag_reader and near(lutein.stats.path_percent, 55.0), "Wind Visor III shows 55% of this kick")
 	lutein.belt[0] = Vitamins.LUTEIN
 	lutein.use_belt(0)
 	lutein.prepare_kick_stats()
-	check(lutein.stats.flag_reader and lutein.stats.laser_line and lutein.stats.laser_full, "Lutein keeps a single wind readout and a single full path")
+	check(lutein.stats.flag_reader and lutein.stats.laser_line and near(lutein.stats.path_percent, 100.0), "Lutein keeps one readout and raises the path to 100%")
 	var bare := RunLogic.new()
 	bare.new_run()
 	bare.belt[0] = Vitamins.LUTEIN
 	bare.use_belt(0)
 	bare.prepare_kick_stats()
-	check(bare.stats.flag_reader and bare.stats.laser_full, "Lutein alone turns on the wind numbers and the full path")
+	check(bare.stats.flag_reader and bare.stats.laser_line and near(bare.stats.path_percent, 100.0), "Lutein alone turns on the wind numbers and the full path")
 	var tart := RunLogic.new()
 	tart.new_run()
 	tart.belt[0] = Vitamins.TART
@@ -3284,6 +3284,111 @@ func _check_full_rerolls() -> void:
 		if second_before.has(str(id)):
 			skipped_again += 1
 	check(skipped_again == 0 and shop.belt == belt_now and not shop.shop_b12_bought, "the second F also replaces every shelf and still ignores the belt and B12")
+
+
+func _check_wind_visor_path() -> void:
+	for rank in [1, 2, 3, 4, 5, 6, 8, 12]:
+		var expected := 0.0
+		if rank >= 2:
+			expected = 40.0 + 15.0 * float(mini(rank, 6) - 2)
+		check(near(KickLogic.path_percent_for_rank(rank), expected), "Wind Visor rank %s covers %s percent of this kick" % [rank, expected])
+	var rules := FileAccess.get_file_as_string("res://scripts/Loadout.gd")
+	var hud := FileAccess.get_file_as_string("res://scripts/hud.gd")
+	check(rules.find("previews wind") < 0 and rules.find("helmet_rank - 5") < 0 and rules.find("wind_preview") < 0, "Wind Visor card text and rules do not forecast later kicks")
+	check(hud.find("upcoming_winds") < 0, "the HUD draws one wind readout and no future-kick list")
+	var laser := _gd_function(hud, "_draw_laser")
+	check(laser.find("preview_plan") >= 0 and laser.find("project_flight_point") >= 0 and laser.find("preview_forward") < 0, "the dotted line uses the real flight plan, not the old short-range shortcut")
+	var rank_one := RunLogic.new()
+	rank_one.new_run()
+	rank_one.give(Loadout.WIND_VISOR, 1)
+	check(rank_one.stats.flag_reader and not rank_one.stats.laser_line and near(rank_one.stats.path_percent, 0.0), "Wind Visor I is mph and an arrow, with no path")
+	var endless := RunLogic.new()
+	endless.new_run()
+	endless.run_mode = "endless"
+	endless.give(Loadout.WIND_VISOR, 8)
+	check(near(endless.stats.path_percent, 100.0) and endless.upcoming_winds().is_empty() and not endless.stats.wind_preview, "Endless rank VIII keeps the full path and adds no visor bonus")
+	check(Loadout.effect_line(Loadout.WIND_VISOR, 8).find("full flight") >= 0 and Loadout.effect_line(Loadout.WIND_VISOR, 3).find("55") >= 0, "the tooltip matches 55% at III and the full flight past VI")
+	var walk := _visor_kick(Kickers.WALK_ON, 12.0, 90.0)
+	var bruce := _visor_kick(Kickers.BIG_BRUCE, 12.0, 90.0)
+	check(bruce.preview_plan()["drift"] > float(walk.preview_plan()["drift"]) * 1.05, "the Farm Ball preview drifts more than Team-Issue in the same wind")
+	var vex := _visor_kick(Kickers.VEX, 0.0, 0.0)
+	check(float(vex.preview_plan()["drift"]) < -0.4, "Vex's preview curves left in 0 mph wind")
+	var plain := _visor_kick(Kickers.WALK_ON, 0.0, 0.0)
+	var cannon := _visor_kick(Kickers.WALK_ON, 0.0, 0.0)
+	cannon.stats.range_bonus += 6.0
+	check(float(cannon.preview_plan()["travel"]) > float(plain.preview_plan()["travel"]) + 5.0, "a range bonus lengthens the preview")
+	var howl := _visor_kick(Kickers.WALK_ON, 10.0, 90.0)
+	var calm_howl := _visor_kick(Kickers.WALK_ON, 10.0, 90.0)
+	howl.howling_wind = true
+	check(absf(float(howl.preview_plan()["drift"])) > absf(float(calm_howl.preview_plan()["drift"])) * 1.4, "Howling Wind scales the preview drift")
+	var sticker := _visor_kick(Kickers.WALK_ON, 10.0, 90.0)
+	sticker.stats.drift_factor = 0.8
+	check(absf(float(sticker.preview_plan()["drift"])) < absf(float(calm_howl.preview_plan()["drift"])) * 0.9, "Sticker Cleats shrink the preview drift")
+	var tail := _visor_kick(Kickers.WALK_ON, 10.0, 0.0)
+	var high := _visor_kick(Kickers.WALK_ON, 10.0, 0.0)
+	high.stats.thin_air = true
+	check(float(high.preview_plan()["travel"]) > float(tail.preview_plan()["travel"]) + 1.0, "High-Air's tailwind bonus lengthens the preview")
+	var snowed := _visor_kick(Kickers.WALK_ON, 0.0, 0.0)
+	snowed.snow_range = true
+	snowed.snow_penalty = 4.0
+	check(float(snowed.preview_plan()["travel"]) < float(plain.preview_plan()["travel"]) - 3.0, "snow shortens the preview")
+	var cleared := _visor_kick(Kickers.VEX, 0.0, 0.0)
+	check(bool(cleared.preview_plan()["reached"]) and float(cleared.preview_plan()["travel"]) > cleared.kick_distance, "Vex clearance is in the preview")
+	var before := _visor_kick(Kickers.WALK_ON, 0.0, 0.0)
+	before.phase = KickLogic.Phase.AIMING
+	before.power = 0.0
+	check(near(float(before.preview_plan()["travel"]), float(before.carry_plan(100.0, before.aim_base)["travel"])), "before the power lock the preview is P=100 and e=0")
+	before.phase = KickLogic.Phase.ACCURACY
+	before.power = 60.0
+	check(near(float(before.preview_plan()["travel"]), float(before.carry_plan(60.0, before.aim_base)["travel"])), "after the power lock the preview uses that P and e=0")
+	var bruce_lock := _visor_kick(Kickers.BIG_BRUCE, 0.0, 0.0)
+	bruce_lock.phase = KickLogic.Phase.ACCURACY
+	bruce_lock.power = 50.0
+	check(near(float(bruce_lock.preview_plan()["travel"]), float(bruce_lock.carry_plan(80.0, bruce_lock.aim_base)["travel"])), "Bruce's preview treats a lock under 80 as 80")
+	check(float(bruce_lock.preview_plan()["travel"]) > float(bruce_lock.carry_plan(50.0, bruce_lock.aim_base)["travel"]) + 5.0, "Farm Strength does not preview the raw lock under 80")
+	var shaky := _visor_kick(Kickers.WALK_ON, 8.0, 90.0)
+	shaky.shaky = true
+	shaky.aim_base = 4.0
+	shaky.aim_degrees = 7.0
+	check(near(float(shaky.preview_plan()["angle"]), 4.0), "the preview uses the intended aim, not Shaky Arrow's sway")
+	var paired := RunLogic.new()
+	paired.start_with_kicker(Kickers.WALK_ON)
+	paired.give(Loadout.WIND_VISOR, 2)
+	paired.belt[0] = Vitamins.LUTEIN
+	paired.use_belt(0)
+	paired.prepare_kick_stats()
+	check(paired.stats.flag_reader and near(paired.stats.path_percent, 100.0), "Lutein with Wind Visor II is still one readout and a 100% path")
+	var long := _visor_kick(Kickers.WALK_ON, 35.0, 90.0)
+	long.kick_distance = 180.0
+	var samples: Array = long.preview_samples(100.0)
+	check(samples.size() > 40, "a long kick samples the real flight at least every 0.5 yards")
+	var previous: Vector3 = samples[0]
+	var smooth := true
+	for index in range(1, samples.size()):
+		var point: Vector3 = samples[index]
+		if point.z > previous.z + 0.001 or absf(point.x - previous.x) > 2.5:
+			smooth = false
+		previous = point
+	check(smooth, "a long kick in a strong crosswind stays smooth in yard-space")
+	var shown: Array = long.preview_samples(40.0)
+	var full_travel := float(long.preview_plan()["travel"])
+	var shown_forward := (long.kick_distance) * (1.0 - (float(shown[shown.size() - 1].z) / KickLogic.visual_span(long.kick_distance)))
+	check(shown_forward < full_travel * 0.5 and shown_forward > full_travel * 0.3, "a 40 percent crop stops near 40 percent of the flight, got %s of %s" % [shown_forward, full_travel])
+
+
+func _visor_kick(id: String, wind: float, direction: float) -> KickLogic:
+	var run := RunLogic.new()
+	run.start_with_kicker(id)
+	run.give(Loadout.WIND_VISOR, 6)
+	run.set_wind(wind, direction)
+	run.prepare_kick_stats()
+	var kick := KickLogic.new()
+	kick.stats = run.stats
+	kick.kick_distance = 35.0
+	kick.wind_speed = int(wind)
+	kick.wind_direction = direction
+	kick.aim_base = 0.0
+	return kick
 
 
 func _check_m2_kickers() -> void:
