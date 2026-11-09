@@ -12,6 +12,12 @@ func _ready() -> void:
 		print("Could not create ", shot_dir)
 		get_tree().quit(1)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "drive":
+		if not await _capture_drive_lid():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "visor":
 		if not await _capture_wind_visor():
 			get_tree().quit(1)
@@ -406,6 +412,9 @@ func _ready() -> void:
 		get_tree().quit(1)
 		return
 	if not await _capture_wind_visor():
+		get_tree().quit(1)
+		return
+	if not await _capture_drive_lid():
 		get_tree().quit(1)
 		return
 	get_tree().quit()
@@ -1898,6 +1907,92 @@ func _lock_preview_power(power_value: float) -> void:
 	if board.logic.phase == KickLogic.Phase.POWER:
 		board.logic.press_space()
 	board._pose = "idle"
+
+
+func _capture_drive_lid() -> bool:
+	board.highlight = 1
+	board.confirm_kicker()
+	board.showing_records = false
+	board.selecting = false
+	board.front.screen = FrontEnd.Screen.PLAY
+	board.force_weather(RunLogic.CLEAR)
+	board.run.run_mode = "standard"
+	board.run.kick_number = 1
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.force_offer([{"id": Loadout.DRIVE_LID, "rank": 1, "kind": Loadout.EQUIPMENT, "slot": Loadout.HELMET}])
+	board.run.roll_offer()
+	print("DRIVE CARD ", board.run.offer, " sprite ", Loadout.sprite_path(Loadout.DRIVE_LID))
+	if not await _capture("drive_lid_card.png"):
+		return false
+	board.run.skip_offer()
+	board.run.give(Loadout.DRIVE_LID, 1)
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.AIMING
+	board.run.awaiting_offer = false
+	if not await _capture("drive_lid_hud.png"):
+		return false
+	board.run.force_offer([{"id": Loadout.DRIVE_LID, "rank": 2, "kind": Loadout.EQUIPMENT, "slot": Loadout.HELMET}, {"id": Loadout.HOT_STREAK, "rank": 1}, {"id": Loadout.ICED, "rank": 1}])
+	board.run.roll_offer()
+	print("DRIVE II ", board.run.offer)
+	if not await _capture("drive_lid_rank2_offer.png"):
+		return false
+	board.run.skip_offer()
+	board.highlight = 0
+	board.confirm_kicker()
+	board.run.give(Loadout.DRIVE_LID, 1)
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.AIMING
+	board.run.awaiting_offer = false
+	var yards: float = board.run.stats.range_base + board.run.stats.range_per_power * 100.0 + board.run.stats.range_bonus
+	board.save_note = "Full power %s yd" % KickLogic.format_number(yards)
+	print("BRUCE DRIVE YARDS ", yards)
+	if not await _capture("drive_lid_bruce_69.png"):
+		return false
+	board.save_note = ""
+	board.highlight = 1
+	board.confirm_kicker()
+	board.run.run_mode = "endless"
+	board.run.kick_number = 6
+	board.run.power_item_seen = false
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.offer = [
+		{"id": Loadout.WIND_VISOR, "rank": 1, "kind": Loadout.EQUIPMENT, "slot": Loadout.HELMET},
+		{"id": Loadout.HOT_STREAK, "rank": 1, "kind": Loadout.PERK, "slot": Loadout.PERK},
+		{"id": Loadout.ICED, "rank": 1, "kind": Loadout.CURSE, "slot": Loadout.CURSE},
+	]
+	board.run._consider_power_safety()
+	board.run.awaiting_offer = true
+	print("ENDLESS FORCE ", board.run.offer, " seen ", board.run.power_item_seen)
+	if not Loadout.offer_has_power(board.run.offer):
+		print("Endless safety net did not add a power item")
+		return false
+	if not await _capture("endless_power_safety_50.png"):
+		return false
+	board.run.run_mode = "standard"
+	board.run.power_item_seen = false
+	board.run.offer = [
+		{"id": Loadout.WIND_VISOR, "rank": 1, "kind": Loadout.EQUIPMENT, "slot": Loadout.HELMET},
+		{"id": Loadout.HOT_STREAK, "rank": 1, "kind": Loadout.PERK, "slot": Loadout.PERK},
+		{"id": Loadout.ICED, "rank": 1, "kind": Loadout.CURSE, "slot": Loadout.CURSE},
+	]
+	board.run._consider_power_safety()
+	board.run.awaiting_offer = true
+	print("STANDARD NO FORCE ", board.run.offer)
+	if Loadout.offer_has_power(board.run.offer):
+		print("Standard offer was forced")
+		return false
+	if not await _capture("standard_no_power_safety.png"):
+		return false
+	board.run.skip_offer()
+	board.run.run_mode = "endless"
+	board.run.give(Loadout.DRIVE_LID, 7)
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.AIMING
+	board.run.awaiting_offer = false
+	print("DRIVE VII ", board.run.helmet_rank, " ", board.run.stats.range_bonus)
+	if not await _capture("drive_lid_endless_vii.png"):
+		return false
+	return true
 
 
 func _capture_wind_visor() -> bool:

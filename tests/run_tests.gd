@@ -49,6 +49,7 @@ func _run() -> void:
 	_check_ball_art()
 	_check_full_rerolls()
 	_check_wind_visor_path()
+	_check_drive_lid_and_power_safety()
 	_check_m2_kickers()
 
 
@@ -3389,6 +3390,147 @@ func _visor_kick(id: String, wind: float, direction: float) -> KickLogic:
 	kick.wind_direction = direction
 	kick.aim_base = 0.0
 	return kick
+
+
+func _offer_ids(cards: Array) -> Array:
+	var ids: Array = []
+	for card in cards:
+		ids.append(str(card.get("id", "")))
+	return ids
+
+
+func _curse_count(cards: Array) -> int:
+	var count := 0
+	for card in cards:
+		if str(card.get("kind", "")) == Loadout.CURSE:
+			count += 1
+	return count
+
+
+func _non_power_offer() -> Array:
+	return [
+		Loadout._card(Loadout.EQUIPMENT, Loadout.HELMET, Loadout.WIND_VISOR, 1),
+		Loadout._card(Loadout.PERK, Loadout.PERK, Loadout.HOT_STREAK, 1),
+		Loadout._card(Loadout.CURSE, Loadout.CURSE, Loadout.ICED, 1),
+	]
+
+
+func _check_drive_lid_and_power_safety() -> void:
+	check(Loadout.HELMET_IDS.has(Loadout.DRIVE_LID), "Drive Lid is in the helmet catalog")
+	check(Loadout.is_power_item(Loadout.DRIVE_LID) and Loadout.is_power_item(Loadout.CANNON) and Loadout.is_power_item(Loadout.HIGH_AIR) and Loadout.is_power_item(Loadout.GLASS_LEG) and Loadout.is_power_item(Loadout.STONE) and Loadout.is_power_item(Loadout.SHAKY), "the six power items are Cannon, Drive Lid, High-Air, Glass Leg, Stone Toe, and Shaky Arrow")
+	check(not Loadout.is_power_item(Vitamins.PROTEIN) and not Loadout.is_power_item(Loadout.HEAVY) and not Loadout.is_power_item(Loadout.WIND_VISOR), "Protein Shake, Heavy Ball, and Wind Visor are not power items")
+	var art := Loadout.sprite_path(Loadout.DRIVE_LID)
+	check(art == "" or art.to_lower().find("drive") >= 0, "Drive Lid art is its own file or a missing-sprite placeholder, got %s" % art)
+	check(art.find("wind_visor") < 0 and art.find("ice_cage") < 0 and art.find("scout_lid") < 0 and art.find("doink_cap") < 0 and art.find("hero_ball") < 0, "Drive Lid does not reuse another helmet or Hero Ball")
+	var bruce := RunLogic.new()
+	bruce.start_with_kicker(Kickers.BIG_BRUCE)
+	var bare := bruce.stats.range_base + bruce.stats.range_per_power * 100.0
+	check(near(bare, 65.0), "full-power Bruce with no range items is 65 yards")
+	bruce.give(Loadout.DRIVE_LID, 1)
+	check(near(bruce.stats.range_base + bruce.stats.range_per_power * 100.0 + bruce.stats.range_bonus, 69.0), "Drive Lid I makes that Bruce 69 yards")
+	check(near(bruce.stats.range_bonus, 4.0) and not bruce.stats.flag_reader and not bruce.stats.thin_air, "Drive Lid I is only +4 yards")
+	bruce.give(Loadout.HOWLING)
+	check(near(bruce.stats.range_bonus, 4.6), "Howling Wind makes Drive Lid I +4.6 yards")
+	var big := RunLogic.new()
+	big.start_with_kicker(Kickers.BIG_BRUCE)
+	big.give(Loadout.DRIVE_LID, 1)
+	big.force_weather(RunLogic.BIG_GAME)
+	big.prepare_kick_stats()
+	check(near(big.stats.range_bonus, 4.0), "Drive Lid still adds range during Big Game")
+	var ranks := RunLogic.new()
+	ranks.new_run()
+	ranks.give(Loadout.DRIVE_LID, 6)
+	check(near(ranks.stats.range_bonus, 24.0), "Drive Lid VI is +24 yards")
+	ranks.give(Loadout.DRIVE_LID, 7)
+	check(ranks.helmet_rank == 6, "Standard Drive Lid stops at rank VI")
+	var endless_lid := RunLogic.new()
+	endless_lid.new_run()
+	endless_lid.run_mode = "endless"
+	endless_lid.give(Loadout.DRIVE_LID, 7)
+	check(endless_lid.helmet_rank == 7 and near(endless_lid.stats.range_bonus, 28.0) and Loadout.rank_badge(Loadout.DRIVE_LID, 7) == "VII", "Endless Drive Lid VII is +28 yards")
+	endless_lid.give(Loadout.DRIVE_LID, 12)
+	check(endless_lid.helmet_rank == 12 and near(endless_lid.stats.range_bonus, 48.0), "Endless Drive Lid XII is +48 yards")
+	var locked := RunLogic.new()
+	locked.new_run()
+	locked.give(Loadout.DRIVE_LID, 1)
+	var saw_other := false
+	var saw_next := false
+	for card in Loadout.legal_equipment(locked.loadout_state()):
+		if str(card.get("slot", "")) != Loadout.HELMET:
+			continue
+		if str(card.get("id", "")) != Loadout.DRIVE_LID:
+			saw_other = true
+		if int(card.get("rank", 0)) == 2:
+			saw_next = true
+	check(not saw_other and saw_next, "Drive Lid style-locks other helmets and can rank up")
+	var early := RunLogic.new()
+	early.new_run()
+	early.run_mode = "endless"
+	early.kick_number = 3
+	early.offer = _non_power_offer()
+	var early_ids := _offer_ids(early.offer)
+	early._consider_power_safety()
+	check(_offer_ids(early.offer) == early_ids and not early.power_item_seen, "Endless does not force a power item before the 50-yard kick")
+	var standard := RunLogic.new()
+	standard.new_run()
+	standard.kick_number = 6
+	standard.offer = _non_power_offer()
+	var standard_ids := _offer_ids(standard.offer)
+	standard._consider_power_safety()
+	check(standard.run_mode != "endless" and _offer_ids(standard.offer) == standard_ids, "Standard never forces a power item")
+	var forced := RunLogic.new()
+	forced.new_run()
+	forced.run_mode = "endless"
+	forced.kick_number = 6
+	var kept_equipment := true
+	var always_power := true
+	var never_two_curses := true
+	for _spin in 24:
+		forced.power_item_seen = false
+		forced.offer = _non_power_offer()
+		forced._consider_power_safety()
+		if not Loadout.offer_has_power(forced.offer):
+			always_power = false
+		if not _offer_ids(forced.offer).has(Loadout.WIND_VISOR):
+			kept_equipment = false
+		if _curse_count(forced.offer) > 1:
+			never_two_curses = false
+	check(always_power, "the 50-yard Endless offer includes a power item when one is legal")
+	check(kept_equipment, "the force keeps the equipment card when a perk or curse can be replaced")
+	check(never_two_curses, "the force never creates two curses")
+	check(forced.power_item_seen, "seeing a power item, including one the safety net added, is remembered")
+	var blocked := RunLogic.new()
+	blocked.new_run()
+	blocked.run_mode = "endless"
+	blocked.kick_number = 8
+	blocked.attempt_cap = 2
+	blocked.give(Loadout.PINPOINT, 1)
+	blocked.give(Loadout.WIND_VISOR, 1)
+	blocked.give(Loadout.IRON_GRIP, 1)
+	blocked.give(Loadout.DEEP_BENCH, 1)
+	blocked.give(Loadout.HOT_STREAK, 1)
+	blocked.give(Loadout.HEAVY)
+	blocked.give(Loadout.NARROW)
+	blocked.power_item_seen = false
+	blocked.offer = _non_power_offer()
+	var blocked_ids := _offer_ids(blocked.offer)
+	check(Loadout.legal_power_items(blocked.loadout_state(), blocked.attempt_cap).is_empty(), "this loadout has no legal power item")
+	blocked._consider_power_safety()
+	check(_offer_ids(blocked.offer) == blocked_ids and not blocked.power_item_seen, "the force does not fire when no legal power item exists")
+	var remembered := RunLogic.new()
+	remembered.new_run()
+	remembered.run_mode = "endless"
+	remembered.kick_number = 6
+	remembered.power_item_seen = true
+	remembered.offer = _non_power_offer()
+	var remembered_ids := _offer_ids(remembered.offer)
+	remembered._consider_power_safety()
+	check(_offer_ids(remembered.offer) == remembered_ids, "after a power item was already shown, later offers are not forced")
+	var noted := RunLogic.new()
+	noted.new_run()
+	noted.offer = [Loadout._card(Loadout.EQUIPMENT, Loadout.CLEATS, Loadout.CANNON, 2), Loadout._card(Loadout.PERK, Loadout.PERK, Loadout.HOT_STREAK, 1), Loadout._card(Loadout.CURSE, Loadout.CURSE, Loadout.ICED, 1)]
+	noted._consider_power_safety()
+	check(noted.power_item_seen, "a generated offer that contains a power item, including a rank-up, marks it seen")
 
 
 func _check_m2_kickers() -> void:

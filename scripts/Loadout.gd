@@ -19,6 +19,7 @@ const WIND_VISOR := "wind_visor"
 const ICE_CAGE := "ice_cage"
 const SCOUT_LID := "scout_lid"
 const DOINK_CAP := "doink_cap"
+const DRIVE_LID := "drive_lid"
 const IRON_GRIP := "iron_grip"
 const REPLAY_GLOVES := "replay_gloves"
 const HIGH_AIR := "high_air"
@@ -39,7 +40,9 @@ const STONE := "stone_toe"
 const TIGHT := "tight_window"
 
 const CLEAT_IDS: Array = [CANNON, PINPOINT, ANCHOR, STICKER]
-const HELMET_IDS: Array = [WIND_VISOR, ICE_CAGE, SCOUT_LID, DOINK_CAP]
+const HELMET_IDS: Array = [WIND_VISOR, ICE_CAGE, SCOUT_LID, DOINK_CAP, DRIVE_LID]
+
+const POWER_IDS: Array = [CANNON, DRIVE_LID, HIGH_AIR, GLASS_LEG, STONE, SHAKY]
 const GLOVE_IDS: Array = [IRON_GRIP, REPLAY_GLOVES, HIGH_AIR, WEATHER_WRAPS]
 const PERK_IDS: Array = [DEEP_BENCH, HOT_STREAK, STORM_CHASER, HERO_BALL, GLASS_LEG, TWO_MINUTE]
 const CURSE_IDS: Array = [ICED, SHANKY, HEAVY, HOWLING, SHAKY, NARROW, STONE, TIGHT]
@@ -123,6 +126,8 @@ static func piece_name(id: String) -> String:
 			return "Sticker Cleats"
 		WIND_VISOR:
 			return "Wind Visor"
+		DRIVE_LID:
+			return "Drive Lid"
 		ICE_CAGE:
 			return "Ice Cage"
 		SCOUT_LID:
@@ -178,6 +183,8 @@ static func effect_line(id: String, rank: int) -> String:
 			return "Needles ×%s" % KickLogic.format_number(pow(0.85, float(rank)))
 		STICKER:
 			return "Drift ×%s" % KickLogic.format_number(pow(0.80, float(rank)))
+		DRIVE_LID:
+			return "+%d yd" % (4 * rank)
 		WIND_VISOR:
 			if rank <= 1:
 				return "Shows wind mph and an arrow"
@@ -475,6 +482,103 @@ static func _card(kind: String, slot: String, id: String, rank: int) -> Dictiona
 	return {"kind": kind, "slot": slot, "id": id, "rank": rank}
 
 
+static func is_power_item(id: String) -> bool:
+	return POWER_IDS.has(id)
+
+
+static func offer_has_power(cards: Array) -> bool:
+	for card in cards:
+		if is_power_item(str(card.get("id", ""))):
+			return true
+	return false
+
+
+static func legal_power_items(state: Dictionary, attempt_cap: int) -> Array:
+	var found: Array = []
+	for card in legal_equipment(state):
+		if is_power_item(str(card.get("id", ""))):
+			found.append(card)
+	for card in legal_perks(state, attempt_cap):
+		if is_power_item(str(card.get("id", ""))):
+			found.append(card)
+	for card in legal_curses(state):
+		if is_power_item(str(card.get("id", ""))):
+			found.append(card)
+	return found
+
+
+# Endless only calls this. One card is swapped in after the normal draw.
+static func with_power_safety(cards: Array, state: Dictionary, attempt_cap: int, rng: RandomNumberGenerator) -> Array:
+	if offer_has_power(cards) or cards.is_empty():
+		return cards
+	var choices := legal_power_items(state, attempt_cap)
+	if choices.is_empty():
+		return cards
+	var offer: Array = []
+	for card in cards:
+		offer.append((card as Dictionary).duplicate())
+	var flexible: Array = []
+	var equipment_only: Array = []
+	for card in choices:
+		if str(card.get("kind", "")) == EQUIPMENT:
+			equipment_only.append(card)
+		else:
+			flexible.append(card)
+	if _place_power_pick(offer, flexible, rng):
+		return offer
+	if _place_equipment_power(offer, equipment_only, rng):
+		return offer
+	return cards
+
+
+static func _place_power_pick(offer: Array, picks: Array, rng: RandomNumberGenerator) -> bool:
+	var pool: Array = picks.duplicate()
+	while not pool.is_empty():
+		var index := rng.randi() % pool.size()
+		var pick: Dictionary = pool[index]
+		pool.remove_at(index)
+		var slot := _safety_index(offer, pick)
+		if slot < 0:
+			continue
+		offer[slot] = pick
+		return true
+	return false
+
+
+static func _place_equipment_power(offer: Array, picks: Array, rng: RandomNumberGenerator) -> bool:
+	if picks.is_empty():
+		return false
+	var pick: Dictionary = picks[rng.randi() % picks.size()]
+	var slot := _index_kind(offer, EQUIPMENT)
+	if slot < 0:
+		slot = 0
+	offer[slot] = pick
+	return true
+
+
+static func _safety_index(offer: Array, pick: Dictionary) -> int:
+	var curse_at := _index_kind(offer, CURSE)
+	var perk_at := _index_kind(offer, PERK)
+	if str(pick.get("kind", "")) == CURSE:
+		if curse_at >= 0:
+			return curse_at
+		if perk_at >= 0:
+			return perk_at
+		return -1
+	if perk_at >= 0:
+		return perk_at
+	if curse_at >= 0:
+		return curse_at
+	return -1
+
+
+static func _index_kind(offer: Array, kind: String) -> int:
+	for i in offer.size():
+		if str(offer[i].get("kind", "")) == kind:
+			return i
+	return -1
+
+
 # stats already has the kicker's base kit. This adds the owned pieces.
 # howling makes equipment and perk numbers 15% stronger. Curse upsides are not included.
 static func apply(stats: KickerStats, state: Dictionary, howling: bool, item_scale: float = 1.0) -> void:
@@ -533,6 +637,8 @@ static func apply(stats: KickerStats, state: Dictionary, howling: bool, item_sca
 		stats.rerolls_per_run += _scout_rerolls(helmet_rank)
 		if helmet_rank >= 4:
 			stats.practice_per_quarter += 1 + int((helmet_rank - 4) / 2.0)
+	elif helmet == DRIVE_LID:
+		range_add += 4.0 * float(helmet_rank)
 	elif helmet == DOINK_CAP:
 		if helmet_rank <= 5:
 			stats.doink_per_quarter = helmet_rank
@@ -913,6 +1019,9 @@ static func _aliases(id: String) -> Array:
 			aliases.append(full.substr(0, full.length() - mark.length()))
 	if id == HIGH_AIR:
 		aliases.append("highair")
+	if id == DRIVE_LID:
+		aliases.append("drivelid")
+		aliases.append("drive_lid_helmet")
 	if id == TWO_MINUTE:
 		aliases.append("two_minute")
 		aliases.append("twominute")

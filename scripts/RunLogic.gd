@@ -70,6 +70,7 @@ var awaiting_mulligan := false
 var mulligans_left := 0
 var mulligan_used_this_kick := false
 var rerolls_left := 1
+var power_item_seen := false
 var pending_result := ""
 var pending_offset := 0.0
 var pending_perfect := false
@@ -194,6 +195,7 @@ func new_run() -> void:
 	awaiting_mulligan = false
 	mulligan_used_this_kick = false
 	rerolls_left = stats.rerolls_per_run
+	power_item_seen = false
 	pending_result = ""
 	wind_speed = 0
 	wind_direction = 0.0
@@ -706,6 +708,7 @@ func roll_offer() -> void:
 		_forced_cards = []
 	else:
 		offer = Loadout.draw_offer(loadout_state(), attempt_cap, _offer_rng)
+	_consider_power_safety()
 	awaiting_offer = true
 
 
@@ -731,8 +734,17 @@ func reroll_offer() -> bool:
 	rerolls_left -= 1
 	var previous: Array = offer.duplicate(true)
 	offer = Loadout.draw_offer(loadout_state(), attempt_cap, _offer_rng, previous)
+	_consider_power_safety()
 	awaiting_offer = true
 	return true
+
+
+func _consider_power_safety() -> void:
+	if run_mode == "endless" and not power_item_seen and RunTable.endless_distance(kick_number + 1) >= 50.0:
+		offer = Loadout.with_power_safety(offer, loadout_state(), attempt_cap, _offer_rng)
+	for card in offer:
+		if Loadout.is_power_item(str(card.get("id", ""))):
+			power_item_seen = true
 
 
 func opens_shop() -> bool:
