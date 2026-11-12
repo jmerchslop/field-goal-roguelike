@@ -153,9 +153,9 @@ func _draw_wedge_label(hub: Vector2, radius: float, degrees: float, text: String
 func _draw_weather_tint(run: RunLogic) -> void:
 	var tint := Color(0, 0, 0, 0)
 	if run.has_rain():
-		tint = Color(0.25, 0.45, 0.9, 0.22)
+		tint = Color(0.25, 0.45, 0.9, 0.14)
 	elif run.weather == RunLogic.SNOW:
-		tint = Color(0.93, 0.95, 1.0, 0.28)
+		tint = Color(0.93, 0.95, 1.0, 0.12)
 	if tint.a > 0.0:
 		draw_rect(Rect2(0, 0, KickConstants.WINDOW_WIDTH, KickConstants.WINDOW_HEIGHT), tint)
 

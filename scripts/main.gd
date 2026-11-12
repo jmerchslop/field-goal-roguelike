@@ -48,6 +48,15 @@ var _marks: Node3D
 var _stands: Node3D
 var _sky_mat: ShaderMaterial
 var sky_texture_path := ""
+var _weather_anchor: Node3D
+var _rain: GPUParticles3D
+var _snow: GPUParticles3D
+var weather_state := {
+	"kind": "none",
+	"amount": 0,
+	"fall": 0.0,
+	"dim": 1.0,
+}
 var grass_bounds := {
 	"min_z": 0.0,
 	"max_z": 0.0,
@@ -63,6 +72,15 @@ const GRASS_TILE_YARDS := 12.0
 const GRASS_PATH := "res://art/field/grass-tile.png"
 const SKY_CLEAR_PATH := "res://art/field/sky-clear.png"
 const SKY_OVERCAST_PATH := "res://art/field/sky-overcast.png"
+const SUN_ENERGY := 1.25
+const AMBIENT_ENERGY := 0.7
+const OVERCAST_DIM := 0.74
+const RAIN_PARTICLES := 360
+const MONSOON_PARTICLES := 780
+const SNOW_PARTICLES := 200
+const RAIN_FALL := 16.0
+const MONSOON_FALL := 28.0
+const SNOW_FALL := 2.4
 const _STAND_PATHS: Array[String] = [
 	"res://art/field/crowd-stand-strip-a.png",
 	"res://art/field/crowd-stand-strip-b.png",
@@ -1051,12 +1069,12 @@ func _style_world() -> void:
 	env.background_color = Color(0.64, 0.8, 0.95)
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = Color(0.72, 0.8, 0.9)
-	env.ambient_light_energy = 0.7
+	env.ambient_light_energy = AMBIENT_ENERGY
 	$WorldEnvironment.environment = env
 	var sun := $Sun as DirectionalLight3D
 	sun.rotation_degrees = Vector3(-52, -38, 0)
 	sun.light_color = Color(1.0, 0.96, 0.88)
-	sun.light_energy = 1.25
+	sun.light_energy = SUN_ENERGY
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 160.0
 	_camera.fov = 58.0
@@ -1065,6 +1083,7 @@ func _style_world() -> void:
 func _build_field() -> void:
 	_build_stadium()
 	_build_sky()
+	_build_weather()
 	_ensure_field(35.0)
 
 
@@ -1265,6 +1284,180 @@ func _frame_sky(rig: Dictionary) -> void:
 	var zenith := maxf(top_elev + 0.02, horizon + 0.12)
 	_sky_mat.set_shader_parameter("horizon_elev", horizon)
 	_sky_mat.set_shader_parameter("zenith_elev", zenith)
+
+
+func _build_weather() -> void:
+	# One volume in front of the camera. It is not a field of drops.
+	_weather_anchor = Node3D.new()
+	_weather_anchor.name = "Weather"
+	_world.add_child(_weather_anchor)
+	_rain = _make_precip("Rain", _streak_texture(), Vector2(0.1, 0.86), true)
+	_snow = _make_precip("Snow", _flake_texture(), Vector2(0.32, 0.32), false)
+	_weather_anchor.add_child(_rain)
+	_weather_anchor.add_child(_snow)
+	_apply_weather("")
+
+
+func _make_precip(node_name: String, texture: Texture2D, size: Vector2, align_fall: bool) -> GPUParticles3D:
+	var particles := GPUParticles3D.new()
+	particles.name = node_name
+	particles.emitting = false
+	particles.visible = false
+	particles.amount = 1
+	particles.lifetime = 1.2
+	particles.preprocess = 4.0
+	particles.explosiveness = 0.0
+	particles.local_coords = true
+	particles.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	particles.visibility_aabb = AABB(Vector3(-16, -12, -12), Vector3(32, 24, 24))
+	var process := ParticleProcessMaterial.new()
+	process.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+	process.emission_box_extents = Vector3(12.0, 7.5, 6.5)
+	process.direction = Vector3.DOWN
+	process.spread = 8.0
+	process.gravity = Vector3(0, -RAIN_FALL, 0)
+	process.initial_velocity_min = RAIN_FALL
+	process.initial_velocity_max = RAIN_FALL
+	process.set_particle_flag(ParticleProcessMaterial.PARTICLE_FLAG_ALIGN_Y_TO_VELOCITY, align_fall)
+	if not align_fall:
+		process.turbulence_enabled = true
+		process.turbulence_noise_strength = 0.4
+		process.turbulence_noise_scale = 1.6
+		process.turbulence_influence_min = 0.04
+		process.turbulence_influence_max = 0.12
+		process.scale_min = 0.75
+		process.scale_max = 1.25
+	particles.process_material = process
+	var quad := QuadMesh.new()
+	quad.size = size
+	var paint := StandardMaterial3D.new()
+	paint.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	paint.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	paint.blend_mode = BaseMaterial3D.BLEND_MODE_MIX
+	paint.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES if align_fall else BaseMaterial3D.BILLBOARD_ENABLED
+	paint.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	paint.albedo_texture = texture
+	paint.vertex_color_use_as_albedo = true
+	paint.cull_mode = BaseMaterial3D.CULL_DISABLED
+	quad.material = paint
+	particles.draw_pass_1 = quad
+	return particles
+
+
+func _streak_texture() -> Texture2D:
+	var image := Image.create(3, 12, false, Image.FORMAT_RGBA8)
+	image.fill(Color(0, 0, 0, 0))
+	for y in 12:
+		var alpha := 0.0
+		if y >= 2 and y <= 9:
+			alpha = 0.9
+		elif y == 1 or y == 10:
+			alpha = 0.45
+		image.set_pixel(1, y, Color(0.86, 0.92, 1.0, alpha))
+	return ImageTexture.create_from_image(image)
+
+
+func _flake_texture() -> Texture2D:
+	var image := Image.create(7, 7, false, Image.FORMAT_RGBA8)
+	image.fill(Color(0, 0, 0, 0))
+	var mid := 3.0
+	for y in 7:
+		for x in 7:
+			var dist := Vector2(float(x) - mid, float(y) - mid).length()
+			var alpha := 0.0
+			if dist <= 1.2:
+				alpha = 0.82
+			elif dist <= 2.15:
+				alpha = 0.5
+			elif dist <= 2.8:
+				alpha = 0.22
+			if alpha > 0.0:
+				image.set_pixel(x, y, Color(0.96, 0.97, 1.0, alpha))
+	return ImageTexture.create_from_image(image)
+
+
+func _weather_kind(weather: String) -> String:
+	if weather == RunLogic.RAIN or weather == RunLogic.MONSOON:
+		return "rain"
+	if weather == RunLogic.SNOW or weather == RunLogic.ICED:
+		return "snow"
+	return "none"
+
+
+func _apply_weather(weather: String) -> void:
+	var kind := _weather_kind(weather)
+	var amount := 0
+	var fall := 0.0
+	if weather == RunLogic.MONSOON:
+		amount = MONSOON_PARTICLES
+		fall = MONSOON_FALL
+	elif weather == RunLogic.RAIN:
+		amount = RAIN_PARTICLES
+		fall = RAIN_FALL
+	elif kind == "snow":
+		amount = SNOW_PARTICLES
+		fall = SNOW_FALL
+	var dim := OVERCAST_DIM if kind != "none" else 1.0
+	weather_state = {"kind": kind, "amount": amount, "fall": fall, "dim": dim}
+	_tune_precip(_rain, kind == "rain", amount, fall, 0.55 if weather == RunLogic.MONSOON else 0.85)
+	_tune_precip(_snow, kind == "snow", amount, fall, 3.6)
+	var env := $WorldEnvironment.environment as Environment
+	if env != null:
+		env.ambient_light_energy = AMBIENT_ENERGY * dim
+	var sun := $Sun as DirectionalLight3D
+	if sun != null:
+		sun.light_energy = SUN_ENERGY * dim
+
+
+func _tune_precip(particles: GPUParticles3D, active: bool, amount: int, fall: float, life: float) -> void:
+	if particles == null:
+		return
+	particles.visible = active
+	particles.emitting = active
+	if not active:
+		return
+	particles.amount = amount
+	particles.lifetime = life
+	var process := particles.process_material as ParticleProcessMaterial
+	if process == null:
+		return
+	process.initial_velocity_min = fall * 0.85
+	process.initial_velocity_max = fall * 1.15
+	process.gravity = Vector3(0, -fall, 0)
+	process.color = Color(1, 1, 1, 0.84 if particles == _snow else 0.72)
+
+
+func _place_weather() -> void:
+	if _weather_anchor == null or _camera == null:
+		return
+	if str(weather_state["kind"]) == "none":
+		return
+	var forward := -_camera.global_transform.basis.z
+	if forward.length_squared() < 0.0001:
+		return
+	forward = forward.normalized()
+	var origin := _camera.global_position + forward * 9.0
+	_weather_anchor.global_position = origin
+	if forward.cross(Vector3.UP).length_squared() > 0.0001:
+		_weather_anchor.look_at(origin + forward, Vector3.UP)
+	var info := ribbon_state()
+	var blow: Vector3 = info["blow"]
+	var lean := float(info["lean"])
+	var fall := float(weather_state["fall"])
+	var world_grav := Vector3.DOWN * fall
+	if lean > 0.5 and blow.length_squared() > 0.0001:
+		var axis := Vector3.DOWN.cross(blow.normalized())
+		if axis.length_squared() > 0.0001:
+			world_grav = Vector3.DOWN.rotated(axis.normalized(), deg_to_rad(lean)) * fall
+	var local_grav := _weather_anchor.global_transform.basis.transposed() * world_grav
+	for particles in [_rain, _snow]:
+		if particles == null or not particles.emitting:
+			continue
+		var process := particles.process_material as ParticleProcessMaterial
+		if process == null:
+			continue
+		process.gravity = local_grav
+		process.direction = local_grav.normalized()
 
 
 func _build_stadium() -> void:
@@ -1555,6 +1748,7 @@ func _fit_sprite(sprite: Sprite3D, path: String) -> void:
 func _place_world() -> void:
 	_ensure_field(logic.kick_distance)
 	_apply_sky(run.weather)
+	_apply_weather(run.weather)
 	_apply_ball_sprite()
 	var tee := _tee_position()
 	var spot := _ball_position()
@@ -1794,6 +1988,7 @@ func _place_camera() -> void:
 	_camera.look_at(rig["look"], Vector3.UP)
 	_camera.far = maxf(400.0, at.z + 80.0)
 	_frame_sky(rig)
+	_place_weather()
 	var sun := $Sun as DirectionalLight3D
 	if sun != null:
 		sun.directional_shadow_max_distance = maxf(160.0, at.z + 40.0)

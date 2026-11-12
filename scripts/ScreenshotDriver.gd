@@ -24,6 +24,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "precip":
+		if not await _capture_precip():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "sky":
 		if not await _capture_sky():
 			get_tree().quit(1)
@@ -2307,6 +2313,79 @@ func _capture_gauge_crop(file_name: String) -> bool:
 		return false
 	print("Saved ", path, " ", crop.get_width(), "x", crop.get_height())
 	return true
+
+
+func _settle_weather() -> void:
+	for _i in 3:
+		await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+
+
+func _capture_precip() -> bool:
+	board.highlight = 1
+	board.selecting = true
+	board.confirm_kicker()
+	board.logic.phase = KickLogic.Phase.AIMING
+	board.force_weather(RunLogic.CLEAR)
+	await _settle_weather()
+	if not await _capture("precip_35_clear.png"):
+		return false
+	board.force_weather(RunLogic.RAIN)
+	await _settle_weather()
+	if not await _capture("precip_35_rain.png"):
+		return false
+	board.cycle_debug_distance()
+	board.cycle_debug_distance()
+	await _settle_weather()
+	if not await _capture("precip_200_rain.png"):
+		return false
+	board.cycle_debug_distance()
+	await _settle_weather()
+	if not await _capture("precip_500_rain.png"):
+		return false
+	board.cycle_debug_distance()
+	await _settle_weather()
+	if not await _capture("precip_1000_rain.png"):
+		return false
+	board.cycle_debug_distance()
+	var attempts: int = board.run.attempts
+	var kick_number: int = board.run.kick_number
+	if board.preview_step() != 0:
+		print("preview did not restore the real kick")
+		return false
+	board.force_weather(RunLogic.MONSOON)
+	await _settle_weather()
+	if not await _capture("precip_monsoon.png"):
+		return false
+	board.force_weather(RunLogic.SNOW)
+	await _settle_weather()
+	if not await _capture("precip_snow.png"):
+		return false
+	board.force_weather(RunLogic.ICED)
+	await _settle_weather()
+	if not await _capture("precip_iced.png"):
+		return false
+	board.force_weather(RunLogic.MUD)
+	await _settle_weather()
+	if not await _capture("precip_mud.png"):
+		return false
+	board.force_weather(RunLogic.THIN_AIR)
+	await _settle_weather()
+	if not await _capture("precip_thin_air.png"):
+		return false
+	board.force_weather(RunLogic.RAIN)
+	board.set_wind(12.0, 90.0)
+	board.refresh_view()
+	await _settle_weather()
+	if not await _capture("precip_rain_wind.png"):
+		return false
+	board.set_wind(0.0, 0.0)
+	board.force_weather(RunLogic.CLEAR)
+	print("PRECIP back kick ", board.run.kick_number, " attempts ", board.run.attempts, " preview ", board.preview_step(), " kind ", board.weather_state["kind"])
+	if board.run.attempts != attempts or board.run.kick_number != kick_number or board.preview_step() != 0:
+		print("weather preview changed the kick")
+		return false
+	return await _capture("precip_back_clear.png")
 
 
 func _capture_sky() -> bool:
