@@ -24,6 +24,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "stamps":
+		if not await _capture_stamps():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "menu":
 		if not await _capture_menu_and_rerolls():
 			get_tree().quit(1)
@@ -2277,6 +2283,96 @@ func _capture_gauge_crop(file_name: String) -> bool:
 		return false
 	print("Saved ", path, " ", crop.get_width(), "x", crop.get_height())
 	return true
+
+
+func _capture_stamps() -> bool:
+	board.front.screen = FrontEnd.Screen.SELECT
+	board.selecting = true
+	board.highlight = 0
+	board.confirm_kicker()
+	board.logic.phase = KickLogic.Phase.POWER
+	board.result_age = 0.0
+	if not await _capture("stamp_hud_still_default.png"):
+		return false
+	board.logic.phase = KickLogic.Phase.RESULT
+	_stamp("GOOD", false, false, false, 4.0, 90.0, 2.4)
+	board.result_age = 0.0
+	if not await _capture("stamp_good_slam.png"):
+		return false
+	board.result_age = 0.4
+	if not await _capture("stamp_good_power.png"):
+		return false
+	_stamp("SHORT", false, false, false, 14.0, 40.0, 0.0)
+	if not await _capture("stamp_short.png"):
+		return false
+	_stamp("WIDE LEFT", false, false, false, 14.0, 80.0, -8.0)
+	if not await _capture("stamp_wide_left.png"):
+		return false
+	_stamp("WIDE RIGHT", false, false, false, 14.0, 80.0, 8.0)
+	if not await _capture("stamp_wide_right.png"):
+		return false
+	_stamp("DOINK", false, false, false, 12.0, 80.0, 3.2)
+	if not await _capture("stamp_doink.png"):
+		return false
+	board.logic.shanked = true
+	board.logic.result_text = "SHORT"
+	board.logic.perfect = false
+	board.logic.power = 0.0
+	board.logic.accuracy_error = 15.0
+	if not await _capture("stamp_shank.png"):
+		return false
+	_stamp("GOOD", false, false, true, 4.0, 90.0, 0.0)
+	if not await _capture("stamp_down_the_middle.png"):
+		return false
+	_stamp("GOOD", false, false, true, 0.2, 90.0, 0.0)
+	board.logic.perfect = true
+	if not await _capture("stamp_middle_perfect.png"):
+		return false
+	_stamp("GOOD", false, false, false, 0.2, 90.0, 4.0)
+	board.logic.perfect = true
+	if not await _capture("stamp_perfect.png"):
+		return false
+	_stamp("GOOD", false, true, false, 0.4, 80.0, 3.1)
+	board.logic.perfect = false
+	if not await _capture("stamp_insured.png"):
+		return false
+	_stamp("SHORT", false, false, false, 14.0, 55.0, 0.0)
+	board.logic.kick_distance = 35.0
+	if not await _capture("stamp_short_35.png"):
+		return false
+	board.logic.kick_distance = 1000.0
+	board._preview_step = 4
+	if not await _capture("stamp_short_1000.png"):
+		return false
+	board._preview_step = 0
+	board.logic.kick_distance = 35.0
+	_stamp("GOOD", false, false, false, 4.0, 70.0, 2.4)
+	board.result_age = 0.9
+	board.run.resolve_kick("GOOD", 0.0, false)
+	board.run.roll_offer()
+	if not await _capture("stamp_then_offer.png"):
+		return false
+	board.run.awaiting_offer = false
+	board.front.screen = FrontEnd.Screen.MAIN
+	if not await _capture("stamp_menu_unchanged.png"):
+		return false
+	return true
+
+
+func _stamp(result: String, shanked: bool, insured: bool, middle: bool, error: float, power: float, offset: float) -> void:
+	board.logic.phase = KickLogic.Phase.RESULT
+	board.logic.shanked = shanked
+	board.logic.result_text = result
+	board.logic.insured = insured
+	board.logic.bank_shot = false
+	board.logic.perfect = false
+	board.logic.accuracy_error = error
+	board.logic.power = power
+	board.logic.offset_yards = 0.0 if middle else offset
+	board.logic.stats = board.run.stats
+	board.result_age = 0.4
+	board.run.awaiting_offer = false
+	board.run.phase = RunLogic.Phase.PLAYING
 
 
 func _capture(file_name: String) -> bool:

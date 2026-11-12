@@ -48,6 +48,7 @@ var _marks: Node3D
 var _field_distance := -1.0
 # 0 is the real kick. 1..4 preview 75, 200, 500, 1000, then back to the real kick.
 var _preview_step := 0
+var result_age := 0.0
 const _PREVIEW_DISTANCES: Array[float] = [75.0, 200.0, 500.0, 1000.0]
 var _ribbon_l: MeshInstance3D
 var _ribbon_r: MeshInstance3D
@@ -116,6 +117,8 @@ func _copy_run_onto_kick() -> void:
 
 
 func settle_kick() -> void:
+	if logic.phase == KickLogic.Phase.RESULT and not ResultStamp.hold_ready(result_age):
+		return
 	if _preview_step > 0 and logic.phase == KickLogic.Phase.RESULT:
 		var dist := shown_distance()
 		logic.reset_kick()
@@ -550,6 +553,10 @@ func _process(delta: float) -> void:
 	if front.screen == FrontEnd.Screen.TITLE or front.screen == FrontEnd.Screen.MAIN or front.screen == FrontEnd.Screen.OPTIONS or front.screen == FrontEnd.Screen.RECORDS or selecting:
 		refresh_view()
 		return
+	if logic.phase == KickLogic.Phase.RESULT:
+		result_age += delta
+	else:
+		result_age = 0.0
 	if logic.phase != KickLogic.Phase.AIMING:
 		meter_time += delta
 	_sway_time += delta

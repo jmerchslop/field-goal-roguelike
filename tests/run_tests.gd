@@ -55,6 +55,7 @@ func _run() -> void:
 	_check_willow_offer_and_endless_shops()
 	_check_field_span_math()
 	_check_ribbons_visor_and_aim_cap()
+	_check_result_stamps()
 
 
 func _finish_live() -> void:
@@ -4107,6 +4108,45 @@ func _check_ribbons_visor_and_aim_cap() -> void:
 	check(heavy.aim_cap_degrees() >= 12.0, "the aim cap never drops below ±12")
 
 
+func _check_result_stamps() -> void:
+	check(ResultStamp.words(true, "GOOD", false, false, false, false)[0] == "SHANK", "a shank stamp is SHANK, not the miss word")
+	check(ResultStamp.words(false, "SHORT", false, false, false, false)[0] == "SHORT", "a short miss stamps SHORT")
+	check(ResultStamp.words(false, "WIDE LEFT", false, false, false, false)[0] == "WIDE LEFT", "a left miss stamps WIDE LEFT")
+	check(ResultStamp.words(false, "WIDE RIGHT", false, false, false, false)[0] == "WIDE RIGHT", "a right miss stamps WIDE RIGHT")
+	check(ResultStamp.words(false, "DOINK", false, false, false, false)[0] == "DOINK", "an unsaved doink stamps DOINK")
+	check(not ResultStamp.words(false, "SHORT", false, false, false, false).has("MISS"), "misses do not use a generic MISS")
+	var bank := ResultStamp.words(false, "GOOD", true, false, true, true)
+	check(bank.size() == 1 and bank[0] == "BANK SHOT" and bank[0].find("!") < 0, "a banked doink is only BANK SHOT")
+	var saved := ResultStamp.words(false, "GOOD", false, true, true, true)
+	check(saved.size() == 1 and saved[0] == "INSURED", "an insured doink is only INSURED")
+	var both := ResultStamp.words(false, "GOOD", false, false, true, true)
+	check(both.size() == 2 and both[0] == "DOWN THE MIDDLE" and both[1] == "PERFECT", "a perfect middle make stacks PERFECT under DOWN THE MIDDLE")
+	check(ResultStamp.words(false, "GOOD", false, false, true, false)[0] == "PERFECT", "a perfect make that is not centered stamps PERFECT")
+	check(ResultStamp.words(false, "GOOD", false, false, false, false)[0] == "GOOD", "any other make stamps GOOD")
+	for word in ["PERFECT", "DOWN THE MIDDLE", "BANK SHOT", "INSURED", "GOOD", "SHANK"]:
+		check(word.find("!") < 0, "stamp words have no exclamation point")
+	check(ResultStamp.power_line(true, 0.0, 0.0) == "POWER 100" and ResultStamp.accuracy_line(true, false, 15.0, 1.5, 6.0) == "", "a shank line is only POWER 100")
+	check(ResultStamp.power_line(false, 50.0, 80.0) == "POWER 80", "Farm Strength shows the effective power")
+	check(ResultStamp.accuracy_line(false, true, 4.0, 1.5, 6.0) == "ACCURACY PERFECT", "a perfect lock reads ACCURACY PERFECT")
+	check(ResultStamp.accuracy_line(false, false, 4.0, 1.5, 6.0) == "ACCURACY GOOD", "a good lock that is not perfect reads ACCURACY GOOD")
+	check(ResultStamp.accuracy_line(false, false, 12.0, 1.5, 6.0) == "ACCURACY BAD", "a lock outside the good band reads ACCURACY BAD")
+	check(not ResultStamp.hold_ready(0.79) and ResultStamp.hold_ready(0.8), "the offer waits until the stamp has been up 0.8 seconds")
+	var callout := BitmapFonts.callout_font()
+	var ui := BitmapFonts.ui_font()
+	check(callout.antialiasing == TextServer.FONT_ANTIALIASING_NONE and ui.antialiasing == TextServer.FONT_ANTIALIASING_NONE, "bitmap fonts are not anti-aliased")
+	check(callout.get_string_size("GOOD", HORIZONTAL_ALIGNMENT_LEFT, -1, BitmapFonts.callout_px).x > 40.0, "Stadium Block draws GOOD")
+	var callout_glyphs: Array = callout.get_glyph_list(0, Vector2i(BitmapFonts.callout_px, 0))
+	var ui_glyphs: Array = ui.get_glyph_list(0, Vector2i(BitmapFonts.ui_px, 0))
+	check(not callout_glyphs.has(33) and not ui_glyphs.has(33), "neither font invents an exclamation glyph")
+	check(ui_glyphs.has(43) and ui_glyphs.has(46) and not ui_glyphs.has(61) and not ui_glyphs.has(215), "Pixel Gothic has plus and dot, and not equals or a times sign")
+	var hud := FileAccess.get_file_as_string("res://scripts/hud.gd")
+	var result_at := hud.find("func _draw_result")
+	var result_body := hud.substr(result_at, hud.find("\nfunc ", result_at + 10) - result_at)
+	check(result_body.find("kick_distance") < 0, "the stamp size does not depend on the kick distance")
+	check(hud.find("PERFECT!") < 0 and hud.find("detail_line()") < 0, "the result overlay dropped the bangs and the old range sentence")
+	check(hud.find("func _draw_title") >= 0 and hud.find("func _draw_offer") >= 0, "title and offer drawing stay in the HUD script")
+
+
 func _check_live_field() -> void:
 	OS.set_environment("FG_SHOTS", "")
 	var packed: PackedScene = load("res://scenes/main.tscn")
@@ -4153,6 +4193,15 @@ func _check_live_field() -> void:
 	check(near(game._post_l.position.x, -RunLogic.SQUEEZE_WIDTH * 0.5) and near(left.position.x, -half), "The Squeeze narrows the posts and leaves the hash rows on 6.17")
 	check(game._ribbon_l != null and game._ribbon_r != null and game._ribbon_l.visible and not game.logic.stats.flag_reader, "orange ribbons are on the posts with no Wind Visor")
 	check(game._ribbon_l.position.x < 0.0 and game._ribbon_r.position.x > 0.0 and absf(game._ribbon_l.position.x - game._post_l.position.x) < 1.0 and absf(game._ribbon_r.position.x - game._post_r.position.x) < 1.0, "ribbons stay on the narrower posts")
+	game.logic.phase = KickLogic.Phase.RESULT
+	game.logic.result_text = "GOOD"
+	game.logic.shanked = false
+	game.result_age = 0.2
+	game.settle_kick()
+	check(not game.run.kick_resolved, "the offer cannot be chosen before the stamp has been held 0.8 seconds")
+	game.result_age = 0.8
+	game.settle_kick()
+	check(game.run.kick_resolved, "after the hold, Space still resolves the kick")
 	var aimed := KickLogic.new()
 	aimed.kick_distance = 200.0
 	aimed.start_lateral_yards = 3.0

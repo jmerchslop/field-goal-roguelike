@@ -41,14 +41,14 @@ func _draw() -> void:
 	_draw_loadout_rail(run)
 	_draw_wind(logic, run)
 	_draw_laser(logic, run)
+	if logic.phase == KickLogic.Phase.RESULT and run.phase == RunLogic.Phase.PLAYING:
+		_draw_result(logic, run)
 	if run.awaiting_mulligan:
 		_draw_mulligan()
 	elif run.awaiting_offer:
 		_draw_offer(run)
 	elif run.phase == RunLogic.Phase.GAME_OVER or run.phase == RunLogic.Phase.WIN or run.phase == RunLogic.Phase.FAR:
 		_draw_end_screen(run)
-	elif logic.phase == KickLogic.Phase.RESULT:
-		_draw_result(logic, run)
 	_draw_trophy(run)
 	_draw_cash_belt(run)
 	if run.curse_prompt:
@@ -515,32 +515,102 @@ func _draw_attempt_pips(run: RunLogic, origin_x: float, origin_y: float) -> void
 
 
 func _draw_result(logic: KickLogic, run: RunLogic) -> void:
-	var box := Rect2(KickConstants.RESULT_LEFT, KickConstants.RESULT_TOP, KickConstants.RESULT_WIDTH, KickConstants.RESULT_HEIGHT)
-	draw_rect(box, KickConstants.COLOR_RESULT_SCRIM)
-	var y := box.position.y + 42.0
-	if logic.bank_shot:
-		_text_centered("BANK SHOT!", y, 36, KickConstants.COLOR_ATTEMPT)
-		y += 40.0
-	if logic.insured:
-		_text_centered("INSURED!", y, 36, KickConstants.COLOR_ATTEMPT)
-		y += 40.0
-	if logic.perfect:
-		_text_centered("PERFECT!", y, 28, KickConstants.COLOR_PERFECT_TEXT)
-		y += 32.0
-	if run.down_the_middle and logic.result_text == "GOOD":
-		_text_centered("DOWN THE MIDDLE!", y, 26, KickConstants.COLOR_PERFECT_TEXT)
-		y += 32.0
-	var word_color := KickConstants.COLOR_GOOD if logic.result_text == "GOOD" else KickConstants.COLOR_MISS
-	_text_centered(logic.result_text, y + 20.0, 60, word_color)
-	y += 78.0
+	# Screen-space stamp. The field distance does not change its size.
+	var middle := logic.result_text == "GOOD" and absf(logic.offset_yards) <= KickConstants.MIDDLE_YARDS
+	var lines := ResultStamp.words(logic.shanked, logic.result_text, logic.bank_shot, logic.insured, logic.perfect, middle)
+	var main_lines: PackedStringArray = ResultStamp.primary_lines(lines[0])
+	var accuracy := ResultStamp.accuracy_line(logic.shanked, logic.perfect, logic.accuracy_error, logic.stats.perfect_band, logic.stats.good_band)
+	var ui_lines := 1 if accuracy == "" else 2
+	var stacked := lines.size() > 1
+	var scale := 1
+	var slam := 1
+	var punch := 0.0
+	if run.awaiting_offer:
+		scale = 1
+		slam = 1
+	else:
+		var fitted := _stamp_scale(main_lines, stacked, ui_lines, 1280, 680)
+		# Leave a size step for the slam when a bigger whole-pixel size still fits.
+		if fitted >= 3 and _stamp_fits(main_lines, stacked, ui_lines, fitted, 1280, 680):
+			scale = fitted - 1
+			slam = fitted
+		else:
+			scale = fitted
+			slam = fitted
+			punch = 16.0
+	if game == null or game.result_age >= ResultStamp.SLAM_SEC:
+		slam = scale
+		punch = 0.0
+	var shake := Vector2.ZERO
+	if game != null and ResultStamp.shakes(lines[0]) and game.result_age < 0.22:
+		var amp := int(ceil((0.22 - game.result_age) / 0.22 * 3.0))
+		var flip := 1 if int(game.result_age * 40.0) % 2 == 0 else -1
+		shake = Vector2(flip * amp, 0)
+	var second := maxi(slam - 1, 1) if lines.size() > 1 else 0
+	var block := BitmapFonts.line_height("callout", slam) * main_lines.size()
+	if second > 0:
+		block += 8 + BitmapFonts.line_height("callout", second)
+	if not run.awaiting_offer:
+		block += 16 + BitmapFonts.line_height("ui", 1) * ui_lines
+	var top := 24.0 if run.awaiting_offer else (KickConstants.WINDOW_HEIGHT - float(block)) * 0.38 + punch
+	draw_rect(Rect2(0, top - 16.0, KickConstants.WINDOW_WIDTH, float(block) + 32.0), Color(0, 0, 0, 0.55))
+	var saved_filter := texture_filter
+	texture_filter = TEXTURE_FILTER_NEAREST
+	var y := top
+	for line in main_lines:
+		_paint_centered("callout", line, y, slam, shake)
+		y += float(BitmapFonts.line_height("callout", slam))
+	if lines.size() > 1:
+		y += 8.0
+		_paint_centered("callout", lines[1], y, second, shake)
+		y += float(BitmapFonts.line_height("callout", second))
+	if not run.awaiting_offer:
+		y += 16.0
+		_paint_centered("ui", ResultStamp.power_line(logic.shanked, logic.power, logic.stats.power_floor), y, 1, shake)
+		y += float(BitmapFonts.line_height("ui", 1))
+		if accuracy != "":
+			_paint_centered("ui", accuracy, y, 1, shake)
+			y += float(BitmapFonts.line_height("ui", 1))
+	texture_filter = saved_filter
+	# Score math still uses × ( ) = which Pixel Gothic does not have.
+	if run.awaiting_offer:
+		return
 	if run.score_line != "":
+		y += 28.0
 		_text_centered(run.score_line, y, 22, KickConstants.COLOR_TEXT)
-		y += 30.0
 	if run.attempt_note != "":
-		var note_color := KickConstants.COLOR_ATTEMPT if run.attempt_note == RunLogic.NOTE_EARNED else KickConstants.COLOR_TEXT
-		_text_centered(run.attempt_note, y, 26, note_color)
-		y += 32.0
-	_text_centered(logic.detail_line(), y, 20, KickConstants.COLOR_TEXT)
+		y += 8.0
+		texture_filter = TEXTURE_FILTER_NEAREST
+		_paint_centered("ui", run.attempt_note, y, 1, Vector2.ZERO)
+		texture_filter = saved_filter
+
+
+func _stamp_scale(lines: PackedStringArray, stacked: bool, ui_lines: int, max_width: int, max_height: int) -> int:
+	var scale := 4
+	while scale > 1:
+		if _stamp_fits(lines, stacked, ui_lines, scale, max_width, max_height):
+			return scale
+		scale -= 1
+	return 1
+
+
+func _stamp_fits(lines: PackedStringArray, stacked: bool, ui_lines: int, scale: int, max_width: int, max_height: int) -> bool:
+	var widest := 0
+	for line in lines:
+		widest = maxi(widest, BitmapFonts.line_width("callout", line, scale))
+	var height := BitmapFonts.line_height("callout", scale) * lines.size()
+	if stacked:
+		height += 8 + BitmapFonts.line_height("callout", maxi(scale - 1, 1))
+	height += 16 + BitmapFonts.line_height("ui", 1) * ui_lines
+	return widest <= max_width and height <= max_height
+
+
+func _paint_centered(key: String, text: String, top: float, scale: int, shake: Vector2) -> void:
+	if text == "":
+		return
+	var width := BitmapFonts.line_width(key, text, scale)
+	var x := (KickConstants.WINDOW_WIDTH - float(width)) * 0.5 + shake.x
+	BitmapFonts.paint(self, key, text, Vector2(x, top + shake.y), scale, Color.WHITE)
 
 
 func _draw_end_screen(run: RunLogic) -> void:
