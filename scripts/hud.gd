@@ -413,6 +413,8 @@ func _draw_laser(logic: KickLogic, _run: RunLogic) -> void:
 	if travel <= 0.05:
 		return
 	var limit := travel * float(logic.stats.path_percent) / 100.0
+	if logic.kick_distance > 0.0:
+		limit = minf(limit, logic.kick_distance)
 	var drift := float(plan["drift"])
 	var angle := float(plan["angle"])
 	var reached := bool(plan["reached"])
@@ -427,7 +429,8 @@ func _draw_laser(logic: KickLogic, _run: RunLogic) -> void:
 			var start: Vector2 = previous
 			var finish: Vector2 = screen
 			if start.distance_to(finish) <= 220.0:
-				draw_line(start, finish, Color(0.95, 0.82, 0.16), 3.0)
+				draw_line(start, finish, Color(0.02, 0.04, 0.08), 7.0)
+				draw_line(start, finish, Color(0.15, 0.95, 1.0), 3.5)
 		if screen == null:
 			previous = null
 			dash = false

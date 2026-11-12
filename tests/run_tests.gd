@@ -54,6 +54,7 @@ func _run() -> void:
 	_check_honest_cards_and_bench()
 	_check_willow_offer_and_endless_shops()
 	_check_field_span_math()
+	_check_ribbons_visor_and_aim_cap()
 
 
 func _finish_live() -> void:
@@ -4020,6 +4021,92 @@ func _check_field_span_math() -> void:
 	check(drift_b > drift_a and near(KickLogic.offset_yards_at_uprights(200.0, 0.0, 3.0), 3.0), "wind drift and aim offset still use real yards")
 
 
+func _check_ribbons_visor_and_aim_cap() -> void:
+	check(KickLogic.ribbon_band(0) == "still" and KickLogic.ribbon_band(1) == "light" and KickLogic.ribbon_band(7) == "light", "0 mph is still and 1–7 is light")
+	check(KickLogic.ribbon_band(8) == "medium" and KickLogic.ribbon_band(15) == "medium" and KickLogic.ribbon_band(16) == "heavy", "8–15 is medium and 16+ is heavy")
+	check(near(KickLogic.ribbon_lean_degrees("still"), 0.0) and KickLogic.ribbon_lean_degrees("heavy") > KickLogic.ribbon_lean_degrees("medium") and KickLogic.ribbon_lean_degrees("medium") > KickLogic.ribbon_lean_degrees("light"), "heavier wind leans the ribbon farther")
+	var calm := KickLogic.new()
+	check(calm.effective_wind_mph() == 0 and KickLogic.ribbon_band(calm.effective_wind_mph()) == "still", "zero wind hangs the ribbons straight down")
+	var howl := KickLogic.new()
+	howl.wind_speed = 6
+	howl.wind_direction = 90.0
+	check(KickLogic.ribbon_band(howl.effective_wind_mph()) == "light", "6 mph with no Howling is a light ribbon")
+	howl.howling_wind = true
+	check(howl.effective_wind_mph() == 9 and KickLogic.ribbon_band(howl.effective_wind_mph()) == "medium", "Howling Wind feeds the ribbons the ×1.5 speed, not the raw 6")
+	var blow := KickLogic.ribbon_blow(0.0)
+	check(blow.z < -0.9 and absf(blow.x) < 0.01, "a tailwind blows the ribbons toward the posts")
+	var head := KickLogic.ribbon_blow(180.0)
+	check(head.z > 0.9, "a headwind blows the ribbons back toward the kicker")
+	var cross := KickLogic.ribbon_blow(90.0)
+	check(cross.x > 0.9 and absf(cross.z) < 0.01, "a positive crosswind blows the ribbons to the right")
+	var plain := KickLogic.new()
+	plain.wind_speed = 10
+	plain.wind_direction = 90.0
+	var kept := plain.carry_plan(100.0, 0.0)
+	check(near(float(kept["drift"]), 10.0 * 0.0065 * plain.kick_distance), "crosswind drift math is unchanged")
+	check(near(KickLogic.path_percent_for_rank(2), 40.0) and near(KickLogic.path_percent_for_rank(3), 55.0) and near(KickLogic.path_percent_for_rank(4), 70.0) and near(KickLogic.path_percent_for_rank(5), 85.0) and near(KickLogic.path_percent_for_rank(6), 100.0) and near(KickLogic.path_percent_for_rank(12), 100.0), "visor ranks II–XII keep the same path percents")
+	check(Loadout.effect_line(Loadout.WIND_VISOR, 6).find("ending at the posts") >= 0 and Loadout.effect_line(Loadout.WIND_VISOR, 2).find("40") >= 0, "a full visor path says it ends at the posts, and rank II stays at 40 percent")
+	var long_path := KickLogic.new()
+	long_path.kick_distance = 40.0
+	long_path.stats.range_base = 16.0
+	long_path.stats.range_per_power = 0.7
+	var full: Array = long_path.preview_samples(100.0)
+	var last: Vector3 = full[full.size() - 1]
+	check(last.z >= -0.05 and last.z < 0.6, "a full path stops on the goal line, z=%s" % last.z)
+	var partial: Array = long_path.preview_samples(40.0)
+	var partial_end: Vector3 = partial[partial.size() - 1]
+	var travel := float(long_path.preview_plan()["travel"])
+	var partial_forward := long_path.kick_distance * (1.0 - partial_end.z / KickLogic.visual_span(long_path.kick_distance))
+	check(partial_forward < long_path.kick_distance - 0.5 and near(partial_forward, travel * 0.4, 0.6), "a 40 percent path is still about 40 percent and stays in front of the posts, got %s of %s" % [partial_forward, travel])
+	var over := KickLogic.new()
+	over.kick_distance = 30.0
+	over.stats.range_base = 80.0
+	over.stats.range_per_power = 0.0
+	var cropped: Array = over.preview_samples(40.0)
+	var cropped_end: Vector3 = cropped[cropped.size() - 1]
+	check(cropped_end.z >= -0.05, "a partial path that would pass the posts stops at the goal line")
+	var light := KickLogic.new()
+	light.kick_distance = 35.0
+	light.wind_speed = 4
+	light.wind_direction = 90.0
+	check(near(light.aim_cap_degrees(), 12.0), "light wind on a standard kick keeps the ±12 cap, got %s" % light.aim_cap_degrees())
+	light.aim(1.0, 5.0)
+	check(near(light.aim_degrees, 12.0), "holding Right on that kick still stops at +12")
+	var short_kick := KickLogic.new()
+	short_kick.kick_distance = 400.0
+	short_kick.wind_speed = 30
+	short_kick.wind_direction = 90.0
+	short_kick.howling_wind = true
+	check(float(short_kick.carry_plan(100.0, 0.0)["travel"]) < short_kick.kick_distance and near(short_kick.aim_cap_degrees(), 12.0), "a short kick does not get a wider aim cap")
+	var heavy := KickLogic.new()
+	heavy.kick_distance = 200.0
+	heavy.wind_speed = 24
+	heavy.wind_direction = 90.0
+	heavy.howling_wind = true
+	heavy.stats.range_base = 16.0
+	heavy.stats.range_per_power = 2.2
+	heavy.stats.good_band = 6.0
+	heavy.stats.perfect_band = 1.5
+	var cap := heavy.aim_cap_degrees()
+	check(cap > 12.0, "heavy Howling crosswind with the range raises the aim cap, got %s" % cap)
+	var edge := -heavy.stats.good_band
+	var hook := -edge * KickConstants.ACCURACY_DEG_PER_ERROR
+	var offset := KickLogic.path_lateral(0.0, heavy.kick_distance, -cap + hook, heavy.kick_distance, float(heavy.carry_plan(100.0, 0.0)["drift"]))
+	var made := KickLogic.judge(heavy.kick_distance + 1.0, heavy.kick_distance, offset, "standard", heavy.post_half_gap)
+	check(str(made["text"]) == "GOOD", "full aim into that wind at the cap still splits the posts, offset %s" % offset)
+	var bad := KickLogic.path_lateral(0.0, heavy.kick_distance, -cap + 15.0 * KickConstants.ACCURACY_DEG_PER_ERROR, heavy.kick_distance, float(heavy.carry_plan(100.0, 0.0)["drift"]))
+	var missed := KickLogic.judge(heavy.kick_distance + 1.0, heavy.kick_distance, bad, "standard", heavy.post_half_gap)
+	check(str(missed["text"]) != "GOOD", "a bad accuracy lock on that kick can still miss wide, got %s" % missed["text"])
+	heavy.shaky = true
+	heavy.phase = KickLogic.Phase.AIMING
+	heavy.aim_base = cap
+	heavy.sway(PI * 0.5 / 1.6)
+	check(heavy.aim_degrees <= cap + 0.001 and heavy.aim_degrees >= -cap - 0.001, "Shaky Arrow stays inside this kick's cap, got %s vs %s" % [heavy.aim_degrees, cap])
+	heavy.aim_base = 4.0
+	check(near(float(heavy.preview_plan()["angle"]), 4.0), "the visor preview uses the intended aim, not the sway")
+	check(heavy.aim_cap_degrees() >= 12.0, "the aim cap never drops below ±12")
+
+
 func _check_live_field() -> void:
 	OS.set_environment("FG_SHOTS", "")
 	var packed: PackedScene = load("res://scenes/main.tscn")
@@ -4064,6 +4151,8 @@ func _check_live_field() -> void:
 	game.force_weather(RunLogic.SQUEEZE)
 	game._place_world()
 	check(near(game._post_l.position.x, -RunLogic.SQUEEZE_WIDTH * 0.5) and near(left.position.x, -half), "The Squeeze narrows the posts and leaves the hash rows on 6.17")
+	check(game._ribbon_l != null and game._ribbon_r != null and game._ribbon_l.visible and not game.logic.stats.flag_reader, "orange ribbons are on the posts with no Wind Visor")
+	check(game._ribbon_l.position.x < 0.0 and game._ribbon_r.position.x > 0.0 and absf(game._ribbon_l.position.x - game._post_l.position.x) < 1.0 and absf(game._ribbon_r.position.x - game._post_r.position.x) < 1.0, "ribbons stay on the narrower posts")
 	var aimed := KickLogic.new()
 	aimed.kick_distance = 200.0
 	aimed.start_lateral_yards = 3.0

@@ -105,8 +105,9 @@ func set_seed(seed_value: int) -> void:
 func aim(direction: float, delta: float) -> void:
 	if phase != Phase.AIMING:
 		return
+	var cap := aim_cap_degrees()
 	aim_base += direction * KickConstants.AIM_SPEED_DEG_PER_SEC * delta
-	aim_base = clampf(aim_base, KickConstants.AIM_MIN_DEG, KickConstants.AIM_MAX_DEG)
+	aim_base = clampf(aim_base, -cap, cap)
 	aim_degrees = aim_base
 
 
@@ -355,10 +356,82 @@ static func approach_z(pose: String, run_time: float, swing_time: float, early: 
 
 # Shanky Cleats and Howling Wind are read by the kick. The run turns them on.
 func sway(time: float) -> void:
+	var cap := aim_cap_degrees()
+	if phase == Phase.AIMING:
+		aim_base = clampf(aim_base, -cap, cap)
 	if shaky and phase == Phase.AIMING:
-		aim_degrees = clampf(aim_base + sin(time * 1.6) * 3.0, KickConstants.AIM_MIN_DEG, KickConstants.AIM_MAX_DEG)
+		aim_degrees = clampf(aim_base + sin(time * 1.6) * 3.0, -cap, cap)
 	else:
 		aim_degrees = aim_base
+
+
+# Rounded mph after Howling Wind's ×1.5. This is the number the visor shows.
+func effective_wind_mph() -> int:
+	var speed := float(wind_speed)
+	if howling_wind:
+		speed *= 1.5
+	return int(round(speed))
+
+
+static func ribbon_band(mph: int) -> String:
+	if mph <= 0:
+		return "still"
+	if mph <= 7:
+		return "light"
+	if mph <= 15:
+		return "medium"
+	return "heavy"
+
+
+static func ribbon_lean_degrees(band: String) -> float:
+	if band == "light":
+		return 18.0
+	if band == "medium":
+		return 42.0
+	if band == "heavy":
+		return 75.0
+	return 0.0
+
+
+# Horizontal direction the wind is blowing. 0° is toward the posts.
+static func ribbon_blow(direction_degrees: float) -> Vector3:
+	var radians := deg_to_rad(direction_degrees)
+	return Vector3(sin(radians), 0.0, -cos(radians))
+
+
+# Smallest cap at or above ±12° that lets a good-band-edge lock, aimed fully
+# into the wind, still split the posts when the kick has the range.
+func aim_cap_degrees() -> float:
+	var powered := power_for_range(100.0, stats.power_floor)
+	var plan := carry_plan(powered, 0.0)
+	if float(plan["travel"]) + 0.001 < kick_distance:
+		return absf(KickConstants.AIM_MAX_DEG)
+	var drift := float(plan["drift"])
+	var push := drift
+	if absf(push) < 0.0001:
+		push = start_lateral_yards
+	if absf(push) < 0.0001:
+		return absf(KickConstants.AIM_MAX_DEG)
+	var edge := -stats.good_band if push > 0.0 else stats.good_band
+	var hook := _good_edge_hook(edge)
+	# Aim that centers the ball against this drift and the unhelpful hook.
+	# The player can stop short of the cap, so a light wind stays at ±12.
+	var ratio := -(start_lateral_yards + drift) / maxf(kick_distance, 0.01)
+	var needed := rad_to_deg(atan(ratio)) - hook
+	return maxf(absf(KickConstants.AIM_MAX_DEG), absf(needed))
+
+
+func _good_edge_hook(error_value: float) -> float:
+	var error := error_value
+	if stats.numero_dos:
+		error = 0.0
+	if stats.omega and absf(error) <= stats.good_band:
+		error = 0.0
+	if stats.good_as_gold and absf(error_value) <= stats.good_band:
+		error = 0.0
+	if absf(error) <= stats.perfect_band:
+		return 0.0
+	return -error * KickConstants.ACCURACY_DEG_PER_ERROR * angle_scale
 
 
 static func preview_forward(distance_yards: float) -> float:
@@ -769,6 +842,9 @@ func preview_samples(percent: float) -> Array:
 	if travel <= 0.05 or percent <= 0.0:
 		return []
 	var limit := travel * percent / 100.0
+	# A full path, and any partial path that would already be past the posts, stops on the goal line.
+	if kick_distance > 0.0:
+		limit = minf(limit, kick_distance)
 	var drift := float(plan["drift"])
 	var angle := float(plan["angle"])
 	var reached := bool(plan["reached"])

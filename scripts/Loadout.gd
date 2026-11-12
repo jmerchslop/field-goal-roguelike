@@ -239,7 +239,7 @@ static func effect_line(id: String, rank: int) -> String:
 				return "Shows wind mph and an arrow"
 			var shown := int(KickLogic.path_percent_for_rank(rank))
 			if shown >= 100:
-				return "Wind mph and arrow. Dotted path for the full flight"
+				return "Wind mph and arrow. Dotted path for the full flight, ending at the posts"
 			return "Wind mph and arrow. Dotted path for %d%% of this kick" % shown
 		ICE_CAGE:
 			return _ice_cage_line(rank)

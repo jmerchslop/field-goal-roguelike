@@ -49,6 +49,10 @@ var _field_distance := -1.0
 # 0 is the real kick. 1..4 preview 75, 200, 500, 1000, then back to the real kick.
 var _preview_step := 0
 const _PREVIEW_DISTANCES: Array[float] = [75.0, 200.0, 500.0, 1000.0]
+var _ribbon_l: MeshInstance3D
+var _ribbon_r: MeshInstance3D
+var _ribbon_time := 0.0
+const _POST_TOP_Y := 13.33
 var _hud
 
 
@@ -549,7 +553,9 @@ func _process(delta: float) -> void:
 	if logic.phase != KickLogic.Phase.AIMING:
 		meter_time += delta
 	_sway_time += delta
+	_ribbon_time += delta
 	logic.sway(_sway_time)
+	_place_ribbons()
 	_step_kick_pose(delta)
 	if _pose == "run":
 		Sfx.approach()
@@ -1145,6 +1151,77 @@ func _build_uprights() -> void:
 	_crossbar = _pole(Vector3(1.0, 0.16, 0.16), Vector3(0, crossbar_y, 0), yellow)
 	_pole(Vector3(0.2, crossbar_y, 0.2), Vector3(0, crossbar_y * 0.5, 0), yellow)
 	_fit_posts(KickConstants.POST_SEPARATION_YARDS)
+	_build_ribbons()
+
+
+func _build_ribbons() -> void:
+	_ribbon_l = _make_ribbon("RibbonLeft")
+	_ribbon_r = _make_ribbon("RibbonRight")
+
+
+func _make_ribbon(node_name: String) -> MeshInstance3D:
+	var body := MeshInstance3D.new()
+	body.name = node_name
+	var mesh := BoxMesh.new()
+	mesh.size = Vector3(0.11, 1.17, 0.02)
+	body.mesh = mesh
+	var paint := _mat(Color(1.0, 0.42, 0.05), 0.55)
+	paint.emission_enabled = true
+	paint.emission = Color(0.85, 0.28, 0.02)
+	body.material_override = paint
+	body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_world.add_child(body)
+	return body
+
+
+func ribbon_state() -> Dictionary:
+	var mph := logic.effective_wind_mph()
+	var band := KickLogic.ribbon_band(mph)
+	return {
+		"mph": mph,
+		"band": band,
+		"lean": KickLogic.ribbon_lean_degrees(band),
+		"blow": KickLogic.ribbon_blow(logic.wind_direction),
+	}
+
+
+func _place_ribbons() -> void:
+	if _ribbon_l == null or _ribbon_r == null or _post_l == null or _post_r == null:
+		return
+	var info := ribbon_state()
+	var lean := float(info["lean"])
+	if lean > 0.0:
+		lean += sin(_ribbon_time * 2.4) * 3.0
+	var blow: Vector3 = info["blow"]
+	var rig := camera_rig(logic.kick_distance, logic.start_lateral_yards)
+	var pole := float(rig["pole"])
+	# True ribbons are 4 by 42 inches. Past a normal kick that width is a pixel,
+	# so they thicken with the posts and stay a streamer on the upright.
+	var width := maxf(0.42, pole * 0.9)
+	var length := maxf(1.17, pole * 2.4)
+	var thick := maxf(0.06, pole * 0.22)
+	_pose_ribbon(_ribbon_l, _post_l.position.x, lean, blow, width, length, thick)
+	_pose_ribbon(_ribbon_r, _post_r.position.x, lean, blow, width, length, thick)
+
+
+func _pose_ribbon(body: MeshInstance3D, x: float, lean: float, blow: Vector3, width: float, length: float, thick: float) -> void:
+	var mesh := body.mesh as BoxMesh
+	if mesh != null:
+		mesh.size = Vector3(width, length, thick)
+	var hang := Vector3.DOWN
+	if lean > 0.5 and blow.length_squared() > 0.0001:
+		var axis := Vector3.DOWN.cross(blow.normalized())
+		if axis.length_squared() > 0.0001:
+			hang = Vector3.DOWN.rotated(axis.normalized(), deg_to_rad(lean))
+	var y_axis := hang.normalized()
+	var x_axis := y_axis.cross(Vector3.FORWARD)
+	if x_axis.length_squared() < 0.0001:
+		x_axis = Vector3.RIGHT
+	x_axis = x_axis.normalized()
+	var z_axis := x_axis.cross(y_axis).normalized()
+	body.basis = Basis(x_axis, y_axis, z_axis)
+	var outward := -1.0 if x < 0.0 else 1.0
+	body.position = Vector3(x + outward * width * 0.45, _POST_TOP_Y, 0.2) + y_axis * (length * 0.5)
 
 
 func _pole(size: Vector3, pos: Vector3, color: Color) -> MeshInstance3D:
@@ -1270,6 +1347,7 @@ func _place_world() -> void:
 		_mud.visible = run.has_mud()
 		_mud.position = tee + Vector3(0.0, 0.06, 0.15)
 	_fit_posts(run.post_width())
+	_place_ribbons()
 	_place_kicker(tee)
 	_place_arrow(tee)
 	_place_camera()
