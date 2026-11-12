@@ -41,6 +41,14 @@ var _camera: Camera3D
 var _ball: Sprite3D
 var _tee: MeshInstance3D
 var _arrow: MeshInstance3D
+var aim_corridor := {
+	"visible": false,
+	"origin": Vector3.ZERO,
+	"far": Vector3.ZERO,
+	"width": 0.0,
+	"left": Vector3.ZERO,
+	"right": Vector3.ZERO,
+}
 var _shadow: MeshInstance3D
 var _kicker_sprite: Sprite3D
 var _post_l: MeshInstance3D
@@ -1918,11 +1926,18 @@ func _build_ball() -> void:
 	_shadow.material_override = shade
 	_shadow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_world.add_child(_shadow)
-	var shaft := BoxMesh.new()
-	shaft.size = Vector3(0.08, 0.025, 18.0)
 	_arrow = MeshInstance3D.new()
-	_arrow.mesh = shaft
-	_arrow.material_override = _mat(Color(0.95, 0.86, 0.2), 0.45)
+	_arrow.name = "AimCone"
+	var gel := StandardMaterial3D.new()
+	gel.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	gel.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	gel.vertex_color_use_as_albedo = true
+	gel.albedo_color = Color.WHITE
+	gel.cull_mode = BaseMaterial3D.CULL_DISABLED
+	gel.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
+	gel.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	_arrow.material_override = gel
+	_arrow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_world.add_child(_arrow)
 	var mud_mesh := BoxMesh.new()
 	mud_mesh.size = Vector3(1.8, 0.04, 1.35)
@@ -2192,12 +2207,94 @@ func _place_arrow(tee: Vector3) -> void:
 	var show := logic.phase == KickLogic.Phase.AIMING or logic.phase == KickLogic.Phase.POWER or logic.phase == KickLogic.Phase.ACCURACY
 	_arrow.visible = show
 	if not show:
+		aim_corridor["visible"] = false
 		return
 	var aim := deg_to_rad(logic.aim_degrees)
 	var dir := Vector3(sin(aim), 0.0, -cos(aim))
-	_arrow.position = tee + dir * 10.0 + Vector3(0, 0.06, 0)
-	if dir.length_squared() > 0.001:
-		_arrow.look_at(_arrow.position + dir, Vector3.UP)
+	var side := Vector3(cos(aim), 0.0, sin(aim))
+	var reach := tee.z / maxf(cos(aim), 0.25)
+	var width := run.post_width()
+	var origin := Vector3(tee.x, 0.09, tee.z)
+	var far := origin + dir * reach
+	far.y = 0.09
+	far.z = 0.0
+	var half := width * 0.5
+	var goal := Vector3(1.0, 0.0, 0.0)
+	aim_corridor = {
+		"visible": true,
+		"origin": origin,
+		"far": far,
+		"width": width,
+		"left": far - goal * half,
+		"right": far + goal * half,
+	}
+	var boost := 1.0
+	if logic.kick_distance >= 500.0:
+		boost = 1.28
+	elif logic.kick_distance >= 200.0:
+		boost = 1.12
+	_arrow.position = Vector3.ZERO
+	_arrow.rotation = Vector3.ZERO
+	_arrow.mesh = _aim_cone_mesh(origin, dir, side, reach, 0.16, half, boost)
+
+
+func _aim_cone_mesh(origin: Vector3, dir: Vector3, side: Vector3, reach: float, near_half: float, far_half: float, boost: float) -> ArrayMesh:
+	var near_c := origin + dir * 0.12
+	var far_c := origin + dir * reach
+	near_c.y = 0.09
+	far_c.y = 0.09
+	far_c.z = 0.0
+	var goal := Vector3(1.0, 0.0, 0.0)
+	var tool := SurfaceTool.new()
+	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var gel_near := Color(1.0, 0.07, 0.05, minf(0.72, 0.58 * boost))
+	var gel_far := Color(1.0, 0.08, 0.04, minf(0.55, 0.36 * boost))
+	_cone_layer(tool, near_c, far_c, side, goal, near_half, far_half, 0.09, gel_near, gel_far)
+	var rim_near := Color(0.95, 0.1, 0.03, minf(0.95, 0.88 * boost))
+	var rim_far := Color(0.86, 0.07, 0.03, minf(0.78, 0.55 * boost))
+	_cone_edges(tool, near_c, far_c, side, goal, near_half, far_half, near_half + 0.045, far_half + 0.045, 0.094, rim_near, rim_far)
+	var line_near := Color(0.22, 0.02, 0.02, 0.9)
+	var line_far := Color(0.16, 0.02, 0.02, 0.55)
+	_cone_edges(tool, near_c, far_c, side, goal, near_half + 0.045, far_half + 0.045, near_half + 0.08, far_half + 0.08, 0.086, line_near, line_far)
+	return tool.commit()
+
+
+func _cone_layer(tool: SurfaceTool, near_c: Vector3, far_c: Vector3, near_axis: Vector3, far_axis: Vector3, near_half: float, far_half: float, y: float, near_color: Color, far_color: Color) -> void:
+	var a := near_c - near_axis * near_half
+	var b := near_c + near_axis * near_half
+	var c := far_c + far_axis * far_half
+	var d := far_c - far_axis * far_half
+	a.y = y
+	b.y = y
+	c.y = y
+	d.y = y
+	c.z = 0.0
+	d.z = 0.0
+	var corners := [a, b, c, d]
+	var colors := [near_color, near_color, far_color, far_color]
+	for index in [0, 1, 2, 0, 2, 3]:
+		tool.set_color(colors[index])
+		tool.add_vertex(corners[index])
+
+
+func _cone_edges(tool: SurfaceTool, near_c: Vector3, far_c: Vector3, near_axis: Vector3, far_axis: Vector3, inner_near: float, inner_far: float, outer_near: float, outer_far: float, y: float, near_color: Color, far_color: Color) -> void:
+	for sign_value in [-1.0, 1.0]:
+		var sign := float(sign_value)
+		var a := near_c + near_axis * (sign * inner_near)
+		var b := near_c + near_axis * (sign * outer_near)
+		var c := far_c + far_axis * (sign * outer_far)
+		var d := far_c + far_axis * (sign * inner_far)
+		a.y = y
+		b.y = y
+		c.y = y
+		d.y = y
+		c.z = 0.0
+		d.z = 0.0
+		var corners := [a, b, c, d]
+		var colors := [near_color, near_color, far_color, far_color]
+		for index in [0, 1, 2, 0, 2, 3]:
+			tool.set_color(colors[index])
+			tool.add_vertex(corners[index])
 
 
 func _place_camera() -> void:

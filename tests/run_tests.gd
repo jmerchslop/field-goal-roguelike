@@ -63,6 +63,7 @@ func _run() -> void:
 
 func _finish_live() -> void:
 	_check_pause_saves()
+	_check_aim_cone()
 	_check_live_field()
 	_check_live_kick_sounds()
 	_release_sfx()
@@ -4604,6 +4605,59 @@ func _check_pause_saves() -> void:
 	records.file_path = kept_path
 	records.load_file()
 	check(records.wins == kept_wins, "the pause test put lifetime wins back")
+
+
+func _check_aim_cone() -> void:
+	var kick := KickLogic.new()
+	kick.aim(1.0, 0.1)
+	check(near(kick.aim_degrees, KickConstants.AIM_SPEED_DEG_PER_SEC * 0.1), "aim speed is unchanged")
+	var hud := FileAccess.get_file_as_string("res://scripts/hud.gd")
+	var shell := FileAccess.get_file_as_string("res://scripts/main.gd")
+	check(hud.find("minf(limit, logic.kick_distance)") >= 0, "the visor path still crops at the posts")
+	check(shell.find("aim-arrow-lock") < 0, "the lock JPEG is not stamped on the field")
+	check(shell.find("0.95, 0.86, 0.2") < 0, "the thin yellow aim line is gone")
+	check(shell.find("KEY_H") >= 0 and shell.find("KEY_J") >= 0 and shell.find("KEY_K") >= 0 and shell.find("KEY_L") >= 0, "debug H, J, K, and L stay on their keys")
+	check(not ResourceLoader.exists("res://art/loadout/empty_perk.png"), "empty_perk.png was not added")
+	var packed: PackedScene = load("res://scenes/main.tscn")
+	var game = packed.instantiate()
+	get_root().add_child(game)
+	game._taking_pictures = true
+	game.highlight = 1
+	game.confirm_kicker()
+	game.logic.aim_degrees = 0.0
+	game.logic.aim_base = 0.0
+	game.logic.start_lateral_yards = 0.0
+	game.run.spot_yards = 0.0
+	game.refresh_view()
+	var cone: Dictionary = game.aim_corridor
+	check(bool(cone["visible"]), "the aim corridor is on while aiming")
+	check(near(float(cone["width"]), KickConstants.POST_SEPARATION_YARDS), "a normal far end is the inside post width, got %s" % cone["width"])
+	var origin: Vector3 = cone["origin"]
+	var far: Vector3 = cone["far"]
+	check(near(origin.x, 0.0) and near(origin.z, game.logic.kick_distance), "the corridor starts at the teed ball")
+	check(absf(far.z) < 0.05, "the corridor crops at the uprights, far z %s" % far.z)
+	var left: Vector3 = cone["left"]
+	var right: Vector3 = cone["right"]
+	check(near(left.x, -KickConstants.POST_SEPARATION_YARDS * 0.5, 0.02) and near(right.x, KickConstants.POST_SEPARATION_YARDS * 0.5, 0.02), "aim 0 frames the uprights")
+	game.logic.aim_degrees = 10.0
+	game.logic.aim_base = 10.0
+	game.refresh_view()
+	var swung: Vector3 = game.aim_corridor["far"]
+	var swung_left: Vector3 = game.aim_corridor["left"]
+	var swung_right: Vector3 = game.aim_corridor["right"]
+	check(absf(swung.x) > 2.0 and absf(float(game.aim_corridor["width"]) - KickConstants.POST_SEPARATION_YARDS) < 0.01, "aiming rotates the cone without changing its far-end width")
+	check(absf(swung.z) < 0.05 and absf(swung_left.z) < 0.05 and absf(swung_right.z) < 0.05, "an aimed cone still crops on the uprights line")
+	check(near(swung_left.distance_to(swung_right), KickConstants.POST_SEPARATION_YARDS, 0.02), "the aimed far end is still the post width")
+	game.logic.aim_degrees = 0.0
+	game.logic.aim_base = 0.0
+	game.force_weather(RunLogic.SQUEEZE)
+	check(near(float(game.aim_corridor["width"]), RunLogic.SQUEEZE_WIDTH), "Squeeze narrows the far end to 5.17, got %s" % game.aim_corridor["width"])
+	game.force_weather(RunLogic.CLEAR)
+	game.run.give(Loadout.NARROW)
+	game._sync_debug_loadout()
+	check(near(float(game.aim_corridor["width"]), RunLogic.SQUEEZE_WIDTH), "Narrow Posts uses the tighter far end")
+	check(game._ribbon_l != null and game._ribbon_r != null, "post ribbons are still on the uprights")
+	game.free()
 
 
 func _check_live_field() -> void:

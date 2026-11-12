@@ -60,6 +60,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "cone":
+		if not await _capture_cone():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "icons":
 		if not await _capture_icons():
 			get_tree().quit(1)
@@ -1130,6 +1136,93 @@ func _capture_needle() -> bool:
 	if not await _capture("needle_tight_window.png"):
 		return false
 	return true
+
+
+func _capture_cone() -> bool:
+	board.highlight = 1
+	board.selecting = true
+	board.confirm_kicker()
+	board.logic.phase = KickLogic.Phase.AIMING
+	board.logic.aim_degrees = 0.0
+	board.logic.aim_base = 0.0
+	board.logic.start_lateral_yards = 0.0
+	board.run.spot_yards = 0.0
+	board.refresh_view()
+	if not await _capture("cone_35_center.png"):
+		return false
+	board.logic.aim_degrees = -8.0
+	board.logic.aim_base = -8.0
+	board.refresh_view()
+	if not await _capture("cone_aim_left.png"):
+		return false
+	board.logic.aim_degrees = 8.0
+	board.logic.aim_base = 8.0
+	board.refresh_view()
+	if not await _capture("cone_aim_right.png"):
+		return false
+	board.logic.aim_degrees = 0.0
+	board.logic.aim_base = 0.0
+	board.logic.start_lateral_yards = 3.0
+	board.run.spot_yards = 3.0
+	board.refresh_view()
+	if not await _capture("cone_hash_aim0.png"):
+		return false
+	var cover := rad_to_deg(atan2(-3.0, board.logic.kick_distance))
+	board.logic.aim_degrees = cover
+	board.logic.aim_base = cover
+	board.refresh_view()
+	if not await _capture("cone_hash_on_posts.png"):
+		return false
+	board.logic.aim_degrees = 0.0
+	board.logic.aim_base = 0.0
+	board.logic.start_lateral_yards = 0.0
+	board.run.spot_yards = 0.0
+	board.force_weather(RunLogic.SQUEEZE)
+	if not await _capture("cone_squeeze.png"):
+		return false
+	board.force_weather(RunLogic.CLEAR)
+	board.cycle_debug_distance()
+	board.cycle_debug_distance()
+	board.logic.aim_degrees = 0.0
+	board.logic.aim_base = 0.0
+	board.refresh_view()
+	if not await _capture("cone_200.png"):
+		return false
+	board.cycle_debug_distance()
+	board.logic.aim_degrees = 0.0
+	board.logic.aim_base = 0.0
+	board.refresh_view()
+	if not await _capture("cone_500.png"):
+		return false
+	board.cycle_debug_distance()
+	board.logic.aim_degrees = 0.0
+	board.logic.aim_base = 0.0
+	board.refresh_view()
+	if not await _capture("cone_1000.png"):
+		return false
+	var attempts: int = board.run.attempts
+	var kick_number: int = board.run.kick_number
+	board.cycle_debug_distance()
+	board.run.give(Loadout.WIND_VISOR, 6)
+	board.run.wind_speed = 12
+	board.run.wind_direction = 90.0
+	board.logic.wind_speed = 12
+	board.logic.wind_direction = 90.0
+	board.logic.aim_degrees = 0.0
+	board.logic.aim_base = 0.0
+	board._sync_debug_loadout()
+	if not await _capture("cone_visor.png"):
+		return false
+	board.run.helmet_id = ""
+	board.run.helmet_rank = 0
+	board.run.wind_speed = 0
+	board.run.wind_direction = 0.0
+	board._sync_debug_loadout()
+	print("CONE back kick ", board.run.kick_number, " attempts ", board.run.attempts, " preview ", board.preview_step())
+	if board.run.attempts != attempts or board.run.kick_number != kick_number or board.preview_step() != 0:
+		print("distance preview did not restore the kick")
+		return false
+	return await _capture("cone_back_real.png")
 
 
 func _capture_icons() -> bool:
