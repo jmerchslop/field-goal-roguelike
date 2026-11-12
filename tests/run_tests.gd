@@ -4632,33 +4632,64 @@ func _check_aim_cone() -> void:
 	game.refresh_view()
 	var cone: Dictionary = game.aim_corridor
 	check(bool(cone["visible"]), "the aim corridor is on while aiming")
-	check(near(float(cone["width"]), KickConstants.POST_SEPARATION_YARDS), "a normal far end is the inside post width, got %s" % cone["width"])
+	check(near(float(game.CONE_LENGTH_YARDS), 5.0), "the cone length constant is 5 yards")
 	var origin: Vector3 = cone["origin"]
 	var far: Vector3 = cone["far"]
 	check(near(origin.x, 0.0) and near(origin.z, game.logic.kick_distance), "the corridor starts at the teed ball")
-	check(absf(far.z) < 0.05, "the corridor crops at the uprights, far z %s" % far.z)
-	var left: Vector3 = cone["left"]
-	var right: Vector3 = cone["right"]
-	check(near(left.x, -KickConstants.POST_SEPARATION_YARDS * 0.5, 0.02) and near(right.x, KickConstants.POST_SEPARATION_YARDS * 0.5, 0.02), "aim 0 frames the uprights")
+	check(near(float(cone["length"]), 5.0, 0.02) and near(origin.distance_to(far), 5.0, 0.05), "the visible cone stops about 5 yards out, got %s" % cone["length"])
+	check(far.z > 20.0, "a 35-yard cone does not reach the uprights, far z %s" % far.z)
+	var expected := _cone_width_at(35.0, KickConstants.POST_SEPARATION_YARDS)
+	check(near(float(cone["width"]), expected, 0.03), "the 5-yard far end is the tapered width, got %s" % cone["width"])
+	check(float(cone["width"]) < 2.0, "the short cone is not a full-width fan")
+	var normal_width := float(cone["width"])
 	game.logic.aim_degrees = 10.0
 	game.logic.aim_base = 10.0
 	game.refresh_view()
 	var swung: Vector3 = game.aim_corridor["far"]
-	var swung_left: Vector3 = game.aim_corridor["left"]
-	var swung_right: Vector3 = game.aim_corridor["right"]
-	check(absf(swung.x) > 2.0 and absf(float(game.aim_corridor["width"]) - KickConstants.POST_SEPARATION_YARDS) < 0.01, "aiming rotates the cone without changing its far-end width")
-	check(absf(swung.z) < 0.05 and absf(swung_left.z) < 0.05 and absf(swung_right.z) < 0.05, "an aimed cone still crops on the uprights line")
-	check(near(swung_left.distance_to(swung_right), KickConstants.POST_SEPARATION_YARDS, 0.02), "the aimed far end is still the post width")
+	check(absf(swung.x) > 0.5 and near(origin.distance_to(swung), 5.0, 0.08), "aiming rotates the 5-yard cone")
+	check(swung.z > 20.0 and float(game.aim_corridor["width"]) < 2.5, "an aimed cone stays a short wedge, not the post width")
 	game.logic.aim_degrees = 0.0
 	game.logic.aim_base = 0.0
+	for distance in [200.0, 500.0, 1000.0]:
+		game.logic.kick_distance = distance
+		game.logic.sync_tee()
+		game.refresh_view()
+		var long_cone: Dictionary = game.aim_corridor
+		var long_far: Vector3 = long_cone["far"]
+		check(near(float(long_cone["length"]), 5.0, 0.02), "a %s-yard kick still draws a 5-yard cone" % distance)
+		check(near(float(long_cone["width"]), _cone_width_at(distance, KickConstants.POST_SEPARATION_YARDS), 0.04), "the %s-yard crop keeps the real taper" % distance)
+		check(long_far.z > distance - 6.0, "the long-kick cone stays by the tee")
+	game.logic.kick_distance = 35.0
+	game.logic.sync_tee()
+	game.refresh_view()
 	game.force_weather(RunLogic.SQUEEZE)
-	check(near(float(game.aim_corridor["width"]), RunLogic.SQUEEZE_WIDTH), "Squeeze narrows the far end to 5.17, got %s" % game.aim_corridor["width"])
+	var squeeze_width := float(game.aim_corridor["width"])
+	check(near(squeeze_width, _cone_width_at(35.0, RunLogic.SQUEEZE_WIDTH), 0.03), "Squeeze uses the tighter taper, got %s" % squeeze_width)
+	check(squeeze_width < normal_width - 0.02 and squeeze_width < RunLogic.SQUEEZE_WIDTH, "Squeeze is a narrower 5-yard wedge, not the full posts")
 	game.force_weather(RunLogic.CLEAR)
 	game.run.give(Loadout.NARROW)
 	game._sync_debug_loadout()
-	check(near(float(game.aim_corridor["width"]), RunLogic.SQUEEZE_WIDTH), "Narrow Posts uses the tighter far end")
+	check(near(float(game.aim_corridor["width"]), squeeze_width, 0.03), "Narrow Posts uses the same tighter 5-yard crop")
+	game.logic.kick_distance = 3.0
+	game.logic.sync_tee()
+	game.refresh_view()
+	check(near(float(game.aim_corridor["length"]), 3.0, 0.05) and absf(game.aim_corridor["far"].z) < 0.08, "a kick shorter than 5 yards still crops at the goal line")
 	check(game._ribbon_l != null and game._ribbon_r != null, "post ribbons are still on the uprights")
+	game.load_current_kick()
+	game.lock_shown_flight(100.0)
+	game.fly_and_sample(0.4)
+	var tee_z := float(game.logic.kick_distance)
+	var trail_z := tee_z
+	for index in game.trail_count():
+		trail_z = minf(trail_z, game.trail_point(index).z)
+	check(game.logic.ball_forward_yards > 8.0 and tee_z - trail_z > 8.0, "the ball trail still follows the full flight past the 5-yard cone")
 	game.free()
+
+
+func _cone_width_at(distance: float, post_width: float) -> float:
+	var span := maxf(distance - 0.12, 0.001)
+	var along := clampf((5.0 - 0.12) / span, 0.0, 1.0)
+	return lerpf(0.16, post_width * 0.5, along) * 2.0
 
 
 func _check_ball_trail() -> void:

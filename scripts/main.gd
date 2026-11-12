@@ -117,6 +117,9 @@ var _ribbon_l: MeshInstance3D
 var _ribbon_r: MeshInstance3D
 var _ribbon_time := 0.0
 const _POST_TOP_Y := 13.33
+const CONE_LENGTH_YARDS := 5.0
+const CONE_MOUTH_YARDS := 0.12
+const CONE_NEAR_HALF := 0.16
 const TRAIL_POINT_CAP := 80
 const TRAIL_FADE_SEC := 0.55
 const TRAIL_WORLD_HALF := 0.028
@@ -2238,21 +2241,21 @@ func _place_arrow(tee: Vector3) -> void:
 	var aim := deg_to_rad(logic.aim_degrees)
 	var dir := Vector3(sin(aim), 0.0, -cos(aim))
 	var side := Vector3(cos(aim), 0.0, sin(aim))
-	var reach := tee.z / maxf(cos(aim), 0.25)
-	var width := run.post_width()
+	var full_reach := tee.z / maxf(cos(aim), 0.25)
+	var post_half := run.post_width() * 0.5
 	var origin := Vector3(tee.x, 0.09, tee.z)
-	var far := origin + dir * reach
-	far.y = 0.09
-	far.z = 0.0
-	var half := width * 0.5
-	var goal := Vector3(1.0, 0.0, 0.0)
+	var crop := _cone_crop(origin, dir, side, full_reach, post_half)
+	var far: Vector3 = crop["far"]
+	var left: Vector3 = crop["left"]
+	var right: Vector3 = crop["right"]
 	aim_corridor = {
 		"visible": true,
 		"origin": origin,
 		"far": far,
-		"width": width,
-		"left": far - goal * half,
-		"right": far + goal * half,
+		"width": float(crop["width"]),
+		"length": float(crop["shown"]),
+		"left": left,
+		"right": right,
 	}
 	var boost := 1.0
 	if logic.kick_distance >= 500.0:
@@ -2261,27 +2264,62 @@ func _place_arrow(tee: Vector3) -> void:
 		boost = 1.12
 	_arrow.position = Vector3.ZERO
 	_arrow.rotation = Vector3.ZERO
-	_arrow.mesh = _aim_cone_mesh(origin, dir, side, reach, 0.16, half, boost)
+	_arrow.mesh = _aim_cone_mesh(origin, dir, side, crop, boost)
 
 
-func _aim_cone_mesh(origin: Vector3, dir: Vector3, side: Vector3, reach: float, near_half: float, far_half: float, boost: float) -> ArrayMesh:
-	var near_c := origin + dir * 0.12
-	var far_c := origin + dir * reach
-	near_c.y = 0.09
-	far_c.y = 0.09
-	far_c.z = 0.0
+func _cone_crop(origin: Vector3, dir: Vector3, side: Vector3, full_reach: float, post_half: float) -> Dictionary:
+	# The imaginary corridor still runs tee-to-posts and opens to the inside post width.
+	# The drawn gel stops at 5 yards, or at the goal line when that is closer.
+	var shown := minf(CONE_LENGTH_YARDS, maxf(full_reach, 0.0))
+	var span := maxf(full_reach - CONE_MOUTH_YARDS, 0.001)
+	var along := 0.0
+	if shown > CONE_MOUTH_YARDS:
+		along = clampf((shown - CONE_MOUTH_YARDS) / span, 0.0, 1.0)
+	var near_c := origin + dir * CONE_MOUTH_YARDS
+	var far_full := origin + dir * full_reach
 	var goal := Vector3(1.0, 0.0, 0.0)
+	var near_l := near_c - side * CONE_NEAR_HALF
+	var near_r := near_c + side * CONE_NEAR_HALF
+	var far_l := far_full - goal * post_half
+	var far_r := far_full + goal * post_half
+	var left := near_l.lerp(far_l, along)
+	var right := near_r.lerp(far_r, along)
+	var far := near_c.lerp(far_full, along)
+	left.y = origin.y
+	right.y = origin.y
+	far.y = origin.y
+	var axis := goal
+	if left.distance_to(right) > 0.001:
+		axis = (right - left).normalized()
+	return {
+		"shown": shown,
+		"far": far,
+		"left": left,
+		"right": right,
+		"width": left.distance_to(right),
+		"half": left.distance_to(right) * 0.5,
+		"axis": axis,
+	}
+
+
+func _aim_cone_mesh(origin: Vector3, dir: Vector3, side: Vector3, crop: Dictionary, boost: float) -> ArrayMesh:
+	var near_c := origin + dir * CONE_MOUTH_YARDS
+	var far_c: Vector3 = crop["far"]
+	near_c.y = origin.y
+	far_c.y = origin.y
+	var far_half := float(crop["half"])
+	var far_axis: Vector3 = crop["axis"]
 	var tool := SurfaceTool.new()
 	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var gel_near := Color(1.0, 0.07, 0.05, minf(0.72, 0.58 * boost))
 	var gel_far := Color(1.0, 0.08, 0.04, minf(0.55, 0.36 * boost))
-	_cone_layer(tool, near_c, far_c, side, goal, near_half, far_half, 0.09, gel_near, gel_far)
+	_cone_layer(tool, near_c, far_c, side, far_axis, CONE_NEAR_HALF, far_half, 0.09, gel_near, gel_far)
 	var rim_near := Color(0.95, 0.1, 0.03, minf(0.95, 0.88 * boost))
 	var rim_far := Color(0.86, 0.07, 0.03, minf(0.78, 0.55 * boost))
-	_cone_edges(tool, near_c, far_c, side, goal, near_half, far_half, near_half + 0.045, far_half + 0.045, 0.094, rim_near, rim_far)
+	_cone_edges(tool, near_c, far_c, side, far_axis, CONE_NEAR_HALF, far_half, CONE_NEAR_HALF + 0.045, far_half + 0.045, 0.094, rim_near, rim_far)
 	var line_near := Color(0.22, 0.02, 0.02, 0.9)
 	var line_far := Color(0.16, 0.02, 0.02, 0.55)
-	_cone_edges(tool, near_c, far_c, side, goal, near_half + 0.045, far_half + 0.045, near_half + 0.08, far_half + 0.08, 0.086, line_near, line_far)
+	_cone_edges(tool, near_c, far_c, side, far_axis, CONE_NEAR_HALF + 0.045, far_half + 0.045, CONE_NEAR_HALF + 0.08, far_half + 0.08, 0.086, line_near, line_far)
 	return tool.commit()
 
 
@@ -2294,8 +2332,6 @@ func _cone_layer(tool: SurfaceTool, near_c: Vector3, far_c: Vector3, near_axis: 
 	b.y = y
 	c.y = y
 	d.y = y
-	c.z = 0.0
-	d.z = 0.0
 	var corners := [a, b, c, d]
 	var colors := [near_color, near_color, far_color, far_color]
 	for index in [0, 1, 2, 0, 2, 3]:
@@ -2314,8 +2350,6 @@ func _cone_edges(tool: SurfaceTool, near_c: Vector3, far_c: Vector3, near_axis: 
 		b.y = y
 		c.y = y
 		d.y = y
-		c.z = 0.0
-		d.z = 0.0
 		var corners := [a, b, c, d]
 		var colors := [near_color, near_color, far_color, far_color]
 		for index in [0, 1, 2, 0, 2, 3]:
