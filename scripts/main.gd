@@ -117,6 +117,15 @@ var _ribbon_l: MeshInstance3D
 var _ribbon_r: MeshInstance3D
 var _ribbon_time := 0.0
 const _POST_TOP_Y := 13.33
+const TRAIL_POINT_CAP := 80
+const TRAIL_FADE_SEC := 0.55
+const TRAIL_WORLD_HALF := 0.028
+const TRAIL_MIN_PIXELS := 3.2
+const TRAIL_COLOR := Color(1.0, 0.93, 0.8, 1.0)
+var _trail: MeshInstance3D
+var _trail_points := PackedVector3Array()
+var _trail_alpha := 1.0
+var _trail_fade := 0.0
 var _hud
 
 
@@ -150,6 +159,7 @@ func _ready() -> void:
 
 
 func load_current_kick() -> void:
+	_clear_trail()
 	logic.reset_kick()
 	_copy_run_onto_kick()
 	if _preview_step > 0:
@@ -676,6 +686,7 @@ func _process(delta: float) -> void:
 		settle_kick()
 		if logic.phase == KickLogic.Phase.POWER or logic.phase == KickLogic.Phase.ACCURACY:
 			_approach_time += delta
+	tick_trail(delta)
 	refresh_view()
 
 
@@ -1939,6 +1950,20 @@ func _build_ball() -> void:
 	_arrow.material_override = gel
 	_arrow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_world.add_child(_arrow)
+	_trail = MeshInstance3D.new()
+	_trail.name = "BallTrail"
+	var ribbon := StandardMaterial3D.new()
+	ribbon.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	ribbon.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	ribbon.vertex_color_use_as_albedo = true
+	ribbon.albedo_color = Color.WHITE
+	ribbon.cull_mode = BaseMaterial3D.CULL_DISABLED
+	ribbon.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
+	ribbon.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	_trail.material_override = ribbon
+	_trail.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_trail.visible = false
+	_world.add_child(_trail)
 	var mud_mesh := BoxMesh.new()
 	mud_mesh.size = Vector3(1.8, 0.04, 1.35)
 	_mud = MeshInstance3D.new()
@@ -2000,6 +2025,7 @@ func _place_world() -> void:
 	_place_ribbons()
 	_place_kicker(tee)
 	_place_arrow(tee)
+	_sample_trail()
 	_place_camera()
 
 
@@ -2295,6 +2321,208 @@ func _cone_edges(tool: SurfaceTool, near_c: Vector3, far_c: Vector3, near_axis: 
 		for index in [0, 1, 2, 0, 2, 3]:
 			tool.set_color(colors[index])
 			tool.add_vertex(corners[index])
+
+
+func trail_count() -> int:
+	return _trail_points.size()
+
+
+func trail_visible() -> bool:
+	return _trail != null and _trail.visible
+
+
+func trail_head() -> Vector3:
+	if _trail_points.is_empty():
+		return Vector3.ZERO
+	return _trail_points[_trail_points.size() - 1]
+
+
+func trail_point(index: int) -> Vector3:
+	return _trail_points[index]
+
+
+func trail_alpha() -> float:
+	return _trail_alpha
+
+
+func trail_head_color() -> Color:
+	return _trail_vertex_color(1.0)
+
+
+func lock_shown_flight(power_value: float) -> void:
+	# Stops when the ball leaves the tee. The flight itself is sampled later.
+	_clear_trail()
+	logic.press_space()
+	if logic.windup_left > 0.0:
+		logic.advance(logic.windup_left)
+	if power_value >= KickConstants.METER_MAX - 0.001:
+		logic.take_power_press(logic.seconds_to_power(power_value))
+	else:
+		logic.advance(logic.seconds_to_power(power_value))
+		if logic.phase == KickLogic.Phase.POWER:
+			logic.press_space()
+	if logic.phase == KickLogic.Phase.ACCURACY:
+		var wait := logic.seconds_until_error(0.0)
+		if wait > 0.0:
+			logic.advance(wait)
+		if logic.phase == KickLogic.Phase.ACCURACY:
+			logic.press_space()
+
+
+func fly_and_sample(fraction: float) -> void:
+	if logic.phase != KickLogic.Phase.FLIGHT and logic.phase != KickLogic.Phase.RESULT:
+		return
+	var end := clampf(fraction, 0.0, 1.0) * maxf(logic.flight_duration, 0.0)
+	var guard := 0
+	while logic.flight_elapsed < end - 0.00001 and logic.phase == KickLogic.Phase.FLIGHT and guard < 500:
+		var step_dt := minf(0.04, end - logic.flight_elapsed)
+		if step_dt <= 0.0:
+			break
+		logic.advance(step_dt)
+		_sample_trail()
+		guard += 1
+	_sample_trail()
+	refresh_view()
+
+
+func tick_trail(delta: float) -> void:
+	if logic.phase != KickLogic.Phase.FLIGHT and logic.phase != KickLogic.Phase.RESULT:
+		return
+	var fading := run.awaiting_offer or run.awaiting_shop
+	if run.phase == RunLogic.Phase.GAME_OVER or run.phase == RunLogic.Phase.WIN or run.phase == RunLogic.Phase.FAR:
+		fading = true
+	if not fading:
+		return
+	_trail_fade += delta
+	_trail_alpha = clampf(1.0 - _trail_fade / TRAIL_FADE_SEC, 0.0, 1.0)
+
+
+func _clear_trail() -> void:
+	_trail_points = PackedVector3Array()
+	_trail_alpha = 1.0
+	_trail_fade = 0.0
+	if _trail != null:
+		_trail.visible = false
+
+
+func _sample_trail() -> void:
+	if _trail == null:
+		return
+	if logic.phase != KickLogic.Phase.FLIGHT and logic.phase != KickLogic.Phase.RESULT:
+		if not _trail_points.is_empty():
+			_clear_trail()
+		else:
+			_trail.visible = false
+		return
+	if logic.ball_forward_yards < 0.12:
+		return
+	var spot := _ball_position()
+	var step := maxf(0.22, logic.travel_yards / float(TRAIL_POINT_CAP - 2))
+	if _trail_points.is_empty():
+		_trail_points.append(spot)
+		_trail_points.append(spot)
+	else:
+		var anchor: Vector3 = _trail_points[_trail_points.size() - 2]
+		if anchor.distance_to(spot) >= step:
+			_trail_points.append(spot)
+			if _trail_points.size() > TRAIL_POINT_CAP:
+				_thin_trail()
+		else:
+			_trail_points[_trail_points.size() - 1] = spot
+	_rebuild_trail()
+
+
+func _thin_trail() -> void:
+	var kept := PackedVector3Array()
+	var last := _trail_points.size() - 1
+	for index in _trail_points.size():
+		if index == 0 or index == last or index % 2 == 0:
+			kept.append(_trail_points[index])
+	_trail_points = kept
+
+
+func _trail_half_width(point: Vector3) -> float:
+	var half := TRAIL_WORLD_HALF
+	if _camera == null or _camera.is_position_behind(point):
+		return half
+	var origin := _camera.unproject_position(point)
+	var nudged := _camera.unproject_position(point + _camera.global_transform.basis.x)
+	var pixels := origin.distance_to(nudged)
+	if pixels < 0.25:
+		return half
+	return maxf(half, TRAIL_MIN_PIXELS / pixels * 0.5)
+
+
+func _rebuild_trail() -> void:
+	if _trail == null:
+		return
+	if _trail_points.size() < 2 or _trail_alpha <= 0.02:
+		_trail.visible = false
+		return
+	var last: Vector3 = _trail_points[_trail_points.size() - 1]
+	var first: Vector3 = _trail_points[0]
+	if first.distance_to(last) < 0.08:
+		_trail.visible = false
+		return
+	var drawn := PackedVector3Array()
+	for index in _trail_points.size():
+		drawn.append(_trail_points[index])
+	var before: Vector3 = drawn[drawn.size() - 2]
+	var toward := last - before
+	if toward.length() > 0.36:
+		drawn[drawn.size() - 1] = last - toward.normalized() * 0.28
+	var count := drawn.size()
+	var tool := SurfaceTool.new()
+	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for index in count - 1:
+		var a: Vector3 = drawn[index]
+		var b: Vector3 = drawn[index + 1]
+		var span := b - a
+		var width_a := _trail_half_width(a)
+		var width_b := _trail_half_width(b)
+		var side := _trail_side(span)
+		var t0 := float(index) / float(count - 1)
+		var t1 := float(index + 1) / float(count - 1)
+		var c0 := _trail_vertex_color(t0)
+		var c1 := _trail_vertex_color(t1)
+		var a_l := a - side * width_a
+		var a_r := a + side * width_a
+		var b_l := b - side * width_b
+		var b_r := b + side * width_b
+		_trail_tri(tool, a_l, b_l, b_r, c0, c1, c1)
+		_trail_tri(tool, a_l, b_r, a_r, c0, c1, c0)
+	_trail.mesh = tool.commit()
+	_trail.visible = true
+
+
+func _trail_side(span: Vector3) -> Vector3:
+	var right := Vector3(1.0, 0.0, 0.0)
+	var up := Vector3(0.0, 1.0, 0.0)
+	if _camera != null:
+		right = _camera.global_transform.basis.x
+		up = _camera.global_transform.basis.y
+	var side := right
+	if span.length_squared() > 0.0001 and absf(span.normalized().dot(right.normalized())) > 0.82:
+		side = up
+	if side.length_squared() < 0.0001:
+		side = Vector3(1.0, 0.0, 0.0)
+	return side.normalized()
+
+
+func _trail_vertex_color(along: float) -> Color:
+	var fade := lerpf(0.62, 0.96, along)
+	var color := TRAIL_COLOR
+	color.a = fade * _trail_alpha
+	return color
+
+
+func _trail_tri(tool: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, ca: Color, cb: Color, cc: Color) -> void:
+	tool.set_color(ca)
+	tool.add_vertex(a)
+	tool.set_color(cb)
+	tool.add_vertex(b)
+	tool.set_color(cc)
+	tool.add_vertex(c)
 
 
 func _place_camera() -> void:

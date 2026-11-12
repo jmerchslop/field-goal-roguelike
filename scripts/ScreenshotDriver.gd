@@ -60,6 +60,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "trail":
+		if not await _capture_trail():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "cone":
 		if not await _capture_cone():
 			get_tree().quit(1)
@@ -1136,6 +1142,112 @@ func _capture_needle() -> bool:
 	if not await _capture("needle_tight_window.png"):
 		return false
 	return true
+
+
+func _capture_trail() -> bool:
+	board.highlight = 1
+	board.selecting = true
+	board.confirm_kicker()
+	board.logic.aim_degrees = 0.0
+	board.logic.aim_base = 0.0
+	if not await _capture("trail_aim.png"):
+		return false
+	board.logic.press_space()
+	board.refresh_view()
+	if not await _capture("trail_meter.png"):
+		return false
+	board.load_current_kick()
+	board.lock_shown_flight(100.0)
+	board.fly_and_sample(0.48)
+	if not await _capture("trail_35_make.png"):
+		return false
+	board.fly_and_sample(1.0)
+	board.result_age = 0.45
+	board.refresh_view()
+	if not await _capture("trail_stamp.png"):
+		return false
+	board.result_age = 0.9
+	board.settle_kick()
+	board.tick_trail(0.7)
+	board.refresh_view()
+	if not await _capture("trail_offer.png"):
+		return false
+	print("TRAIL offer ", board.run.awaiting_offer, " alpha ", board.trail_alpha())
+	board.run.awaiting_offer = false
+	board.run.kick_resolved = false
+	board.load_current_kick()
+	board.set_wind(16.0, 90.0)
+	board.run.give(Loadout.WIND_VISOR, 6)
+	board._sync_debug_loadout()
+	board.lock_shown_flight(92.0)
+	board.fly_and_sample(0.72)
+	if not await _capture("trail_wind.png"):
+		return false
+	board.load_current_kick()
+	board.run.helmet_id = ""
+	board.run.helmet_rank = 0
+	board.set_wind(0.0, 0.0)
+	board._sync_debug_loadout()
+	board.lock_shown_flight(22.0)
+	board.fly_and_sample(1.0)
+	board.result_age = 0.45
+	board.refresh_view()
+	if not await _capture("trail_short.png"):
+		return false
+	board.load_current_kick()
+	board.logic._shank()
+	board.fly_and_sample(1.0)
+	board.result_age = 0.45
+	board.refresh_view()
+	if not await _capture("trail_shank.png"):
+		return false
+	board.load_current_kick()
+	board.cycle_debug_distance()
+	board.cycle_debug_distance()
+	board.lock_shown_flight(100.0)
+	board.fly_and_sample(0.8)
+	if not await _capture("trail_200.png"):
+		return false
+	board.load_current_kick()
+	board.cycle_debug_distance()
+	board.lock_shown_flight(100.0)
+	board.fly_and_sample(0.8)
+	if not await _capture("trail_500.png"):
+		return false
+	board.load_current_kick()
+	board.cycle_debug_distance()
+	board.lock_shown_flight(100.0)
+	board.fly_and_sample(0.85)
+	if not await _capture("trail_1000.png"):
+		return false
+	var attempts: int = board.run.attempts
+	var kick_number: int = board.run.kick_number
+	board.load_current_kick()
+	board.cycle_debug_distance()
+	if not await _capture("trail_back_real.png"):
+		return false
+	print("TRAIL back kick ", board.run.kick_number, " attempts ", board.run.attempts, " preview ", board.preview_step())
+	if board.run.attempts != attempts or board.run.kick_number != kick_number or board.preview_step() != 0:
+		print("distance preview did not restore the kick")
+		return false
+	board.force_weather(RunLogic.RAIN)
+	board.lock_shown_flight(100.0)
+	board.fly_and_sample(0.62)
+	if not await _capture("trail_rain.png"):
+		return false
+	board.force_weather(RunLogic.CLEAR)
+	board.load_current_kick()
+	board.run.stats.practice_per_quarter = 1
+	board.run.practice_left = 1
+	if not board.run.start_practice():
+		print("practice swing did not start")
+		return false
+	board.lock_shown_flight(90.0)
+	board.fly_and_sample(0.5)
+	if not await _capture("trail_practice.png"):
+		return false
+	board.load_current_kick()
+	return board.trail_count() == 0
 
 
 func _capture_cone() -> bool:

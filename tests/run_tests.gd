@@ -64,6 +64,7 @@ func _run() -> void:
 func _finish_live() -> void:
 	_check_pause_saves()
 	_check_aim_cone()
+	_check_ball_trail()
 	_check_live_field()
 	_check_live_kick_sounds()
 	_release_sfx()
@@ -4657,6 +4658,77 @@ func _check_aim_cone() -> void:
 	game._sync_debug_loadout()
 	check(near(float(game.aim_corridor["width"]), RunLogic.SQUEEZE_WIDTH), "Narrow Posts uses the tighter far end")
 	check(game._ribbon_l != null and game._ribbon_r != null, "post ribbons are still on the uprights")
+	game.free()
+
+
+func _check_ball_trail() -> void:
+	check(KickLogic.classify(40.0, 35.0, 0.0) == "GOOD", "judging is unchanged")
+	check(near(KickLogic.flight_time_seconds(35.0), KickConstants.FLIGHT_TIME_BASE_SEC + KickConstants.FLIGHT_TIME_PER_YARD * 35.0), "flight time is unchanged")
+	var hud := FileAccess.get_file_as_string("res://scripts/hud.gd")
+	var shell := FileAccess.get_file_as_string("res://scripts/main.gd")
+	check(hud.find("minf(limit, logic.kick_distance)") >= 0, "the visor path still crops at the posts")
+	check(shell.find("KEY_H") >= 0 and shell.find("KEY_J") >= 0 and shell.find("KEY_K") >= 0 and shell.find("KEY_L") >= 0, "debug H, J, K, and L stay on their keys")
+	check(not ResourceLoader.exists("res://art/loadout/empty_perk.png"), "empty_perk.png was not added")
+	check(shell.find("look_at") >= 0 and shell.find("ball_follow") < 0, "no ball-follow camera was added")
+	var packed: PackedScene = load("res://scenes/main.tscn")
+	var game = packed.instantiate()
+	get_root().add_child(game)
+	game._taking_pictures = true
+	game.highlight = 1
+	game.confirm_kicker()
+	game.refresh_view()
+	check(game.logic.phase == KickLogic.Phase.AIMING and game.trail_count() == 0 and not game.trail_visible(), "aiming draws no trail")
+	game.logic.press_space()
+	game.refresh_view()
+	check(game.logic.phase == KickLogic.Phase.POWER and game.trail_count() == 0 and not game.trail_visible(), "the meter draws no trail before the kick")
+	game.load_current_kick()
+	game.logic.aim_degrees = 8.0
+	game.logic.aim_base = 8.0
+	game.lock_shown_flight(100.0)
+	check(game.logic.phase == KickLogic.Phase.FLIGHT, "the locked kick leaves the tee")
+	game._sample_trail()
+	check(game.trail_count() == 0, "a ball still on the tee has no trail yet")
+	game.fly_and_sample(0.12)
+	check(game.trail_count() > 1 and game.trail_visible(), "the trail follows the ball after it leaves the tee")
+	var ball: Vector3 = game._ball_position()
+	var ahead := false
+	for index in game.trail_count():
+		var point: Vector3 = game.trail_point(index)
+		if point.z < ball.z - 0.45:
+			ahead = true
+	check(not ahead and game.trail_head().distance_to(ball) < 0.6, "the trail is sampled behind the ball, not predicted ahead of it")
+	var early: int = game.trail_count()
+	game.fly_and_sample(0.55)
+	check(game.trail_count() > early, "more of the flight adds samples")
+	check(absf(game._camera.position.x - game.logic.start_lateral_yards) < 0.25, "the camera stays on the tee line")
+	var made: Color = game.trail_head_color()
+	check(made.r > 0.9 and made.g > 0.85 and made.b > 0.7, "the trail is pale cream")
+	game.logic.result_text = "SHANK"
+	game.logic.shanked = true
+	game._rebuild_trail()
+	var missed: Color = game.trail_head_color()
+	check(made == missed, "a miss does not recolor the trail")
+	game.logic.result_text = "GOOD"
+	game.logic.shanked = false
+	game._rebuild_trail()
+	check(game.trail_head_color() == made, "a make uses the same trail color")
+	game.fly_and_sample(1.0)
+	check(game.logic.phase == KickLogic.Phase.RESULT and game.trail_alpha() > 0.95, "the finished path stays up with the stamp")
+	game.tick_trail(0.4)
+	check(game.trail_alpha() > 0.95, "the path holds until the offer, shop, or end screen")
+	game.run.awaiting_offer = true
+	game.tick_trail(0.35)
+	check(game.trail_alpha() < 0.5, "the trail fades as the offer comes in")
+	game.load_current_kick()
+	check(game.trail_count() == 0 and not game.trail_visible(), "the next kick starts with no trail")
+	game.run.stats.practice_per_quarter = 1
+	game.run.practice_left = 1
+	check(game.run.start_practice(), "practice swing can start")
+	game.lock_shown_flight(90.0)
+	game.fly_and_sample(0.4)
+	check(game.run.practicing and game.trail_visible(), "practice swing gets the same trail")
+	game.load_current_kick()
+	check(game.trail_count() == 0, "practice clears before the next kick")
 	game.free()
 
 
