@@ -46,12 +46,23 @@ var _crossbar: MeshInstance3D
 var _mud: MeshInstance3D
 var _marks: Node3D
 var _stands: Node3D
+var _sky_mat: ShaderMaterial
+var sky_texture_path := ""
+var grass_bounds := {
+	"min_z": 0.0,
+	"max_z": 0.0,
+	"tile": GRASS_TILE_YARDS,
+}
 var _field_distance := -1.0
 # Grass box is 54 yards wide. Painted sidelines sit at ±25. Stands sit just outside the grass.
 const STAND_X := 27.45
 const STAND_HEIGHT := 14.0
 const STAND_TILE := 28.0
 const STAND_BOWL_Z := -2.4
+const GRASS_TILE_YARDS := 12.0
+const GRASS_PATH := "res://art/field/grass-tile.png"
+const SKY_CLEAR_PATH := "res://art/field/sky-clear.png"
+const SKY_OVERCAST_PATH := "res://art/field/sky-overcast.png"
 const _STAND_PATHS: Array[String] = [
 	"res://art/field/crowd-stand-strip-a.png",
 	"res://art/field/crowd-stand-strip-b.png",
@@ -1053,6 +1064,7 @@ func _style_world() -> void:
 
 func _build_field() -> void:
 	_build_stadium()
+	_build_sky()
 	_ensure_field(35.0)
 
 
@@ -1077,18 +1089,8 @@ func _ensure_field(distance: float) -> void:
 	var near_z := -8.0
 	var length := far_z - near_z
 	var mid_z := (far_z + near_z) * 0.5
-	_paint_box(_marks, Vector3(54, 0.4, length), Vector3(0, -0.2, mid_z), Color(0.28, 0.58, 0.26))
-	var stripes := SurfaceTool.new()
-	stripes.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var line_z := near_z
-	var stripe := 0
-	while line_z < far_z - 0.01:
-		var green := Color(0.34, 0.66, 0.3) if stripe % 2 == 0 else Color(0.27, 0.56, 0.25)
-		_add_flat(stripes, 25.0, line_z, minf(5.0, far_z - line_z), 0.02, green)
-		stripe += 1
-		line_z += 5.0
-	var stripe_mesh := stripes.commit()
-	_mesh_node(_marks, "Stripes", stripe_mesh, _vertex_mat())
+	_paint_box(_marks, Vector3(54, 0.4, length), Vector3(0, -0.2, mid_z), Color(0.18, 0.32, 0.16))
+	_paint_grass(27.0, near_z, far_z)
 	var paint := SurfaceTool.new()
 	paint.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var white := Color(0.93, 0.95, 0.92)
@@ -1175,6 +1177,94 @@ func _paint_box(parent: Node3D, size: Vector3, pos: Vector3, color: Color) -> vo
 	body.material_override = _mat(color, 0.92)
 	body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	parent.add_child(body)
+
+
+func _paint_grass(half_x: float, z0: float, z1: float) -> void:
+	var tool := SurfaceTool.new()
+	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var y := 0.03
+	var corners := [
+		Vector3(-half_x, y, z0),
+		Vector3(half_x, y, z0),
+		Vector3(half_x, y, z1),
+		Vector3(-half_x, y, z1),
+	]
+	var uvs := [
+		Vector2(-half_x / GRASS_TILE_YARDS, z0 / GRASS_TILE_YARDS),
+		Vector2(half_x / GRASS_TILE_YARDS, z0 / GRASS_TILE_YARDS),
+		Vector2(half_x / GRASS_TILE_YARDS, z1 / GRASS_TILE_YARDS),
+		Vector2(-half_x / GRASS_TILE_YARDS, z1 / GRASS_TILE_YARDS),
+	]
+	for index in [0, 1, 2, 0, 2, 3]:
+		tool.set_normal(Vector3.UP)
+		tool.set_uv(uvs[index])
+		tool.add_vertex(corners[index])
+	var body := MeshInstance3D.new()
+	body.name = "Grass"
+	body.mesh = tool.commit()
+	body.material_override = _grass_material()
+	body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_marks.add_child(body)
+	grass_bounds = {"min_z": z0, "max_z": z1, "tile": GRASS_TILE_YARDS}
+
+
+func _grass_material() -> StandardMaterial3D:
+	var paint := _mat(Color.WHITE, 1.0)
+	paint.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	paint.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	paint.texture_repeat = true
+	var texture := load(GRASS_PATH) as Texture2D
+	if texture != null:
+		paint.albedo_texture = texture
+	return paint
+
+
+func sky_path_for(weather: String) -> String:
+	if weather == RunLogic.RAIN or weather == RunLogic.SNOW or weather == RunLogic.MONSOON or weather == RunLogic.ICED:
+		return SKY_OVERCAST_PATH
+	return SKY_CLEAR_PATH
+
+
+func _build_sky() -> void:
+	# The paintings wrap the horizon. A sky shader samples them by direction,
+	# so the view stays inside the painting at 35 yards and at 1000.
+	var shader := Shader.new()
+	shader.code = "shader_type sky;\nuniform sampler2D sky_tex : source_color, filter_nearest, repeat_enable;\nuniform float horizon_elev = 0.05;\nuniform float zenith_elev = 0.45;\nvoid sky() {\n\tvec3 dir = EYEDIR;\n\tfloat u = atan(dir.x, dir.z) / 6.28318530718 + 0.5;\n\tfloat elev = asin(clamp(dir.y, -1.0, 1.0));\n\tfloat t = clamp((elev - horizon_elev) / max(zenith_elev - horizon_elev, 0.001), 0.0, 1.0);\n\tCOLOR = texture(sky_tex, vec2(u, 1.0 - t)).rgb;\n}\n"
+	_sky_mat = ShaderMaterial.new()
+	_sky_mat.shader = shader
+	var sky := Sky.new()
+	sky.sky_material = _sky_mat
+	var env := $WorldEnvironment.environment as Environment
+	env.background_mode = Environment.BG_SKY
+	env.sky = sky
+	_apply_sky("")
+
+
+func _apply_sky(weather: String) -> void:
+	var path := sky_path_for(weather)
+	sky_texture_path = path
+	if _sky_mat == null:
+		return
+	var texture := load(path) as Texture2D
+	if texture != null:
+		_sky_mat.set_shader_parameter("sky_tex", texture)
+
+
+func _frame_sky(rig: Dictionary) -> void:
+	if _sky_mat == null:
+		return
+	var cam: Vector3 = rig["position"]
+	var look: Vector3 = rig["look"]
+	var ahead := look - cam
+	var look_elev := atan2(ahead.y, Vector2(ahead.x, ahead.z).length())
+	var top_elev := look_elev + deg_to_rad(float(rig["fov"])) * 0.5
+	var roof := Vector3(0.0, STAND_HEIGHT, STAND_BOWL_Z) - cam
+	var roof_elev := atan2(roof.y, Vector2(roof.x, roof.z).length())
+	# Pale horizon just above the far stand roof. Deep blue at the top of the frame.
+	var horizon := roof_elev - 0.015
+	var zenith := maxf(top_elev + 0.02, horizon + 0.12)
+	_sky_mat.set_shader_parameter("horizon_elev", horizon)
+	_sky_mat.set_shader_parameter("zenith_elev", zenith)
 
 
 func _build_stadium() -> void:
@@ -1464,6 +1554,7 @@ func _fit_sprite(sprite: Sprite3D, path: String) -> void:
 
 func _place_world() -> void:
 	_ensure_field(logic.kick_distance)
+	_apply_sky(run.weather)
 	_apply_ball_sprite()
 	var tee := _tee_position()
 	var spot := _ball_position()
@@ -1702,6 +1793,7 @@ func _place_camera() -> void:
 	_camera.fov = float(rig["fov"])
 	_camera.look_at(rig["look"], Vector3.UP)
 	_camera.far = maxf(400.0, at.z + 80.0)
+	_frame_sky(rig)
 	var sun := $Sun as DirectionalLight3D
 	if sun != null:
 		sun.directional_shadow_max_distance = maxf(160.0, at.z + 40.0)

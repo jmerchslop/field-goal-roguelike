@@ -4503,7 +4503,33 @@ func _check_live_field() -> void:
 	check(int(game.stand_bounds["nodes"]) < 20, "sideline stands are a handful of meshes, not thousands of nodes")
 	var look: Dictionary = game.camera_rig(200.0, 4.0)
 	check(near(look["look"].x, 4.0) and near(look["position"].x, 3.95), "the camera keeps the spot offset and does not re-center the posts")
+	for file in ["grass-tile.png", "sky-clear.png", "sky-overcast.png"]:
+		check(ResourceLoader.exists("res://art/field/" + file), "field art %s is imported" % file)
+	var grass: Node = game._marks.get_node_or_null("Grass")
+	var lines: Node = game._marks.get_node_or_null("Lines")
+	check(grass != null and lines != null and game._marks.get_node_or_null("Stripes") == null, "the grass tile replaced the stripes and the markings stayed")
+	var grass_mat := (grass as MeshInstance3D).material_override as StandardMaterial3D
+	check(grass_mat != null and grass_mat.albedo_texture != null and str(grass_mat.albedo_texture.resource_path).ends_with("grass-tile.png"), "the kick grass uses grass-tile.png")
+	game._ensure_field(35.0)
+	var short_grass: float = float(game.grass_bounds["max_z"]) - float(game.grass_bounds["min_z"])
+	for yards in [200.0, 500.0, 1000.0]:
+		game._ensure_field(yards)
+		var patch: Dictionary = game.grass_bounds
+		check(float(patch["min_z"]) <= 0.0 and float(patch["max_z"]) >= yards, "grass covers the tee-to-posts span at %s yards" % yards)
+		check(float(patch["max_z"]) - float(patch["min_z"]) > short_grass + 40.0, "a %s-yard field uses a longer grass run than 35 yards" % yards)
+		check(float(game.stand_bounds["min_z"]) <= 0.0 and float(game.stand_bounds["max_z"]) >= yards, "stands still cover tee-to-posts at %s yards after the grass paste" % yards)
+	for fair in [RunLogic.CLEAR, RunLogic.THIN_AIR, RunLogic.MUD, RunLogic.SQUEEZE, RunLogic.BIG_GAME, ""]:
+		check(game.sky_path_for(fair).ends_with("sky-clear.png"), "%s uses the clear sky" % fair)
+	for grey in [RunLogic.RAIN, RunLogic.SNOW, RunLogic.MONSOON, RunLogic.ICED]:
+		check(game.sky_path_for(grey).ends_with("sky-overcast.png"), "%s uses the overcast sky" % grey)
+	game._apply_sky(RunLogic.RAIN)
+	var rain_tex: Texture2D = game._sky_mat.get_shader_parameter("sky_tex")
+	check(game.sky_texture_path.ends_with("sky-overcast.png") and rain_tex != null and str(rain_tex.resource_path).ends_with("sky-overcast.png"), "forcing rain puts the overcast texture on the sky")
+	game._apply_sky(RunLogic.CLEAR)
+	var clear_tex: Texture2D = game._sky_mat.get_shader_parameter("sky_tex")
+	check(game.sky_texture_path.ends_with("sky-clear.png") and clear_tex != null and str(clear_tex.resource_path).ends_with("sky-clear.png"), "clear puts the painted clear sky back")
 	var source := FileAccess.get_file_as_string("res://scripts/main.gd")
-	check(source.find("grass-tile") < 0 and source.find("sky-clear") < 0 and source.find("sky-overcast") < 0, "grass and sky textures are not applied")
+	check(source.find("GPUParticles") < 0, "this paste did not add rain or snow particles")
+	check(source.find("func _shift_weather") >= 0 and source.find("KEY_0") >= 0 and source.find("KEY_8") >= 0, "Shift+0 through Shift+8 are still the weather keys")
 	game.free()
 

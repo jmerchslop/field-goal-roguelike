@@ -24,6 +24,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "sky":
+		if not await _capture_sky():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "stands":
 		if not await _capture_stands():
 			get_tree().quit(1)
@@ -2300,6 +2306,50 @@ func _capture_gauge_crop(file_name: String) -> bool:
 		print("FAILED to save ", path, " error ", err)
 		return false
 	print("Saved ", path, " ", crop.get_width(), "x", crop.get_height())
+	return true
+
+
+func _capture_sky() -> bool:
+	board.highlight = 1
+	board.selecting = true
+	board.confirm_kicker()
+	board.logic.phase = KickLogic.Phase.AIMING
+	board.force_weather(RunLogic.CLEAR)
+	if not await _capture("sky_35_clear.png"):
+		return false
+	board.cycle_debug_distance()
+	board.cycle_debug_distance()
+	if not await _capture("sky_200_clear.png"):
+		return false
+	board.cycle_debug_distance()
+	if not await _capture("sky_500_clear.png"):
+		return false
+	board.cycle_debug_distance()
+	if not await _capture("sky_1000_clear.png"):
+		return false
+	board.cycle_debug_distance()
+	var attempts: int = board.run.attempts
+	var kick_number: int = board.run.kick_number
+	print("SKY real kick ", kick_number, " attempts ", attempts, " preview ", board.preview_step(), " dist ", board.logic.kick_distance)
+	if board.preview_step() != 0:
+		print("preview did not restore the real kick")
+		return false
+	for shot in [
+		[RunLogic.RAIN, "sky_rain.png"],
+		[RunLogic.SNOW, "sky_snow.png"],
+		[RunLogic.MONSOON, "sky_monsoon.png"],
+		[RunLogic.ICED, "sky_iced.png"],
+		[RunLogic.MUD, "sky_mud.png"],
+		[RunLogic.THIN_AIR, "sky_thin_air.png"],
+		[RunLogic.CLEAR, "sky_back_clear.png"],
+	]:
+		board.force_weather(str(shot[0]))
+		if not await _capture(str(shot[1])):
+			return false
+	if board.run.attempts != attempts or board.run.kick_number != kick_number or board.preview_step() != 0:
+		print("weather force changed the kick")
+		return false
+	print("SKY back on kick ", board.run.kick_number, " attempts ", board.run.attempts, " sky ", board.sky_texture_path)
 	return true
 
 
