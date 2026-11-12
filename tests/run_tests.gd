@@ -51,6 +51,7 @@ func _run() -> void:
 	_check_wind_visor_path()
 	_check_drive_lid_and_power_safety()
 	_check_m2_kickers()
+	_check_honest_cards_and_bench()
 
 
 func _finish_live() -> void:
@@ -2994,15 +2995,18 @@ func _check_sfx() -> void:
 	sfx.begin_kick()
 	sfx.played.clear()
 	sfx.struck(false, 0.0, 1.5, 6.0, true)
+	sfx.tick(0.2)
 	var perfect_pools := _sfx_pools(sfx)
 	check(perfect_pools.has("ballcontact") and perfect_pools.has("air_perfect") and not perfect_pools.has("air_good") and not perfect_pools.has("air_bad"), "a PERFECT lock picks the perfect airborne pool, not the result label")
 	sfx.begin_kick()
 	sfx.played.clear()
 	sfx.struck(false, 4.0, 1.5, 6.0, false)
+	sfx.tick(0.2)
 	check(_sfx_pools(sfx).has("air_good") and not _sfx_pools(sfx).has("air_perfect"), "a good lock that is not PERFECT uses the good airborne pool")
 	sfx.begin_kick()
 	sfx.played.clear()
 	sfx.struck(false, 10.0, 1.5, 6.0, false)
+	sfx.tick(0.2)
 	check(_sfx_pools(sfx).has("air_bad"), "a lock outside the good band uses the bad airborne pool")
 	var count_before_doink := sfx.played.size()
 	check(sfx.post().begins_with("goalpostdoink"), "a doink adds the post sound")
@@ -3016,6 +3020,7 @@ func _check_sfx() -> void:
 	check(sfx.airborne_stops == stops + 1 and not sfx.kick_airborne, "a new kick stops the previous airborne")
 	sfx.played.clear()
 	sfx.struck(false, 0.0, 1.5, 6.0, true)
+	sfx.tick(0.2)
 	check(_sfx_pools(sfx).has("air_perfect"), "the new kick can play its own airborne")
 	var settings: GameSettings = get_root().get_node("Settings")
 	var saved_sfx := settings.sfx
@@ -3109,6 +3114,7 @@ func _live_pools_after_space(game, sfx: KickSfx) -> Array:
 	var calls := sfx.play_calls
 	game._unhandled_input(_space_key())
 	game._process(0.016)
+	sfx.tick(KickSfx.AIR_AFTER_CONTACT_SEC)
 	check(sfx.play_calls >= calls + 2, "a live lock calls play() for contact and airborne, calls %s -> %s" % [calls, sfx.play_calls])
 	return _sfx_pools(sfx)
 
@@ -3725,4 +3731,112 @@ func _check_m2_kickers() -> void:
 	check(near(big.stats.ball_speed_mult, 1.15) and big.stats.numero_dos, "Big Game keeps Numero Dos and the faster ball")
 	records.file_path = kept
 	records.load_file()
+
+
+func _check_honest_cards_and_bench() -> void:
+	var anchor_show := ["0.85", "0.72", "0.61", "0.52", "0.44", "0.38", "0.32", "0.27", "0.23", "0.20", "0.17", "0.14"]
+	var sticker_show := ["0.80", "0.64", "0.51", "0.41", "0.33", "0.26", "0.21", "0.17", "0.13", "0.11", "0.09", "0.07"]
+	for rank in range(1, 13):
+		check(Loadout.effect_line(Loadout.ANCHOR, rank) == "Needles ×%s" % anchor_show[rank - 1], "Anchor rank %s prints two decimals, got %s" % [rank, Loadout.effect_line(Loadout.ANCHOR, rank)])
+		check(Loadout.effect_line(Loadout.STICKER, rank) == "Drift ×%s" % sticker_show[rank - 1], "Sticker rank %s prints two decimals, got %s" % [rank, Loadout.effect_line(Loadout.STICKER, rank)])
+	check(Loadout.effect_line(Loadout.ANCHOR, 5) != Loadout.effect_line(Loadout.ANCHOR, 6), "Anchor V and VI do not print the same factor")
+	var anchor_run := RunLogic.new()
+	anchor_run.new_run()
+	anchor_run.give(Loadout.ANCHOR, 6)
+	check(near(anchor_run.stats.power_speed, 100.0 * pow(0.85, 6.0)), "Anchor VI needles still use the unrounded factor")
+	check(Loadout.effect_line(Loadout.WIND_VISOR, 1) == "Shows wind mph and an arrow", "Wind Visor I still names the mph and arrow")
+	check(Loadout.effect_line(Loadout.WIND_VISOR, 2) == "Wind mph and arrow. Dotted path for 40% of this kick", "Wind Visor II names the mph and the 40 percent path")
+	check(Loadout.effect_line(Loadout.WIND_VISOR, 6).begins_with("Wind mph and arrow.") and Loadout.effect_line(Loadout.WIND_VISOR, 12).find("full flight") >= 0, "Wind Visor VI through XII keep the mph line and the full path")
+	check(Loadout.effect_line(Loadout.ICE_CAGE, 6) == "No red-tip penalty. Immune to Iced. Accuracy needle ×0.90. PERFECT +2, good +4", "Ice Cage VI lists the full package")
+	check(Loadout.effect_line(Loadout.ICE_CAGE, 12) == "No red-tip penalty. Immune to Iced. Accuracy needle ×0.90. PERFECT +5, good +10", "Ice Cage XII lists the grown bands")
+	check(Loadout.effect_line(Loadout.SCOUT_LID, 7) == "+6 rerolls, and two Practice Swings a quarter", "Scout Lid VII says +6 rerolls and two swings")
+	check(Loadout.effect_line(Loadout.DOINK_CAP, 7) == "7 doink-to-good a quarter, unused carry (max 7)", "Doink Cap VII carries 7")
+	check(Loadout.effect_line(Loadout.DOINK_CAP, 12) == "12 doink-to-good a quarter, unused carry (max 12)", "Doink Cap XII carries 12")
+	check(Loadout.effect_line(Loadout.REPLAY_GLOVES, 7) == "7 practice swings, unused carry (max 7)", "Replay Gloves VII carries 7")
+	check(Loadout.effect_line(Loadout.WEATHER_WRAPS, 7) == "Penalties ignored, +8 yd unless CLEAR", "Weather Wraps VII says +8")
+	check(Loadout.effect_line(Loadout.WEATHER_WRAPS, 12) == "Penalties ignored, +18 yd unless CLEAR", "Weather Wraps XII says +18")
+	check(Loadout.effect_line(Loadout.HOT_STREAK, 4) == "Streak step +1.25" and Loadout.effect_line(Loadout.HOT_STREAK, 6) == "Streak step +1.75", "Hot Streak IV and VI name the real steps")
+	check(Loadout.effect_line(Loadout.STORM_CHASER, 4) == "+0.8 Mult per mph of crosswind" and Loadout.effect_line(Loadout.STORM_CHASER, 6) == "+1.2 Mult per mph of crosswind", "Storm Chaser IV and VI name the real rates")
+	check(Loadout.effect_line(Loadout.HERO_BALL, 4) == "+2.5 Mult, both needles ×0.80" and Loadout.effect_line(Loadout.HERO_BALL, 6) == "+3.5 Mult, both needles ×0.80", "Hero Ball IV and VI name the real Mult")
+	check(Loadout.effect_line(Loadout.GLASS_LEG, 4) == "+32 yd total, no extra cap loss" and Loadout.effect_line(Loadout.GLASS_LEG, 6) == "+48 yd total, no extra cap loss", "Glass Leg IV and VI name the real yards")
+	check(Loadout.effect_line(Loadout.TWO_MINUTE, 4) == "Boss kicks +2.0 Mult, on top of ×1.5" and Loadout.effect_line(Loadout.TWO_MINUTE, 6) == "Boss kicks +3.0 Mult, on top of ×1.5", "Two-Minute Drill IV and VI name the real Mult")
+	check(Loadout.effect_line(Loadout.CANNON, 12) == "+72 yd" and Loadout.effect_line(Loadout.DRIVE_LID, 12) == "+48 yd", "Cannon and Drive Lid cards still show the growing totals")
+	var phil := str(Kickers.get_def(Kickers.PHIL)["excels"])
+	check(phil.find("including B12") >= 0 and phil.find("Shelf rerolls still cost cash") >= 0 and phil.find("not only shop bottles") >= 0, "Phil's select line names free shop goods and the wider 15 percent")
+	check(str(Kickers.get_def(Kickers.PHIL)["downside"]) == "55 yards with nothing on. Rerolls still cost cash.", "Phil's downside stays 55 yards and paid rerolls")
+	check(Vitamins.effect_line(Vitamins.OMEGA).find("+5 perfect score bonus") >= 0 and Vitamins.effect_line(Vitamins.OMEGA).find("perfect cash dollar") >= 0, "Omega-3 names the missing score bonus and the cash that still pays")
+	var bench := RunLogic.new()
+	bench.new_run()
+	bench.run_mode = "endless"
+	bench.attempts = 1
+	bench.give(Loadout.DEEP_BENCH, 1)
+	check(bench.attempt_cap == 4 and bench.attempts == 2 and near(bench.bench_bank, 0.0), "Deep Bench I still adds one cap and one attempt")
+	bench.give(Loadout.DEEP_BENCH, 2)
+	check(bench.attempt_cap == 5 and bench.attempts == 3, "Deep Bench II still reaches cap 5")
+	bench.give(Loadout.DEEP_BENCH, 3)
+	check(bench.attempt_cap == 5 and bench.attempts == 4 and bench.stats.bench_spare, "Deep Bench III still adds the spare without raising the cap")
+	var held_attempts := bench.attempts
+	var held_cap := bench.attempt_cap
+	bench.give(Loadout.DEEP_BENCH, 4)
+	check(bench.attempt_cap == held_cap and bench.attempts == held_attempts and near(bench.bench_bank, 0.5), "Deep Bench IV banks a half and does not add an attempt")
+	check(Loadout.effect_line(Loadout.DEEP_BENCH, 4) == "Cap stays. Halfway to +1 extra attempt. Spare stays.", "Deep Bench IV card says halfway")
+	bench.give(Loadout.DEEP_BENCH, 5)
+	check(bench.attempt_cap == 6 and bench.attempts == held_attempts + 1 and near(bench.bench_bank, 0.0), "Deep Bench V pays one cap and one attempt past the old max of 5")
+	bench.give(Loadout.DEEP_BENCH, 6)
+	check(bench.attempt_cap == 7 and bench.attempts == held_attempts + 2 and near(bench.bench_bank, 0.0), "Deep Bench VI pays the leftover half as another attempt")
+	bench.attempts = bench.attempt_cap - 1
+	var before_quarter := bench.attempts
+	bench.kick_number = 6
+	bench._refill_quarter()
+	check(bench.attempts == before_quarter + 1, "the quarter spare is still +1 when below cap")
+	var walk := RunLogic.new()
+	walk.start_with_kicker(Kickers.WALK_ON)
+	var kick := KickLogic.new()
+	kick.stats = walk.stats
+	kick.kick_distance = walk.distance_yards()
+	kick.wind_speed = 0
+	kick.wind_direction = 0.0
+	var shown := kick.max_range_at_full_power()
+	check(near(shown, float(kick.carry_plan(100.0, 0.0)["travel"])), "Max at 100 percent matches carry_plan")
+	walk.give(Loadout.CANNON, 1)
+	kick.stats = walk.stats
+	check(near(kick.max_range_at_full_power(), shown + 6.0), "Cannon Cleats I raises Max by 6")
+	walk.give(Loadout.DRIVE_LID, 1)
+	kick.stats = walk.stats
+	check(near(kick.max_range_at_full_power(), shown + 10.0), "Drive Lid I raises Max by another 4")
+	walk.belt = [Vitamins.PROTEIN, ""]
+	check(walk.use_belt(0), "Protein Shake can be used before the meter")
+	walk.prepare_kick_stats()
+	kick.stats = walk.stats
+	check(near(kick.max_range_at_full_power(), shown + 16.0), "Protein Shake raises Max right away")
+	kick.wind_speed = 10
+	kick.wind_direction = 180.0
+	var into_wind := kick.max_range_at_full_power()
+	kick.wind_speed = 0
+	check(into_wind < kick.max_range_at_full_power() - 1.0, "a headwind lowers the live Max")
+	var hud := FileAccess.get_file_as_string("res://scripts/hud.gd")
+	check(hud.find("Max %s yd") >= 0 and hud.find("distance_yards()") >= 0, "the HUD draws Max and still draws the required distance")
+	var locked := KickLogic.new()
+	locked.stats = walk.stats
+	locked.kick_distance = 35.0
+	locked.wind_speed = 0
+	_lock_power_at(locked, 50.0)
+	var full := locked.max_range_at_full_power()
+	check(locked.max_range < full - 1.0 and locked.detail_line().find(KickLogic.format_number(locked.max_range)) >= 0, "the result line uses the locked power, which can be under Max")
+	var sounds := KickSfx.new()
+	sounds.scan()
+	sounds.begin_kick()
+	sounds.played.clear()
+	var contact_only := sounds.struck(false, 0.0, 1.5, 6.0, true)
+	check(contact_only.begins_with("ballcontact") and not _sfx_pools(sounds).has("air_perfect"), "contact plays at the strike, before the airborne cue")
+	sounds.tick(0.05)
+	check(not _sfx_pools(sounds).has("air_perfect"), "the airborne cue waits so the contact thud can be heard")
+	sounds.tick(KickSfx.AIR_AFTER_CONTACT_SEC)
+	check(_sfx_pools(sounds).has("air_perfect"), "the airborne cue follows the contact")
+	sounds.begin_kick()
+	sounds.played.clear()
+	var shank_only := sounds.struck(true, 15.0, 1.5, 6.0, false)
+	sounds.tick(0.2)
+	check(shank_only.begins_with("shankedkick") and not _sfx_pools(sounds).has("ballcontact") and not _sfx_pools(sounds).has("air_bad"), "a shank stays on the shank pool and never plays contact or air")
+	sounds.free()
 

@@ -429,6 +429,7 @@ func refresh_view() -> void:
 
 
 func _process(delta: float) -> void:
+	Sfx.tick(delta)
 	if not _taking_pictures:
 		if save_note != "":
 			_note_time += delta

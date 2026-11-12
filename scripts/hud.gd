@@ -187,7 +187,7 @@ func _draw_well(hub: Vector2, radius: float) -> void:
 
 
 func _draw_hud(logic: KickLogic, run: RunLogic) -> void:
-	draw_rect(Rect2(12, 64, 390, 248), Color(0.02, 0.05, 0.08, 0.42))
+	draw_rect(Rect2(12, 64, 390, 272), Color(0.02, 0.05, 0.08, 0.42))
 	var x := 24.0
 	var y := 86.0
 	var kick_line := "Kick %d" % run.kick_number
@@ -196,6 +196,8 @@ func _draw_hud(logic: KickLogic, run: RunLogic) -> void:
 	_text(Vector2(x, y), kick_line, 22, KickConstants.COLOR_TEXT)
 	y += 26.0
 	_text(Vector2(x, y), "%s yd" % KickLogic.format_number(run.distance_yards()), 20, KickConstants.COLOR_TEXT)
+	y += 22.0
+	_text(Vector2(x, y), "Max %s yd" % KickLogic.format_number(logic.max_range_at_full_power()), 20, KickConstants.COLOR_TEXT)
 	y += 22.0
 	_text(Vector2(x, y), RunLogic.spot_label(run.spot_yards), 16, KickConstants.COLOR_ATTEMPT)
 	y += 22.0
@@ -468,27 +470,36 @@ func _draw_offer(run: RunLogic) -> void:
 		_text(rect.position + Vector2(96, 32), "%d  %s" % [i + 1, Loadout.type_label(slot)], 16, _slot_color(slot))
 		_draw_slot_icon(id, rank, slot, Rect2(rect.position + Vector2(14, 28), Vector2(72, 72)), true)
 		_text(rect.position + Vector2(96, 62), Loadout.card_title(id, rank), 18, KickConstants.COLOR_ATTEMPT)
-		_draw_wrapped(Loadout.effect_line(id, rank), Rect2(rect.position + Vector2(96, 84), Vector2(width - 110, 150)), 16)
+		_draw_wrapped(Loadout.effect_line(id, rank), Rect2(rect.position + Vector2(12, 112), Vector2(width - 24, 90)), 15)
 	_text_centered("Reroll: %d left    %s rerolls    %s skips" % [run.rerolls_left, Settings.key_label("offer_reroll"), Settings.key_label("skip")], 640.0, 18, KickConstants.COLOR_TEXT)
 	_text_centered("Skip takes nothing.", 666.0, 16, KickConstants.COLOR_TEXT)
 
 
-func _draw_wrapped(text: String, area: Rect2, size: int) -> void:
+func _wrap_lines(text: String, width: float, size: int) -> PackedStringArray:
+	var lines := PackedStringArray()
 	var font := ThemeDB.fallback_font
-	if font == null:
-		return
+	if font == null or text == "":
+		if text != "":
+			lines.append(text)
+		return lines
 	var line := ""
-	var y := area.position.y
 	for word in text.split(" "):
 		var trial := (line + word).strip_edges()
-		if line != "" and font.get_string_size(trial, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > area.size.x:
-			_text(Vector2(area.position.x, y), line.strip_edges(), size, KickConstants.COLOR_TEXT)
-			y += float(size) + 4.0
+		if line != "" and font.get_string_size(trial, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > width:
+			lines.append(line.strip_edges())
 			line = word + " "
 		else:
 			line = trial + " "
 	if line.strip_edges() != "":
-		_text(Vector2(area.position.x, y), line.strip_edges(), size, KickConstants.COLOR_TEXT)
+		lines.append(line.strip_edges())
+	return lines
+
+
+func _draw_wrapped(text: String, area: Rect2, size: int) -> void:
+	var y := area.position.y
+	for line in _wrap_lines(text, area.size.x, size):
+		_text(Vector2(area.position.x, y), line, size, KickConstants.COLOR_TEXT)
+		y += float(size) + 4.0
 
 
 func _draw_attempt_pips(run: RunLogic, origin_x: float, origin_y: float) -> void:
@@ -737,17 +748,19 @@ func _draw_slot_tooltip() -> void:
 		if badge != "":
 			title += " " + badge
 		lines.append(title)
-		lines.append(Loadout.effect_line(id, rank if rank > 0 else 1))
+		lines.append_array(_wrap_lines(Loadout.effect_line(id, rank if rank > 0 else 1), 248.0, 14))
 	var anchor: Rect2 = hit["rect"]
-	var box := Rect2(anchor.position + Vector2(0, anchor.size.y + 8.0), Vector2(240, 18.0 + float(lines.size()) * 20.0))
+	var box := Rect2(anchor.position + Vector2(0, anchor.size.y + 8.0), Vector2(264, 16.0 + float(lines.size()) * 18.0))
 	if box.position.x + box.size.x > KickConstants.WINDOW_WIDTH - 8.0:
 		box.position.x = KickConstants.WINDOW_WIDTH - 8.0 - box.size.x
+	if box.position.y + box.size.y > KickConstants.WINDOW_HEIGHT - 8.0:
+		box.position.y = maxf(8.0, anchor.position.y - box.size.y - 8.0)
 	draw_rect(box, Color(0.05, 0.08, 0.1, 0.94))
 	draw_rect(box, KickConstants.COLOR_ATTEMPT, false, 2.0)
 	var y := box.position.y + 18.0
 	for line in lines:
 		_text(Vector2(box.position.x + 8, y), str(line), 14, KickConstants.COLOR_TEXT)
-		y += 20.0
+		y += 18.0
 
 
 func _slot_color(slot: String) -> Color:
@@ -930,12 +943,11 @@ func _draw_shop(run: RunLogic) -> void:
 			_text(frame.position + Vector2(28, 78), "SOLD", 22, Color(0.85, 0.85, 0.88))
 		else:
 			_draw_bottle(id, frame.grow(-18), false)
-			var plate := Rect2(frame.position.x - 8, frame.position.y + frame.size.y + 4, frame.size.x + 16, 52)
+			var plate := Rect2(frame.position.x + frame.size.x * 0.5 - 107.0, 604.0, 214.0, 74.0)
 			draw_rect(plate, Color(0.05, 0.04, 0.03, 0.88))
 			var price_color := Color(1.0, 0.3, 0.25) if run.shop_flash == str(i) else KickConstants.COLOR_ATTEMPT
-			_text(plate.position + Vector2(6, 16), "%d  $%d" % [i + 1, run.item_price(id)], 14, price_color)
-			_text(plate.position + Vector2(6, 34), Vitamins.piece_name(id), 12, KickConstants.COLOR_TEXT)
-			_text(plate.position + Vector2(6, 48), Vitamins.effect_line(id), 11, KickConstants.COLOR_TEXT)
+			_text(plate.position + Vector2(8, 16), "%d  $%d  %s" % [i + 1, run.item_price(id), Vitamins.piece_name(id)], 12, price_color)
+			_draw_wrapped(Vitamins.effect_line(id), Rect2(plate.position + Vector2(8, 30), Vector2(plate.size.x - 16, 40)), 10)
 	var b12 := Rect2(980, 250, 250, 150)
 	var grey := run.b12_grey()
 	draw_rect(b12, Color(0.08, 0.08, 0.08, 0.9) if grey else Color(0.16, 0.12, 0.05, 0.92))

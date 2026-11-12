@@ -55,7 +55,7 @@ const ALL: Array = [
 		"id": PHIL,
 		"name": "Phil The Pharmacist",
 		"lore": "He compounds the little things. The shop knows his name, and the gelcap only pays when he actually took it.",
-		"excels": "House Account. Compounding. Shop items are free and 15% stronger.",
+		"excels": "House Account. Shop goods are free, including B12. Shelf rerolls still cost cash. Compounding. Your items are 15% stronger: equipment, perks, curse upsides, and vitamins, not only shop bottles.",
 		"downside": "55 yards with nothing on. Rerolls still cost cash.",
 		"ball_name": "The Gelcap",
 		"ball_description": "A vitamin used on this attempt adds +0.5 Mult on a make.",

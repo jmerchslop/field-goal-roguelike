@@ -714,6 +714,12 @@ func sync_tee() -> void:
 
 
 # Same wind, ball, and range math the real kick uses. e = 0, so the aim is the intended aim.
+func max_range_at_full_power() -> float:
+	# The aiming HUD's Max line. Same travel as the ball at a 100% lock.
+	var powered := power_for_range(100.0, stats.power_floor)
+	return float(carry_plan(powered, 0.0)["travel"])
+
+
 func preview_plan() -> Dictionary:
 	var powered := 100.0
 	if phase == Phase.ACCURACY:

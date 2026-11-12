@@ -80,6 +80,55 @@ static func kind_of(id: String) -> String:
 	return EQUIPMENT
 
 
+static func _two_decimals(value: float) -> String:
+	var hundredths := int(round(absf(value) * 100.0))
+	return "%d.%02d" % [int(hundredths / 100), hundredths % 100]
+
+
+static func _scout_practice(rank: int) -> int:
+	if rank < 4:
+		return 0
+	return 1 + int((rank - 4) / 2.0)
+
+
+static func _swing_word(count: int) -> String:
+	if count == 1:
+		return "one"
+	if count == 2:
+		return "two"
+	if count == 3:
+		return "three"
+	if count == 4:
+		return "four"
+	if count == 5:
+		return "five"
+	return str(count)
+
+
+static func _ice_cage_line(rank: int) -> String:
+	var line := "No red-tip penalty. Immune to Iced."
+	if rank <= 1:
+		return line
+	line += " Accuracy needle ×0.90"
+	var perfect := 0
+	var odd := 3
+	while odd <= rank:
+		perfect += 1
+		odd += 2
+	var good := 0
+	var even := 4
+	while even <= rank:
+		good += 2
+		even += 2
+	if perfect > 0 and good > 0:
+		line += ". PERFECT +%d, good +%d" % [perfect, good]
+	elif perfect > 0:
+		line += ". PERFECT +%d" % perfect
+	elif good > 0:
+		line += ". good +%d" % good
+	return line
+
+
 static func _scout_rerolls(rank: int) -> int:
 	if rank <= 3:
 		return rank
@@ -180,9 +229,9 @@ static func effect_line(id: String, rank: int) -> String:
 		PINPOINT:
 			return "PERFECT +%d, good +%d" % [2 * rank, 3 * rank]
 		ANCHOR:
-			return "Needles ×%s" % KickLogic.format_number(pow(0.85, float(rank)))
+			return "Needles ×%s" % _two_decimals(pow(0.85, float(rank)))
 		STICKER:
-			return "Drift ×%s" % KickLogic.format_number(pow(0.80, float(rank)))
+			return "Drift ×%s" % _two_decimals(pow(0.80, float(rank)))
 		DRIVE_LID:
 			return "+%d yd" % (4 * rank)
 		WIND_VISOR:
@@ -190,20 +239,10 @@ static func effect_line(id: String, rank: int) -> String:
 				return "Shows wind mph and an arrow"
 			var shown := int(KickLogic.path_percent_for_rank(rank))
 			if shown >= 100:
-				return "Dotted path for the full flight"
-			return "Dotted path for %d%% of this kick" % shown
+				return "Wind mph and arrow. Dotted path for the full flight"
+			return "Wind mph and arrow. Dotted path for %d%% of this kick" % shown
 		ICE_CAGE:
-			if rank <= 1:
-				return "No red-tip penalty. Immune to Iced."
-			if rank == 2:
-				return "Also accuracy needle ×0.90"
-			if rank == 3:
-				return "Also PERFECT +1"
-			if rank == 4:
-				return "Also good +2"
-			if rank == 5:
-				return "PERFECT +2 total"
-			return "Good +4 total"
+			return _ice_cage_line(rank)
 		SCOUT_LID:
 			if rank <= 3:
 				return "+%d reroll" % rank
@@ -211,10 +250,14 @@ static func effect_line(id: String, rank: int) -> String:
 				return "+3 rerolls, and one Practice Swing a quarter"
 			if rank == 5:
 				return "+4 rerolls, and one Practice Swing a quarter"
-			return "+5 rerolls, and two Practice Swings a quarter"
+			if rank == 6:
+				return "+5 rerolls, and two Practice Swings a quarter"
+			return "+%d rerolls, and %s Practice Swings a quarter" % [rank - 1, _swing_word(_scout_practice(rank))]
 		DOINK_CAP:
-			if rank >= 6:
+			if rank == 6:
 				return "5 doink-to-good a quarter, unused carry (max 5)"
+			if rank >= 7:
+				return "%d doink-to-good a quarter, unused carry (max %d)" % [rank, rank]
 			return "%d doink-to-good a quarter" % rank
 		IRON_GRIP:
 			if rank <= 2:
@@ -227,8 +270,10 @@ static func effect_line(id: String, rank: int) -> String:
 				return "Noise −4 (min ±1), red tip 9 later"
 			return "Red tip never triggers"
 		REPLAY_GLOVES:
-			if rank >= 6:
+			if rank == 6:
 				return "5 practice swings, unused carry (max 5)"
+			if rank >= 7:
+				return "%d practice swings, unused carry (max %d)" % [rank, rank]
 			return "%d practice swing a quarter" % rank
 		HIGH_AIR:
 			return "+%d yd, tailwind range ×1.5" % (2 * rank)
@@ -239,45 +284,79 @@ static func effect_line(id: String, rank: int) -> String:
 				return "Rain, snow, and mud penalties ignored"
 			if rank == 3:
 				return "Also ignores Monsoon's rain and mud"
-			if rank == 4:
-				return "Penalties ignored, +2 yd unless CLEAR"
-			if rank == 5:
-				return "Penalties ignored, +4 yd unless CLEAR"
-			return "Penalties ignored, +6 yd unless CLEAR"
+			if rank >= 4:
+				return "Penalties ignored, +%d yd unless CLEAR" % (2 * (rank - 3))
+			return ""
 		DEEP_BENCH:
-			if rank >= 3:
+			if rank <= 2:
+				return "Attempt cap +%d and attempts +%d" % [rank, rank]
+			if rank == 3:
 				return "Cap stays. +1 attempt now and each quarter if below cap"
-			return "Attempt cap +%d and attempts +%d" % [rank, rank]
+			if rank == 4:
+				return "Cap stays. Halfway to +1 extra attempt. Spare stays."
+			if rank == 5:
+				return "+1 attempt cap and +1 attempt now. Spare stays."
+			return "+1 more attempt cap and +1 attempt now. Spare stays."
 		HOT_STREAK:
 			if rank <= 1:
 				return "Streak step +0.5"
 			if rank == 2:
 				return "Streak step +0.75"
-			return "Streak step +1.0"
+			if rank == 3:
+				return "Streak step +1.0"
+			if rank == 4:
+				return "Streak step +1.25"
+			if rank == 5:
+				return "Streak step +1.5"
+			return "Streak step +1.75"
 		STORM_CHASER:
 			if rank <= 1:
 				return "+0.2 Mult per mph of crosswind"
 			if rank == 2:
 				return "+0.4 Mult per mph of crosswind"
-			return "+0.6 Mult per mph of crosswind"
+			if rank == 3:
+				return "+0.6 Mult per mph of crosswind"
+			if rank == 4:
+				return "+0.8 Mult per mph of crosswind"
+			if rank == 5:
+				return "+1.0 Mult per mph of crosswind"
+			return "+1.2 Mult per mph of crosswind"
 		HERO_BALL:
 			if rank <= 1:
 				return "+1.0 Mult, both needles ×0.80"
 			if rank == 2:
 				return "+1.5 Mult, both needles ×0.80"
-			return "+2.0 Mult, both needles ×0.80"
+			if rank == 3:
+				return "+2.0 Mult, both needles ×0.80"
+			if rank == 4:
+				return "+2.5 Mult, both needles ×0.80"
+			if rank == 5:
+				return "+3.0 Mult, both needles ×0.80"
+			return "+3.5 Mult, both needles ×0.80"
 		GLASS_LEG:
 			if rank <= 1:
 				return "+8 yd, attempt cap −1"
 			if rank == 2:
 				return "+16 yd total, no extra cap loss"
-			return "+24 yd total, no extra cap loss"
+			if rank == 3:
+				return "+24 yd total, no extra cap loss"
+			if rank == 4:
+				return "+32 yd total, no extra cap loss"
+			if rank == 5:
+				return "+40 yd total, no extra cap loss"
+			return "+48 yd total, no extra cap loss"
 		TWO_MINUTE:
 			if rank <= 1:
 				return "Boss kicks +0.5 Mult, on top of ×1.5"
 			if rank == 2:
 				return "Boss kicks +1.0 Mult, on top of ×1.5"
-			return "Boss kicks +1.5 Mult, on top of ×1.5"
+			if rank == 3:
+				return "Boss kicks +1.5 Mult, on top of ×1.5"
+			if rank == 4:
+				return "Boss kicks +2.0 Mult, on top of ×1.5"
+			if rank == 5:
+				return "Boss kicks +2.5 Mult, on top of ×1.5"
+			return "Boss kicks +3.0 Mult, on top of ×1.5"
 		ICED:
 			return "Down: meter hides 0.4s after Space. Up: +0.5 Mult"
 		SHANKY:

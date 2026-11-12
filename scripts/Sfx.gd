@@ -29,6 +29,10 @@ var kick_contact := false
 var kick_airborne := false
 var kick_doink := false
 var airborne_stops := 0
+# Contact plays at the strike. Air follows a moment later so the thud is heard.
+const AIR_AFTER_CONTACT_SEC := 0.12
+var _air_wait := -1.0
+var _air_pool := ""
 
 var _rng := RandomNumberGenerator.new()
 var _pools: Dictionary = {}
@@ -124,6 +128,8 @@ func files_of(pool: String) -> Array:
 
 func begin_kick() -> void:
 	airborne_stops += 1
+	_air_wait = -1.0
+	_air_pool = ""
 	if _air != null:
 		_air.stop()
 	kick_footsteps = false
@@ -149,9 +155,22 @@ func struck(shanked: bool, error: float, perfect_band: float, good_band: float, 
 		return play_pool("shank")
 	var contact := play_pool("ballcontact")
 	if not kick_airborne:
-		kick_airborne = true
-		play_pool(airborne_pool(error, perfect_band, good_band, perfect_lock))
+		_air_pool = airborne_pool(error, perfect_band, good_band, perfect_lock)
+		_air_wait = AIR_AFTER_CONTACT_SEC
 	return contact
+
+
+func tick(delta: float) -> void:
+	if _air_wait < 0.0:
+		return
+	_air_wait -= delta
+	if _air_wait > 0.0:
+		return
+	_air_wait = -1.0
+	if kick_airborne or _air_pool == "":
+		return
+	kick_airborne = true
+	play_pool(_air_pool)
 
 
 func post() -> String:

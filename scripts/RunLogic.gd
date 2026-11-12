@@ -29,6 +29,8 @@ var run_mode := "standard"
 var kick_number := 1
 var attempts := KickConstants.ATTEMPTS_START
 var attempt_cap := KickConstants.ATTEMPT_CAP
+var bench_bank := 0.0
+var bench_extra_cap := 0
 var score := 0
 var streak := 0
 var kicks_made := 0
@@ -155,6 +157,8 @@ func new_run() -> void:
 	kick_number = 1
 	attempts = KickConstants.ATTEMPTS_START
 	attempt_cap = mini(KickConstants.ATTEMPT_CAP, KickConstants.ATTEMPT_CAP_MAX)
+	bench_bank = 0.0
+	bench_extra_cap = 0
 	score = 0
 	streak = 0
 	kicks_made = 0
@@ -981,6 +985,7 @@ func give(id: String, rank: int = 1) -> void:
 	var slot := Loadout.slot_of(id)
 	if slot == "":
 		return
+	var previous_bench := 0
 	if slot == Loadout.CLEATS:
 		if cleats_id != "" and cleats_id != id:
 			return
@@ -998,6 +1003,7 @@ func give(id: String, rank: int = 1) -> void:
 			return
 	elif slot == Loadout.PERK:
 		var have := _perk_rank(id)
+		previous_bench = have
 		if have == 0 and perks.size() >= 2:
 			return
 		if id == Loadout.GLASS_LEG and have == 0 and attempt_cap <= 2:
@@ -1049,8 +1055,29 @@ func give(id: String, rank: int = 1) -> void:
 	var practice_gain := stats.practice_per_quarter - practice_before
 	if practice_gain > 0:
 		practice_left += practice_gain
-	if id == Loadout.DEEP_BENCH and rank >= 3 and attempts < attempt_cap:
-		attempts += 1
+	if id == Loadout.DEEP_BENCH:
+		if previous_bench < 3 and rank >= 3 and attempts < attempt_cap:
+			attempts += 1
+		_bank_deep_bench(previous_bench, rank)
+
+
+func _grant_bench_attempt() -> void:
+	bench_extra_cap += 1
+	attempt_cap += 1
+	attempts = mini(attempts + 1, attempt_cap)
+
+
+func _bank_deep_bench(old_rank: int, new_rank: int) -> void:
+	var step := maxi(old_rank + 1, 4)
+	while step <= new_rank:
+		bench_bank += 0.5
+		if bench_bank >= 0.999:
+			bench_bank -= 1.0
+			_grant_bench_attempt()
+		if step == 6 and bench_bank >= 0.499:
+			bench_bank = 0.0
+			_grant_bench_attempt()
+		step += 1
 
 
 func loadout_state() -> Dictionary:
@@ -1081,7 +1108,7 @@ func rebuild_stats() -> void:
 	if kicker_id != "":
 		Kickers.apply_to(stats, kicker_id)
 	Loadout.apply(stats, loadout_state(), has_curse(Loadout.HOWLING), item_effect_scale())
-	attempt_cap = mini(stats.attempt_cap, KickConstants.ATTEMPT_CAP_MAX)
+	attempt_cap = mini(stats.attempt_cap, KickConstants.ATTEMPT_CAP_MAX) + bench_extra_cap
 
 
 func owned_labels() -> Array:
