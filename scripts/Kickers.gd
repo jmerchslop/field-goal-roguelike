@@ -122,8 +122,8 @@ const ALL: Array = [
 	{
 		"id": WILLOW,
 		"name": "Willow Reed",
-		"lore": "She takes her time. The first shop of the run always has something that adds yards.",
-		"excels": "Synchronicity. The first shop opening includes a range vitamin.",
+		"lore": "She takes her time. The first loadout offer of the run includes a range item.",
+		"excels": "Synchronicity. The first loadout offer includes a range item.",
 		"downside": "50 yards with nothing on. The Chill Ball is slow.",
 		"ball_name": "The Chill Ball",
 		"ball_description": "Both needles run at half speed. Items and weather still stack on top.",

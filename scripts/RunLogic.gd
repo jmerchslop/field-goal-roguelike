@@ -93,7 +93,7 @@ var cash_popup := ""
 var unlock_toast := ""
 var lucky_stacks := 0
 var showtime_mult := 1.0
-var shop_guaranteed := false
+var synchronicity_offer_done := false
 var belt: Array = ["", ""]
 var active_vitamins := {}
 var zinc_used := false
@@ -188,7 +188,7 @@ func new_run() -> void:
 	clean_makes = {}
 	lucky_stacks = 0
 	showtime_mult = 1.0
-	shop_guaranteed = false
+	synchronicity_offer_done = false
 	unlock_toast = ""
 	trophy_name = ""
 	new_record_score = false
@@ -705,6 +705,7 @@ func roll_offer() -> void:
 		awaiting_offer = false
 		offer = []
 		return
+	var generated := _forced_cards.size() == 0
 	if _forced_cards.size() > 0:
 		offer = []
 		for item in _forced_cards:
@@ -713,6 +714,8 @@ func roll_offer() -> void:
 	else:
 		offer = Loadout.draw_offer(loadout_state(), attempt_cap, _offer_rng)
 	_consider_power_safety()
+	if generated:
+		_apply_synchronicity_offer()
 	awaiting_offer = true
 
 
@@ -754,6 +757,8 @@ func _consider_power_safety() -> void:
 func opens_shop() -> bool:
 	if phase != Phase.PLAYING or not last_result_made:
 		return false
+	if run_mode == "endless":
+		return kick_number > 0 and kick_number % 5 == 0
 	return kick_number == 5 or kick_number == 10 or kick_number == 15
 
 
@@ -1302,6 +1307,40 @@ func _vitamin_count(id: String) -> int:
 	return int(active_vitamins.get(id, 0))
 
 
+func _legal_synchronicity_pool() -> Array:
+	var state := loadout_state()
+	var legal := {}
+	for card in Loadout.legal_equipment(state):
+		legal[Loadout.card_key(card)] = card
+	for card in Loadout.legal_perks(state, attempt_cap):
+		legal[Loadout.card_key(card)] = card
+	var pool: Array = []
+	for id in [Loadout.CANNON, Loadout.DRIVE_LID, Loadout.HIGH_AIR, Loadout.GLASS_LEG]:
+		var key := "%s|1" % id
+		if legal.has(key):
+			pool.append(legal[key])
+	return pool
+
+
+func _apply_synchronicity_offer() -> void:
+	# The first generated offer of a Willow run. A reroll or a later make is a normal draw.
+	if not stats.synchronicity or synchronicity_offer_done:
+		return
+	synchronicity_offer_done = true
+	var pool := _legal_synchronicity_pool()
+	if pool.is_empty() or offer.is_empty():
+		return
+	var pick: Dictionary = pool[_offer_rng.randi() % pool.size()]
+	var pick_id := str(pick.get("id", ""))
+	for card in offer:
+		if str(card.get("id", "")) == pick_id and int(card.get("rank", 0)) == 1:
+			power_item_seen = true
+			return
+	var slot := _offer_rng.randi() % offer.size()
+	offer[slot] = pick.duplicate()
+	power_item_seen = true
+
+
 func _empty_belt() -> int:
 	if str(belt[0]) == "":
 		return 0
@@ -1312,10 +1351,6 @@ func _empty_belt() -> int:
 
 func _fill_shelves(opening: bool = false, avoid: Array = []) -> void:
 	var picks: Array = Vitamins.draw_three(_shop_rng, [] if opening else avoid)
-	if opening and stats.synchronicity and not shop_guaranteed:
-		shop_guaranteed = true
-		if not picks.has(Vitamins.PROTEIN):
-			picks[0] = Vitamins.PROTEIN
 	shop_stock = ["", "", ""]
 	for i in mini(3, picks.size()):
 		shop_stock[i] = str(picks[i])

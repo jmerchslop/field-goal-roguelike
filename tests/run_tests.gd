@@ -52,6 +52,7 @@ func _run() -> void:
 	_check_drive_lid_and_power_safety()
 	_check_m2_kickers()
 	_check_honest_cards_and_bench()
+	_check_willow_offer_and_endless_shops()
 
 
 func _finish_live() -> void:
@@ -3631,11 +3632,11 @@ func _check_m2_kickers() -> void:
 	willow.phase = RunLogic.Phase.PLAYING
 	willow.cash = 30
 	check(willow.follow_offer() == "shop" and willow.awaiting_shop, "Willow's first shop still opens")
-	var protein_count := 0
+	var opening_known := willow.shop_stock.size() == 3
 	for item in willow.shop_stock:
-		if str(item) == Vitamins.PROTEIN:
-			protein_count += 1
-	check(protein_count == 1 and willow.shop_stock.size() == 3, "Willow's opening three include exactly one Protein Shake")
+		if not Vitamins.ALL.has(str(item)):
+			opening_known = false
+	check(opening_known, "Willow's first shop is three normal vitamins, with no forced Protein Shake")
 	var saw_plain := false
 	for _roll in 40:
 		willow._fill_shelves(false)
@@ -3839,4 +3840,164 @@ func _check_honest_cards_and_bench() -> void:
 	sounds.tick(0.2)
 	check(shank_only.begins_with("shankedkick") and not _sfx_pools(sounds).has("ballcontact") and not _sfx_pools(sounds).has("air_bad"), "a shank stays on the shank pool and never plays contact or air")
 	sounds.free()
+
+
+func _range_rank_one_ids(cards: Array) -> Array:
+	var ids: Array = []
+	for card in cards:
+		var id := str(card.get("id", ""))
+		if int(card.get("rank", 0)) != 1:
+			continue
+		if id == Loadout.CANNON or id == Loadout.DRIVE_LID or id == Loadout.HIGH_AIR or id == Loadout.GLASS_LEG:
+			ids.append(id)
+	return ids
+
+
+func _check_willow_offer_and_endless_shops() -> void:
+	var excels := str(Kickers.get_def(Kickers.WILLOW)["excels"])
+	check(excels == "Synchronicity. The first loadout offer includes a range item.", "Willow's select line names the first loadout offer, got %s" % excels)
+	check(str(Kickers.get_def(Kickers.WILLOW)["kit_line"]) == "Synchronicity", "Willow's HUD kit line stays Synchronicity")
+	check(str(Kickers.get_def(Kickers.WILLOW)["ball_name"]) == "The Chill Ball" and str(Kickers.get_def(Kickers.WILLOW)["downside"]) == "50 yards with nothing on. The Chill Ball is slow.", "Willow's Chill Ball and 50-yard downside stay")
+	var seen := {}
+	var later_plain := false
+	var skipped_clean := false
+	var picked_other := false
+	for seed_value in 48:
+		var willow := RunLogic.new()
+		willow.start_with_kicker(Kickers.WILLOW)
+		willow.set_offer_seed(seed_value)
+		willow.attempts = 2
+		willow.resolve_kick("GOOD", 1.0, false)
+		willow.roll_offer()
+		var ranged := _range_rank_one_ids(willow.offer)
+		check(willow.offer.size() == 3 and ranged.size() >= 1 and willow.cleats_id == "" and willow.helmet_id == "" and willow.gloves_id == "" and willow.perks.is_empty(), "Willow's first offer includes a rank I range card and does not equip it, seed %s" % seed_value)
+		for id in ranged:
+			seen[id] = true
+		if not skipped_clean:
+			willow.skip_offer()
+			check(willow.cleats_id == "" and willow.perks.is_empty(), "Skip does not take the range item")
+			skipped_clean = true
+		elif not picked_other:
+			var other := -1
+			for i in willow.offer.size():
+				var id := str(willow.offer[i].get("id", ""))
+				if id != Loadout.CANNON and id != Loadout.DRIVE_LID and id != Loadout.HIGH_AIR and id != Loadout.GLASS_LEG:
+					other = i
+			if other >= 0:
+				var before := willow.offer.duplicate(true)
+				check(willow.pick_card(other), "Willow can pick a different card")
+				check(willow.cleats_id != Loadout.CANNON and willow.helmet_id != Loadout.DRIVE_LID and willow.gloves_id != Loadout.HIGH_AIR and willow._perk_rank(Loadout.GLASS_LEG) == 0, "picking another card does not grant the range item")
+				picked_other = before.size() == 3
+		if not later_plain:
+			if willow.awaiting_offer:
+				willow.skip_offer()
+			if willow.go_to_next_kick():
+				willow.resolve_kick("GOOD", 1.0, false)
+				willow.roll_offer()
+				if _range_rank_one_ids(willow.offer).is_empty():
+					later_plain = true
+	check(seen.has(Loadout.CANNON) and seen.has(Loadout.DRIVE_LID) and seen.has(Loadout.HIGH_AIR) and seen.has(Loadout.GLASS_LEG), "all four range items can be the guaranteed card, saw %s" % str(seen.keys()))
+	check(later_plain, "a later Willow offer is not forced to include a range item")
+	check(picked_other, "Willow can take a non-range card from the first offer")
+	var missed := RunLogic.new()
+	missed.start_with_kicker(Kickers.WILLOW)
+	missed.attempts = 2
+	missed.resolve_kick("SHORT", 0.0, false)
+	check(missed.phase == RunLogic.Phase.PLAYING and not missed.awaiting_offer and not missed.synchronicity_offer_done, "missing kick 1 does not open the first offer")
+	missed.begin_retry()
+	missed.resolve_kick("GOOD", 1.0, false)
+	missed.roll_offer()
+	check(_range_rank_one_ids(missed.offer).size() >= 1 and missed.cleats_id == "" and missed.perks.is_empty(), "making kick 1 after a miss still guarantees a range card")
+	var blocked := RunLogic.new()
+	blocked.start_with_kicker(Kickers.WILLOW)
+	blocked.give(Loadout.PINPOINT, 1)
+	blocked.give(Loadout.WIND_VISOR, 1)
+	blocked.give(Loadout.IRON_GRIP, 1)
+	blocked.attempt_cap = 2
+	blocked.roll_offer()
+	var illegal := _range_rank_one_ids(blocked.offer)
+	check(illegal.is_empty() and blocked.synchronicity_offer_done, "an empty range pool does not force Glass Leg or a filled slot, got %s" % str(illegal))
+	var shop_plain := false
+	var reroll_plain := false
+	for seed_value in 24:
+		var shop := RunLogic.new()
+		shop.start_with_kicker(Kickers.WILLOW)
+		shop.set_seed(seed_value + 80)
+		shop.kick_number = 5
+		shop.last_result_made = true
+		shop.kick_resolved = true
+		shop.phase = RunLogic.Phase.PLAYING
+		shop.cash = 40
+		shop.follow_offer()
+		if not shop.shop_stock.has(Vitamins.PROTEIN):
+			shop_plain = true
+		if shop.reroll_shop() and not shop.shop_stock.has(Vitamins.PROTEIN):
+			reroll_plain = true
+	check(shop_plain, "Willow's first Vitamin Shop is not forced to include Protein Shake")
+	check(reroll_plain, "a paid shelf reroll is not forced to include Protein Shake")
+	var standard := RunLogic.new()
+	standard.phase = RunLogic.Phase.PLAYING
+	standard.last_result_made = true
+	for kick in [5, 10, 15]:
+		standard.kick_number = kick
+		check(standard.opens_shop(), "Standard still opens the shop on kick %s" % kick)
+	for kick in [4, 6, 16, 20, 25, 30]:
+		standard.kick_number = kick
+		check(not standard.opens_shop(), "Standard does not open a shop on kick %s" % kick)
+	var endless := RunLogic.new()
+	endless.run_mode = "endless"
+	endless.phase = RunLogic.Phase.PLAYING
+	endless.last_result_made = true
+	for kick in [5, 10, 15, 20, 25, 30, 100]:
+		endless.kick_number = kick
+		check(endless.opens_shop(), "Endless opens the shop on kick %s" % kick)
+	for kick in [4, 6, 16, 21, 31]:
+		endless.kick_number = kick
+		check(not endless.opens_shop(), "Endless does not open the shop on kick %s" % kick)
+	var missed_shop := RunLogic.new()
+	missed_shop.run_mode = "endless"
+	missed_shop.kick_number = 20
+	missed_shop.attempts = 2
+	missed_shop.resolve_kick("SHORT", 0.0, false)
+	check(missed_shop.phase == RunLogic.Phase.PLAYING and not missed_shop.opens_shop(), "a miss on Endless kick 20 does not open the shop")
+	missed_shop.begin_retry()
+	missed_shop.resolve_kick("GOOD", 1.0, false)
+	check(missed_shop.opens_shop() and missed_shop.wants_upgrade(), "making Endless kick 20 after the miss opens the shop path")
+	var deal := RunLogic.new()
+	deal.start_with_kicker(Kickers.COLE)
+	deal.run_mode = "endless"
+	deal.kick_number = 20
+	deal.attempts = 2
+	deal.resolve_kick("GOOD", 1.0, false)
+	check(deal.wants_upgrade() and deal.opens_shop(), "Cole on Endless kick 20 still qualifies for the offer and the shop kick")
+	deal.roll_offer()
+	check(deal.awaiting_offer and deal.offer.size() == 3, "Cole still gets the three-card offer at kick 20")
+	deal.skip_offer()
+	check(deal.follow_offer() == "next" and not deal.awaiting_shop, "Cole's Brand Deal still skips the Endless kick 20 shop")
+	var priced := RunLogic.new()
+	priced.start_with_kicker(Kickers.WALK_ON)
+	priced.run_mode = "endless"
+	priced.kick_number = 5
+	priced.cash = 30
+	priced.last_result_made = true
+	priced.kick_resolved = true
+	priced.phase = RunLogic.Phase.PLAYING
+	priced.follow_offer()
+	check(priced.awaiting_shop and priced.shop_reroll_price == 2, "the kick 5 shop starts rerolls at $2")
+	check(priced.reroll_shop() and priced.shop_reroll_price == 3, "a paid reroll raises the price inside that visit")
+	priced.leave_shop()
+	priced.kick_number = 20
+	priced.last_result_made = true
+	priced.kick_resolved = true
+	priced.phase = RunLogic.Phase.PLAYING
+	priced.follow_offer()
+	check(priced.awaiting_shop and priced.shop_reroll_price == Vitamins.REROLL_START and not priced.shop_b12_bought, "the kick 20 shop starts rerolls at $2 and sells B12 again")
+	var other := RunLogic.new()
+	other.start_with_kicker(Kickers.WALK_ON)
+	other.run_mode = "endless"
+	other.kick_number = 25
+	other.last_result_made = true
+	other.kick_resolved = true
+	other.phase = RunLogic.Phase.PLAYING
+	check(other.follow_offer() == "shop" and other.awaiting_shop, "a non-Cole kicker also gets the Endless kick 25 shop")
 
