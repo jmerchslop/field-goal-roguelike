@@ -60,6 +60,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "pause":
+		if not await _capture_pause():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "shell":
 		if not await _capture_shell():
 			get_tree().quit(1)
@@ -1117,6 +1123,58 @@ func _capture_needle() -> bool:
 	print("NEEDLE tight window perfect band ", board.logic.stats.perfect_band, " good ", board.logic.stats.good_band)
 	if not await _capture("needle_tight_window.png"):
 		return false
+	return true
+
+
+func _capture_pause() -> bool:
+	var records = get_tree().root.get_node("SaveData")
+	var kept_path := str(records.file_path)
+	records.file_path = "user://fg_pause_shot.cfg"
+	board.showing_records = false
+	board.selecting = false
+	board.highlight = 1
+	board.front.run_mode = "standard"
+	board.confirm_kicker()
+	board.run.kick_number = 2
+	board.load_current_kick()
+	board._open_pause()
+	if not await _capture("pause_panel.png"):
+		return false
+	board._save_and_quit()
+	board.front.gate = "choose"
+	board.front.gate_index = 0
+	board.front.run_mode = "standard"
+	if not await _capture("pause_continue_standard.png"):
+		return false
+	board.front.gate = "confirm"
+	board.front.gate_index = 0
+	if not await _capture("pause_confirm_standard.png"):
+		return false
+	board.highlight = 0
+	board.front.run_mode = "endless"
+	board.front.gate = ""
+	board.confirm_kicker()
+	board.run.kick_number = 8
+	board.load_current_kick()
+	board._save_and_quit()
+	board.front.screen = FrontEnd.Screen.MAIN
+	board.front.run_mode = "endless"
+	board.front.gate = "choose"
+	board.front.gate_index = 0
+	if not await _capture("pause_continue_endless.png"):
+		return false
+	board.front.gate = "confirm"
+	if not await _capture("pause_confirm_endless.png"):
+		return false
+	records.clear_run_slot("standard")
+	board.front.gate = ""
+	board.front.run_mode = "standard"
+	board.selecting = false
+	board._apply_menu_choice("select")
+	if not await _capture("pause_standard_fresh.png"):
+		return false
+	records.file_path = kept_path
+	records.load_file()
 	return true
 
 

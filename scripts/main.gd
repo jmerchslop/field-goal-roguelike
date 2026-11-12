@@ -17,6 +17,9 @@ var _bank_time := 0.0
 var selecting := false
 var showing_records := false
 var front := FrontEnd.new()
+var paused := false
+var pause_index := 0
+var _checkpoint: Dictionary = {}
 var save_note := ""
 var _note_time := 0.0
 var _trophy_time := 0.0
@@ -125,6 +128,7 @@ func _ready() -> void:
 	front.screen = FrontEnd.Screen.TITLE
 	highlight = -1
 	_show_fresh_unlocks()
+	get_tree().set_auto_accept_quit(false)
 	if OS.get_environment("FG_SHOTS") != "1":
 		return
 	_taking_pictures = true
@@ -166,6 +170,7 @@ func _copy_run_onto_kick() -> void:
 	meter_time = 0.0
 	_reset_kick_pose()
 	Sfx.begin_kick()
+	_remember_run()
 
 
 func settle_kick() -> void:
@@ -197,6 +202,7 @@ func settle_kick() -> void:
 	_cash_time = 0.0
 	if run.wants_upgrade():
 		run.roll_offer()
+		_remember_run()
 	elif run.phase == RunLogic.Phase.PLAYING:
 		run.begin_retry()
 		load_current_kick()
@@ -243,6 +249,7 @@ func _choose_card(index: int) -> void:
 func _after_cards() -> void:
 	if run.last_result_made:
 		if run.follow_offer() == "shop":
+			_remember_run()
 			refresh_view()
 			return
 		advance_run()
@@ -271,6 +278,7 @@ func confirm_kicker() -> void:
 		refresh_view()
 		return
 	selecting = false
+	front.came_from_gate = false
 	var mode := front.run_mode
 	_cue("select")
 	run.start_with_kicker(id)
@@ -334,10 +342,7 @@ func _select_input(event: InputEvent) -> void:
 		refresh_view()
 		return
 	if Settings.pressed_event(event, "back") and not showing_records:
-		selecting = false
-		front.back_select()
-		_cue("select")
-		refresh_view()
+		_leave_character_select()
 		return
 	if showing_records:
 		return
@@ -623,6 +628,9 @@ func _process(delta: float) -> void:
 	if front.screen == FrontEnd.Screen.TITLE or front.screen == FrontEnd.Screen.MAIN or front.screen == FrontEnd.Screen.OPTIONS or front.screen == FrontEnd.Screen.RECORDS or selecting:
 		refresh_view()
 		return
+	if paused:
+		refresh_view()
+		return
 	if logic.phase == KickLogic.Phase.RESULT:
 		result_age += delta
 	else:
@@ -663,8 +671,22 @@ func _process(delta: float) -> void:
 	refresh_view()
 
 
+func _notification(what: int) -> void:
+	if what != NOTIFICATION_WM_CLOSE_REQUEST:
+		return
+	if _active_run() and not _taking_pictures:
+		_write_quit_slot()
+	get_tree().quit()
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if _taking_pictures:
+		return
+	if paused:
+		_pause_input(event)
+		return
+	if _active_run() and _is_back(event):
+		_open_pause()
 		return
 	if _front_input(event):
 		return
@@ -827,11 +849,200 @@ func _unhandled_input(event: InputEvent) -> void:
 	refresh_view()
 
 
+func _active_run() -> bool:
+	if paused or selecting or showing_records:
+		return false
+	if front.screen != FrontEnd.Screen.PLAY:
+		return false
+	return run.phase == RunLogic.Phase.PLAYING
+
+
+func _is_back(event: InputEvent) -> bool:
+	return event is InputEventKey and (event as InputEventKey).pressed and not (event as InputEventKey).echo and Settings.pressed_event(event, "back")
+
+
+func _is_confirm(event: InputEvent) -> bool:
+	if not event is InputEventKey:
+		return false
+	var key := event as InputEventKey
+	if not key.pressed or key.echo:
+		return false
+	return Settings.pressed_event(event, "confirm") or key.keycode == KEY_ENTER or key.keycode == KEY_KP_ENTER
+
+
+func _open_pause() -> void:
+	paused = true
+	pause_index = 0
+	refresh_view()
+
+
+func _resume_pause() -> void:
+	paused = false
+	refresh_view()
+
+
+func _remember_run() -> void:
+	if run.kicker_id == "" or run.phase != RunLogic.Phase.PLAYING:
+		return
+	_checkpoint = run.export_resume()
+	if _taking_pictures:
+		return
+	SaveData.write_run_slot(run.run_mode, _checkpoint)
+
+
+func _resume_payload() -> Dictionary:
+	if run.awaiting_shop or run.awaiting_offer or run.kick_resolved:
+		return run.export_resume()
+	if logic.phase != KickLogic.Phase.AIMING and not _checkpoint.is_empty():
+		return _checkpoint.duplicate(true)
+	return run.export_resume()
+
+
+func _write_quit_slot() -> void:
+	if run.kicker_id == "" or (run.run_mode != "standard" and run.run_mode != "endless"):
+		return
+	SaveData.write_run_slot(run.run_mode, _resume_payload())
+
+
+func _save_and_quit() -> void:
+	_write_quit_slot()
+	_return_to_main_menu()
+
+
+func _continue_mode(mode: String) -> void:
+	var data := SaveData.run_slot(mode)
+	if str(data.get("kicker_id", "")) == "":
+		return
+	run.import_resume(data)
+	paused = false
+	selecting = false
+	showing_records = false
+	front.gate = ""
+	front.came_from_gate = false
+	front.screen = FrontEnd.Screen.PLAY
+	front.run_mode = run.run_mode
+	_preview_step = 0
+	_tint_ball()
+	load_current_kick()
+
+
+func _leave_character_select() -> void:
+	selecting = false
+	if front.came_from_gate:
+		front.came_from_gate = false
+		front.screen = FrontEnd.Screen.MAIN
+		front.gate = "choose"
+		front.gate_index = 0
+	else:
+		front.back_select()
+	_cue("select")
+	refresh_view()
+
+
+func _start_new_run() -> void:
+	front.gate = ""
+	front.came_from_gate = true
+	selecting = true
+	highlight = -1
+	showing_records = false
+	front.screen = FrontEnd.Screen.SELECT
+	refresh_view()
+
+
+func _keep_saved_run() -> void:
+	front.gate = "choose"
+	front.gate_index = 0
+	refresh_view()
+
+
+func _pause_input(event: InputEvent) -> void:
+	if _is_back(event):
+		_resume_pause()
+		return
+	if event is InputEventMouseButton:
+		var mouse := event as InputEventMouseButton
+		if mouse.pressed and mouse.button_index == MOUSE_BUTTON_LEFT:
+			var hit: int = _hud.pause_hit(mouse.position)
+			if hit >= 0:
+				pause_index = hit
+				_activate_pause()
+		return
+	if not event is InputEventKey:
+		return
+	var key := event as InputEventKey
+	if not key.pressed or key.echo:
+		return
+	if Settings.pressed_event(event, "menu_up") or Settings.pressed_event(event, "menu_left"):
+		pause_index = 0
+	elif Settings.pressed_event(event, "menu_down") or Settings.pressed_event(event, "menu_right"):
+		pause_index = 1
+	elif _is_confirm(event):
+		_activate_pause()
+	refresh_view()
+
+
+func _activate_pause() -> void:
+	if pause_index == 0:
+		_resume_pause()
+	else:
+		_save_and_quit()
+
+
+func _gate_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		var mouse := event as InputEventMouseButton
+		if mouse.pressed and mouse.button_index == MOUSE_BUTTON_LEFT:
+			var hit: int = _hud.gate_hit(mouse.position, front.gate)
+			if hit >= 0:
+				front.gate_index = hit
+				_activate_gate()
+		return
+	if not _is_key(event):
+		return
+	if _is_back(event):
+		if front.gate == "confirm":
+			_keep_saved_run()
+		else:
+			front.gate = ""
+			refresh_view()
+		return
+	if Settings.pressed_event(event, "menu_up") or Settings.pressed_event(event, "menu_left"):
+		front.gate_index = 0
+	elif Settings.pressed_event(event, "menu_down") or Settings.pressed_event(event, "menu_right"):
+		front.gate_index = 1
+	elif _is_confirm(event):
+		_activate_gate()
+		return
+	refresh_view()
+
+
+func _activate_gate() -> void:
+	if front.gate == "choose":
+		if front.gate_index == 0:
+			_continue_mode(front.run_mode)
+		else:
+			front.gate = "confirm"
+			front.gate_index = 0
+			refresh_view()
+		return
+	if front.gate_index == 0:
+		_start_new_run()
+	else:
+		_keep_saved_run()
+
+
+func _is_key(event: InputEvent) -> bool:
+	return event is InputEventKey and (event as InputEventKey).pressed and not (event as InputEventKey).echo
+
+
 func _return_to_main_menu() -> void:
 	selecting = false
 	showing_records = false
+	paused = false
 	front.screen = FrontEnd.Screen.MAIN
 	front.menu_index = 0
+	front.gate = ""
+	front.came_from_gate = false
 	front.lock_message = ""
 	refresh_view()
 
@@ -840,6 +1051,9 @@ func _front_input(event: InputEvent) -> bool:
 	var mode := front.screen
 	if mode != FrontEnd.Screen.TITLE and mode != FrontEnd.Screen.MAIN and mode != FrontEnd.Screen.OPTIONS and mode != FrontEnd.Screen.RECORDS:
 		return false
+	if mode == FrontEnd.Screen.MAIN and front.gate != "":
+		_gate_input(event)
+		return true
 	if event is InputEventMouseMotion and mode == FrontEnd.Screen.MAIN:
 		var tile := MenuLayout.tile_at(event.position, _hud._menu_window())
 		if tile >= 0:
@@ -912,6 +1126,14 @@ func _front_input(event: InputEvent) -> bool:
 
 func _apply_menu_choice(choice: String) -> void:
 	if choice == "select":
+		if SaveData.has_run_slot(front.run_mode):
+			front.screen = FrontEnd.Screen.MAIN
+			front.gate = "choose"
+			front.gate_index = 0
+			selecting = false
+			showing_records = false
+			return
+		front.screen = FrontEnd.Screen.SELECT
 		selecting = true
 		highlight = -1
 		showing_records = false

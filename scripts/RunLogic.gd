@@ -1340,6 +1340,171 @@ func _quarter_was_clean() -> bool:
 	return true
 
 
+func export_resume() -> Dictionary:
+	var place := "tee"
+	if awaiting_shop:
+		place = "shop"
+	elif awaiting_offer:
+		place = "offer"
+	var bosses: Array = []
+	for kick in endless_bosses.keys():
+		bosses.append({"kick": int(kick), "name": str(endless_bosses[kick])})
+	var vitamins: Array = []
+	for id in active_vitamins.keys():
+		vitamins.append({"id": str(id), "count": int(active_vitamins[id])})
+	var clean: Array = []
+	for kick in clean_makes.keys():
+		if bool(clean_makes[kick]):
+			clean.append(int(kick))
+	return {
+		"mode": run_mode,
+		"kicker_id": kicker_id,
+		"kick_number": kick_number,
+		"spot_yards": spot_yards,
+		"distance": int(round(distance_yards())),
+		"attempts": attempts,
+		"bench_extra_cap": bench_extra_cap,
+		"bench_bank": bench_bank,
+		"score": score,
+		"streak": streak,
+		"kicks_made": kicks_made,
+		"longest_make": longest_make,
+		"is_first_ball": is_first_ball,
+		"cash": cash,
+		"rerolls_left": rerolls_left,
+		"mulligans_left": mulligans_left,
+		"insurance_left": insurance_left,
+		"practice_left": practice_left,
+		"wind_speed": wind_speed,
+		"wind_direction": wind_direction,
+		"weather": weather,
+		"weather_forced": weather_forced,
+		"previous_weather": _previous_weather,
+		"older_weather": _older_weather,
+		"power_item_seen": power_item_seen,
+		"synchronicity_offer_done": synchronicity_offer_done,
+		"zinc_used": zinc_used,
+		"lucky_stacks": lucky_stacks,
+		"showtime_mult": showtime_mult,
+		"balls_kicked": balls_kicked,
+		"middles_this_run": middles_this_run,
+		"best_streak": best_streak,
+		"curses_locked": curses_locked,
+		"shop_b12_bought": shop_b12_bought,
+		"shop_reroll_price": shop_reroll_price,
+		"place": place,
+		"cleats_id": cleats_id,
+		"cleats_rank": cleats_rank,
+		"helmet_id": helmet_id,
+		"helmet_rank": helmet_rank,
+		"gloves_id": gloves_id,
+		"gloves_rank": gloves_rank,
+		"perks": perks.duplicate(true),
+		"curses": curse_ids.duplicate(),
+		"banned_curses": banned_curses.duplicate(),
+		"belt": belt.duplicate(),
+		"offer": offer.duplicate(true),
+		"shop_stock": shop_stock.duplicate(),
+		"bosses": bosses,
+		"vitamins": vitamins,
+		"clean": clean,
+		"last_result_made": last_result_made,
+	}
+
+
+func import_resume(data: Dictionary) -> void:
+	new_run()
+	run_mode = str(data.get("mode", "standard"))
+	kicker_id = str(data.get("kicker_id", ""))
+	cleats_id = str(data.get("cleats_id", ""))
+	cleats_rank = int(data.get("cleats_rank", 0))
+	helmet_id = str(data.get("helmet_id", ""))
+	helmet_rank = int(data.get("helmet_rank", 0))
+	gloves_id = str(data.get("gloves_id", ""))
+	gloves_rank = int(data.get("gloves_rank", 0))
+	perks = _dict_list(data.get("perks", []))
+	curse_ids = _string_list(data.get("curses", []))
+	banned_curses = _string_list(data.get("banned_curses", []))
+	curses_locked = bool(data.get("curses_locked", false))
+	bench_extra_cap = int(data.get("bench_extra_cap", 0))
+	bench_bank = float(data.get("bench_bank", 0.0))
+	rebuild_stats()
+	kick_number = int(data.get("kick_number", 1))
+	spot_yards = float(data.get("spot_yards", 0.0))
+	attempts = int(data.get("attempts", attempts))
+	score = int(data.get("score", 0))
+	streak = int(data.get("streak", 0))
+	kicks_made = int(data.get("kicks_made", 0))
+	longest_make = float(data.get("longest_make", 0.0))
+	is_first_ball = bool(data.get("is_first_ball", true))
+	cash = int(data.get("cash", 0))
+	rerolls_left = int(data.get("rerolls_left", rerolls_left))
+	mulligans_left = int(data.get("mulligans_left", mulligans_left))
+	insurance_left = int(data.get("insurance_left", insurance_left))
+	practice_left = int(data.get("practice_left", practice_left))
+	wind_speed = int(data.get("wind_speed", 0))
+	wind_direction = float(data.get("wind_direction", 0.0))
+	weather = str(data.get("weather", CLEAR))
+	weather_forced = bool(data.get("weather_forced", false))
+	_previous_weather = str(data.get("previous_weather", ""))
+	_older_weather = str(data.get("older_weather", ""))
+	power_item_seen = bool(data.get("power_item_seen", false))
+	synchronicity_offer_done = bool(data.get("synchronicity_offer_done", false))
+	zinc_used = bool(data.get("zinc_used", false))
+	lucky_stacks = int(data.get("lucky_stacks", 0))
+	showtime_mult = float(data.get("showtime_mult", 1.0))
+	balls_kicked = int(data.get("balls_kicked", 0))
+	middles_this_run = int(data.get("middles_this_run", 0))
+	best_streak = int(data.get("best_streak", 0))
+	shop_b12_bought = bool(data.get("shop_b12_bought", false))
+	shop_reroll_price = int(data.get("shop_reroll_price", shop_reroll_price))
+	belt = _string_list(data.get("belt", ["", ""]))
+	while belt.size() < 2:
+		belt.append("")
+	endless_bosses = {}
+	for pair in _dict_list(data.get("bosses", [])):
+		endless_bosses[int(pair.get("kick", 0))] = str(pair.get("name", ""))
+	active_vitamins = {}
+	for pair in _dict_list(data.get("vitamins", [])):
+		active_vitamins[str(pair.get("id", ""))] = int(pair.get("count", 0))
+	clean_makes = {}
+	for kick in data.get("clean", []):
+		clean_makes[int(kick)] = true
+	var place := str(data.get("place", "tee"))
+	if place == "offer":
+		awaiting_offer = true
+		kick_resolved = true
+		last_result_made = true
+		offer = _dict_list(data.get("offer", []))
+	elif place == "shop":
+		awaiting_shop = true
+		kick_resolved = true
+		last_result_made = true
+		shop_stock = _string_list(data.get("shop_stock", ["", "", ""]))
+	else:
+		awaiting_offer = false
+		awaiting_shop = false
+		kick_resolved = false
+		offer = []
+
+
+func _dict_list(value) -> Array:
+	var rows: Array = []
+	if value is Array:
+		for item in value:
+			if item is Dictionary:
+				rows.append((item as Dictionary).duplicate(true))
+	return rows
+
+
+func _string_list(value) -> Array:
+	var rows: Array = []
+	if value is Array:
+		for item in value:
+			rows.append(str(item))
+	return rows
+
+
 func _save_finished_run() -> void:
 	if _run_saved:
 		return
@@ -1347,6 +1512,7 @@ func _save_finished_run() -> void:
 	var data = _records()
 	if data == null:
 		return
+	data.clear_run_slot(run_mode)
 	var flags: Dictionary = data.commit_run({
 		"score": score,
 		"longest": int(round(longest_make)),

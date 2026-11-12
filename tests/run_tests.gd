@@ -61,6 +61,7 @@ func _run() -> void:
 
 
 func _finish_live() -> void:
+	_check_pause_saves()
 	_check_live_field()
 	_check_live_kick_sounds()
 	_release_sfx()
@@ -4444,6 +4445,121 @@ func _wind_drift(speed: float, direction: float, shelter: float, hush: float) ->
 	kick.stats.shelter_factor = shelter
 	kick.stats.hush_mph = hush
 	return float(kick.carry_plan(100.0, 0.0)["drift"])
+
+
+func _check_pause_saves() -> void:
+	var allowed := "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+. "
+	var lines: Array = [
+		FrontEnd.PAUSE_WORD, FrontEnd.RESUME_WORD, FrontEnd.SAVE_QUIT_WORD,
+		FrontEnd.GATE_CONTINUE, FrontEnd.GATE_NEW, FrontEnd.GATE_REPLACE_STANDARD,
+		FrontEnd.GATE_REPLACE_ENDLESS, FrontEnd.GATE_START, FrontEnd.GATE_KEEP,
+		"BRUCE", "WALK ON", "KICK 12   52 YD",
+	]
+	for line in lines:
+		var bad := ""
+		var text := str(line)
+		for i in text.length():
+			var ch := text.substr(i, 1)
+			if not allowed.contains(ch):
+				bad = ch
+		check(bad == "", "new copy stays in Pixel Gothic glyphs, got %s in %s" % [bad, text])
+	var shell := FileAccess.get_file_as_string("res://scripts/main.gd")
+	check(shell.find("front.back_main()") >= 0 and shell.find("front.back_options()") >= 0 and shell.find("front.back_select()") >= 0, "Esc still backs out of the main menu, Options, and character select")
+	check(shell.find("func _open_pause") >= 0 and shell.find("SAVE AND QUIT") < 0, "pause is a run overlay, and the button words live with the menu copy")
+	var records = get_root().get_node("SaveData")
+	var kept_path := str(records.file_path)
+	var kept_wins := int(records.wins)
+	records.file_path = "user://fg_pause_test.cfg"
+	records.clear_run_slot("standard")
+	records.clear_run_slot("endless")
+	var standard_slot := {"kicker_id": Kickers.BIG_BRUCE, "kick_number": 12, "distance": 52, "mode": "standard", "place": "tee", "attempts": 3, "weather": "CLEAR", "wind_speed": 4}
+	var endless_slot := {"kicker_id": Kickers.WILLOW, "kick_number": 8, "distance": 40, "mode": "endless", "place": "tee"}
+	records.write_run_slot("standard", standard_slot)
+	records.write_run_slot("endless", endless_slot)
+	check(records.has_run_slot("standard") and records.has_run_slot("endless"), "Standard and Endless can each hold a save")
+	records.write_run_slot("standard", standard_slot)
+	check(records.has_run_slot("endless") and str(records.run_slot("endless").get("kicker_id", "")) == Kickers.WILLOW, "a second Standard write does not create a second Standard slot or erase Endless")
+	var before := JSON.stringify(records.run_slot("standard"))
+	var packed: PackedScene = load("res://scenes/main.tscn")
+	var game = packed.instantiate()
+	get_root().add_child(game)
+	game._taking_pictures = true
+	game._keep_saved_run()
+	check(JSON.stringify(records.run_slot("standard")) == before, "Keep Saved Run does not change the slot")
+	game.front.run_mode = "standard"
+	game.front.screen = FrontEnd.Screen.MAIN
+	game._apply_menu_choice("select")
+	check(game.front.gate == "choose" and not game.selecting, "a saved Standard run opens Continue / New Run instead of character select")
+	game.front.gate = "confirm"
+	game._start_new_run()
+	check(game.selecting and game.front.came_from_gate and int(records.run_slot("standard").get("kick_number", 0)) == 12, "Start New Run reaches character select and keeps the old slot")
+	game._leave_character_select()
+	check(game.front.gate == "choose" and not game.selecting and int(records.run_slot("standard").get("kick_number", 0)) == 12, "Esc from character select returns to Continue / New Run with the old save")
+	game.highlight = 1
+	game._taking_pictures = false
+	game.confirm_kicker()
+	game._taking_pictures = true
+	check(int(records.run_slot("standard").get("kick_number", 0)) == 1, "the old Standard slot is replaced when the new run reaches the first tee")
+	game.run.kick_number = 4
+	game.run.weather = RunLogic.RAIN
+	game.run.wind_speed = 9
+	game.run.wind_direction = 90.0
+	game.run.attempts = 2
+	game.load_current_kick()
+	var saved_attempts: int = game.run.attempts
+	game.logic.press_space()
+	if game.logic.windup_left > 0.0:
+		game.logic.advance(game.logic.windup_left)
+	check(game.logic.phase != KickLogic.Phase.AIMING, "the meter left the tee")
+	game._save_and_quit()
+	check(game.front.screen == FrontEnd.Screen.MAIN and game.run.phase == RunLogic.Phase.PLAYING, "Save and Quit returns to the menu without ending the run")
+	var mid: Dictionary = records.run_slot("standard")
+	check(str(mid.get("place", "")) == "tee" and int(mid.get("kick_number", 0)) == 4 and int(mid.get("attempts", 0)) == saved_attempts, "a mid-meter save stores the start of that kick")
+	check(str(mid.get("weather", "")) == RunLogic.RAIN and int(mid.get("wind_speed", 0)) == 9, "the saved kick keeps its weather and wind")
+	game._continue_mode("standard")
+	check(game.logic.phase == KickLogic.Phase.AIMING and game.run.kick_number == 4 and game.run.attempts == saved_attempts, "Continue after a mid-meter quit is back on the tee, not in the meter")
+	game.run.offer = [{"id": Loadout.CANNON, "rank": 1}]
+	game.run.awaiting_offer = true
+	game.run.kick_resolved = true
+	game.run.last_result_made = true
+	game.run.rerolls_left = 1
+	game._save_and_quit()
+	game._continue_mode("standard")
+	check(game.run.awaiting_offer and game.run.offer.size() == 1 and str(game.run.offer[0].get("id", "")) == Loadout.CANNON, "Continue returns to the same loadout offer")
+	game.run.awaiting_offer = false
+	game.run.open_shop()
+	game.run.shop_stock = [Vitamins.B12, Vitamins.B12, ""]
+	game.run.cash = 20
+	game.run.shop_reroll_price = 4
+	game._save_and_quit()
+	game._continue_mode("standard")
+	check(game.run.awaiting_shop and str(game.run.shop_stock[0]) == Vitamins.B12 and game.run.cash == 20 and game.run.shop_reroll_price == 4, "Continue returns to the same Vitamin Shop")
+	records.write_run_slot("standard", standard_slot)
+	game.run.phase = RunLogic.Phase.PLAYING
+	game.run._run_saved = false
+	game.run.kick_resolved = false
+	game.run.run_mode = "standard"
+	game.run.kick_number = 20
+	game.run.attempts = 2
+	game.run.resolve_kick("GOOD", 0.0, false)
+	check(game.run.phase == RunLogic.Phase.WIN and not records.has_run_slot("standard"), "a Standard WIN clears that mode's Continue slot")
+	check(records.has_run_slot("endless"), "a Standard WIN does not clear the Endless slot")
+	records.write_run_slot("standard", standard_slot)
+	game.run.phase = RunLogic.Phase.PLAYING
+	game.run._run_saved = false
+	game.run.kick_resolved = false
+	game.run.active_vitamins = {}
+	game.run.attempts = 1
+	game.run.kick_number = 3
+	game.run.resolve_kick("MISS", 2.0, false)
+	check(game.run.phase == RunLogic.Phase.GAME_OVER and not records.has_run_slot("standard"), "GAME OVER clears that mode's Continue slot")
+	records.write_run_slot("standard", standard_slot)
+	records.reset_save()
+	check(not records.has_run_slot("standard") and not records.has_run_slot("endless"), "F9 save reset clears mid-run slots")
+	game.free()
+	records.file_path = kept_path
+	records.load_file()
+	check(records.wins == kept_wins, "the pause test put lifetime wins back")
 
 
 func _check_live_field() -> void:

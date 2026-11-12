@@ -21,6 +21,19 @@ var notice_left := 0.0
 var focus := 0
 var rebinding := ""
 var dragging := ""
+var gate := ""
+var gate_index := 0
+var came_from_gate := false
+
+const PAUSE_WORD := "PAUSE"
+const RESUME_WORD := "RESUME"
+const SAVE_QUIT_WORD := "SAVE AND QUIT"
+const GATE_CONTINUE := "CONTINUE"
+const GATE_NEW := "NEW RUN"
+const GATE_REPLACE_STANDARD := "THIS REPLACES THE SAVED STANDARD RUN"
+const GATE_REPLACE_ENDLESS := "THIS REPLACES THE SAVED ENDLESS RUN"
+const GATE_START := "START NEW RUN"
+const GATE_KEEP := "KEEP SAVED RUN"
 
 
 func tick(delta: float) -> void:

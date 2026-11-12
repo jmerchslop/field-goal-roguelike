@@ -156,6 +156,28 @@ const ALL: Array = [
 ]
 
 
+static func save_tag(id: String) -> String:
+	match id:
+		BIG_BRUCE:
+			return "BRUCE"
+		WALK_ON:
+			return "WALK ON"
+		PHIL:
+			return "PHIL"
+		GARY:
+			return "GARY"
+		VEX:
+			return "VEX"
+		COLE:
+			return "COLE"
+		WILLOW:
+			return "WILLOW"
+		CARLOS:
+			return "CARLOS"
+		_:
+			return "KICKER"
+
+
 static func get_def(id: String) -> Dictionary:
 	for item in ALL:
 		if str(item["id"]) == id:

@@ -26,6 +26,7 @@ var middles := 0
 var kickers := {}
 var trophies := {}
 var unlocks := {}
+var run_slots := {"standard": {}, "endless": {}}
 var _f9_at := -10.0
 var fresh_unlocks: Array[String] = []
 
@@ -66,6 +67,7 @@ func load_file() -> void:
 		trophies[id] = bool(cfg.get_value("trophies", id, false))
 	for id in _unlock_ids():
 		unlocks[id] = bool(cfg.get_value("unlocks", id, false))
+	_load_run_slots(cfg)
 	_grant_recorded_unlocks()
 
 
@@ -98,12 +100,65 @@ func save_file() -> void:
 		cfg.set_value("trophies", id, bool(trophies[id]))
 	for id in _unlock_ids():
 		cfg.set_value("unlocks", id, bool(unlocks.get(id, false)))
+	_store_run_slots(cfg)
 	cfg.save(file_path)
 
 
 func reset_save() -> void:
 	_fill_defaults()
 	save_file()
+
+
+func has_run_slot(mode: String) -> bool:
+	return str(run_slot(mode).get("kicker_id", "")) != ""
+
+
+func run_slot(mode: String) -> Dictionary:
+	var data = run_slots.get(mode, {})
+	if data is Dictionary:
+		return (data as Dictionary).duplicate(true)
+	return {}
+
+
+func write_run_slot(mode: String, payload: Dictionary) -> void:
+	if mode != "standard" and mode != "endless":
+		return
+	run_slots[mode] = payload.duplicate(true)
+	save_file()
+
+
+func clear_run_slot(mode: String) -> void:
+	if mode != "standard" and mode != "endless":
+		return
+	run_slots[mode] = {}
+	save_file()
+
+
+func run_status_lines(mode: String) -> PackedStringArray:
+	var data := run_slot(mode)
+	var tag := Kickers.save_tag(str(data.get("kicker_id", "")))
+	var line := "KICK %d   %d YD" % [int(data.get("kick_number", 1)), int(data.get("distance", 0))]
+	return PackedStringArray([tag, line])
+
+
+func _load_run_slots(cfg: ConfigFile) -> void:
+	run_slots = {"standard": {}, "endless": {}}
+	for mode in ["standard", "endless"]:
+		var section := "run_%s" % mode
+		if not bool(cfg.get_value(section, "active", false)):
+			continue
+		var parsed = JSON.parse_string(str(cfg.get_value(section, "payload", "")))
+		if parsed is Dictionary and str((parsed as Dictionary).get("kicker_id", "")) != "":
+			run_slots[mode] = parsed
+
+
+func _store_run_slots(cfg: ConfigFile) -> void:
+	for mode in ["standard", "endless"]:
+		var section := "run_%s" % mode
+		var data: Dictionary = run_slots.get(mode, {})
+		var filled := str(data.get("kicker_id", "")) != ""
+		cfg.set_value(section, "active", filled)
+		cfg.set_value(section, "payload", JSON.stringify(data) if filled else "")
 
 
 func press_f9(now: float) -> String:
@@ -255,6 +310,7 @@ func _fill_defaults() -> void:
 	unlocks = {}
 	for id in _unlock_ids():
 		unlocks[id] = false
+	run_slots = {"standard": {}, "endless": {}}
 
 
 func _kicker_ids() -> Array:

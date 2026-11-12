@@ -16,6 +16,8 @@ func _draw() -> void:
 		return
 	if front != null and front.screen == FrontEnd.Screen.MAIN:
 		_draw_main_menu(front)
+		if front.gate != "":
+			_draw_gate(front)
 		return
 	if front != null and front.screen == FrontEnd.Screen.OPTIONS:
 		_draw_options(front)
@@ -30,6 +32,8 @@ func _draw() -> void:
 		return
 	if game.run.awaiting_shop:
 		_draw_shop(game.run)
+		if game.paused:
+			_draw_pause_panel()
 		return
 	var logic: KickLogic = game.logic
 	var run: RunLogic = game.run
@@ -56,6 +60,87 @@ func _draw() -> void:
 	if game.run != null and game.run.unlock_toast != "":
 		_text_centered(game.run.unlock_toast, 96.0, 22, Color(1.0, 0.92, 0.45))
 	_draw_slot_tooltip()
+	if game.paused:
+		_draw_pause_panel()
+
+
+func pause_hit(point: Vector2) -> int:
+	var buttons := _pause_buttons()
+	for index in buttons.size():
+		if (buttons[index] as Rect2).has_point(point):
+			return index
+	return -1
+
+
+func gate_hit(point: Vector2, which: String) -> int:
+	var buttons := _gate_buttons(which)
+	for index in buttons.size():
+		if (buttons[index] as Rect2).has_point(point):
+			return index
+	return -1
+
+
+func _pause_buttons() -> Array:
+	return [Rect2(390, 318, 500, 58), Rect2(390, 392, 500, 58)]
+
+
+func _gate_buttons(which: String) -> Array:
+	if which == "confirm":
+		return [Rect2(250, 360, 780, 52), Rect2(250, 428, 780, 52)]
+	return [Rect2(390, 340, 500, 58), Rect2(390, 414, 500, 58)]
+
+
+func _draw_pause_panel() -> void:
+	draw_rect(Rect2(0, 0, KickConstants.WINDOW_WIDTH, KickConstants.WINDOW_HEIGHT), Color(0, 0, 0, 0.38))
+	var plate := Rect2(330, 168, 620, 320)
+	_metal_plate(plate)
+	_pg_center(FrontEnd.PAUSE_WORD, 196, 42, Color(0.96, 0.94, 0.88), "callout")
+	var labels := [FrontEnd.RESUME_WORD, FrontEnd.SAVE_QUIT_WORD]
+	var buttons := _pause_buttons()
+	for index in buttons.size():
+		_menu_button(buttons[index], str(labels[index]), index == game.pause_index)
+
+
+func _draw_gate(front: FrontEnd) -> void:
+	draw_rect(Rect2(0, 0, KickConstants.WINDOW_WIDTH, KickConstants.WINDOW_HEIGHT), Color(0, 0, 0, 0.55))
+	var plate := Rect2(180, 150, 920, 380)
+	_metal_plate(plate)
+	if front.gate == "confirm":
+		var line := FrontEnd.GATE_REPLACE_ENDLESS if front.run_mode == "endless" else FrontEnd.GATE_REPLACE_STANDARD
+		_pg_center(line, 196, 16, Color(0.95, 0.93, 0.86))
+		var labels := [FrontEnd.GATE_START, FrontEnd.GATE_KEEP]
+		var buttons := _gate_buttons("confirm")
+		for index in buttons.size():
+			_menu_button(buttons[index], str(labels[index]), index == front.gate_index)
+		return
+	var lines := SaveData.run_status_lines(front.run_mode)
+	if lines.size() > 0:
+		_pg_center(lines[0], 188, 22, Color(0.96, 0.94, 0.88))
+	if lines.size() > 1:
+		_pg_center(lines[1], 230, 18, Color(0.82, 0.84, 0.8))
+	var choose := [FrontEnd.GATE_CONTINUE, FrontEnd.GATE_NEW]
+	var choose_buttons := _gate_buttons("choose")
+	for index in choose_buttons.size():
+		_menu_button(choose_buttons[index], str(choose[index]), index == front.gate_index)
+
+
+func _metal_plate(rect: Rect2) -> void:
+	draw_rect(rect, Color(0.07, 0.075, 0.08, 0.94))
+	draw_rect(rect, Color(0.92, 0.93, 0.95), false, 3.0)
+	draw_rect(rect.grow(-6), Color(0.28, 0.3, 0.33), false, 1.0)
+
+
+func _menu_button(rect: Rect2, text: String, selected: bool) -> void:
+	draw_rect(rect, Color(0.14, 0.15, 0.17) if selected else Color(0.1, 0.11, 0.12))
+	draw_rect(rect, Color(0.97, 0.98, 1.0) if selected else Color(0.45, 0.47, 0.5), false, 3.0 if selected else 2.0)
+	var width := BitmapFonts.measure_px("ui", text, 16)
+	var at := Vector2(rect.position.x + (rect.size.x - float(width)) * 0.5, rect.position.y + 16)
+	_pg(text, at, 16, Color(0.97, 0.96, 0.92))
+
+
+func _pg_center(text: String, y: float, size: int, color: Color, font_key: String = "ui") -> void:
+	var width := BitmapFonts.measure_px(font_key, text, size)
+	BitmapFonts.paint_px(self, font_key, text, Vector2((KickConstants.WINDOW_WIDTH - float(width)) * 0.5, y), size, color)
 
 
 func _draw_meter(logic: KickLogic, run: RunLogic) -> void:
