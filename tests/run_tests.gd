@@ -58,6 +58,7 @@ func _run() -> void:
 	_check_result_stamps()
 	_check_broadcast_hud()
 	_check_equipment_xxiv()
+	_check_six_icons()
 
 
 func _finish_live() -> void:
@@ -3451,7 +3452,7 @@ func _check_drive_lid_and_power_safety() -> void:
 	check(Loadout.is_power_item(Loadout.DRIVE_LID) and Loadout.is_power_item(Loadout.CANNON) and Loadout.is_power_item(Loadout.HIGH_AIR) and Loadout.is_power_item(Loadout.GLASS_LEG) and Loadout.is_power_item(Loadout.STONE) and Loadout.is_power_item(Loadout.SHAKY), "the six power items are Cannon, Drive Lid, High-Air, Glass Leg, Stone Toe, and Shaky Arrow")
 	check(not Loadout.is_power_item(Vitamins.PROTEIN) and not Loadout.is_power_item(Loadout.HEAVY) and not Loadout.is_power_item(Loadout.WIND_VISOR), "Protein Shake, Heavy Ball, and Wind Visor are not power items")
 	var art := Loadout.sprite_path(Loadout.DRIVE_LID)
-	check(art == "" or art.to_lower().find("drive") >= 0, "Drive Lid art is its own file or a missing-sprite placeholder, got %s" % art)
+	check(art.ends_with("drive-lid.png"), "Drive Lid uses drive-lid.png, got %s" % art)
 	check(art.find("wind_visor") < 0 and art.find("ice_cage") < 0 and art.find("scout_lid") < 0 and art.find("doink_cap") < 0 and art.find("hero_ball") < 0, "Drive Lid does not reuse another helmet or Hero Ball")
 	var bruce := RunLogic.new()
 	bruce.start_with_kicker(Kickers.BIG_BRUCE)
@@ -4334,7 +4335,10 @@ func _check_new_styles() -> void:
 		check(Loadout.slot_of(str(id)) != "" and Loadout.piece_name(str(id)) != str(id), "%s is in the catalog" % id)
 		check(not Loadout.is_power_item(str(id)), "%s is not a power item" % id)
 		check(Loadout.max_rank(str(id), "standard") == 6 and Loadout.max_rank(str(id), "endless") == 24, "%s ranks to VI and XXIV" % id)
-		check(Loadout.sprite_path(str(id)) == "", "%s does not reuse another sprite" % id)
+		var icon := Loadout.sprite_path(str(id))
+		var slug := str(id).replace("_", "-")
+		check(icon.ends_with(slug + ".png"), "%s uses its own icon, got %s" % [id, icon])
+		check(icon.find("wind_visor") < 0 and icon.find("ice_cage") < 0 and icon.find("high_air") < 0 and icon.find("iron_grip") < 0 and icon.find("replay") < 0 and icon.find("weather_wraps") < 0 and icon.find("cannon") < 0, "%s is not another item's icon" % id)
 	var willow := RunLogic.new()
 	willow.start_with_kicker(Kickers.WILLOW)
 	for card in willow._legal_synchronicity_pool():
@@ -4445,6 +4449,46 @@ func _wind_drift(speed: float, direction: float, shelter: float, hush: float) ->
 	kick.stats.shelter_factor = shelter
 	kick.stats.hush_mph = hush
 	return float(kick.carry_plan(100.0, 0.0)["drift"])
+
+
+func _check_six_icons() -> void:
+	var pairs := [
+		[Loadout.DRIVE_LID, "drive-lid.png"],
+		[Loadout.TRUE_LID, "true-lid.png"],
+		[Loadout.SHELTER_LID, "shelter-lid.png"],
+		[Loadout.GUIDE_GLOVES, "guide-gloves.png"],
+		[Loadout.PATIENT_GLOVES, "patient-gloves.png"],
+		[Loadout.HUSH_GLOVES, "hush-gloves.png"],
+	]
+	var seen := {}
+	for pair in pairs:
+		var id := str(pair[0])
+		var file_name := str(pair[1])
+		check(ResourceLoader.exists("res://art/loadout/" + file_name), "%s is imported" % file_name)
+		var path := Loadout.sprite_path(id)
+		check(path.ends_with(file_name), "%s resolves to %s, got %s" % [id, file_name, path])
+		check(path.find("placeholder") < 0, "%s is not a labeled placeholder" % id)
+		seen[path] = id
+	check(seen.size() == 6, "the six icons are six different files")
+	check(Loadout.sprite_path(Loadout.WIND_VISOR).ends_with("wind_visor_helmet.png"), "Wind Visor art was not retargeted")
+	check(Loadout.sprite_path(Loadout.ICE_CAGE).ends_with("ice_cage_helmet.png"), "Ice Cage art was not retargeted")
+	check(Loadout.sprite_path(Loadout.SCOUT_LID).ends_with("scout_lid.png"), "Scout Lid art was not retargeted")
+	check(Loadout.sprite_path(Loadout.DOINK_CAP).ends_with("doink_cap.png"), "Doink Cap art was not retargeted")
+	check(Loadout.sprite_path(Loadout.CANNON).ends_with("cannon_cleats.png"), "Cannon Cleats art was not retargeted")
+	check(Loadout.sprite_path(Loadout.HIGH_AIR).ends_with("high_air_gloves.png"), "High-Air Gloves art was not retargeted")
+	check(Loadout.sprite_path(Loadout.IRON_GRIP).ends_with("iron_grip_gloves.png"), "Iron Grip art was not retargeted")
+	check(Loadout.sprite_path(Loadout.REPLAY_GLOVES).ends_with("replay_gloves.png"), "Replay Gloves art was not retargeted")
+	check(Loadout.sprite_path(Loadout.WEATHER_WRAPS).ends_with("weather_wraps_gloves.png"), "Weather Wraps art was not retargeted")
+	check(not ResourceLoader.exists("res://art/loadout/empty_perk.png"), "empty_perk.png was not invented")
+	check(Loadout.effect_line(Loadout.DRIVE_LID, 1) == "+4 yd", "Drive Lid card text is unchanged")
+	check(Loadout.effect_line(Loadout.TRUE_LID, 1) == "Hook ×0.90", "True Lid card text is unchanged")
+	check(Loadout.effect_line(Loadout.SHELTER_LID, 1) == "Headwind loss ×0.80", "Shelter Lid card text is unchanged")
+	check(Loadout.effect_line(Loadout.GUIDE_GLOVES, 1).begins_with("GOOD locks: hook"), "Guide Gloves card text is unchanged")
+	check(Loadout.effect_line(Loadout.PATIENT_GLOVES, 1).begins_with("Power needle"), "Patient Gloves card text is unchanged")
+	check(Loadout.effect_line(Loadout.HUSH_GLOVES, 1) == "First 1 mph of wind ignored", "Hush Gloves card text is unchanged")
+	check(Loadout.is_power_item(Loadout.DRIVE_LID) and not Loadout.is_power_item(Loadout.TRUE_LID), "Drive Lid stays a power item and True Lid does not")
+	var keys := FileAccess.get_file_as_string("res://scripts/main.gd")
+	check(keys.find("KEY_K") >= 0 and keys.find("KEY_L") >= 0 and keys.find("cycle_range_fixture") >= 0 and keys.find("cycle_style_fixture") >= 0, "debug K and L still grant the range and style fixtures")
 
 
 func _check_pause_saves() -> void:

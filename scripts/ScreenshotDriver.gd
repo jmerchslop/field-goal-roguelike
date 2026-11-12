@@ -60,6 +60,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "icons":
+		if not await _capture_icons():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "pause":
 		if not await _capture_pause():
 			get_tree().quit(1)
@@ -1124,6 +1130,51 @@ func _capture_needle() -> bool:
 	if not await _capture("needle_tight_window.png"):
 		return false
 	return true
+
+
+func _capture_icons() -> bool:
+	board.highlight = 1
+	board.selecting = true
+	board.front.run_mode = "endless"
+	board.confirm_kicker()
+	board.run.run_mode = "endless"
+	board.load_current_kick()
+	var attempts: int = board.run.attempts
+	var kick_number: int = board.run.kick_number
+	var styles := ["true_lid", "shelter_lid", "guide_gloves", "patient_gloves", "hush_gloves"]
+	for style_name in styles:
+		board.run.cycle_style_fixture()
+		board._sync_debug_loadout()
+		print("ICON ", style_name, " helmet ", Loadout.sprite_path(board.run.helmet_id), " gloves ", Loadout.sprite_path(board.run.gloves_id))
+		if not await _capture("icon_hud_%s.png" % style_name):
+			return false
+	board.run.force_offer([{"id": Loadout.DRIVE_LID, "rank": 2, "kind": Loadout.EQUIPMENT, "slot": Loadout.HELMET}])
+	board.run.roll_offer()
+	print("ICON CARD ", Loadout.sprite_path(Loadout.DRIVE_LID), " text ", Loadout.effect_line(Loadout.DRIVE_LID, 2))
+	if not await _capture("icon_card_drive_lid.png"):
+		return false
+	board.run.awaiting_offer = false
+	board.run.cycle_style_fixture()
+	board._sync_debug_loadout()
+	board.run.cycle_range_fixture()
+	board.run.cycle_range_fixture()
+	board.run.cycle_range_fixture()
+	board._sync_debug_loadout()
+	print("ICON DRIVE ", Loadout.sprite_path(board.run.helmet_id), " cleats ", Loadout.sprite_path(board.run.cleats_id))
+	if not await _capture("icon_hud_drive_lid.png"):
+		return false
+	board.run.helmet_id = Loadout.WIND_VISOR
+	board.run.helmet_rank = 1
+	board._sync_debug_loadout()
+	if not await _capture("icon_hud_wind_visor.png"):
+		return false
+	board.run.cycle_range_fixture()
+	board._sync_debug_loadout()
+	print("ICON BACK attempts ", board.run.attempts, " kick ", board.run.kick_number, " helmet ", board.run.helmet_id)
+	if board.run.attempts != attempts or board.run.kick_number != kick_number:
+		print("debug grants changed the kick")
+		return false
+	return await _capture("icon_back_real.png")
 
 
 func _capture_pause() -> bool:
