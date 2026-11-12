@@ -24,6 +24,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "stands":
+		if not await _capture_stands():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "gear":
 		if not await _capture_gear():
 			get_tree().quit(1)
@@ -2294,6 +2300,62 @@ func _capture_gauge_crop(file_name: String) -> bool:
 		print("FAILED to save ", path, " error ", err)
 		return false
 	print("Saved ", path, " ", crop.get_width(), "x", crop.get_height())
+	return true
+
+
+func _capture_stands() -> bool:
+	board.highlight = 1
+	board.selecting = true
+	board.confirm_kicker()
+	board.logic.phase = KickLogic.Phase.AIMING
+	if not await _capture("stands_35_center.png"):
+		return false
+	board.cycle_debug_distance()
+	board.cycle_debug_distance()
+	if not await _capture("stands_200.png"):
+		return false
+	board.cycle_debug_distance()
+	if not await _capture("stands_500.png"):
+		return false
+	board.cycle_debug_distance()
+	if not await _capture("stands_1000.png"):
+		return false
+	board.cycle_debug_distance()
+	board.cycle_debug_distance()
+	board.cycle_debug_distance()
+	board.cycle_spot()
+	if not await _capture("stands_200_hash.png"):
+		return false
+	board.cycle_spot()
+	if not await _capture("stands_200_wide.png"):
+		return false
+	if not await _capture_corner("stands_bowl_corner.png"):
+		return false
+	var attempts: int = board.run.attempts
+	var kick_number: int = board.run.kick_number
+	board.cycle_debug_distance()
+	board.cycle_debug_distance()
+	board.cycle_debug_distance()
+	print("BACK real kick ", board.run.kick_number, " attempts ", board.run.attempts, " preview ", board.preview_step(), " dist ", board.logic.kick_distance)
+	if board.run.attempts != attempts or board.run.kick_number != kick_number or board.preview_step() != 0:
+		print("preview did not restore the real kick")
+		return false
+	return await _capture("stands_back_on_real_kick.png")
+
+
+func _capture_corner(file_name: String) -> bool:
+	board.refresh_view()
+	board._camera.position = Vector3(-16.0, 6.0, 10.0)
+	board._camera.look_at(Vector3(-27.4, 6.0, -2.0), Vector3.UP)
+	await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+	var image: Image = board.get_viewport().get_texture().get_image()
+	var path := shot_dir.path_join(file_name)
+	var err: Error = image.save_png(path)
+	if err != OK:
+		print("FAILED to save ", path, " error ", err)
+		return false
+	print("Saved ", path, " ", image.get_width(), "x", image.get_height())
 	return true
 
 

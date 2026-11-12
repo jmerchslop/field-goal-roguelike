@@ -4491,5 +4491,19 @@ func _check_live_field() -> void:
 	aimed.wind_direction = 90.0
 	var plain := KickLogic.offset_yards_at_uprights(200.0, 0.0, 3.0)
 	check(near(plain, 3.0), "straight aim from the hash is still the hash, got %s" % plain)
+	for file in ["crowd-stand-strip-a.png", "crowd-stand-strip-b.png", "crowd-stand-strip-c.png"]:
+		check(ResourceLoader.exists("res://art/field/" + file), "stand strip %s is imported" % file)
+	check(game.stand_bounds["variants"] == 3, "all three stand strips are used")
+	var short_span: float = float(game.stand_bounds["max_z"]) - float(game.stand_bounds["min_z"])
+	for yards in [200.0, 500.0, 1000.0]:
+		game._ensure_field(yards)
+		var bounds: Dictionary = game.stand_bounds
+		check(float(bounds["min_z"]) <= 0.0 and float(bounds["max_z"]) >= yards, "stands cover the tee-to-posts span at %s yards" % yards)
+		check(float(bounds["max_z"]) - float(bounds["min_z"]) > short_span + 40.0, "a %s-yard field uses a longer stand run than 35 yards" % yards)
+	check(int(game.stand_bounds["nodes"]) < 20, "sideline stands are a handful of meshes, not thousands of nodes")
+	var look: Dictionary = game.camera_rig(200.0, 4.0)
+	check(near(look["look"].x, 4.0) and near(look["position"].x, 3.95), "the camera keeps the spot offset and does not re-center the posts")
+	var source := FileAccess.get_file_as_string("res://scripts/main.gd")
+	check(source.find("grass-tile") < 0 and source.find("sky-clear") < 0 and source.find("sky-overcast") < 0, "grass and sky textures are not applied")
 	game.free()
 

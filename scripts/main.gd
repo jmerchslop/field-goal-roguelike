@@ -45,7 +45,30 @@ var _post_r: MeshInstance3D
 var _crossbar: MeshInstance3D
 var _mud: MeshInstance3D
 var _marks: Node3D
+var _stands: Node3D
 var _field_distance := -1.0
+# Grass box is 54 yards wide. Painted sidelines sit at ±25. Stands sit just outside the grass.
+const STAND_X := 27.45
+const STAND_HEIGHT := 14.0
+const STAND_TILE := 28.0
+const STAND_BOWL_Z := -2.4
+const _STAND_PATHS: Array[String] = [
+	"res://art/field/crowd-stand-strip-a.png",
+	"res://art/field/crowd-stand-strip-b.png",
+	"res://art/field/crowd-stand-strip-c.png",
+]
+# Left A-C-B, right B-A-C, bowl A-B-C. Not mirrored.
+const _STAND_LEFT: Array[int] = [0, 2, 1]
+const _STAND_RIGHT: Array[int] = [1, 0, 2]
+const _STAND_BOWL: Array[int] = [0, 1, 2]
+var stand_bounds := {
+	"min_z": 0.0,
+	"max_z": 0.0,
+	"x": STAND_X,
+	"height": STAND_HEIGHT,
+	"nodes": 0,
+	"variants": 3,
+}
 # 0 is the real kick. 1..4 preview 75, 200, 500, 1000, then back to the real kick.
 var _preview_step := 0
 var result_age := 0.0
@@ -1029,8 +1052,8 @@ func _style_world() -> void:
 
 
 func _build_field() -> void:
-	_ensure_field(35.0)
 	_build_stadium()
+	_ensure_field(35.0)
 
 
 func field_span_yards() -> float:
@@ -1084,6 +1107,7 @@ func _ensure_field(distance: float) -> void:
 			_add_dash(paint, 0.0, tick, 0.42, white)
 		tick += 1.0
 	_mesh_node(_marks, "Lines", paint.commit(), _vertex_mat())
+	_layout_stands(span)
 	var hash_left := MeshInstance3D.new()
 	hash_left.name = "HashLeft"
 	hash_left.position = Vector3(-half, 0.0, 0.0)
@@ -1154,28 +1178,96 @@ func _paint_box(parent: Node3D, size: Vector3, pos: Vector3, color: Color) -> vo
 
 
 func _build_stadium() -> void:
-	# Flat walls of seats, not a cylinder. A cylinder's UVs turn the crowd into a smear.
-	_stand(Vector3(96.0, 14.0, 1.2), Vector3(0.0, 8.0, -3.0), Vector3(8.0, 3.0, 1.0))
-	_stand(Vector3(1.2, 12.0, 96.0), Vector3(-32.0, 7.0, 40.0), Vector3(8.0, 2.5, 1.0))
-	_stand(Vector3(1.2, 12.0, 96.0), Vector3(32.0, 7.0, 40.0), Vector3(8.0, 2.5, 1.0))
-	_box(Vector3(100.0, 2.2, 1.4), Vector3(0.0, 16.2, -3.2), Color(0.62, 0.78, 0.9))
+	# One node per wall. Each wall is a single mesh with up to three surfaces.
+	_stands = Node3D.new()
+	_stands.name = "Stands"
+	_world.add_child(_stands)
+	for node_name in ["Left", "Right", "Bowl"]:
+		var wall := MeshInstance3D.new()
+		wall.name = node_name
+		wall.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_stands.add_child(wall)
 
 
-func _stand(size: Vector3, pos: Vector3, tiles: Vector3) -> void:
-	var wall := MeshInstance3D.new()
-	var mesh := BoxMesh.new()
-	mesh.size = size
+func _layout_stands(span: float) -> void:
+	if _stands == null:
+		return
+	var rig := camera_rig(span, 0.0)
+	var near_z: float = float(rig["position"].z) + 18.0
+	var far_z := STAND_BOWL_Z
+	stand_bounds = {
+		"min_z": far_z,
+		"max_z": near_z,
+		"x": STAND_X,
+		"height": STAND_HEIGHT,
+		"nodes": _stands.get_child_count(),
+		"variants": _STAND_PATHS.size(),
+	}
+	_paint_stand(_stands.get_node("Left"), -STAND_X, far_z, near_z, _STAND_LEFT, true)
+	_paint_stand(_stands.get_node("Right"), STAND_X, far_z, near_z, _STAND_RIGHT, true)
+	_paint_stand(_stands.get_node("Bowl"), 0.0, -STAND_X, STAND_X, _STAND_BOWL, false)
+
+
+func _paint_stand(wall: MeshInstance3D, fixed: float, start: float, finish: float, pattern: Array[int], along_z: bool) -> void:
+	var buckets: Array = [[], [], []]
+	var cursor := start
+	var index := 0
+	var span := finish - start
+	if span < 0.0:
+		cursor = finish
+		span = -span
+	var origin := cursor
+	while cursor < origin + span - 0.01:
+		var nxt := minf(cursor + STAND_TILE, origin + span)
+		var piece := nxt - cursor
+		var which: int = pattern[index % pattern.size()]
+		buckets[which].append({"at": cursor, "length": piece, "u": piece / STAND_TILE})
+		cursor = nxt
+		index += 1
+	var mesh := ArrayMesh.new()
+	var surface := 0
+	for variant in 3:
+		var tiles: Array = buckets[variant]
+		if tiles.is_empty():
+			continue
+		var tool := SurfaceTool.new()
+		tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+		for tile in tiles:
+			var at: float = float(tile["at"])
+			var length: float = float(tile["length"])
+			var u: float = float(tile["u"])
+			if along_z:
+				var inward := 1.0 if fixed < 0.0 else -1.0
+				_add_stand_quad(tool, Vector3(fixed, 0.0, at), Vector3(0, 0, 1), Vector3(inward, 0, 0), length, u)
+			else:
+				_add_stand_quad(tool, Vector3(at, 0.0, STAND_BOWL_Z), Vector3(1, 0, 0), Vector3(0, 0, 1), length, u)
+		tool.commit(mesh)
+		mesh.surface_set_material(surface, _stand_material(variant))
+		surface += 1
 	wall.mesh = mesh
-	wall.position = pos
+
+
+func _add_stand_quad(tool: SurfaceTool, origin: Vector3, axis: Vector3, normal: Vector3, length: float, u_span: float) -> void:
+	var end := origin + axis * length
+	var top := Vector3.UP * STAND_HEIGHT
+	var points := [origin, end, end + top, origin + top]
+	var uvs := [Vector2(0, 1), Vector2(u_span, 1), Vector2(u_span, 0), Vector2(0, 0)]
+	for index in [0, 1, 2, 0, 2, 3]:
+		tool.set_normal(normal)
+		tool.set_uv(uvs[index])
+		tool.add_vertex(points[index])
+
+
+func _stand_material(variant: int) -> StandardMaterial3D:
 	var paint := _mat(Color.WHITE, 1.0)
-	var crowd := load("res://art/field/crowd.png") as Texture2D
-	if crowd != null:
-		paint.albedo_texture = crowd
-		paint.uv1_scale = tiles
+	paint.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	paint.cull_mode = BaseMaterial3D.CULL_DISABLED
 	paint.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
-	wall.material_override = paint
-	wall.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	_world.add_child(wall)
+	var path := _STAND_PATHS[variant]
+	var texture := load(path) as Texture2D
+	if texture != null:
+		paint.albedo_texture = texture
+	return paint
 
 
 func _build_uprights() -> void:
