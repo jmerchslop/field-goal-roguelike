@@ -2385,6 +2385,11 @@ func _check_menus() -> void:
 	check(locked.endless_unlocked(), "lifetime.wins >= 1 unlocks Endless")
 	locked.menu_index = 1
 	check(locked.confirm_menu() == "select" and locked.run_mode == "endless" and locked.screen == FrontEnd.Screen.SELECT, "unlocked Endless sets run_mode and opens character select")
+	check(MenuLayout.find_texture_path(["endless_unlocked.png", "main_menu_unlocked.png"]) == "", "no unlocked menu painting is in the project")
+	var again := FrontEnd.new()
+	again.confirm_title()
+	again.menu_index = 1
+	check(again.endless_unlocked() and again.confirm_menu() == "select" and again.run_mode == "endless", "unlocked Endless still starts when the locked painting is the one on screen")
 	records.wins = 0
 	records.trophies["season_complete"] = true
 	check(FrontEnd.new().endless_unlocked(), "the season_complete trophy unlocks Endless")
@@ -3235,11 +3240,23 @@ func _check_full_rerolls() -> void:
 	var hud := FileAccess.get_file_as_string("res://scripts/hud.gd")
 	var menu_tile := _gd_function(hud, "_draw_selected_menu_tile")
 	var option_plate := _gd_function(hud, "_draw_selected_option_plate")
-	check(menu_tile.find("_draw_round_outline") >= 0 and menu_tile.find("_whitened_label") >= 0, "the selected menu tile keeps the white outline and turns the painted label white")
+	check(menu_tile.find("_draw_round_outline") >= 0 and menu_tile.find("_whitened_label") < 0 and menu_tile.find("Color.WHITE") < 0, "the selected menu tile keeps the white outline and does not whiten the letters")
 	var trophy_rect := _gd_function(hud, "_menu_label_rect")
 	check(trophy_rect.find("161") >= 0 and trophy_rect.find("106") >= 0, "Trophy Room stays the two-line painted word")
 	check(menu_tile.find("draw_rect") < 0 and trophy_rect.find("draw_rect") < 0, "the selected menu tile does not draw an extra filled box")
-	check(option_plate.find("_draw_round_outline") >= 0 and option_plate.find("draw_rect") < 0, "a selected Options plate is only the white outline")
+	check(option_plate.find("_draw_round_outline") >= 0 and option_plate.find("draw_rect") < 0 and option_plate.find("_whitened_label") < 0, "a selected Options plate is only the white outline")
+	var menu_draw := _gd_function(hud, "_draw_main_menu")
+	check(menu_draw.find("∞") < 0 and menu_draw.find("0.27, 0.27, 0.29") < 0, "unlocked Endless does not draw the gray patch or the infinity glyph")
+	check(menu_draw.find("_draw_padlock_cover") >= 0, "unlocked Endless covers only the padlock when no unlocked painting exists")
+	check(hud.find("NFL") < 0 and hud.find("Cam Little") < 0, "the Trophy Room no longer draws the NFL record line")
+	var records_node = get_root().get_node("SaveData")
+	check(records_node.trophy_condition("record_breaker") == "Make a 69+ yard kick", "Record Breaker stays a 69-yard make with no league mention")
+	var nfl_hit := ""
+	for script_name in ["hud.gd", "FrontEnd.gd", "SaveData.gd", "BroadcastHud.gd", "main.gd", "RunLogic.gd", "Loadout.gd"]:
+		var script_text := FileAccess.get_file_as_string("res://scripts/" + script_name)
+		if script_text.find("NFL") >= 0:
+			nfl_hit = script_name
+	check(nfl_hit == "", "no on-screen script still contains NFL, found %s" % nfl_hit)
 	var kept_a_card := false
 	for seed_value in 12:
 		var deal := RunLogic.new()

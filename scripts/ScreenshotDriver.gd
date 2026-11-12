@@ -60,6 +60,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "shell":
+		if not await _capture_shell():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "menu":
 		if not await _capture_menu_and_rerolls():
 			get_tree().quit(1)
@@ -1111,6 +1117,47 @@ func _capture_needle() -> bool:
 	print("NEEDLE tight window perfect band ", board.logic.stats.perfect_band, " good ", board.logic.stats.good_band)
 	if not await _capture("needle_tight_window.png"):
 		return false
+	return true
+
+
+func _capture_shell() -> bool:
+	board.showing_records = false
+	board.selecting = false
+	var saved_wins := SaveData.wins
+	var saved_trophy := SaveData.has_trophy("season_complete")
+	SaveData.wins = 0
+	SaveData.trophies["season_complete"] = false
+	board.front.screen = FrontEnd.Screen.MAIN
+	board.front.lock_message = ""
+	board.front.menu_index = 1
+	if not await _capture("shell_endless_locked.png"):
+		return false
+	board.front.menu_index = 0
+	if not await _capture("shell_standard.png"):
+		return false
+	board.front.menu_index = 2
+	if not await _capture("shell_trophy.png"):
+		return false
+	board.front.menu_index = 3
+	if not await _capture("shell_options.png"):
+		return false
+	SaveData.wins = 1
+	board.front.menu_index = 1
+	board.front.lock_message = ""
+	print("SHELL unlocked ", board.front.endless_unlocked(), " painting ", MenuLayout.find_texture_path(["endless_unlocked.png", "main_menu_unlocked.png"]))
+	if not await _capture("shell_endless_unlocked.png"):
+		return false
+	var started: String = board.front.confirm_menu()
+	print("SHELL confirm ", started, " mode ", board.front.run_mode)
+	if started != "select" or board.front.run_mode != "endless":
+		print("unlocked Endless did not start")
+		return false
+	board.front.screen = FrontEnd.Screen.RECORDS
+	board.showing_records = true
+	if not await _capture("shell_trophy_room.png"):
+		return false
+	SaveData.wins = saved_wins
+	SaveData.trophies["season_complete"] = saved_trophy
 	return true
 
 

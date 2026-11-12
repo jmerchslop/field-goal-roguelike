@@ -4,7 +4,7 @@ extends Control
 # Meter, attempts, result words. No field drawing in here.
 
 var game
-var _white_labels := {}
+var _padlock_cover: Texture2D
 
 
 func _draw() -> void:
@@ -1051,8 +1051,6 @@ func _draw_records() -> void:
 	_text(Vector2(48, y), "Best score %d" % SaveData.best_score, 18, KickConstants.COLOR_TEXT)
 	y += 24.0
 	_text(Vector2(48, y), "Longest make %s" % _yd_or_dash(SaveData.longest_make), 18, KickConstants.COLOR_TEXT)
-	y += 22.0
-	_text(Vector2(48, y), "NFL record: 68 yd (Cam Little, 2025)", 15, Color(0.65, 0.68, 0.7))
 	y += 24.0
 	_text(Vector2(48, y), "FG%% %s" % SaveData.fg_text(SaveData.makes, SaveData.attempts), 18, KickConstants.COLOR_TEXT)
 	var columns: Array = []
@@ -1319,13 +1317,9 @@ func _draw_main_menu(front: FrontEnd) -> void:
 	for index in MenuLayout.TILES.size():
 		if index != front.menu_index:
 			continue
-		_draw_selected_menu_tile(index, MenuLayout.TILES[index], window, image, art)
+		_draw_selected_menu_tile(MenuLayout.TILES[index], window, image)
 	if front.endless_unlocked() and _menu_texture("endless") == null and art != null:
-		var tile: Rect2 = MenuLayout.TILES[1]
-		var patch := Rect2(tile.position.x + tile.size.x * 0.28, tile.position.y + 18.0, tile.size.x * 0.44, 96.0)
-		var screen_patch := MenuLayout.screen_rect(patch, window, image)
-		draw_rect(screen_patch, Color(0.27, 0.27, 0.29))
-		_text_in_rect("∞", screen_patch, 40, Color(0.95, 0.78, 0.2))
+		_draw_padlock_cover(art, window, image)
 	if front.lock_message != "":
 		var banner := MenuLayout.screen_rect(Rect2(360, 430, 560, 40), window, image)
 		draw_rect(banner, Color(0.05, 0.05, 0.06, 0.88))
@@ -1368,14 +1362,37 @@ func _draw_options(front: FrontEnd) -> void:
 		_text_in_rect(front.notice, banner, 18, Color(1.0, 0.85, 0.4))
 
 
-func _draw_selected_menu_tile(index: int, tile: Rect2, window: Vector2, image: Vector2, art: Texture2D) -> void:
-	# White rounded outline, and the painted word turned white. No filled plate.
+func _draw_selected_menu_tile(tile: Rect2, window: Vector2, image: Vector2) -> void:
+	# White rounded outline only. The engraved letters stay as painted.
 	_draw_round_outline(tile, window, image)
-	var letters := _menu_label_rect(index)
-	var patch := _whitened_label(art, letters)
-	if patch == null:
+
+
+func _draw_padlock_cover(art: Texture2D, window: Vector2, image: Vector2) -> void:
+	# Metal copied from beside the padlock, including its dark outline, not the word.
+	var cover := _endless_padlock_cover(art)
+	if cover == null:
 		return
-	draw_texture_rect(patch, MenuLayout.screen_rect(letters, window, image), false)
+	draw_texture_rect(cover, MenuLayout.screen_rect(Rect2(436, 502, 116, 100), window, image), false)
+
+
+func _endless_padlock_cover(art: Texture2D) -> Texture2D:
+	if _padlock_cover != null:
+		return _padlock_cover
+	var source := art.get_image()
+	if source == null:
+		return null
+	source = source.duplicate()
+	source.convert(Image.FORMAT_RGBA8)
+	var width := 116
+	var height := 100
+	var image := Image.create(width, height, false, Image.FORMAT_RGBA8)
+	var half := width / 2
+	for y in height:
+		for x in width:
+			var from_x := 368 + x if x < half else 552 + (x - half)
+			image.set_pixel(x, y, source.get_pixel(from_x, 502 + y))
+	_padlock_cover = ImageTexture.create_from_image(image)
+	return _padlock_cover
 
 
 func _menu_label_rect(index: int) -> Rect2:
@@ -1387,46 +1404,6 @@ func _menu_label_rect(index: int) -> Rect2:
 	if index == 3:
 		return Rect2(1000, 590, 179, 67)
 	return Rect2(88, 590, 215, 64)
-
-
-func _whitened_label(art: Texture2D, letters: Rect2) -> Texture2D:
-	if art == null:
-		return null
-	var key := "%s:%s" % [art.resource_path, letters]
-	if _white_labels.has(key):
-		return _white_labels[key]
-	var source := art.get_image()
-	if source == null:
-		return null
-	var region := Rect2i(int(letters.position.x), int(letters.position.y), int(letters.size.x), int(letters.size.y))
-	var image := source.get_region(region)
-	image.convert(Image.FORMAT_RGBA8)
-	var width := image.get_width()
-	var height := image.get_height()
-	var copy := image.duplicate()
-	for y in height:
-		for x in width:
-			var color := image.get_pixel(x, y)
-			if maxf(color.r, maxf(color.g, color.b)) >= 32.0 / 255.0:
-				continue
-			var near_light := false
-			for dy in range(-2, 3):
-				for dx in range(-2, 3):
-					var xx := x + dx
-					var yy := y + dy
-					if xx < 0 or yy < 0 or xx >= width or yy >= height:
-						continue
-					var other := image.get_pixel(xx, yy)
-					if other.r > 170.0 / 255.0 and other.g > 140.0 / 255.0 and other.b > 140.0 / 255.0:
-						near_light = true
-						break
-				if near_light:
-					break
-			if near_light:
-				copy.set_pixel(x, y, Color.WHITE)
-	var patch := ImageTexture.create_from_image(copy)
-	_white_labels[key] = patch
-	return patch
 
 
 func _draw_selected_option_plate(front: FrontEnd, window: Vector2, image: Vector2) -> void:
