@@ -39,7 +39,6 @@ func _draw() -> void:
 		_draw_meter(logic, run)
 	_draw_hud(logic, run)
 	_draw_loadout_rail(run)
-	_draw_wind(logic, run)
 	_draw_laser(logic, run)
 	if logic.phase == KickLogic.Phase.RESULT and run.phase == RunLogic.Phase.PLAYING:
 		_draw_result(logic, run)
@@ -187,71 +186,235 @@ func _draw_well(hub: Vector2, radius: float) -> void:
 
 
 func _draw_hud(logic: KickLogic, run: RunLogic) -> void:
-	draw_rect(Rect2(12, 64, 390, 272), Color(0.02, 0.05, 0.08, 0.42))
-	var x := 24.0
-	var y := 86.0
-	var kick_line := "Kick %d" % run.kick_number
-	if run.run_mode != "endless":
-		kick_line = "Kick %d of %d" % [run.kick_number, RunTable.count()]
-	_text(Vector2(x, y), kick_line, 22, KickConstants.COLOR_TEXT)
-	y += 26.0
-	_text(Vector2(x, y), "%s yd" % KickLogic.format_number(run.distance_yards()), 20, KickConstants.COLOR_TEXT)
-	y += 22.0
-	_text(Vector2(x, y), "Max %s yd" % KickLogic.format_number(logic.max_range_at_full_power()), 20, KickConstants.COLOR_TEXT)
-	y += 22.0
-	_text(Vector2(x, y), RunLogic.spot_label(run.spot_yards), 16, KickConstants.COLOR_ATTEMPT)
-	y += 22.0
-	_text(Vector2(x, y), "Score %d    Streak %d" % [run.score, run.streak], 20, KickConstants.COLOR_TEXT)
-	y += 24.0
-	_text(Vector2(x, y), "Mult %s" % RunLogic._two_decimals(run.current_mult()), 20, KickConstants.COLOR_TEXT)
-	y += 26.0
-	_text(Vector2(x, y), "ATTEMPTS", 18, KickConstants.COLOR_TEXT)
-	_draw_attempt_pips(run, x + 110.0, y - 5.0)
-	var pip_end := x + 110.0 + float(run.attempt_cap) * KickConstants.ATTEMPT_PIP_GAP + 6.0
-	_text(Vector2(pip_end, y), "%d / cap %d" % [run.attempts, run.attempt_cap], 16, KickConstants.COLOR_TEXT)
-	y += 22.0
-	if run.kicker_id != "":
-		var who := Kickers.get_def(run.kicker_id)
-		_text(Vector2(x, y), str(who["name"]), 16, KickConstants.COLOR_TEXT)
-		y += 18.0
-		_text(Vector2(x, y), str(who.get("kit_line", "")), 15, KickConstants.COLOR_GOOD)
-		y += 18.0
-		_text(Vector2(x, y), str(who["ball_name"]), 16, KickConstants.COLOR_ATTEMPT)
-		y += 22.0
+	var saved := texture_filter
+	texture_filter = TEXTURE_FILTER_NEAREST
+	_draw_kick_bug(logic, run)
+	_draw_score_bug(run)
+	_draw_kicker_plate(logic, run)
+	texture_filter = saved
+
+
+func _draw_kick_bug(logic: KickLogic, run: RunLogic) -> void:
+	var show_mph := logic.stats.flag_reader
+	var speed := run.shown_wind_speed()
+	var big_game := run.is_boss() and run.weather == RunLogic.BIG_GAME
+	var extra := 0
+	if show_mph:
+		extra += 16
+	if big_game:
+		extra += 16
+	var bug := Rect2(868, 10, 398, 74 + extra)
+	_steel_panel(bug)
+	var cream := Color(0.93, 0.91, 0.84)
+	var left := Rect2(bug.position.x + 6, bug.position.y + 6, 118, 36)
+	draw_rect(left, Color(0.12, 0.62, 0.78))
+	var title := BroadcastHud.kick_title(run.kick_number, run.run_mode == "endless")
+	_pg(title, left.position + Vector2(6, 4), 13, Color(0.05, 0.08, 0.1))
+	var yards := BroadcastHud.yards_text(logic.kick_distance)
+	var yard_box := Rect2(left.position.x + left.size.x + 6, left.position.y, 128, 36)
+	_pg(yards, yard_box.position + Vector2(4, 4), 26, cream)
+	var spot := RunLogic.spot_label(run.spot_yards)
+	var aim := BroadcastHud.aim_text(logic.aim_degrees)
+	var right_x := yard_box.position.x + yard_box.size.x + 8
+	_pg(spot, Vector2(right_x, bug.position.y + 8), 13, cream)
+	_aim_pip(Vector2(right_x, bug.position.y + 28), logic.aim_degrees)
+	_pg(aim, Vector2(right_x + 12, bug.position.y + 24), 12, cream)
+	var row_y := bug.position.y + 48
+	var weather := run.weather
+	if run.is_boss():
+		_pg("BOSS", Vector2(bug.position.x + 8, row_y), 12, Color(0.95, 0.55, 0.2))
+		_pg(weather, Vector2(bug.position.x + 52, row_y), 13, cream)
 	else:
-		y += 24.0
-	_text(Vector2(x, y), "Aim %s°   negative is left" % KickLogic.format_angle(logic.aim_degrees), 16, KickConstants.COLOR_TEXT)
-	if run.is_boss() and run.phase == RunLogic.Phase.PLAYING:
-		_text_centered("BOSS KICK", 118.0, 28, KickConstants.COLOR_BOSS)
-	_draw_condition(run)
-	if run.has_curse(Loadout.HOWLING):
-		_text_centered("Howling Wind   wind ×1.5   items ×1.15", 286.0, 18, Color(0.72, 0.4, 0.95))
-	elif run.curse_ids.size() > 0:
-		var names := ""
-		for id in run.curse_ids:
-			if names != "":
-				names += ", "
-			names += Loadout.piece_name(str(id))
-		_text_centered(names, 286.0, 18, Color(0.72, 0.4, 0.95))
+		_pg(weather, Vector2(bug.position.x + 8, row_y), 13, cream)
+	var wind := BroadcastHud.wind_band(speed, show_mph)
+	_pg(wind, Vector2(bug.position.x + 168, row_y), 13, cream)
+	_wind_pip(Vector2(bug.position.x + 156, row_y + 8), speed, run.wind_direction)
+	row_y += 16
+	if show_mph:
+		_pg(BroadcastHud.wind_detail(speed, run.wind_direction), Vector2(bug.position.x + 8, row_y), 12, Color(0.55, 0.9, 0.95))
+		row_y += 16
+	if big_game:
+		_pg("METER UPGRADES OFF", Vector2(bug.position.x + 8, row_y), 12, cream)
+
+
+func _draw_score_bug(run: RunLogic) -> void:
+	var show_mph := false
+	if game != null:
+		show_mph = game.logic.stats.flag_reader
+	var big_game := run.is_boss() and run.weather == RunLogic.BIG_GAME
+	var extra := 0
+	if show_mph:
+		extra += 16
+	if big_game:
+		extra += 16
+	var bug := Rect2(868, 18 + 74 + extra, 398, 70)
+	_steel_panel(bug)
+	var cells := [
+		{"label": "SCORE", "value": str(run.score), "w": 86.0},
+		{"label": "STREAK", "value": str(run.streak), "w": 86.0},
+		{"label": "MULT", "value": RunLogic._two_decimals(run.current_mult()), "w": 90.0},
+		{"label": "ATTEMPTS", "value": "", "w": 112.0},
+	]
+	var x := bug.position.x + 6.0
+	var cream := Color(0.93, 0.91, 0.84)
+	for cell in cells:
+		var rect := Rect2(x, bug.position.y + 6, float(cell["w"]), 58)
+		draw_rect(rect, Color(0.05, 0.06, 0.07))
+		_pg(str(cell["label"]), rect.position + Vector2(6, 4), 11, Color(0.7, 0.72, 0.75))
+		if str(cell["label"]) == "ATTEMPTS":
+			_draw_compact_pips(run, rect.position.x + 8.0, rect.position.y + 32.0)
+			_pg("CAP %d" % run.attempt_cap, rect.position + Vector2(8.0 + float(run.attempt_cap) * 8.0 + 4.0, 24), 12, cream)
+		else:
+			_pg(str(cell["value"]), rect.position + Vector2(6, 22), 22, cream)
+		x += float(cell["w"]) + 4.0
+
+
+func _draw_kicker_plate(logic: KickLogic, run: RunLogic) -> void:
+	var required := logic.kick_distance
+	var max_range := logic.max_range_at_full_power()
+	var warn := BroadcastHud.max_warning(required, max_range)
+	var kit := BroadcastHud.kit_text(run.kicker_id)
+	var ball := BroadcastHud.ball_text(run.kicker_id)
+	var kit_lines := _pg_wrap(kit, 250, 12)
+	var ball_lines := _pg_wrap(ball, 250, 12)
+	var body := 18 + 16 + 14 * kit_lines.size() + 14 * ball_lines.size()
+	var plate_h := maxi(78, 8 + body)
+	var plate := Rect2(12, 708 - plate_h, 430, plate_h)
+	_steel_panel(plate)
+	var head := Rect2(plate.position.x + 6, plate.position.y + 6, plate_h - 12, plate_h - 12)
+	_draw_head(run.kicker_id, head)
+	var text_x := head.position.x + head.size.x + 8
+	var y := plate.position.y + 6
+	var name := BroadcastHud.plate_name(run.kicker_id)
+	var name_w := BitmapFonts.measure_px("ui", name, 13)
+	var number := BroadcastHud.plate_number(run.kicker_id)
+	var bar_w := name_w + 10
+	if number != "":
+		bar_w += 8 + BitmapFonts.measure_px("ui", number, 12)
+	draw_rect(Rect2(text_x, y, maxf(160, bar_w), 16), Color(0.42, 0.24, 0.68))
+	_pg(name, Vector2(text_x + 4, y + 1), 13, Color(0.95, 0.93, 0.98))
+	if number != "":
+		_pg(number, Vector2(text_x + 8 + name_w, y + 2), 12, Color(0.95, 0.93, 0.98))
+	y += 20
+	_pg("MAX", Vector2(text_x, y), 12, Color(0.7, 0.72, 0.75))
+	var bar := Rect2(text_x + 36, y + 2, 120, 8)
+	draw_rect(bar, Color(0.05, 0.06, 0.07))
+	var fill := BroadcastHud.max_fill(required, max_range)
+	var fill_color := Color(0.95, 0.35, 0.18) if warn else Color(0.2, 0.78, 0.86)
+	draw_rect(Rect2(bar.position, Vector2(bar.size.x * fill, bar.size.y)), fill_color)
+	var yards_color := Color(0.95, 0.4, 0.22) if warn else Color(0.93, 0.91, 0.84)
+	_pg(BroadcastHud.yards_text(max_range), Vector2(text_x + 164, y - 2), 13, yards_color)
+	y += 16
+	for line in kit_lines:
+		_pg(line, Vector2(text_x, y), 12, Color(0.55, 0.95, 0.62))
+		y += 14
+	for line in ball_lines:
+		_pg(line, Vector2(text_x, y), 12, Color(0.95, 0.82, 0.28))
+		y += 14
+	_draw_chips(run, plate.position.y - 28)
 	var hint := ""
-	if run.phase == RunLogic.Phase.GAME_OVER or run.phase == RunLogic.Phase.WIN or run.phase == RunLogic.Phase.FAR:
-		hint = ""
-	elif run.accepts_restart():
-		hint = "R: choose a kicker    Esc: main menu"
-	elif logic.phase == KickLogic.Phase.AIMING:
-		hint = "Hold %s or %s to aim.   %s starts the meter." % [Settings.key_label("aim_left"), Settings.key_label("aim_right"), Settings.key_label("confirm")]
-		if run.can_practice():
-			hint += "   P: practice."
-		elif run.practicing:
-			hint += "   Practice swing."
-	elif logic.phase == KickLogic.Phase.POWER:
-		hint = "%s locks power." % Settings.key_label("confirm")
-	elif logic.phase == KickLogic.Phase.ACCURACY:
-		hint = "%s locks accuracy." % Settings.key_label("confirm")
-	elif logic.phase == KickLogic.Phase.RESULT:
-		hint = "%s: continue." % Settings.key_label("confirm")
-	if hint != "" and not run.awaiting_offer and not run.awaiting_mulligan and not run.curse_prompt:
-		_text_centered(hint, 708.0, 18, KickConstants.COLOR_TEXT)
+	if run.phase != RunLogic.Phase.GAME_OVER and run.phase != RunLogic.Phase.WIN and run.phase != RunLogic.Phase.FAR:
+		if not run.awaiting_offer and not run.awaiting_mulligan and not run.curse_prompt:
+			hint = BroadcastHud.hint_text(logic.phase, run.accepts_restart(), run.can_practice(), run.practicing, Settings.key_label("aim_left"), Settings.key_label("aim_right"), Settings.key_label("confirm"))
+	if hint != "":
+		var hint_x := plate.position.x + plate.size.x + 8.0
+		var hint_lines := _pg_wrap(hint, 470, 12)
+		var widest := 0
+		for line in hint_lines:
+			widest = maxi(widest, BitmapFonts.measure_px("ui", line, 12))
+		var bar_h := hint_lines.size() * 14 + 8
+		var hint_bar := Rect2(hint_x - 6.0, plate.position.y + plate.size.y - float(bar_h), float(widest) + 12.0, float(bar_h))
+		_steel_panel(hint_bar)
+		for i in hint_lines.size():
+			_pg(hint_lines[i], Vector2(hint_x, hint_bar.position.y + 4.0 + float(i) * 14.0), 12, Color(0.9, 0.91, 0.92))
+
+
+func _draw_chips(run: RunLogic, y: float) -> void:
+	var cash := Rect2(12, y, 72, 24)
+	_steel_panel(cash)
+	draw_circle(Vector2(cash.position.x + 12, cash.position.y + 12), 6, Color(0.95, 0.78, 0.22))
+	draw_circle(Vector2(cash.position.x + 12, cash.position.y + 12), 6, Color(0.55, 0.38, 0.08), false, 1.0)
+	_pg(str(run.cash), cash.position + Vector2(22, 5), 13, Color(0.95, 0.9, 0.55))
+	var popup := BroadcastHud.payout_text(run.cash_popup)
+	if popup != "":
+		_pg(popup, cash.position + Vector2(78, 5), 13, Color(1.0, 0.92, 0.4))
+	for i in 2:
+		var key := "Z" if i == 0 else "X"
+		var chip := Rect2(168 + float(i) * 52, y, 46, 24)
+		_steel_panel(chip)
+		_pg(key, chip.position + Vector2(4, 5), 13, Color(0.93, 0.91, 0.84))
+		var id := str(run.belt[i]) if i < run.belt.size() else ""
+		if id != "":
+			var icon := _icon(Vitamins.sprite_path(id))
+			if icon != null:
+				draw_texture_rect(icon, Rect2(chip.position + Vector2(22, 3), Vector2(18, 18)), false)
+	var note := BroadcastHud.belt_note(run.vitamin_note)
+	if note != "":
+		_pg(note, Vector2(276, y + 5), 12, Color(1.0, 0.92, 0.45))
+
+
+func _steel_panel(rect: Rect2) -> void:
+	draw_rect(rect, Color(0.04, 0.045, 0.05))
+	draw_rect(rect, Color(0.62, 0.64, 0.68), false, 2.0)
+	draw_rect(rect.grow(-3), Color(0.22, 0.24, 0.27), false, 1.0)
+
+
+func _pg(text: String, at: Vector2, size: int, color: Color) -> void:
+	if text == "":
+		return
+	BitmapFonts.paint_px(self, "ui", text, at, size, color)
+
+
+func _pg_wrap(text: String, max_w: int, size: int) -> PackedStringArray:
+	var lines := PackedStringArray()
+	if text == "":
+		return lines
+	var line := ""
+	for word in text.split(" "):
+		var trial := word if line == "" else line + " " + word
+		if line != "" and BitmapFonts.measure_px("ui", trial, size) > max_w:
+			lines.append(line)
+			line = word
+		else:
+			line = trial
+	if line != "":
+		lines.append(line)
+	return lines
+
+
+func _draw_head(kicker_id: String, area: Rect2) -> void:
+	draw_rect(area, Color(0.08, 0.09, 0.1))
+	var path := BroadcastHud.head_path(kicker_id)
+	var picture := _portrait_texture(path)
+	if picture != null:
+		var fitted := _fit_rect(area.grow(-2), picture.get_size())
+		draw_texture_rect(picture, fitted, false)
+
+
+func _aim_pip(at: Vector2, degrees: float) -> void:
+	var color := Color(0.2, 0.85, 0.95)
+	if degrees < -0.05:
+		draw_colored_polygon(PackedVector2Array([at + Vector2(8, -4), at + Vector2(8, 4), at]), color)
+	elif degrees > 0.05:
+		draw_colored_polygon(PackedVector2Array([at + Vector2(0, -4), at + Vector2(0, 4), at + Vector2(8, 0)]), color)
+	else:
+		draw_colored_polygon(PackedVector2Array([at + Vector2(4, -6), at, at + Vector2(8, 0)]), color)
+
+
+func _wind_pip(at: Vector2, speed: int, direction: float) -> void:
+	var color := Color(0.55, 0.9, 0.95)
+	if speed <= 0:
+		draw_circle(at, 3, color)
+		return
+	var cross := KickLogic.crosswind_mph(float(speed), direction)
+	var along := KickLogic.head_tail_mph(float(speed), direction)
+	var dir := Vector2(cross, -along)
+	if dir.length() < 0.001:
+		draw_circle(at, 3, color)
+		return
+	dir = dir.normalized() * 7.0
+	draw_line(at, at + dir, color, 2.0)
+	draw_circle(at + dir, 2.5, color)
 
 
 var card_rects: Array = []
@@ -503,6 +666,15 @@ func _draw_wrapped(text: String, area: Rect2, size: int) -> void:
 	for line in _wrap_lines(text, area.size.x, size):
 		_text(Vector2(area.position.x, y), line, size, KickConstants.COLOR_TEXT)
 		y += float(size) + 4.0
+
+
+func _draw_compact_pips(run: RunLogic, origin_x: float, origin_y: float) -> void:
+	for i in run.attempt_cap:
+		var center := Vector2(origin_x + float(i) * 8.0, origin_y)
+		if i < run.attempts:
+			draw_circle(center, 3.5, Color(0.95, 0.78, 0.22))
+		else:
+			draw_circle(center, 3.5, Color(0.75, 0.77, 0.8), false, 1.0)
 
 
 func _draw_attempt_pips(run: RunLogic, origin_x: float, origin_y: float) -> void:
@@ -935,24 +1107,9 @@ func _yd_or_dash(yards: int) -> String:
 	return "%d yd" % yards
 
 
-func _draw_cash_belt(run: RunLogic) -> void:
-	# Under the score panel, on a plate so yard numbers do not cover Z and X.
-	var plate := Rect2(16, 500, 230, 210)
-	draw_rect(plate, Color(0.02, 0.05, 0.08, 0.9))
-	var origin := plate.position + Vector2(10, 24)
-	_text(origin, "$%d" % run.cash, 22, KickConstants.COLOR_ATTEMPT)
-	if run.cash_popup != "":
-		_text(origin + Vector2(78, 0), run.cash_popup, 22, Color(1.0, 0.92, 0.4))
-	for i in 2:
-		var key := "Z" if i == 0 else "X"
-		var rect := Rect2(plate.position.x + 10.0, plate.position.y + 36.0 + float(i) * 54.0, 208.0, 48.0)
-		var id := str(run.belt[i]) if i < run.belt.size() else ""
-		_draw_bottle(id, rect, id == "")
-		_text(rect.position + Vector2(8, 30), key, 16, KickConstants.COLOR_ATTEMPT)
-		if id != "":
-			_text(rect.position + Vector2(36, 30), Vitamins.piece_name(id), 14, KickConstants.COLOR_TEXT)
-	if run.vitamin_note != "":
-		_text(plate.position + Vector2(10, 192), run.vitamin_note, 16, Color(1.0, 0.92, 0.45))
+func _draw_cash_belt(_run: RunLogic) -> void:
+	# Cash and the Z / X chips are drawn with the kicker plate.
+	return
 
 
 func _draw_bottle(id: String, rect: Rect2, empty: bool) -> void:

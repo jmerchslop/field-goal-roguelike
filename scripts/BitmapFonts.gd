@@ -92,6 +92,43 @@ static func line_height(key: String, scale: int) -> int:
 	return (callout_px if key == "callout" else ui_px) * scale
 
 
+static func measure_px(key: String, text: String, pixel_h: int) -> int:
+	_ensure(key)
+	var font_h := callout_px if key == "callout" else ui_px
+	var glyphs: Dictionary = _glyphs[key]
+	var width := 0
+	for i in text.length():
+		var ch := text.substr(i, 1)
+		if ch == " ":
+			width += maxi(1, int(round(float(_space[key]) * float(pixel_h) / float(font_h))))
+		elif glyphs.has(ch):
+			var rect: Rect2 = glyphs[ch]
+			width += maxi(1, int(round(rect.size.x * float(pixel_h) / float(font_h))))
+	return width
+
+
+static func paint_px(canvas: CanvasItem, key: String, text: String, top_left: Vector2, pixel_h: int, color: Color) -> void:
+	_ensure(key)
+	var texture: Texture2D = _textures[key]
+	var glyphs: Dictionary = _glyphs[key]
+	var font_h := callout_px if key == "callout" else ui_px
+	var x := int(round(top_left.x))
+	var top := int(round(top_left.y))
+	for i in text.length():
+		var ch := text.substr(i, 1)
+		if ch == " ":
+			x += maxi(1, int(round(float(_space[key]) * float(pixel_h) / float(font_h))))
+			continue
+		if not glyphs.has(ch):
+			continue
+		var src: Rect2 = glyphs[ch]
+		var dest_w := maxi(1, int(round(src.size.x * float(pixel_h) / float(font_h))))
+		var dest_h := maxi(1, int(round(src.size.y * float(pixel_h) / float(font_h))))
+		var dest := Rect2(x, top + (pixel_h - dest_h), dest_w, dest_h)
+		canvas.draw_texture_rect_region(texture, dest, src, color)
+		x += dest_w
+
+
 static func paint(canvas: CanvasItem, key: String, text: String, top_left: Vector2, scale: int, color: Color) -> void:
 	_ensure(key)
 	var texture: Texture2D = _textures[key]

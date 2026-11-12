@@ -24,6 +24,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "broadcast":
+		if not await _capture_broadcast():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "stamps":
 		if not await _capture_stamps():
 			get_tree().quit(1)
@@ -2282,6 +2288,103 @@ func _capture_gauge_crop(file_name: String) -> bool:
 		print("FAILED to save ", path, " error ", err)
 		return false
 	print("Saved ", path, " ", crop.get_width(), "x", crop.get_height())
+	return true
+
+
+func _capture_broadcast() -> bool:
+	board.front.screen = FrontEnd.Screen.SELECT
+	board.selecting = true
+	board.highlight = 1
+	board.confirm_kicker()
+	board.logic.phase = KickLogic.Phase.AIMING
+	if not await _capture("hud_walkon_kick1.png"):
+		return false
+	board._preview_step = 2
+	board.logic.kick_distance = 200.0
+	if not await _capture("hud_walkon_200.png"):
+		return false
+	board._preview_step = 0
+	board.logic.kick_distance = board.run.distance_yards()
+	board.run.streak = 4
+	board.run.attempts = 2
+	if not await _capture("hud_score_mult.png"):
+		return false
+	board.run.streak = 0
+	board.run.attempts = board.run.attempt_cap
+	var before: float = board.logic.max_range_at_full_power()
+	board.run.give(Loadout.CANNON, 1)
+	board.run.prepare_kick_stats()
+	board.logic.stats = board.run.stats
+	print("MAX before ", before, " after cannon ", board.logic.max_range_at_full_power())
+	if not await _capture("hud_max_after_cannon.png"):
+		return false
+	board.logic.kick_distance = 75.0
+	if not await _capture("hud_max_short.png"):
+		return false
+	board.logic.kick_distance = board.run.distance_yards()
+	board.logic.aim_degrees = -4.2
+	if not await _capture("hud_aim_left.png"):
+		return false
+	board.logic.aim_degrees = 0.0
+	board.run.wind_speed = 12
+	board.run.wind_direction = 90.0
+	board.logic.wind_speed = 12
+	board.logic.wind_direction = 90.0
+	board.logic.stats.flag_reader = false
+	if not await _capture("hud_wind_band.png"):
+		return false
+	board.logic.stats.flag_reader = true
+	if not await _capture("hud_wind_visor.png"):
+		return false
+	board.logic.stats.flag_reader = false
+	board.run.wind_speed = 0
+	board.logic.wind_speed = 0
+	board.run.kick_number = 5
+	board.run.weather = RunLogic.ICED
+	board.logic.kick_distance = board.run.distance_yards()
+	if not await _capture("hud_boss.png"):
+		return false
+	board.highlight = 0
+	board.selecting = true
+	board.confirm_kicker()
+	board.logic.phase = KickLogic.Phase.AIMING
+	if not await _capture("hud_bruce.png"):
+		return false
+	var vex_was_open := SaveData.has_unlock(Kickers.VEX)
+	SaveData.unlocks[Kickers.VEX] = true
+	board.highlight = 4
+	board.selecting = true
+	board.confirm_kicker()
+	board.logic.phase = KickLogic.Phase.AIMING
+	if not await _capture("hud_vex.png"):
+		return false
+	board.run.run_mode = "endless"
+	board.run.kick_number = 8
+	board.logic.kick_distance = board.run.distance_yards()
+	if not await _capture("hud_endless.png"):
+		return false
+	board.run.cash = 12
+	board.run.cash_popup = "+$4"
+	if not await _capture("hud_cash_popup.png"):
+		return false
+	board.run.cash_popup = ""
+	board.run.run_mode = "standard"
+	board.logic.phase = KickLogic.Phase.RESULT
+	board.logic.result_text = "GOOD"
+	board.logic.shanked = false
+	board.logic.perfect = false
+	board.logic.offset_yards = 2.4
+	board.logic.power = 80.0
+	board.logic.accuracy_error = 4.0
+	board.result_age = 0.4
+	if not await _capture("hud_stamp_over.png"):
+		return false
+	board.run.resolve_kick("GOOD", 2.4, false)
+	board.run.roll_offer()
+	if not await _capture("hud_stamp_offer.png"):
+		return false
+	if not vex_was_open:
+		SaveData.unlocks[Kickers.VEX] = false
 	return true
 
 

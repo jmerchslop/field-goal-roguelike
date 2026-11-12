@@ -56,6 +56,7 @@ func _run() -> void:
 	_check_field_span_math()
 	_check_ribbons_visor_and_aim_cap()
 	_check_result_stamps()
+	_check_broadcast_hud()
 
 
 func _finish_live() -> void:
@@ -3820,7 +3821,7 @@ func _check_honest_cards_and_bench() -> void:
 	kick.wind_speed = 0
 	check(into_wind < kick.max_range_at_full_power() - 1.0, "a headwind lowers the live Max")
 	var hud := FileAccess.get_file_as_string("res://scripts/hud.gd")
-	check(hud.find("Max %s yd") >= 0 and hud.find("distance_yards()") >= 0, "the HUD draws Max and still draws the required distance")
+	check(hud.find("max_range_at_full_power()") >= 0 and hud.find("logic.kick_distance") >= 0, "the plate MAX uses the 100 percent carry and the big yards are the required distance")
 	var locked := KickLogic.new()
 	locked.stats = walk.stats
 	locked.kick_distance = 35.0
@@ -4145,6 +4146,54 @@ func _check_result_stamps() -> void:
 	check(result_body.find("kick_distance") < 0, "the stamp size does not depend on the kick distance")
 	check(hud.find("PERFECT!") < 0 and hud.find("detail_line()") < 0, "the result overlay dropped the bangs and the old range sentence")
 	check(hud.find("func _draw_title") >= 0 and hud.find("func _draw_offer") >= 0, "title and offer drawing stay in the HUD script")
+
+
+func _check_broadcast_hud() -> void:
+	check(BroadcastHud.kick_title(1, false) == "KICK 1 OF 20", "a standard kick reads KICK n OF 20")
+	check(BroadcastHud.kick_title(8, true) == "KICK 8" and BroadcastHud.kick_title(8, true).find("OF 20") < 0, "endless drops OF 20")
+	check(BroadcastHud.yards_text(35.0) == "35 YD", "the big yard figure is the required distance")
+	check(BroadcastHud.aim_text(0.0) == "AIM 0.0", "a straight aim has no side letter")
+	check(BroadcastHud.aim_text(-1.25) == "AIM L 1.3" or BroadcastHud.aim_text(-1.2) == "AIM L 1.2", "aim left is L and has no degree sign")
+	check(BroadcastHud.aim_text(1.2) == "AIM R 1.2", "aim right is R")
+	check(BroadcastHud.aim_text(-4.0).find("-") < 0, "a left aim does not print a minus")
+	check(BroadcastHud.wind_band(0, false) == "WIND CALM" and BroadcastHud.wind_band(12, false) == "WIND WINDY", "without a visor the wind bug is only the band")
+	check(BroadcastHud.wind_band(12, false).find("12") < 0, "exact mph stays off until Visor or Lutein")
+	check(BroadcastHud.wind_band(12, true) == "WIND 12" and BroadcastHud.wind_band(0, true) == "WIND CALM", "a visor prints whole mph, and calm stays CALM")
+	var detail := BroadcastHud.wind_detail(10, 90.0)
+	check(detail == "CROSS R 10  TAIL 0", "a right crosswind is CROSS R and has no minus")
+	check(BroadcastHud.wind_detail(10, 270.0) == "CROSS L 10  TAIL 0", "a left crosswind is CROSS L")
+	check(BroadcastHud.wind_detail(10, 0.0) == "CROSS 0  TAIL 10", "a helping tailwind is TAIL")
+	check(BroadcastHud.wind_detail(10, 180.0) == "CROSS 0  HEAD 10", "a headwind is HEAD")
+	check(BroadcastHud.plate_name(Kickers.WALK_ON) == "THE WALK ON" and BroadcastHud.ball_text(Kickers.WALK_ON) == "TEAM ISSUE", "Walk-On HUD text drops the hyphens")
+	check(BroadcastHud.plate_number(Kickers.WALK_ON) == "NO.4" and BroadcastHud.plate_number(Kickers.BIG_BRUCE) == "NO.55", "Bruce and Walk-On keep their numbers")
+	for id in [Kickers.PHIL, Kickers.GARY, Kickers.VEX, Kickers.COLE, Kickers.WILLOW, Kickers.CARLOS]:
+		check(BroadcastHud.plate_number(id) == "", "no invented jersey for %s" % id)
+	check(BroadcastHud.kit_text(Kickers.VEX) == "INFINITE RANGE AND BEYOND" and BroadcastHud.kit_text(Kickers.VEX).find("&") < 0, "Vex kit text has no ampersand")
+	check(BroadcastHud.max_warning(70.0, 60.0) and not BroadcastHud.max_warning(35.0, 60.0), "MAX warns only when the kick is longer than the range")
+	check(BroadcastHud.max_fill(35.0, 70.0) < 1.0 and BroadcastHud.max_fill(70.0, 60.0) == 1.0, "the bar fills from required distance over max range")
+	check(BroadcastHud.payout_text("+$4") == "+4" and BroadcastHud.payout_text("") == "", "the payout drops the dollar sign and hides a zero")
+	check(BroadcastHud.belt_note("Omega-3") == "OMEGA 3" and BroadcastHud.belt_note("Pre-Workout") == "PRE WORKOUT", "vitamin notes replace hyphens with spaces")
+	check(BroadcastHud.belt_note("Remove which curse?") == "REMOVE WHICH CURSE", "the curse prompt drops the question mark")
+	var samples := [
+		BroadcastHud.kick_title(1, false), BroadcastHud.aim_text(-2.5), BroadcastHud.wind_detail(16, 180.0),
+		BroadcastHud.plate_name(Kickers.WALK_ON), BroadcastHud.kit_text(Kickers.VEX), BroadcastHud.ball_text(Kickers.CARLOS),
+		BroadcastHud.hint_text(KickLogic.Phase.AIMING, false, true, false, "LEFT", "RIGHT", "SPACE"),
+		BroadcastHud.hint_text(KickLogic.Phase.RESULT, false, false, false, "LEFT", "RIGHT", "SPACE"),
+	]
+	for sample in samples:
+		check(BroadcastHud.is_safe(str(sample)), "broadcast copy stays inside the font")
+	var hud := FileAccess.get_file_as_string("res://scripts/hud.gd")
+	var body := hud.substr(hud.find("func _draw_hud"))
+	body = body.substr(0, body.find("\nfunc "))
+	check(body.find("BOSS KICK") < 0 and body.find("Howling Wind") < 0 and body.find("negative is left") < 0, "the old left stack and centered banners are gone")
+	check(body.find("bench_bank") < 0, "attempt pips do not draw a Deep Bench half")
+	check(hud.find("func _draw_meter") >= 0 and hud.find("func _draw_loadout_rail") >= 0 and hud.find("func _draw_result") >= 0, "the meter, loadout rail, and result stamp stay")
+	check(hud.find("pixel_gothic") < 0 and hud.find("BitmapFonts.paint_px") >= 0, "the broadcast HUD reuses Pixel Gothic instead of a second font")
+	var fonts := 0
+	for file in DirAccess.get_files_at("res://fonts"):
+		if str(file).find("pixel_gothic") >= 0 or str(file).find("ui-font-alphabet") >= 0:
+			fonts += 1
+	check(fonts <= 4, "Pixel Gothic was not copied a second time")
 
 
 func _check_live_field() -> void:
