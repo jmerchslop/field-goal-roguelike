@@ -431,7 +431,10 @@ func _good_edge_hook(error_value: float) -> float:
 		error = 0.0
 	if absf(error) <= stats.perfect_band:
 		return 0.0
-	return -error * KickConstants.ACCURACY_DEG_PER_ERROR * angle_scale
+	var flight := error
+	if absf(error) <= stats.good_band:
+		flight *= stats.guide_factor
+	return -flight * KickConstants.ACCURACY_DEG_PER_ERROR * angle_scale
 
 
 static func preview_forward(distance_yards: float) -> float:
@@ -744,7 +747,10 @@ func _lock_accuracy(value: float) -> void:
 		accuracy_error = 0.0
 		perfect = true
 	var per_unit := KickConstants.ACCURACY_DEG_PER_ERROR * angle_scale
-	var hook := 0.0 if perfect else -accuracy_error * per_unit
+	var flight_error := accuracy_error
+	if not perfect and absf(accuracy_error) <= stats.good_band:
+		flight_error *= stats.guide_factor
+	var hook := 0.0 if perfect else -flight_error * per_unit
 	final_angle_degrees = aim_degrees + hook
 	var ranged := power_for_range(power, stats.power_floor)
 	var plan := carry_plan(ranged, final_angle_degrees)
@@ -808,8 +814,12 @@ func carry_plan(ranged_power: float, angle_degrees: float) -> Dictionary:
 	var blown_dir := rad_to_deg(atan2(cross, head))
 	if howling_wind:
 		blown *= 1.5
+	if stats.hush_mph > 0.0:
+		blown = maxf(0.0, blown - stats.hush_mph)
 	var drift := drift_at_uprights(blown, blown_dir, kick_distance, 0, 0, stats.ball_type) * stats.drift_factor
 	var wind_range := wind_range_delta(blown, blown_dir, 0, stats.thin_air)
+	if wind_range < 0.0:
+		wind_range *= stats.shelter_factor
 	var travel := 0.0
 	if stats.clearance:
 		var clearance := 5.0 + (ranged_power - 88.0) * 1.25

@@ -449,6 +449,24 @@ func camera_rig(distance: float, spot: float) -> Dictionary:
 	}
 
 
+func _sync_debug_loadout() -> void:
+	var aim := logic.aim_degrees
+	var phase = logic.phase
+	run.prepare_kick_stats()
+	logic.stats = run.stats
+	logic.wind_speed = run.wind_speed
+	logic.wind_direction = run.wind_direction
+	logic.howling_wind = run.has_curse(Loadout.HOWLING)
+	logic.heavy_ball = run.has_curse(Loadout.HEAVY)
+	logic.shaky = run.has_curse(Loadout.SHAKY)
+	logic.angle_scale = run.stats.angle_scale
+	logic.aim_degrees = aim
+	logic.phase = phase
+	_copy_weather_onto_kick()
+	logic.post_half_gap = run.post_half_gap()
+	refresh_view()
+
+
 func apply_live_vitamins() -> void:
 	var aim := logic.aim_degrees
 	var phase = logic.phase
@@ -683,6 +701,17 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if key.keycode == KEY_J and run.phase == RunLogic.Phase.PLAYING and not run.awaiting_offer and not run.awaiting_mulligan and logic.phase == KickLogic.Phase.AIMING:
 		cycle_debug_distance()
+		return
+	if key.keycode == KEY_K and run.phase == RunLogic.Phase.PLAYING and not run.awaiting_offer and not run.awaiting_mulligan:
+		run.cycle_range_fixture()
+		_sync_debug_loadout()
+		return
+	if key.keycode == KEY_L and run.phase == RunLogic.Phase.PLAYING and not run.awaiting_offer and not run.awaiting_mulligan:
+		if key.shift_pressed:
+			run.bump_style_fixture()
+		else:
+			run.cycle_style_fixture()
+		_sync_debug_loadout()
 		return
 	if key.keycode == KEY_W and run.phase == RunLogic.Phase.PLAYING and not run.awaiting_offer and not run.awaiting_mulligan:
 		run.apply_debug_wind()

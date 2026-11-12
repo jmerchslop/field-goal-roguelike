@@ -495,6 +495,143 @@ func prepare_kick_stats() -> void:
 	_apply_ball_vitamins()
 
 
+var _fixture_saved := false
+var _saved_cleats_id := ""
+var _saved_cleats_rank := 0
+var _saved_helmet_id := ""
+var _saved_helmet_rank := 0
+var _saved_gloves_id := ""
+var _saved_gloves_rank := 0
+var _saved_perks: Array = []
+var _saved_curses: Array = []
+var _saved_vitamins: Dictionary = {}
+var _range_step := 0
+var _style_step := 0
+
+
+func cycle_range_fixture() -> void:
+	if run_mode != "endless":
+		return
+	_capture_fixture()
+	_style_step = 0
+	_range_step = (_range_step % 3) + 1
+	_restore_fixture()
+	if _range_step == 1:
+		return
+	_strip_range_preview()
+	cleats_id = Loadout.CANNON
+	cleats_rank = 24
+	if _range_step == 3:
+		helmet_id = Loadout.DRIVE_LID
+		helmet_rank = 24
+
+
+func cycle_style_fixture() -> void:
+	if run_mode != "endless":
+		return
+	_capture_fixture()
+	_range_step = 0
+	_style_step = (_style_step % 6) + 1
+	_restore_fixture()
+	if _style_step >= 6:
+		return
+	var id := _style_fixture_id(_style_step)
+	_set_slot(id, 1)
+
+
+func bump_style_fixture() -> void:
+	if run_mode != "endless" or _style_step < 1 or _style_step > 5:
+		return
+	var id := _style_fixture_id(_style_step)
+	var rank := _slot_rank(id) + 1
+	if rank > 24:
+		rank = 1
+	_set_slot(id, rank)
+
+
+func _style_fixture_id(step: int) -> String:
+	if step == 1:
+		return Loadout.TRUE_LID
+	if step == 2:
+		return Loadout.SHELTER_LID
+	if step == 3:
+		return Loadout.GUIDE_GLOVES
+	if step == 4:
+		return Loadout.PATIENT_GLOVES
+	return Loadout.HUSH_GLOVES
+
+
+func _capture_fixture() -> void:
+	if _fixture_saved:
+		return
+	_fixture_saved = true
+	_saved_cleats_id = cleats_id
+	_saved_cleats_rank = cleats_rank
+	_saved_helmet_id = helmet_id
+	_saved_helmet_rank = helmet_rank
+	_saved_gloves_id = gloves_id
+	_saved_gloves_rank = gloves_rank
+	_saved_perks = perks.duplicate(true)
+	_saved_curses = curse_ids.duplicate()
+	_saved_vitamins = active_vitamins.duplicate()
+
+
+func _restore_fixture() -> void:
+	cleats_id = _saved_cleats_id
+	cleats_rank = _saved_cleats_rank
+	helmet_id = _saved_helmet_id
+	helmet_rank = _saved_helmet_rank
+	gloves_id = _saved_gloves_id
+	gloves_rank = _saved_gloves_rank
+	perks = _saved_perks.duplicate(true)
+	curse_ids = _saved_curses.duplicate()
+	active_vitamins = _saved_vitamins.duplicate()
+
+
+func _strip_range_preview() -> void:
+	if helmet_id == Loadout.DRIVE_LID:
+		helmet_id = ""
+		helmet_rank = 0
+	if gloves_id == Loadout.HIGH_AIR:
+		gloves_id = ""
+		gloves_rank = 0
+	var kept: Array = []
+	for item in perks:
+		if str(item.get("id", "")) != Loadout.GLASS_LEG:
+			kept.append(item)
+	perks = kept
+	var curses: Array = []
+	for id in curse_ids:
+		if str(id) != Loadout.STONE and str(id) != Loadout.SHAKY:
+			curses.append(id)
+	curse_ids = curses
+	active_vitamins.erase(Vitamins.PROTEIN)
+
+
+func _set_slot(id: String, rank: int) -> void:
+	var slot := Loadout.slot_of(id)
+	if slot == Loadout.CLEATS:
+		cleats_id = id
+		cleats_rank = rank
+	elif slot == Loadout.HELMET:
+		helmet_id = id
+		helmet_rank = rank
+	elif slot == Loadout.GLOVES:
+		gloves_id = id
+		gloves_rank = rank
+
+
+func _slot_rank(id: String) -> int:
+	var slot := Loadout.slot_of(id)
+	if slot == Loadout.HELMET and helmet_id == id:
+		return helmet_rank
+	if slot == Loadout.GLOVES and gloves_id == id:
+		return gloves_rank
+	if slot == Loadout.CLEATS and cleats_id == id:
+		return cleats_rank
+	return 0
+
+
 func cycle_debug_spot() -> void:
 	var best := 0
 	var best_gap := 1000.0
@@ -987,6 +1124,7 @@ func _as_loadout_card(item) -> Dictionary:
 
 
 func give(id: String, rank: int = 1) -> void:
+	_fixture_saved = false
 	var slot := Loadout.slot_of(id)
 	if slot == "":
 		return

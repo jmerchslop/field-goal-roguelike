@@ -57,6 +57,7 @@ func _run() -> void:
 	_check_ribbons_visor_and_aim_cap()
 	_check_result_stamps()
 	_check_broadcast_hud()
+	_check_equipment_xxiv()
 
 
 func _finish_live() -> void:
@@ -4194,6 +4195,238 @@ func _check_broadcast_hud() -> void:
 		if str(file).find("pixel_gothic") >= 0 or str(file).find("ui-font-alphabet") >= 0:
 			fonts += 1
 	check(fonts <= 4, "Pixel Gothic was not copied a second time")
+
+
+func _check_equipment_xxiv() -> void:
+	for rank in range(1, 13):
+		check(Loadout.cannon_yards(rank) == 6 * rank, "Cannon rank %d stays 6 times the rank" % rank)
+		check(Loadout.drive_yards(rank) == 4 * rank, "Drive Lid rank %d stays 4 times the rank" % rank)
+		check(Loadout.high_air_yards(rank) == 2 * rank, "High-Air rank %d stays 2 times the rank" % rank)
+	var cannon_late := [97, 125, 156, 190, 227, 267, 310, 356, 405, 457, 512, 570]
+	var drive_late := [65, 84, 105, 128, 153, 180, 209, 240, 273, 308, 345, 384]
+	var air_late := [32, 41, 51, 62, 74, 87, 101, 116, 132, 149, 167, 186]
+	for i in cannon_late.size():
+		var rank := 13 + i
+		check(Loadout.cannon_yards(rank) == int(cannon_late[i]), "Cannon %s is the table total" % Loadout.rank_label(rank))
+		check(Loadout.drive_yards(rank) == int(drive_late[i]), "Drive Lid %s is the table total" % Loadout.rank_label(rank))
+		check(Loadout.high_air_yards(rank) == int(air_late[i]), "High-Air %s is the table total" % Loadout.rank_label(rank))
+		check(Loadout.effect_line(Loadout.HIGH_AIR, rank).find("tailwind range ×1.5") >= 0, "High-Air keeps the tailwind line at %s" % Loadout.rank_label(rank))
+	check(Loadout.rank_label(12) == "XII" and Loadout.rank_label(13) == "XIII" and Loadout.rank_label(24) == "XXIV", "badges can show XII, XIII, and XXIV")
+	var standard := RunLogic.new()
+	standard.start_with_kicker(Kickers.WALK_ON)
+	standard.give(Loadout.CANNON, 6)
+	standard.give(Loadout.CANNON, 7)
+	check(standard.cleats_rank == 6 and Loadout.max_rank(Loadout.CANNON, "standard") == 6, "Standard equipment stops at VI")
+	var endless := RunLogic.new()
+	endless.start_with_kicker(Kickers.WALK_ON)
+	endless.run_mode = "endless"
+	endless.give(Loadout.CANNON, 24)
+	check(endless.cleats_rank == 24 and Loadout.max_rank(Loadout.CANNON, "endless") == 24, "Endless equipment can reach XXIV")
+	var bruce := _full_power_range(Kickers.BIG_BRUCE, Loadout.CANNON, 12, "", 0)
+	check(near(bruce, 137.0), "Bruce with Cannon XII is 137 yards, got %s" % bruce)
+	var bruce_lid := _full_power_range(Kickers.BIG_BRUCE, "", 0, Loadout.DRIVE_LID, 12)
+	check(near(bruce_lid, 113.0), "Bruce with Drive Lid XII is 113 yards, got %s" % bruce_lid)
+	var willow := _two_power_range(Kickers.WILLOW)
+	check(near(willow, 1004.0), "Willow with Cannon XXIV and Drive Lid XXIV is 1004, got %s" % willow)
+	var cole := _two_power_range(Kickers.COLE)
+	check(near(cole, 1024.0), "Cole with Cannon XXIV and Drive Lid XXIV is 1024, got %s" % cole)
+	check(near(_one_power_range(Kickers.WILLOW), 620.0), "Willow with only Cannon XXIV is 620")
+	check(near(_one_power_range(Kickers.COLE), 640.0), "Cole with only Cannon XXIV is 640")
+	var stacked := RunLogic.new()
+	stacked.start_with_kicker(Kickers.COLE)
+	stacked.run_mode = "endless"
+	stacked.cleats_id = Loadout.CANNON
+	stacked.cleats_rank = 24
+	stacked.perks = [{"id": Loadout.GLASS_LEG, "rank": 6}]
+	stacked.curse_ids = [Loadout.STONE, Loadout.SHAKY, Loadout.HOWLING]
+	stacked.active_vitamins[Vitamins.PROTEIN] = 1
+	stacked.prepare_kick_stats()
+	var stacked_kick := KickLogic.new()
+	stacked_kick.stats = stacked.stats
+	stacked_kick.howling_wind = true
+	check(stacked_kick.max_range_at_full_power() < 1000.0, "Cole with Cannon XXIV plus the other range pieces stays under 1000, got %s" % stacked_kick.max_range_at_full_power())
+	var vex := RunLogic.new()
+	vex.start_with_kicker(Kickers.VEX)
+	var vex_kick := KickLogic.new()
+	vex_kick.stats = vex.stats
+	vex_kick.kick_distance = 1000.0
+	check(near(vex_kick.max_range_at_full_power(), 1020.0), "Vex at 1000 yards with no items still travels 1020")
+	_check_soft_caps()
+	_check_new_styles()
+
+
+func _full_power_range(kicker_id: String, cleats: String, cleat_rank: int, helmet: String, helmet_rank: int) -> float:
+	var run := RunLogic.new()
+	run.start_with_kicker(kicker_id)
+	run.cleats_id = cleats
+	run.cleats_rank = cleat_rank
+	run.helmet_id = helmet
+	run.helmet_rank = helmet_rank
+	run.prepare_kick_stats()
+	var kick := KickLogic.new()
+	kick.stats = run.stats
+	kick.wind_speed = 0
+	kick.wind_direction = 0.0
+	return kick.max_range_at_full_power()
+
+
+func _two_power_range(kicker_id: String) -> float:
+	return _full_power_range(kicker_id, Loadout.CANNON, 24, Loadout.DRIVE_LID, 24)
+
+
+func _one_power_range(kicker_id: String) -> float:
+	return _full_power_range(kicker_id, Loadout.CANNON, 24, "", 0)
+
+
+func _check_soft_caps() -> void:
+	var names := [Loadout.PINPOINT, Loadout.ANCHOR, Loadout.STICKER, Loadout.ICE_CAGE, Loadout.SCOUT_LID, Loadout.DOINK_CAP, Loadout.REPLAY_GLOVES, Loadout.WEATHER_WRAPS, Loadout.IRON_GRIP]
+	for id in names:
+		var low := RunLogic.new()
+		low.start_with_kicker(Kickers.WALK_ON)
+		_equip(low, str(id), 12)
+		var high := RunLogic.new()
+		high.start_with_kicker(Kickers.WALK_ON)
+		_equip(high, str(id), 24)
+		check(_same_effect(low.stats, high.stats), "%s at XXIV matches its XII effect" % Loadout.piece_name(str(id)))
+		check(Loadout.effect_line(str(id), 13) == Loadout.effect_line(str(id), 12), "%s card text freezes at XII" % Loadout.piece_name(str(id)))
+	check(Loadout.effect_line(Loadout.WIND_VISOR, 24).find("full flight") >= 0, "Wind Visor XXIV still describes the full path")
+
+
+func _equip(run: RunLogic, id: String, rank: int) -> void:
+	var slot := Loadout.slot_of(id)
+	if slot == Loadout.CLEATS:
+		run.cleats_id = id
+		run.cleats_rank = rank
+	elif slot == Loadout.HELMET:
+		run.helmet_id = id
+		run.helmet_rank = rank
+	elif slot == Loadout.GLOVES:
+		run.gloves_id = id
+		run.gloves_rank = rank
+	run.prepare_kick_stats()
+
+
+func _same_effect(a: KickerStats, b: KickerStats) -> bool:
+	return near(a.range_bonus, b.range_bonus) and near(a.perfect_band, b.perfect_band) and near(a.good_band, b.good_band) and near(a.power_speed, b.power_speed) and near(a.accuracy_speed, b.accuracy_speed) and near(a.drift_factor, b.drift_factor) and near(a.path_percent, b.path_percent) and a.flag_reader == b.flag_reader and a.red_tip_off == b.red_tip_off and a.ice_veins == b.ice_veins and a.doink_per_quarter == b.doink_per_quarter and a.doink_carry == b.doink_carry and a.practice_per_quarter == b.practice_per_quarter and a.practice_carry == b.practice_carry and a.rerolls_per_run == b.rerolls_per_run and a.weather_cut == b.weather_cut and near(a.wraps_yards, b.wraps_yards)
+
+
+func _check_new_styles() -> void:
+	var ids := [Loadout.TRUE_LID, Loadout.SHELTER_LID, Loadout.GUIDE_GLOVES, Loadout.PATIENT_GLOVES, Loadout.HUSH_GLOVES]
+	for id in ids:
+		check(Loadout.slot_of(str(id)) != "" and Loadout.piece_name(str(id)) != str(id), "%s is in the catalog" % id)
+		check(not Loadout.is_power_item(str(id)), "%s is not a power item" % id)
+		check(Loadout.max_rank(str(id), "standard") == 6 and Loadout.max_rank(str(id), "endless") == 24, "%s ranks to VI and XXIV" % id)
+		check(Loadout.sprite_path(str(id)) == "", "%s does not reuse another sprite" % id)
+	var willow := RunLogic.new()
+	willow.start_with_kicker(Kickers.WILLOW)
+	for card in willow._legal_synchronicity_pool():
+		check(not ids.has(str(card.get("id", ""))), "Willow's range guarantee skips the new styles")
+	for card in Loadout.legal_power_items(Loadout.empty_state(), 3):
+		check(not ids.has(str(card.get("id", ""))), "the 50-yard safety net skips the new styles")
+	var locked := RunLogic.new()
+	locked.start_with_kicker(Kickers.WALK_ON)
+	locked.run_mode = "endless"
+	locked.give(Loadout.TRUE_LID, 1)
+	var other := false
+	var next := false
+	for card in Loadout.legal_equipment(locked.loadout_state()):
+		if str(card.get("slot", "")) != Loadout.HELMET:
+			continue
+		if str(card.get("id", "")) != Loadout.TRUE_LID:
+			other = true
+		if int(card.get("rank", 0)) == 2:
+			next = true
+	check(not other and next, "True Lid style-locks the helmet and offers the next rank")
+	var bare := RunLogic.new()
+	bare.start_with_kicker(Kickers.WALK_ON)
+	var bands_perfect := bare.stats.perfect_band
+	var bands_good := bare.stats.good_band
+	var red_off := bare.stats.red_tip_off
+	bare.give(Loadout.TRUE_LID, 1)
+	check(near(bare.stats.angle_scale, 0.90) and near(bare.stats.perfect_band, bands_perfect) and near(bare.stats.good_band, bands_good) and bare.stats.red_tip_off == red_off, "True Lid I scales the hook and leaves the bands and red tip alone")
+	bare.force_weather(RunLogic.BIG_GAME)
+	bare.prepare_kick_stats()
+	check(near(bare.stats.angle_scale, 0.90), "Big Game keeps True Lid")
+	var plain := _hook_of(1.0, 4.0)
+	var guided := _hook_of(1.0, 4.0)
+	guided.stats.guide_factor = 0.50
+	_press_error(guided, 4.0)
+	_press_error(plain, 4.0)
+	check(guided.result_text == "GOOD" and plain.result_text == "GOOD", "a GOOD lock still scores GOOD with Guide Gloves")
+	check(absf(guided.final_angle_degrees) < absf(plain.final_angle_degrees) - 0.1, "Guide Gloves I reduces a GOOD hook")
+	var bad_plain := _hook_of(1.0, 10.0)
+	var bad_guide := _hook_of(1.0, 10.0)
+	bad_guide.stats.guide_factor = 0.50
+	_press_error(bad_plain, 10.0)
+	_press_error(bad_guide, 10.0)
+	check(near(bad_plain.final_angle_degrees, bad_guide.final_angle_degrees), "Guide Gloves leaves a BAD lock alone")
+	var perfect_plain := _hook_of(1.0, 0.4)
+	var perfect_guide := _hook_of(1.0, 0.4)
+	perfect_guide.stats.guide_factor = 0.50
+	_press_error(perfect_plain, 0.4)
+	_press_error(perfect_guide, 0.4)
+	check(perfect_plain.perfect and perfect_guide.perfect and near(perfect_plain.final_angle_degrees, perfect_guide.final_angle_degrees), "Guide Gloves leaves a PERFECT lock alone")
+	var patient := RunLogic.new()
+	patient.start_with_kicker(Kickers.WALK_ON)
+	patient.give(Loadout.PATIENT_GLOVES, 1)
+	check(near(patient.stats.power_speed, 85.0) and near(patient.stats.accuracy_speed, 120.0), "Patient Gloves I slows only the power needle")
+	patient.force_weather(RunLogic.BIG_GAME)
+	patient.prepare_kick_stats()
+	check(near(patient.stats.power_speed, 100.0) and near(patient.stats.accuracy_speed, 120.0), "Big Game turns Patient Gloves off")
+	var head_open := _wind_travel(10.0, 180.0, 1.0, 0.0)
+	var head_cut := _wind_travel(10.0, 180.0, 0.80, 0.0)
+	var tail_open := _wind_travel(10.0, 0.0, 1.0, 0.0)
+	var tail_cut := _wind_travel(10.0, 0.0, 0.80, 0.0)
+	check(head_cut > head_open + 0.2 and near(tail_open, tail_cut), "Shelter Lid cuts a headwind and leaves a tailwind alone")
+	var drift_open := _wind_drift(10.0, 90.0, 1.0, 0.0)
+	var drift_cut := _wind_drift(10.0, 90.0, 0.80, 0.0)
+	check(near(drift_open, drift_cut), "Shelter Lid does not change sideways drift")
+	var calm := _wind_travel(0.0, 0.0, 1.0, 0.0)
+	var one := _wind_travel(1.0, 180.0, 1.0, 0.0)
+	var hushed := _wind_travel(1.0, 180.0, 1.0, 1.0)
+	check(hushed > one and near(hushed, calm), "Hush Gloves I turns a 1 mph headwind into calm range")
+	var strong := _wind_drift(10.0, 90.0, 1.0, 0.0)
+	var hushed_strong := _wind_drift(10.0, 90.0, 1.0, 1.0)
+	var nine := _wind_drift(9.0, 90.0, 1.0, 0.0)
+	check(hushed_strong < strong and near(hushed_strong, nine, 0.02), "Hush Gloves reduces the wind before drift is computed")
+
+
+func _hook_of(scale: float, _error: float) -> KickLogic:
+	var kick := KickLogic.new()
+	kick.kick_distance = 35.0
+	kick.angle_scale = scale
+	kick.stats.angle_scale = scale
+	return kick
+
+
+func _press_error(kick: KickLogic, error_value: float) -> void:
+	kick.press_space()
+	kick.advance(kick.windup_left)
+	kick.advance(kick.seconds_to_power(80.0))
+	if kick.phase == KickLogic.Phase.POWER:
+		kick.press_space()
+	kick.needle_angle = MeterGauge.angle_from_error(error_value)
+	kick.needle = error_value
+	kick.press_space()
+
+
+func _wind_travel(speed: float, direction: float, shelter: float, hush: float) -> float:
+	var kick := KickLogic.new()
+	kick.wind_speed = speed
+	kick.wind_direction = direction
+	kick.stats.shelter_factor = shelter
+	kick.stats.hush_mph = hush
+	return float(kick.carry_plan(100.0, 0.0)["travel"])
+
+
+func _wind_drift(speed: float, direction: float, shelter: float, hush: float) -> float:
+	var kick := KickLogic.new()
+	kick.kick_distance = 35.0
+	kick.wind_speed = speed
+	kick.wind_direction = direction
+	kick.stats.shelter_factor = shelter
+	kick.stats.hush_mph = hush
+	return float(kick.carry_plan(100.0, 0.0)["drift"])
 
 
 func _check_live_field() -> void:

@@ -20,10 +20,15 @@ const ICE_CAGE := "ice_cage"
 const SCOUT_LID := "scout_lid"
 const DOINK_CAP := "doink_cap"
 const DRIVE_LID := "drive_lid"
+const TRUE_LID := "true_lid"
+const SHELTER_LID := "shelter_lid"
 const IRON_GRIP := "iron_grip"
 const REPLAY_GLOVES := "replay_gloves"
 const HIGH_AIR := "high_air"
 const WEATHER_WRAPS := "weather_wraps"
+const GUIDE_GLOVES := "guide_gloves"
+const PATIENT_GLOVES := "patient_gloves"
+const HUSH_GLOVES := "hush_gloves"
 const DEEP_BENCH := "deep_bench"
 const HOT_STREAK := "hot_streak"
 const STORM_CHASER := "storm_chaser"
@@ -40,19 +45,59 @@ const STONE := "stone_toe"
 const TIGHT := "tight_window"
 
 const CLEAT_IDS: Array = [CANNON, PINPOINT, ANCHOR, STICKER]
-const HELMET_IDS: Array = [WIND_VISOR, ICE_CAGE, SCOUT_LID, DOINK_CAP, DRIVE_LID]
+const HELMET_IDS: Array = [WIND_VISOR, ICE_CAGE, SCOUT_LID, DOINK_CAP, DRIVE_LID, TRUE_LID, SHELTER_LID]
 
 const POWER_IDS: Array = [CANNON, DRIVE_LID, HIGH_AIR, GLASS_LEG, STONE, SHAKY]
-const GLOVE_IDS: Array = [IRON_GRIP, REPLAY_GLOVES, HIGH_AIR, WEATHER_WRAPS]
+const GLOVE_IDS: Array = [IRON_GRIP, REPLAY_GLOVES, HIGH_AIR, WEATHER_WRAPS, GUIDE_GLOVES, PATIENT_GLOVES, HUSH_GLOVES]
 const PERK_IDS: Array = [DEEP_BENCH, HOT_STREAK, STORM_CHASER, HERO_BALL, GLASS_LEG, TWO_MINUTE]
 const CURSE_IDS: Array = [ICED, SHANKY, HEAVY, HOWLING, SHAKY, NARROW, STONE, TIGHT]
 
-const _ROMAN: Array = ["", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"]
+const _ROMAN: Array = [
+	"", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII",
+	"XIII", "XIV", "XV", "XVI", "XVII", "XVIII", "XIX", "XX", "XXI", "XXII", "XXIII", "XXIV",
+]
+const _CANNON_LATE: Array = [97, 125, 156, 190, 227, 267, 310, 356, 405, 457, 512, 570]
+const _DRIVE_LATE: Array = [65, 84, 105, 128, 153, 180, 209, 240, 273, 308, 345, 384]
+const _AIR_LATE: Array = [32, 41, 51, 62, 74, 87, 101, 116, 132, 149, 167, 186]
 
 
 static func rank_label(rank: int) -> String:
-	var index := clampi(rank, 0, 12)
+	var index := clampi(rank, 0, 24)
 	return str(_ROMAN[index])
+
+
+static func effect_rank(rank: int) -> int:
+	return mini(maxi(rank, 0), 12)
+
+
+static func _late_yards(rank: int, early_per_rank: int, late: Array) -> int:
+	if rank <= 0:
+		return 0
+	if rank <= 12:
+		return early_per_rank * rank
+	return int(late[clampi(rank, 13, 24) - 13])
+
+
+static func cannon_yards(rank: int) -> int:
+	return _late_yards(rank, 6, _CANNON_LATE)
+
+
+static func drive_yards(rank: int) -> int:
+	return _late_yards(rank, 4, _DRIVE_LATE)
+
+
+static func high_air_yards(rank: int) -> int:
+	return _late_yards(rank, 2, _AIR_LATE)
+
+
+static func guide_factor(rank: int) -> float:
+	return 0.50 - 0.02 * float(effect_rank(rank) - 1)
+
+
+static func _scale_factor(factor: float, howling: bool, item_scale: float) -> float:
+	if howling:
+		factor = boost_factor(factor)
+	return scale_gap(factor, item_scale)
 
 
 static func slot_of(id: String) -> String:
@@ -146,7 +191,7 @@ static func max_rank(id: String, mode: String = "standard") -> int:
 		return 1
 	if slot_of(id) == "":
 		return 0
-	return 12 if mode == "endless" else 6
+	return 24 if mode == "endless" else 6
 
 
 static func type_label(slot: String) -> String:
@@ -177,6 +222,10 @@ static func piece_name(id: String) -> String:
 			return "Wind Visor"
 		DRIVE_LID:
 			return "Drive Lid"
+		TRUE_LID:
+			return "True Lid"
+		SHELTER_LID:
+			return "Shelter Lid"
 		ICE_CAGE:
 			return "Ice Cage"
 		SCOUT_LID:
@@ -191,6 +240,12 @@ static func piece_name(id: String) -> String:
 			return "High-Air Gloves"
 		WEATHER_WRAPS:
 			return "Weather Wraps"
+		GUIDE_GLOVES:
+			return "Guide Gloves"
+		PATIENT_GLOVES:
+			return "Patient Gloves"
+		HUSH_GLOVES:
+			return "Hush Gloves"
 		DEEP_BENCH:
 			return "Deep Bench"
 		HOT_STREAK:
@@ -225,15 +280,19 @@ static func piece_name(id: String) -> String:
 static func effect_line(id: String, rank: int) -> String:
 	match id:
 		CANNON:
-			return "+%d yd" % (6 * rank)
+			return "+%d yd" % cannon_yards(rank)
 		PINPOINT:
-			return "PERFECT +%d, good +%d" % [2 * rank, 3 * rank]
+			return "PERFECT +%d, good +%d" % [2 * effect_rank(rank), 3 * effect_rank(rank)]
 		ANCHOR:
-			return "Needles ×%s" % _two_decimals(pow(0.85, float(rank)))
+			return "Needles ×%s" % _two_decimals(pow(0.85, float(effect_rank(rank))))
 		STICKER:
-			return "Drift ×%s" % _two_decimals(pow(0.80, float(rank)))
+			return "Drift ×%s" % _two_decimals(pow(0.80, float(effect_rank(rank))))
 		DRIVE_LID:
-			return "+%d yd" % (4 * rank)
+			return "+%d yd" % drive_yards(rank)
+		TRUE_LID:
+			return "Hook ×%s" % _two_decimals(pow(0.90, float(effect_rank(rank))))
+		SHELTER_LID:
+			return "Headwind loss ×%s" % _two_decimals(pow(0.80, float(effect_rank(rank))))
 		WIND_VISOR:
 			if rank <= 1:
 				return "Shows wind mph and an arrow"
@@ -242,23 +301,25 @@ static func effect_line(id: String, rank: int) -> String:
 				return "Wind mph and arrow. Dotted path for the full flight, ending at the posts"
 			return "Wind mph and arrow. Dotted path for %d%% of this kick" % shown
 		ICE_CAGE:
-			return _ice_cage_line(rank)
+			return _ice_cage_line(effect_rank(rank))
 		SCOUT_LID:
-			if rank <= 3:
-				return "+%d reroll" % rank
-			if rank == 4:
+			var scout := effect_rank(rank)
+			if scout <= 3:
+				return "+%d reroll" % scout
+			if scout == 4:
 				return "+3 rerolls, and one Practice Swing a quarter"
-			if rank == 5:
+			if scout == 5:
 				return "+4 rerolls, and one Practice Swing a quarter"
-			if rank == 6:
+			if scout == 6:
 				return "+5 rerolls, and two Practice Swings a quarter"
-			return "+%d rerolls, and %s Practice Swings a quarter" % [rank - 1, _swing_word(_scout_practice(rank))]
+			return "+%d rerolls, and %s Practice Swings a quarter" % [scout - 1, _swing_word(_scout_practice(scout))]
 		DOINK_CAP:
-			if rank == 6:
+			var charges := effect_rank(rank)
+			if charges == 6:
 				return "5 doink-to-good a quarter, unused carry (max 5)"
-			if rank >= 7:
-				return "%d doink-to-good a quarter, unused carry (max %d)" % [rank, rank]
-			return "%d doink-to-good a quarter" % rank
+			if charges >= 7:
+				return "%d doink-to-good a quarter, unused carry (max %d)" % [charges, charges]
+			return "%d doink-to-good a quarter" % charges
 		IRON_GRIP:
 			if rank <= 2:
 				return "Red-tip noise −%d" % (2 * rank)
@@ -270,22 +331,30 @@ static func effect_line(id: String, rank: int) -> String:
 				return "Noise −4 (min ±1), red tip 9 later"
 			return "Red tip never triggers"
 		REPLAY_GLOVES:
-			if rank == 6:
+			var swings := effect_rank(rank)
+			if swings == 6:
 				return "5 practice swings, unused carry (max 5)"
-			if rank >= 7:
-				return "%d practice swings, unused carry (max %d)" % [rank, rank]
-			return "%d practice swing a quarter" % rank
+			if swings >= 7:
+				return "%d practice swings, unused carry (max %d)" % [swings, swings]
+			return "%d practice swing a quarter" % swings
 		HIGH_AIR:
-			return "+%d yd, tailwind range ×1.5" % (2 * rank)
+			return "+%d yd, tailwind range ×1.5" % high_air_yards(rank)
+		GUIDE_GLOVES:
+			return "GOOD locks: hook ×%s" % _two_decimals(guide_factor(rank))
+		PATIENT_GLOVES:
+			return "Power needle ×%s" % _two_decimals(pow(0.85, float(effect_rank(rank))))
+		HUSH_GLOVES:
+			return "First %d mph of wind ignored" % effect_rank(rank)
 		WEATHER_WRAPS:
-			if rank <= 1:
+			var wraps := effect_rank(rank)
+			if wraps <= 1:
 				return "Rain, snow, and mud penalties cut in half"
-			if rank == 2:
+			if wraps == 2:
 				return "Rain, snow, and mud penalties ignored"
-			if rank == 3:
+			if wraps == 3:
 				return "Also ignores Monsoon's rain and mud"
-			if rank >= 4:
-				return "Penalties ignored, +%d yd unless CLEAR" % (2 * (rank - 3))
+			if wraps >= 4:
+				return "Penalties ignored, +%d yd unless CLEAR" % (2 * (wraps - 3))
 			return ""
 		DEEP_BENCH:
 			if rank <= 2:
@@ -673,24 +742,20 @@ static func apply(stats: KickerStats, state: Dictionary, howling: bool, item_sca
 	var helmet_rank := int(state.get("helmet_rank", 0))
 	var gloves := str(state.get("gloves_id", ""))
 	var glove_rank := int(state.get("gloves_rank", 0))
+	var cleat_fx := effect_rank(cleat_rank)
 	if cleats == CANNON:
-		range_add += 6.0 * float(cleat_rank)
+		range_add += float(cannon_yards(cleat_rank))
 	elif cleats == PINPOINT:
-		perfect_add += 2.0 * float(cleat_rank)
-		good_add += 3.0 * float(cleat_rank)
+		perfect_add += 2.0 * float(cleat_fx)
+		good_add += 3.0 * float(cleat_fx)
 	elif cleats == ANCHOR:
-		var factor := pow(0.85, float(cleat_rank))
-		if howling:
-			factor = boost_factor(factor)
-		factor = scale_gap(factor, item_scale)
+		var factor := _scale_factor(pow(0.85, float(cleat_fx)), howling, item_scale)
 		power_mul *= factor
 		accuracy_mul *= factor
 	elif cleats == STICKER:
-		var factor := pow(0.80, float(cleat_rank))
-		if howling:
-			factor = boost_factor(factor)
-		factor = scale_gap(factor, item_scale)
+		var factor := _scale_factor(pow(0.80, float(cleat_fx)), howling, item_scale)
 		drift_mul *= factor
+	var helmet_fx := effect_rank(helmet_rank)
 	if helmet == WIND_VISOR:
 		stats.flag_reader = helmet_rank >= 1
 		stats.path_percent = KickLogic.path_percent_for_rank(helmet_rank)
@@ -698,62 +763,69 @@ static func apply(stats: KickerStats, state: Dictionary, howling: bool, item_sca
 	elif helmet == ICE_CAGE:
 		stats.ice_cage = true
 		stats.ice_veins = true
-		if helmet_rank >= 2:
-			var factor := 0.90
-			if howling:
-				factor = boost_factor(factor)
-			factor = scale_gap(factor, item_scale)
-			accuracy_mul *= factor
+		if helmet_fx >= 2:
+			accuracy_mul *= _scale_factor(0.90, howling, item_scale)
 		var odd := 3
-		while odd <= helmet_rank:
+		while odd <= helmet_fx:
 			perfect_add += 1.0
 			odd += 2
 		var even := 4
-		while even <= helmet_rank:
+		while even <= helmet_fx:
 			good_add += 2.0
 			even += 2
 	elif helmet == SCOUT_LID:
-		stats.rerolls_per_run += _scout_rerolls(helmet_rank)
-		if helmet_rank >= 4:
-			stats.practice_per_quarter += 1 + int((helmet_rank - 4) / 2.0)
+		stats.rerolls_per_run += _scout_rerolls(helmet_fx)
+		if helmet_fx >= 4:
+			stats.practice_per_quarter += 1 + int((helmet_fx - 4) / 2.0)
 	elif helmet == DRIVE_LID:
-		range_add += 4.0 * float(helmet_rank)
+		range_add += float(drive_yards(helmet_rank))
+	elif helmet == TRUE_LID:
+		stats.angle_scale *= _scale_factor(pow(0.90, float(helmet_fx)), howling, item_scale)
+	elif helmet == SHELTER_LID:
+		stats.shelter_factor = _scale_factor(pow(0.80, float(helmet_fx)), howling, item_scale)
 	elif helmet == DOINK_CAP:
-		if helmet_rank <= 5:
-			stats.doink_per_quarter = helmet_rank
-		elif helmet_rank == 6:
+		if helmet_fx <= 5:
+			stats.doink_per_quarter = helmet_fx
+		elif helmet_fx == 6:
 			stats.doink_per_quarter = 5
 		else:
-			stats.doink_per_quarter = helmet_rank
-		stats.doink_carry = helmet_rank >= 6
+			stats.doink_per_quarter = helmet_fx
+		stats.doink_carry = helmet_fx >= 6
+	var glove_fx := effect_rank(glove_rank)
 	if gloves == IRON_GRIP:
-		var cut := 2.0 * float(mini(glove_rank, 2))
+		var cut := 2.0 * float(mini(glove_fx, 2))
 		stats.red_tip_noise = maxf(stats.red_tip_noise - cut, 1.0)
-		if glove_rank >= 3:
+		if glove_fx >= 3:
 			stats.red_tip_start += 3.0
-		if glove_rank >= 4:
+		if glove_fx >= 4:
 			stats.red_tip_start += 3.0
-		if glove_rank >= 5:
+		if glove_fx >= 5:
 			stats.red_tip_start += 3.0
-		stats.red_tip_off = glove_rank >= 6
+		stats.red_tip_off = glove_fx >= 6
 	elif gloves == REPLAY_GLOVES:
-		if glove_rank >= 7:
-			stats.practice_per_quarter += glove_rank
+		if glove_fx >= 7:
+			stats.practice_per_quarter += glove_fx
 		else:
-			stats.practice_per_quarter += mini(glove_rank, 5)
-		stats.practice_carry = glove_rank >= 6
+			stats.practice_per_quarter += mini(glove_fx, 5)
+		stats.practice_carry = glove_fx >= 6
 	elif gloves == HIGH_AIR:
-		range_add += 2.0 * float(glove_rank)
+		range_add += float(high_air_yards(glove_rank))
 		stats.thin_air = true
+	elif gloves == GUIDE_GLOVES:
+		stats.guide_factor = _scale_factor(guide_factor(glove_rank), howling, item_scale)
+	elif gloves == PATIENT_GLOVES:
+		power_mul *= _scale_factor(pow(0.85, float(glove_fx)), howling, item_scale)
+	elif gloves == HUSH_GLOVES:
+		stats.hush_mph = float(glove_fx)
 	elif gloves == WEATHER_WRAPS:
-		if glove_rank <= 1:
+		if glove_fx <= 1:
 			stats.weather_cut = 1
-		elif glove_rank == 2:
+		elif glove_fx == 2:
 			stats.weather_cut = 2
 		else:
 			stats.weather_cut = 3
-		if glove_rank >= 4:
-			stats.wraps_yards = 2.0 * float(glove_rank - 3)
+		if glove_fx >= 4:
+			stats.wraps_yards = 2.0 * float(glove_fx - 3)
 	var hero_add := 0.0
 	var storm := 0.0
 	var drill := 0.0
@@ -850,7 +922,7 @@ static func apply(stats: KickerStats, state: Dictionary, howling: bool, item_sca
 	stats.storm_per_mph = storm
 	stats.drill_mult = drill
 	stats.curse_mult = curse_mult
-	stats.angle_scale = angle
+	stats.angle_scale = angle * stats.angle_scale
 	stats.attempt_cap = clampi(stats.attempt_cap, 1, KickConstants.ATTEMPT_CAP_MAX)
 
 

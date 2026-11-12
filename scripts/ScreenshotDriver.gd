@@ -24,6 +24,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "gear":
+		if not await _capture_gear():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "broadcast":
 		if not await _capture_broadcast():
 			get_tree().quit(1)
@@ -2289,6 +2295,181 @@ func _capture_gauge_crop(file_name: String) -> bool:
 		return false
 	print("Saved ", path, " ", crop.get_width(), "x", crop.get_height())
 	return true
+
+
+func _capture_gear() -> bool:
+	board.highlight = 1
+	board.selecting = true
+	board.confirm_kicker()
+	board.run.run_mode = "endless"
+	var styles := [
+		[Loadout.TRUE_LID, "gear_card_true_lid.png"],
+		[Loadout.SHELTER_LID, "gear_card_shelter_lid.png"],
+		[Loadout.GUIDE_GLOVES, "gear_card_guide_gloves.png"],
+		[Loadout.PATIENT_GLOVES, "gear_card_patient_gloves.png"],
+		[Loadout.HUSH_GLOVES, "gear_card_hush_gloves.png"],
+	]
+	for style in styles:
+		board.run.force_offer([{"id": style[0], "rank": 1, "kind": Loadout.EQUIPMENT, "slot": Loadout.slot_of(str(style[0]))}])
+		board.run.roll_offer()
+		if not await _capture(str(style[1])):
+			return false
+	board.run.awaiting_offer = false
+	board.run.helmet_id = Loadout.TRUE_LID
+	board.run.helmet_rank = 1
+	board.run.gloves_id = Loadout.GUIDE_GLOVES
+	board.run.gloves_rank = 1
+	board._sync_debug_loadout()
+	if not await _capture("gear_hud_true_and_guide.png"):
+		return false
+	board.run.force_offer([{"id": Loadout.TRUE_LID, "rank": 2, "kind": Loadout.EQUIPMENT, "slot": Loadout.HELMET}, {"id": Loadout.HOT_STREAK, "rank": 1}, {"id": Loadout.ICED, "rank": 1}])
+	board.run.roll_offer()
+	if not await _capture("gear_offer_true_lid_ii.png"):
+		return false
+	board.run.skip_offer()
+	board.run.helmet_id = ""
+	board.run.helmet_rank = 0
+	board.run.gloves_id = ""
+	board.run.gloves_rank = 0
+	board.run.cleats_id = Loadout.CANNON
+	for rank in [12, 13, 24]:
+		board.run.cleats_rank = rank
+		board._sync_debug_loadout()
+		if not await _capture("gear_badge_%s.png" % Loadout.rank_label(rank).to_lower()):
+			return false
+	board.highlight = 1
+	board.selecting = true
+	board.confirm_kicker()
+	board.run.give(Loadout.CANNON, 6)
+	board._sync_debug_loadout()
+	if not await _capture("gear_standard_cap_vi.png"):
+		return false
+	if not await _shoot_range(Kickers.WILLOW, Loadout.CANNON, 24, Loadout.DRIVE_LID, 24, "gear_willow_1004.png"):
+		return false
+	if not await _shoot_range(Kickers.COLE, Loadout.CANNON, 24, Loadout.DRIVE_LID, 24, "gear_cole_1024.png"):
+		return false
+	if not await _shoot_range(Kickers.COLE, Loadout.CANNON, 24, "", 0, "gear_cole_640.png"):
+		return false
+	if not await _shoot_range(Kickers.BIG_BRUCE, Loadout.CANNON, 12, "", 0, "gear_bruce_cannon_137.png"):
+		return false
+	if not await _shoot_range(Kickers.BIG_BRUCE, "", 0, Loadout.DRIVE_LID, 12, "gear_bruce_drive_113.png"):
+		return false
+	if not await _shoot_hook(false, "gear_hook_plain.png"):
+		return false
+	if not await _shoot_hook(true, "gear_hook_true_lid.png"):
+		return false
+	board.highlight = 1
+	board.selecting = true
+	board.confirm_kicker()
+	board.load_current_kick()
+	_swing_meter(80.0, 4.0)
+	if not await _capture("gear_guide_plain_good.png"):
+		return false
+	board.load_current_kick()
+	board.run.gloves_id = Loadout.GUIDE_GLOVES
+	board.run.gloves_rank = 1
+	board._sync_debug_loadout()
+	_swing_meter(80.0, 4.0)
+	if not await _capture("gear_guide_good.png"):
+		return false
+	if not await _shoot_patient(false, false, "gear_patient_off.png"):
+		return false
+	if not await _shoot_patient(true, false, "gear_patient_on.png"):
+		return false
+	if not await _shoot_patient(true, true, "gear_patient_big_game.png"):
+		return false
+	if not await _shoot_wind(10.0, 180.0, false, "gear_shelter_headwind_off.png"):
+		return false
+	if not await _shoot_wind(10.0, 180.0, true, "gear_shelter_headwind_on.png"):
+		return false
+	if not await _shoot_wind(10.0, 0.0, false, "gear_shelter_tailwind_off.png"):
+		return false
+	if not await _shoot_wind(10.0, 0.0, true, "gear_shelter_tailwind_on.png"):
+		return false
+	if not await _shoot_hush(false, "gear_hush_off.png"):
+		return false
+	if not await _shoot_hush(true, "gear_hush_on.png"):
+		return false
+	return true
+
+
+func _shoot_range(kicker_id: String, cleats: String, cleat_rank: int, helmet: String, helmet_rank: int, file_name: String) -> bool:
+	var slot := 0
+	for i in Kickers.ALL.size():
+		if str(Kickers.ALL[i]["id"]) == kicker_id:
+			slot = i
+	if kicker_id != Kickers.WALK_ON and kicker_id != Kickers.BIG_BRUCE:
+		SaveData.unlocks[kicker_id] = true
+	board.highlight = slot
+	board.selecting = true
+	board.confirm_kicker()
+	board.run.cleats_id = cleats
+	board.run.cleats_rank = cleat_rank
+	board.run.helmet_id = helmet
+	board.run.helmet_rank = helmet_rank
+	board.run.wind_speed = 0
+	board.run.wind_direction = 0.0
+	board._sync_debug_loadout()
+	print(file_name, " max ", board.logic.max_range_at_full_power())
+	return await _capture(file_name)
+
+
+func _shoot_hook(true_lid: bool, file_name: String) -> bool:
+	board.highlight = 1
+	board.selecting = true
+	board.confirm_kicker()
+	board.run.helmet_id = Loadout.TRUE_LID if true_lid else ""
+	board.run.helmet_rank = 1 if true_lid else 0
+	board.load_current_kick()
+	board._sync_debug_loadout()
+	_swing_meter(80.0, 8.0)
+	if board.logic.phase == KickLogic.Phase.FLIGHT:
+		board.logic.advance(board.logic.flight_duration * 0.72)
+	print(file_name, " angle ", board.logic.final_angle_degrees)
+	return await _capture(file_name)
+
+
+func _shoot_patient(gloves: bool, big_game: bool, file_name: String) -> bool:
+	board.highlight = 1
+	board.selecting = true
+	board.confirm_kicker()
+	board.run.gloves_id = Loadout.PATIENT_GLOVES if gloves else ""
+	board.run.gloves_rank = 1 if gloves else 0
+	if big_game:
+		board.force_weather(RunLogic.BIG_GAME)
+	board.load_current_kick()
+	board.logic.press_space()
+	if board.logic.windup_left > 0.0:
+		board.logic.advance(board.logic.windup_left)
+	board.logic.advance(0.22)
+	print(file_name, " power ", board.logic.power_true, " speed ", board.run.stats.power_speed)
+	return await _capture(file_name)
+
+
+func _shoot_wind(speed: float, direction: float, shelter: bool, file_name: String) -> bool:
+	board.highlight = 1
+	board.selecting = true
+	board.confirm_kicker()
+	board.run.helmet_id = Loadout.SHELTER_LID if shelter else ""
+	board.run.helmet_rank = 1 if shelter else 0
+	board.run.wind_speed = int(speed)
+	board.run.wind_direction = direction
+	board._sync_debug_loadout()
+	print(file_name, " max ", board.logic.max_range_at_full_power())
+	return await _capture(file_name)
+
+
+func _shoot_hush(gloves: bool, file_name: String) -> bool:
+	board.highlight = 1
+	board.selecting = true
+	board.confirm_kicker()
+	board.run.gloves_id = Loadout.HUSH_GLOVES if gloves else ""
+	board.run.gloves_rank = 1 if gloves else 0
+	board.run.wind_speed = 1
+	board.run.wind_direction = 180.0
+	board._sync_debug_loadout()
+	print(file_name, " max ", board.logic.max_range_at_full_power(), " drift ", board.logic.carry_plan(100.0, 0.0)["drift"])
+	return await _capture(file_name)
 
 
 func _capture_broadcast() -> bool:
