@@ -396,11 +396,11 @@ static func power_for_range(locked_power: float, floor_value: float) -> float:
 	return locked_power
 
 
-# Kicks past 75 yards stay in yard-space for the rules. The view squeezes the extra.
+# World yards from the tee to the goal line. 1 unit = 1 yard, through 1000.
+# An older view squeezed everything past 75 into a couple of extra yards.
+# That made a 200-yard kick look like a 75. The rules still use real yards.
 static func visual_span(real_yards: float) -> float:
-	if real_yards <= 75.0:
-		return real_yards
-	return 75.0 + (real_yards - 75.0) * 0.02
+	return maxf(real_yards, 0.0)
 
 
 static func _result_at_plane(offset: float, half_gap: float = KickConstants.POST_HALF_GAP_YARDS) -> String:

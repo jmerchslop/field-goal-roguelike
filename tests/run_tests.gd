@@ -53,9 +53,11 @@ func _run() -> void:
 	_check_m2_kickers()
 	_check_honest_cards_and_bench()
 	_check_willow_offer_and_endless_shops()
+	_check_field_span_math()
 
 
 func _finish_live() -> void:
+	_check_live_field()
 	_check_live_kick_sounds()
 	_release_sfx()
 	await create_timer(0.6).timeout
@@ -4000,4 +4002,74 @@ func _check_willow_offer_and_endless_shops() -> void:
 	other.kick_resolved = true
 	other.phase = RunLogic.Phase.PLAYING
 	check(other.follow_offer() == "shop" and other.awaiting_shop, "a non-Cole kicker also gets the Endless kick 25 shop")
+
+
+func _check_field_span_math() -> void:
+	check(near(KickLogic.visual_span(35.0), 35.0) and near(KickLogic.visual_span(75.0), 75.0), "35 and 75 stay on the real yard scale")
+	check(near(KickLogic.visual_span(200.0), 200.0) and KickLogic.visual_span(200.0) > KickLogic.visual_span(75.0) + 50.0, "a 200-yard kick is not drawn on a 75-yard field")
+	check(near(KickLogic.visual_span(500.0), 500.0) and KickLogic.visual_span(500.0) > KickLogic.visual_span(200.0) + 100.0, "500 yards of field is longer than 200")
+	check(near(KickLogic.visual_span(1000.0), 1000.0) and KickLogic.visual_span(1000.0) > KickLogic.visual_span(500.0) + 100.0, "1000 yards of field is longer than 500")
+	var half := KickConstants.POST_SEPARATION_YARDS * 0.5
+	check(near(half, 3.085) and near(half * 2.0, 6.17), "hash rows use the normal upright spacing, half 3.085")
+	check(absf(KickConstants.HASH_OFFSET_YARDS - half) < 0.1 and absf(-KickConstants.HASH_OFFSET_YARDS - (-half)) < 0.1, "a hash spot sits on the matching hash row")
+	check(absf(KickConstants.WIDE_OFFSET_YARDS) - half > absf(KickConstants.HASH_OFFSET_YARDS) - half, "wide stands farther outside the hashes than a hash spot")
+	check(KickLogic.judge(30.0, 35.0, 0.0, "standard")["text"] == "SHORT" and KickLogic.judge(40.0, 35.0, 0.0, "standard")["text"] == "GOOD", "make and miss math is unchanged at 35")
+	check(KickLogic.judge(190.0, 200.0, 0.0, "standard")["text"] == "SHORT" and KickLogic.judge(210.0, 200.0, 0.0, "standard")["text"] == "GOOD", "a 200-yard kick is still scored in real yards")
+	var drift_a := KickLogic.drift_at_uprights(10.0, 90.0, 75.0, 0, 0, "standard")
+	var drift_b := KickLogic.drift_at_uprights(10.0, 90.0, 200.0, 0, 0, "standard")
+	check(drift_b > drift_a and near(KickLogic.offset_yards_at_uprights(200.0, 0.0, 3.0), 3.0), "wind drift and aim offset still use real yards")
+
+
+func _check_live_field() -> void:
+	OS.set_environment("FG_SHOTS", "")
+	var packed: PackedScene = load("res://scenes/main.tscn")
+	var game = packed.instantiate()
+	get_root().add_child(game)
+	game._taking_pictures = true
+	game.highlight = 1
+	game.confirm_kicker()
+	game.load_current_kick()
+	var attempts: int = game.run.attempts
+	var kick_number: int = game.run.kick_number
+	var saved: float = game.run.distance_yards()
+	game.cycle_debug_distance()
+	check(near(game.logic.kick_distance, 75.0) and near(game.field_span_yards(), 75.0), "J first previews 75 yards of field")
+	game.cycle_debug_distance()
+	check(near(game.logic.kick_distance, 200.0) and near(game.field_span_yards(), 200.0), "J then previews 200 yards, not the 75-yard field")
+	game.cycle_debug_distance()
+	check(near(game.field_span_yards(), 500.0), "J then previews 500 yards")
+	game.cycle_debug_distance()
+	check(near(game.field_span_yards(), 1000.0) and game.field_span_yards() > 500.0, "J then previews 1000 yards")
+	game.cycle_debug_distance()
+	check(game.preview_step() == 0 and near(game.logic.kick_distance, saved), "the next J returns to the real kick distance")
+	check(game.run.attempts == attempts and game.run.kick_number == kick_number and near(game.run.distance_yards(), saved), "the distance preview does not spend an attempt or change the saved kick")
+	check(not game.run.awaiting_offer and not game.run.awaiting_shop, "the distance preview does not open an offer or a shop")
+	var half: float = game.hash_row_half()
+	var left: Node3D = game._marks.get_node("HashLeft")
+	var right: Node3D = game._marks.get_node("HashRight")
+	check(near(left.position.x, -half) and near(right.position.x, half) and near(right.position.x - left.position.x, KickConstants.POST_SEPARATION_YARDS), "hash rows are 6.17 yards apart")
+	game._fit_posts(KickConstants.POST_SEPARATION_YARDS)
+	check(near(game._post_l.position.x, -half) and near(game._post_r.position.x, half), "normal uprights stand on the same x as the hash rows")
+	game.logic.start_lateral_yards = KickConstants.HASH_OFFSET_YARDS
+	game._place_world()
+	check(near(game._tee_position().x, KickConstants.HASH_OFFSET_YARDS) and absf(game._tee_position().x - half) < 0.1, "the right hash stands the tee on the right hash row")
+	game.logic.start_lateral_yards = -KickConstants.HASH_OFFSET_YARDS
+	check(near(game._tee_position().x, -KickConstants.HASH_OFFSET_YARDS) and absf(game._tee_position().x - (-half)) < 0.1, "the left hash stands the tee on the left hash row")
+	var left_rig: Dictionary = game.camera_rig(200.0, -3.0)
+	var right_rig: Dictionary = game.camera_rig(200.0, 3.0)
+	var wide_rig: Dictionary = game.camera_rig(200.0, 6.0)
+	check(near(float(left_rig["look"].x), -3.0) and not near(float(left_rig["look"].x), 0.0), "a left hash does not recenter the camera on the posts")
+	check(near(float(right_rig["look"].x), 3.0) and near(float(wide_rig["look"].x), 6.0), "right hash and wide keep the camera on that spot's line")
+	check(absf(float(wide_rig["position"].x)) > absf(float(right_rig["position"].x)), "wide keeps a bigger sideways camera offset than hash")
+	game.force_weather(RunLogic.SQUEEZE)
+	game._place_world()
+	check(near(game._post_l.position.x, -RunLogic.SQUEEZE_WIDTH * 0.5) and near(left.position.x, -half), "The Squeeze narrows the posts and leaves the hash rows on 6.17")
+	var aimed := KickLogic.new()
+	aimed.kick_distance = 200.0
+	aimed.start_lateral_yards = 3.0
+	aimed.wind_speed = 12
+	aimed.wind_direction = 90.0
+	var plain := KickLogic.offset_yards_at_uprights(200.0, 0.0, 3.0)
+	check(near(plain, 3.0), "straight aim from the hash is still the hash, got %s" % plain)
+	game.free()
 

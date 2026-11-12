@@ -44,6 +44,11 @@ var _post_l: MeshInstance3D
 var _post_r: MeshInstance3D
 var _crossbar: MeshInstance3D
 var _mud: MeshInstance3D
+var _marks: Node3D
+var _field_distance := -1.0
+# 0 is the real kick. 1..4 preview 75, 200, 500, 1000, then back to the real kick.
+var _preview_step := 0
+const _PREVIEW_DISTANCES: Array[float] = [75.0, 200.0, 500.0, 1000.0]
 var _hud
 
 
@@ -78,6 +83,8 @@ func _ready() -> void:
 func load_current_kick() -> void:
 	logic.reset_kick()
 	_copy_run_onto_kick()
+	if _preview_step > 0:
+		logic.kick_distance = shown_distance()
 	logic.sync_tee()
 	_approach_time = 0.0
 	_bank_time = 0.0
@@ -105,6 +112,15 @@ func _copy_run_onto_kick() -> void:
 
 
 func settle_kick() -> void:
+	if _preview_step > 0 and logic.phase == KickLogic.Phase.RESULT:
+		var dist := shown_distance()
+		logic.reset_kick()
+		logic.kick_distance = dist
+		logic.start_lateral_yards = run.spot_yards
+		logic.sync_tee()
+		_reset_kick_pose()
+		refresh_view()
+		return
 	if logic.phase != KickLogic.Phase.RESULT:
 		return
 	if run.kick_resolved or run.awaiting_mulligan or run.awaiting_offer:
@@ -187,6 +203,7 @@ func _leave_shop() -> void:
 
 
 func confirm_kicker() -> void:
+	_preview_step = 0
 	var id := Kickers.id_for_slot(highlight)
 	if id == "":
 		return
@@ -329,6 +346,7 @@ func advance_run() -> bool:
 
 
 func restart_run() -> void:
+	_preview_step = 0
 	var id := run.kicker_id
 	if id == "":
 		open_select()
@@ -353,6 +371,75 @@ func cycle_spot() -> void:
 	logic.start_lateral_yards = run.spot_yards
 	logic.sync_tee()
 	refresh_view()
+
+
+func preview_step() -> int:
+	return _preview_step
+
+
+func shown_distance() -> float:
+	if _preview_step <= 0:
+		return run.distance_yards()
+	return _PREVIEW_DISTANCES[_preview_step - 1]
+
+
+func hash_row_half() -> float:
+	# Same x as a normal upright. Squeeze and Narrow Posts do not move the hashes.
+	return KickConstants.POST_SEPARATION_YARDS * 0.5
+
+
+func cycle_debug_distance() -> void:
+	# J previews a distance. It does not spend an attempt or rewrite the kick.
+	var attempts := run.attempts
+	var kick_number := run.kick_number
+	var saved := run.distance_yards()
+	_preview_step = (_preview_step + 1) % 5
+	if logic.phase != KickLogic.Phase.AIMING:
+		logic.reset_kick()
+	logic.kick_distance = saved if _preview_step == 0 else shown_distance()
+	logic.start_lateral_yards = run.spot_yards
+	logic.sync_tee()
+	if run.attempts != attempts or run.kick_number != kick_number or not is_equal_approx(run.distance_yards(), saved):
+		run.attempts = attempts
+		run.kick_number = kick_number
+	refresh_view()
+
+
+func camera_rig(distance: float, spot: float) -> Dictionary:
+	# Up through 75 yards this is the pull-back the game already used, so a
+	# Standard kick still frames the kicker and the posts the same way.
+	# Farther kicks keep a real tee-to-posts gap. The camera eases its extra
+	# step-back and narrows a little so 200, 500, and 1000 each look farther
+	# than the last, and the uprights stay thick enough to see.
+	# The look point stays on the tee's line. The posts are not pulled to center.
+	var dist := KickLogic.visual_span(distance)
+	var extra := 0.0
+	if dist > 48.0:
+		extra = (dist - 48.0) * 0.11
+	if dist > 75.0:
+		var at_75 := (75.0 - 48.0) * 0.11
+		extra = at_75 + (dist - 75.0) * 0.035
+	var back := 6.4 + extra
+	var height := 3.05 + extra * 0.22
+	var fov := 58.0
+	var pole := 0.16
+	var look_y := 1.05
+	var look_z := maxf(dist - 14.0, 0.0)
+	if dist > 75.0:
+		# Ease the zoom so the uprights stay a goal, and keep looking near the
+		# tee so the kicker does not fall out of the bottom of a long kick.
+		var dist_to_posts := dist + back
+		fov = clampf(58.0 - (dist - 75.0) * 0.028, 32.0, 58.0)
+		var h_fov := 2.0 * atan(tan(deg_to_rad(fov) * 0.5) * KickConstants.WINDOW_WIDTH / KickConstants.WINDOW_HEIGHT)
+		pole = maxf(0.16, 4.0 * h_fov * dist_to_posts / KickConstants.WINDOW_WIDTH)
+		pole = minf(pole, KickConstants.POST_SEPARATION_YARDS * 0.28)
+	return {
+		"position": Vector3(spot - 0.05, height, dist + back),
+		"look": Vector3(spot, look_y, look_z),
+		"span": dist,
+		"fov": fov,
+		"pole": pole,
+	}
 
 
 func apply_live_vitamins() -> void:
@@ -580,6 +667,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 	if key.keycode == KEY_H and run.phase == RunLogic.Phase.PLAYING and not run.awaiting_offer and not run.awaiting_mulligan:
 		cycle_spot()
+		return
+	if key.keycode == KEY_J and run.phase == RunLogic.Phase.PLAYING and not run.awaiting_offer and not run.awaiting_mulligan and logic.phase == KickLogic.Phase.AIMING:
+		cycle_debug_distance()
 		return
 	if key.keycode == KEY_W and run.phase == RunLogic.Phase.PLAYING and not run.awaiting_offer and not run.awaiting_mulligan:
 		run.apply_debug_wind()
@@ -897,30 +987,128 @@ func _style_world() -> void:
 
 
 func _build_field() -> void:
-	_box(Vector3(54, 0.4, 100), Vector3(0, -0.2, 42), Color(0.28, 0.58, 0.26))
-	var stripe := 0
-	var z := -6.0
-	while z < 88.0:
-		var green := Color(0.34, 0.66, 0.3) if stripe % 2 == 0 else Color(0.27, 0.56, 0.25)
-		_box(Vector3(50, 0.04, 5.0), Vector3(0, 0.02, z + 2.5), green)
-		_box(Vector3(50, 0.05, 0.14), Vector3(0, 0.045, z), Color(0.93, 0.95, 0.92))
-		stripe += 1
-		z += 5.0
-	var mark := 10
-	while mark <= 70:
-		_yard_sign(-20.0, float(mark), str(mark))
-		_yard_sign(20.0, float(mark), str(mark))
-		mark += 10
-	_box(Vector3(0.16, 0.04, 86.0), Vector3(-25.0, 0.05, 40.0), Color(0.93, 0.95, 0.92))
-	_box(Vector3(0.16, 0.04, 86.0), Vector3(25.0, 0.05, 40.0), Color(0.93, 0.95, 0.92))
-	var tick := 0.0
-	while tick <= 78.0:
-		_box(Vector3(0.9, 0.03, 0.08), Vector3(-10.2, 0.07, tick), Color(0.93, 0.95, 0.92))
-		_box(Vector3(0.9, 0.03, 0.08), Vector3(10.2, 0.07, tick), Color(0.93, 0.95, 0.92))
-		if int(tick) % 5 != 0:
-			_box(Vector3(0.42, 0.03, 0.08), Vector3(0.0, 0.07, tick), Color(0.93, 0.95, 0.92))
-		tick += 1.0
+	_ensure_field(35.0)
 	_build_stadium()
+
+
+func field_span_yards() -> float:
+	return _field_distance
+
+
+func _ensure_field(distance: float) -> void:
+	var span := maxf(KickLogic.visual_span(distance), 1.0)
+	if _marks != null and is_equal_approx(_field_distance, span):
+		return
+	_field_distance = span
+	if _marks != null:
+		_world.remove_child(_marks)
+		_marks.free()
+	_marks = Node3D.new()
+	_marks.name = "Markings"
+	_world.add_child(_marks)
+	var rig := camera_rig(span, 0.0)
+	var back := float(rig["position"].z) - span
+	var far_z := span + back + 8.0
+	var near_z := -8.0
+	var length := far_z - near_z
+	var mid_z := (far_z + near_z) * 0.5
+	_paint_box(_marks, Vector3(54, 0.4, length), Vector3(0, -0.2, mid_z), Color(0.28, 0.58, 0.26))
+	var stripes := SurfaceTool.new()
+	stripes.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var line_z := near_z
+	var stripe := 0
+	while line_z < far_z - 0.01:
+		var green := Color(0.34, 0.66, 0.3) if stripe % 2 == 0 else Color(0.27, 0.56, 0.25)
+		_add_flat(stripes, 25.0, line_z, minf(5.0, far_z - line_z), 0.02, green)
+		stripe += 1
+		line_z += 5.0
+	var stripe_mesh := stripes.commit()
+	_mesh_node(_marks, "Stripes", stripe_mesh, _vertex_mat())
+	var paint := SurfaceTool.new()
+	paint.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var white := Color(0.93, 0.95, 0.92)
+	var yard := 0.0
+	while yard <= span + 0.01:
+		_add_flat(paint, 25.0, yard - 0.07, 0.14, 0.05, white)
+		yard += 5.0
+	_add_flat_at(paint, -25.0, near_z, 0.16, far_z - near_z, 0.05, white)
+	_add_flat_at(paint, 25.0, near_z, 0.16, far_z - near_z, 0.05, white)
+	var half := hash_row_half()
+	var tick := 0.0
+	while tick <= span + 0.01:
+		_add_dash(paint, -half, tick, 0.9, white)
+		_add_dash(paint, half, tick, 0.9, white)
+		if int(round(tick)) % 5 != 0:
+			_add_dash(paint, 0.0, tick, 0.42, white)
+		tick += 1.0
+	_mesh_node(_marks, "Lines", paint.commit(), _vertex_mat())
+	var hash_left := MeshInstance3D.new()
+	hash_left.name = "HashLeft"
+	hash_left.position = Vector3(-half, 0.0, 0.0)
+	_marks.add_child(hash_left)
+	var hash_right := MeshInstance3D.new()
+	hash_right.name = "HashRight"
+	hash_right.position = Vector3(half, 0.0, 0.0)
+	_marks.add_child(hash_right)
+	var number := 10
+	while number <= int(floor(span + 0.01)):
+		if number <= 200 or number % 50 == 0:
+			_yard_sign(-20.0, float(number), str(number))
+			_yard_sign(20.0, float(number), str(number))
+		number += 10
+
+
+func _mesh_node(parent: Node3D, node_name: String, mesh: Mesh, material: Material) -> void:
+	var body := MeshInstance3D.new()
+	body.name = node_name
+	body.mesh = mesh
+	body.material_override = material
+	body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(body)
+
+
+func _vertex_mat() -> StandardMaterial3D:
+	var mat := StandardMaterial3D.new()
+	mat.vertex_color_use_as_albedo = true
+	mat.roughness = 0.92
+	return mat
+
+
+func _add_flat(tool: SurfaceTool, half_width: float, z: float, depth: float, y: float, color: Color) -> void:
+	_add_quad(tool, Vector3(0.0, y, z + depth * 0.5), half_width, depth * 0.5, color)
+
+
+func _add_flat_at(tool: SurfaceTool, x: float, z0: float, width: float, depth: float, y: float, color: Color) -> void:
+	_add_quad(tool, Vector3(x, y, z0 + depth * 0.5), width * 0.5, depth * 0.5, color)
+
+
+func _add_dash(tool: SurfaceTool, x: float, z: float, length: float, color: Color) -> void:
+	_add_quad(tool, Vector3(x, 0.07, z), length * 0.5, 0.04, color)
+
+
+func _add_quad(tool: SurfaceTool, center: Vector3, half_x: float, half_z: float, color: Color) -> void:
+	var corners := [
+		center + Vector3(-half_x, 0.0, -half_z),
+		center + Vector3(half_x, 0.0, -half_z),
+		center + Vector3(half_x, 0.0, half_z),
+		center + Vector3(-half_x, 0.0, half_z),
+	]
+	var order := [0, 1, 2, 0, 2, 3]
+	for index in order:
+		tool.set_normal(Vector3.UP)
+		tool.set_color(color)
+		tool.add_vertex(corners[index])
+
+
+func _paint_box(parent: Node3D, size: Vector3, pos: Vector3, color: Color) -> void:
+	var body := MeshInstance3D.new()
+	var mesh := BoxMesh.new()
+	mesh.size = size
+	body.mesh = mesh
+	body.position = pos
+	body.material_override = _mat(color, 0.92)
+	body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(body)
 
 
 func _build_stadium() -> void:
@@ -973,14 +1161,26 @@ func _pole(size: Vector3, pos: Vector3, color: Color) -> MeshInstance3D:
 
 func _fit_posts(width: float) -> void:
 	var half := width * 0.5
+	var rig := camera_rig(logic.kick_distance, logic.start_lateral_yards)
+	var thick := float(rig["pole"])
 	if _post_l != null:
 		_post_l.position.x = -half
+		var mesh := _post_l.mesh as BoxMesh
+		if mesh != null:
+			mesh.size.x = thick
+			mesh.size.z = thick
 	if _post_r != null:
 		_post_r.position.x = half
+		var mesh := _post_r.mesh as BoxMesh
+		if mesh != null:
+			mesh.size.x = thick
+			mesh.size.z = thick
 	if _crossbar != null:
 		var mesh := _crossbar.mesh as BoxMesh
 		if mesh != null:
 			mesh.size.x = width
+			mesh.size.y = maxf(0.16, thick * 0.45)
+			mesh.size.z = thick
 
 
 func _build_ball() -> void:
@@ -1058,6 +1258,7 @@ func _fit_sprite(sprite: Sprite3D, path: String) -> void:
 
 
 func _place_world() -> void:
+	_ensure_field(logic.kick_distance)
 	_apply_ball_sprite()
 	var tee := _tee_position()
 	var spot := _ball_position()
@@ -1289,16 +1490,15 @@ func _place_arrow(tee: Vector3) -> void:
 func _place_camera() -> void:
 	# The camera rides with the tee. It looks along the tee's line, not at the posts,
 	# so a left spot leaves the posts on the right of the screen and a right spot does the opposite.
-	var spot := logic.start_lateral_yards
-	var dist := KickLogic.visual_span(logic.kick_distance)
-	var extra := 0.0
-	if dist > 48.0:
-		extra = (dist - 48.0) * 0.11
-	var back := 6.4 + extra
-	var height := 3.05 + extra * 0.22
-	_camera.position = Vector3(spot - 0.05, height, dist + back)
-	var look := Vector3(spot, 1.05, maxf(dist - 14.0, 0.0))
-	_camera.look_at(look, Vector3.UP)
+	var rig := camera_rig(logic.kick_distance, logic.start_lateral_yards)
+	var at: Vector3 = rig["position"]
+	_camera.position = at
+	_camera.fov = float(rig["fov"])
+	_camera.look_at(rig["look"], Vector3.UP)
+	_camera.far = maxf(400.0, at.z + 80.0)
+	var sun := $Sun as DirectionalLight3D
+	if sun != null:
+		sun.directional_shadow_max_distance = maxf(160.0, at.z + 40.0)
 
 
 func _yard_sign(x: float, z: float, label: String) -> void:
@@ -1312,7 +1512,8 @@ func _yard_sign(x: float, z: float, label: String) -> void:
 	sign.position = Vector3(x, 1.1, z)
 	# Face the kicker so the number is not backwards.
 	sign.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	_world.add_child(sign)
+	var parent: Node3D = _marks if _marks != null else _world
+	parent.add_child(sign)
 
 
 func _box(size: Vector3, pos: Vector3, color: Color) -> void:
