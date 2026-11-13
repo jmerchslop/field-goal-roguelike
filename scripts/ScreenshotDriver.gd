@@ -84,6 +84,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "r1":
+		if not await _capture_r1():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "g6":
 		if not await _capture_g6():
 			get_tree().quit(1)
@@ -1346,6 +1352,137 @@ func _capture_c3() -> bool:
 	print("C3 back kick ", board.run.kick_number, " attempts ", board.run.attempts, " preview ", board.preview_step(), " yards ", board.logic.kick_distance)
 	if board.run.attempts != attempts or board.run.kick_number != kick_number or board.preview_step() != 0 or not is_equal_approx(board.logic.kick_distance, 35.0):
 		print("distance preview did not restore the kick")
+		return false
+	return true
+
+
+func _capture_r1() -> bool:
+	board.highlight = 0
+	board.confirm_kicker()
+	board.force_weather(RunLogic.CLEAR)
+	if not board.run.arm_debug_ring():
+		print("debug B did not arm a ring on kick 1")
+		return false
+	board.refresh_view()
+	if not board._ring.visible:
+		print("debug ring is not on kick 1")
+		return false
+	if not await _capture("r1_debug_kick1.png"):
+		return false
+	board.run.kick_number = 12
+	board.load_current_kick()
+	if board.run.ring_showing():
+		print("kick 12 showed a ring")
+		return false
+	board.run.kick_number = 13
+	board.run.wind_speed = 0
+	board.run.wind_direction = 0.0
+	board.run.weather_forced = true
+	board.run.weather = RunLogic.CLEAR
+	board.run.spot_yards = 6.0
+	board.run.streak = 2
+	board.load_current_kick()
+	if not board.run.ring_showing() or not board._ring.visible:
+		print("kick 13 ring missing")
+		return false
+	if not await _capture("r1_kick13_ring.png"):
+		return false
+	board.run.kick_number = 14
+	board.load_current_kick()
+	if board.run.ring_showing():
+		print("kick 14 showed a ring")
+		return false
+	board.run.kick_number = 13
+	board.run.spot_yards = -3.0
+	board.run.wind_speed = 0
+	board.load_current_kick()
+	if not board._ring.visible:
+		print("hash ring missing")
+		return false
+	if not await _capture("r1_hash_reachable.png"):
+		return false
+	board.run.spot_yards = 6.0
+	board.load_current_kick()
+	var center: float = board.logic.ring_center
+	var aim := rad_to_deg(atan((center - board.logic.start_lateral_yards) / board.logic.kick_distance))
+	board.logic.aim_degrees = aim
+	board.logic.aim_base = aim
+	board.run.attempts = 3
+	var attempts: int = board.run.attempts
+	_swing_meter(100.0, 0.0)
+	if board.logic.phase == KickLogic.Phase.FLIGHT:
+		board.logic.advance(board.logic.flight_duration)
+	print("RING result ", board.logic.result_text, " offset ", board.logic.offset_yards, " center ", center, " aim ", aim)
+	if board.logic.result_text != "BONUS RING":
+		return false
+	board.result_age = 0.30
+	board._step_kick_pose(0.0)
+	board.refresh_view()
+	if board._ring.visible:
+		print("ring stayed up after the collect")
+		return false
+	if not await _capture("r1_bonus_stamp.png"):
+		return false
+	board.result_age = 0.9
+	board.settle_kick()
+	if not board.run.awaiting_offer or board.run.offer.size() != 3 or board.run.attempts != attempts - 1:
+		print("offer ", board.run.awaiting_offer, " cards ", board.run.offer.size(), " attempts ", board.run.attempts, " skipped ", board.run.ring_offer_skipped)
+		return false
+	if not await _capture("r1_bonus_offer.png"):
+		return false
+	if not board.run.skip_offer():
+		print("ring offer did not skip")
+		return false
+	board._after_cards()
+	if board.run.kick_number != 13 or board.run.ring_showing() or board.run.attempts != attempts - 1:
+		print("retry ", board.run.kick_number, " ring ", board.run.ring_showing(), " attempts ", board.run.attempts)
+		return false
+	if not await _capture("r1_kick13_retry.png"):
+		return false
+	board.run.run_mode = "endless"
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.kick_number = 16
+	board.load_current_kick()
+	if board.run.ring_showing():
+		print("endless kick 16 showed a ring")
+		return false
+	board.run.kick_number = 17
+	board.run.wind_speed = 0
+	board.run.spot_yards = 0.0
+	board.load_current_kick()
+	if not board.run.ring_showing() or absf(board.run.distance_yards() - 100.0) > 0.1:
+		print("kick 17 ", board.run.distance_yards(), " ring ", board.run.ring_showing())
+		return false
+	if not await _capture("r1_endless_100.png"):
+		return false
+	board.run.kick_number = 18
+	board.load_current_kick()
+	if board.run.ring_showing():
+		print("endless kick 18 showed a ring")
+		return false
+	board.run.kick_number = 17
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.kick_resolved = false
+	board.load_current_kick()
+	board.run.practice_left = 1
+	board.run.stats.practice_per_quarter = 1
+	if not board.run.start_practice():
+		print("practice did not start")
+		return false
+	board.refresh_view()
+	if board.run.ring_showing() or board._ring.visible:
+		print("practice showed the ring")
+		return false
+	board.run.end_practice()
+	board.load_current_kick()
+	if not board.run.ring_showing():
+		print("ring did not return after practice")
+		return false
+	board.run.attempts = 1
+	board.logic.result_text = "BONUS RING"
+	board.run.resolve_kick("BONUS RING", board.logic.ring_center, false)
+	if board.run.phase != RunLogic.Phase.GAME_OVER or board.run.awaiting_offer or board.run.ring_offer_pending:
+		print("last-attempt ring opened an offer")
 		return false
 	return true
 

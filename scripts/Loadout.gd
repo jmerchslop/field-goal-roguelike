@@ -548,6 +548,25 @@ static func card_key(card) -> String:
 	return "%s|%s" % [str(card.get("id", "")), int(card.get("rank", 0))]
 
 
+static func draw_equipment_offer(state: Dictionary, rng: RandomNumberGenerator) -> Array:
+	var pool := legal_equipment(state)
+	if pool.is_empty():
+		return []
+	var cards: Array = []
+	var bag: Array = pool.duplicate()
+	while cards.size() < 3:
+		if bag.is_empty():
+			bag = pool.duplicate()
+		var index := rng.randi_range(0, bag.size() - 1)
+		cards.append(bag[index])
+		bag.remove_at(index)
+		if cards.size() >= pool.size() and cards.size() >= 3:
+			break
+	while cards.size() < 3:
+		cards.append(pool[cards.size() % pool.size()])
+	return cards
+
+
 static func draw_offer(state: Dictionary, attempt_cap: int, rng: RandomNumberGenerator, avoid: Array = []) -> Array:
 	var equip := legal_equipment(state)
 	var perks := legal_perks(state, attempt_cap)

@@ -63,6 +63,13 @@ var balls_kicked := 0
 var middles_this_run := 0
 var best_streak := 0
 var clean_makes := {}
+# Kick numbers whose Bonus Ring is already collected or made past.
+var ring_spent := {}
+# -1 left, +1 right. Chosen once per kick and kept for retries.
+var ring_sides := {}
+var ring_debug := {}
+var ring_offer_pending := false
+var ring_offer_skipped := false
 var trophy_name := ""
 var new_record_score := false
 var new_record_long := false
@@ -186,6 +193,11 @@ func new_run() -> void:
 	middles_this_run = 0
 	best_streak = 0
 	clean_makes = {}
+	ring_spent = {}
+	ring_sides = {}
+	ring_debug = {}
+	ring_offer_pending = false
+	ring_offer_skipped = false
 	lucky_stacks = 0
 	showtime_mult = 1.0
 	synchronicity_offer_done = false
@@ -330,8 +342,12 @@ func resolve_kick(result_text: String, offset: float, perfect: bool) -> void:
 			phase = Phase.FAR
 		elif run_mode != "endless" and kick_number >= RunTable.count():
 			phase = Phase.WIN
+		if _ring_armed():
+			_spend_ring()
 		_note_trophies(true, distance)
 	else:
+		if result_text == "BONUS RING":
+			_spend_ring()
 		streak = 0
 		showtime_mult = 1.0
 		is_first_ball = false
@@ -355,6 +371,7 @@ func resolve_kick(result_text: String, offset: float, perfect: bool) -> void:
 		_try_unlock(Kickers.GARY)
 	if phase == Phase.GAME_OVER and run_mode == "endless" and distance > 75.0:
 		_try_unlock(Kickers.VEX)
+	ring_offer_pending = result_text == "BONUS RING" and phase == Phase.PLAYING
 	if phase != Phase.PLAYING:
 		_save_finished_run()
 
@@ -371,6 +388,7 @@ func go_to_next_kick() -> bool:
 	score_line = ""
 	last_points = 0
 	awaiting_offer = false
+	ring_offer_pending = false
 	awaiting_mulligan = false
 	awaiting_shop = false
 	offer = []
@@ -395,6 +413,7 @@ func begin_retry() -> bool:
 	kick_resolved = false
 	is_first_ball = false
 	awaiting_offer = false
+	ring_offer_pending = false
 	offer = []
 	attempt_note = ""
 	score_line = ""
@@ -1095,6 +1114,65 @@ func weather_flags_now() -> Dictionary:
 	return flags
 
 
+const RING_OPEN_YARDS := 3.0
+const RING_COLLECT_YARDS := 1.5
+const RING_PAST_UPRIGHT := 3.0
+const RING_OUTER_PX := 856.0
+const RING_OPEN_PX := 713.0
+
+
+static func ring_outer_yards() -> float:
+	return RING_OPEN_YARDS * (RING_OUTER_PX / RING_OPEN_PX)
+
+
+static func ring_min_center(half_gap: float) -> float:
+	# Inner edge stays clear of the upright's outer face.
+	return half_gap + 0.08 + ring_outer_yards() * 0.5
+
+
+static func ring_ideal_center(half_gap: float) -> float:
+	return half_gap + RING_PAST_UPRIGHT
+
+
+static func ring_window_reaches(center: float, side: float, half_gap: float, distance: float, spot: float, cap_deg: float) -> bool:
+	var reach := distance * tan(deg_to_rad(maxf(cap_deg, 0.0)))
+	var near := spot - reach
+	var far := spot + reach
+	var lo := center - RING_COLLECT_YARDS
+	var hi := center + RING_COLLECT_YARDS
+	var wide := half_gap + KickConstants.DOINK_BAND_YARDS + 0.001
+	if side < 0.0:
+		hi = minf(hi, -wide)
+	else:
+		lo = maxf(lo, wide)
+	if lo > hi:
+		return false
+	return hi >= near and lo <= far
+
+
+# Pulls the center inward only when the ideal spot is outside the aim cap
+# and a point still outside the upright is inside that cap.
+static func ring_placement(side: int, half_gap: float, distance: float, spot: float, cap_deg: float) -> Dictionary:
+	var sign := -1.0 if side < 0 else 1.0
+	var ideal := ring_ideal_center(half_gap)
+	var minimum := ring_min_center(half_gap)
+	if minimum > ideal:
+		minimum = ideal
+	if ring_window_reaches(sign * ideal, sign, half_gap, distance, spot, cap_deg):
+		return {"x": sign * ideal, "pulled": false, "blocked": false}
+	if not ring_window_reaches(sign * minimum, sign, half_gap, distance, spot, cap_deg):
+		return {"x": sign * ideal, "pulled": false, "blocked": true}
+	var low := minimum
+	var high := ideal
+	for _i in 24:
+		var mid := (low + high) * 0.5
+		if ring_window_reaches(sign * mid, sign, half_gap, distance, spot, cap_deg):
+			low = mid
+		else:
+			high = mid
+	return {"x": sign * low, "pulled": true, "blocked": false}
+
+
 static func cash_payout(made: bool, perfect: bool, middle: bool, boss: bool) -> int:
 	if not made:
 		return 0
@@ -1106,6 +1184,79 @@ static func cash_payout(made: bool, perfect: bool, middle: bool, boss: bool) -> 
 	if boss:
 		gain += 2
 	return gain
+
+
+func scheduled_ring() -> bool:
+	if run_mode == "endless":
+		return kick_number == 17 or kick_number == 47 or kick_number == 97 or kick_number == 147
+	return run_mode == "standard" and kick_number == 13
+
+
+func _ring_armed() -> bool:
+	if practicing or phase != Phase.PLAYING or is_boss():
+		return false
+	if bool(ring_spent.get(kick_number, false)):
+		return false
+	if bool(ring_debug.get(kick_number, false)):
+		return true
+	return scheduled_ring()
+
+
+func ring_showing() -> bool:
+	return _ring_armed()
+
+
+func arm_debug_ring() -> bool:
+	# Same gate as the other debug keys: a live kick, not a boss, not practice.
+	if practicing or phase != Phase.PLAYING or is_boss():
+		return false
+	if bool(ring_spent.get(kick_number, false)):
+		return false
+	ring_debug[kick_number] = true
+	_ensure_ring_side()
+	return true
+
+
+func ring_side() -> int:
+	_ensure_ring_side()
+	return int(ring_sides.get(kick_number, 1))
+
+
+func _ensure_ring_side() -> void:
+	if ring_sides.has(kick_number):
+		return
+	ring_sides[kick_number] = -1 if _rng.randi_range(0, 1) == 0 else 1
+
+
+func ring_place(distance: float, spot: float, half_gap: float, cap_deg: float) -> Dictionary:
+	if not ring_showing():
+		return {"x": 0.0, "pulled": false, "blocked": false, "show": false}
+	return ring_placement(ring_side(), half_gap, distance, spot, cap_deg)
+
+
+func collects_at(offset: float, center: float, result_text: String, reached: bool, shanked: bool) -> bool:
+	if shanked or practicing or not reached or not ring_showing():
+		return false
+	if result_text != "WIDE LEFT" and result_text != "WIDE RIGHT":
+		return false
+	return absf(offset - center) <= RING_COLLECT_YARDS
+
+
+func open_ring_offer() -> bool:
+	if not ring_offer_pending or phase != Phase.PLAYING:
+		return false
+	var cards := Loadout.draw_equipment_offer(loadout_state(), _offer_rng)
+	ring_offer_pending = false
+	if cards.size() < 3:
+		ring_offer_skipped = true
+		return false
+	offer = cards
+	awaiting_offer = true
+	return true
+
+
+func _spend_ring() -> void:
+	ring_spent[kick_number] = true
 
 
 func _as_loadout_card(item) -> Dictionary:
@@ -1344,6 +1495,8 @@ func export_resume() -> Dictionary:
 	var place := "tee"
 	if awaiting_shop:
 		place = "shop"
+	elif awaiting_offer and not last_result_made:
+		place = "ring"
 	elif awaiting_offer:
 		place = "offer"
 	var bosses: Array = []
@@ -1409,6 +1562,10 @@ func export_resume() -> Dictionary:
 		"vitamins": vitamins,
 		"clean": clean,
 		"last_result_made": last_result_made,
+		"ring_spent": _kick_keys(ring_spent),
+		"ring_sides": _side_rows(),
+		"ring_debug": _kick_keys(ring_debug),
+		"ring_offer": ring_offer_pending,
 	}
 
 
@@ -1470,11 +1627,27 @@ func import_resume(data: Dictionary) -> void:
 	clean_makes = {}
 	for kick in data.get("clean", []):
 		clean_makes[int(kick)] = true
+	ring_spent = {}
+	for kick in data.get("ring_spent", []):
+		ring_spent[int(kick)] = true
+	ring_debug = {}
+	for kick in data.get("ring_debug", []):
+		ring_debug[int(kick)] = true
+	ring_sides = {}
+	for pair in _dict_list(data.get("ring_sides", [])):
+		ring_sides[int(pair.get("kick", 0))] = int(pair.get("side", 1))
+	ring_offer_pending = bool(data.get("ring_offer", false))
 	var place := str(data.get("place", "tee"))
 	if place == "offer":
 		awaiting_offer = true
 		kick_resolved = true
 		last_result_made = true
+		offer = _dict_list(data.get("offer", []))
+	elif place == "ring":
+		awaiting_offer = true
+		kick_resolved = true
+		last_result_made = false
+		ring_offer_pending = false
 		offer = _dict_list(data.get("offer", []))
 	elif place == "shop":
 		awaiting_shop = true
@@ -1494,6 +1667,21 @@ func _dict_list(value) -> Array:
 		for item in value:
 			if item is Dictionary:
 				rows.append((item as Dictionary).duplicate(true))
+	return rows
+
+
+func _kick_keys(flags: Dictionary) -> Array:
+	var keys: Array = []
+	for kick in flags.keys():
+		if bool(flags[kick]):
+			keys.append(int(kick))
+	return keys
+
+
+func _side_rows() -> Array:
+	var rows: Array = []
+	for kick in ring_sides.keys():
+		rows.append({"kick": int(kick), "side": int(ring_sides[kick])})
 	return rows
 
 

@@ -80,6 +80,8 @@ var flight_duration := 0.0
 var travel_yards := 0.0
 # True when the power sweep reached MAX with no Space #2. Not a power lock.
 var shanked := false
+var ring_active := false
+var ring_center := 0.0
 
 # Where the ball is right now. Height is 0 on the ground and 1 at mid-flight.
 var ball_forward_yards := 0.0
@@ -210,6 +212,8 @@ func reset_kick() -> void:
 	max_range = 0.0
 	offset_yards = 0.0
 	result_text = ""
+	ring_active = false
+	ring_center = 0.0
 	perfect = false
 	bank_shot = false
 	insured = false
@@ -773,6 +777,9 @@ func _lock_accuracy(value: float) -> void:
 		result_text = "GOOD"
 		insured = true
 		insurance_ready = false
+	if ring_active and not shanked and reached_uprights and (result_text == "WIDE LEFT" or result_text == "WIDE RIGHT"):
+		if absf(offset_yards - ring_center) <= 1.5:
+			result_text = "BONUS RING"
 	phase = Phase.FLIGHT
 	flight_elapsed = 0.0
 

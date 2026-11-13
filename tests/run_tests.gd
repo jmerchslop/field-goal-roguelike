@@ -62,6 +62,7 @@ func _run() -> void:
 	_check_playing_card()
 	_check_reactions()
 	_check_floodlights()
+	_check_bonus_ring()
 
 
 func _finish_live() -> void:
@@ -5188,4 +5189,114 @@ func _check_floodlights_live() -> void:
 	var left_rig: Dictionary = game.camera_rig(200.0, -3.0)
 	check(not is_equal_approx(float(left_rig["look"].x), 0.0), "a hash preview still does not re-center the posts")
 	game.free()
+
+
+func _check_bonus_ring() -> void:
+	check(ResourceLoader.exists("res://art/field/bonus-coin.png"), "the bonus ring texture is imported")
+	check(not ResourceLoader.exists("res://art/field/bonus-coin-lock.jpg") and not ResourceLoader.exists("res://LOOK_TARGETS/bonus-coin-lock.jpg"), "the bonus ring lock JPEG is not a game sprite")
+	var shell := FileAccess.get_file_as_string("res://scripts/main.gd")
+	check(shell.find("bonus-coin-lock") < 0, "the lock JPEG is not stamped into the kick scene")
+	check(shell.find("KEY_B") >= 0 and shell.find("KEY_H") >= 0 and shell.find("KEY_J") >= 0, "debug B was added and H and J stayed")
+	check(not KickConstants.debug_unlock_all_kickers, "debug_unlock_all_kickers stays false")
+	var standard := RunLogic.new()
+	for kick in range(1, 21):
+		standard.kick_number = kick
+		var boss := kick == 5 or kick == 10 or kick == 15 or kick == 20
+		var expect := kick == 13
+		check(standard.ring_showing() == expect, "standard kick %s ring" % kick)
+		check(not (boss and standard.ring_showing()), "a boss kick has no ring")
+	var endless := RunLogic.new()
+	endless.run_mode = "endless"
+	for kick in [16, 17, 18, 46, 47, 48, 96, 97, 98, 146, 147, 148, 10, 20]:
+		endless.kick_number = kick
+		var want: bool = kick == 17 or kick == 47 or kick == 97 or kick == 147
+		check(endless.ring_showing() == want, "endless kick %s ring" % kick)
+		check(not (endless.is_boss() and endless.ring_showing()), "an endless boss has no ring")
+	var practice := RunLogic.new()
+	practice.kick_number = 13
+	practice.practicing = true
+	check(not practice.ring_showing(), "practice swing hides the ring")
+	var debug_boss := RunLogic.new()
+	debug_boss.kick_number = 5
+	check(not debug_boss.arm_debug_ring(), "debug B does not arm a boss kick")
+	check(not debug_boss.ring_showing(), "a boss stays without a ring")
+	var debug_kick := RunLogic.new()
+	check(debug_kick.arm_debug_ring() and debug_kick.ring_showing(), "debug B puts the ring on kick 1")
+	var side := debug_kick.ring_side()
+	debug_kick.kick_resolved = true
+	debug_kick.begin_retry()
+	check(debug_kick.ring_side() == side and debug_kick.ring_showing(), "the ring keeps its side on a retry")
+	var spots: Array[float] = [-6.0, -3.0, 0.0, 3.0, 6.0]
+	var distances: Array[float] = [35.0, 48.0, 62.0, 75.0, 100.0, 250.0, 500.0, 750.0, 1000.0]
+	for half in [3.08, 2.585]:
+		for distance in distances:
+			for spot in spots:
+				for ring_side in [-1, 1]:
+					var place: Dictionary = RunLogic.ring_placement(ring_side, half, distance, spot, 12.0)
+					var inner := absf(float(place["x"])) - RunLogic.ring_outer_yards() * 0.5
+					check(inner > half + 0.07, "ring overlaps the upright at %s yd spot %s" % [distance, spot])
+	var hit := RunLogic.new()
+	hit.kick_number = 13
+	hit.spot_yards = 0.0
+	hit.attempts = 3
+	hit.streak = 4
+	hit.score = 20
+	hit.cash = 7
+	hit.showtime_mult = 2.0
+	var placed: Dictionary = hit.ring_place(62.0, 0.0, hit.post_half_gap(), 12.0)
+	var center := float(placed["x"])
+	var wide := "WIDE LEFT" if center < 0.0 else "WIDE RIGHT"
+	check(hit.collects_at(center, center, wide, true, false), "a ball on the ring center collects it")
+	check(hit.collects_at(center + 1.5, center, wide, true, false), "a ball 1.5 yards from the ring collects it")
+	check(not hit.collects_at(center + 1.6, center, wide, true, false), "a ball 1.6 yards from the ring misses it")
+	check(not hit.collects_at(center, center, "DOINK", true, false), "a doink does not collect the ring")
+	check(not hit.collects_at(center, center, "GOOD", true, false), "a make does not collect the ring")
+	check(not hit.collects_at(center, center, "SHORT", false, false), "a short kick does not collect the ring")
+	check(not hit.collects_at(center, center, wide, true, true), "a shank does not collect the ring")
+	var kept := hit.ring_side()
+	hit.resolve_kick("SHORT", 0.0, false)
+	hit.begin_retry()
+	check(hit.ring_showing() and hit.ring_side() == kept, "a normal miss leaves the ring on the same side")
+	hit.attempts = 3
+	hit.streak = 4
+	hit.score = 20
+	hit.cash = 7
+	hit.showtime_mult = 2.0
+	hit.resolve_kick("BONUS RING", center, true)
+	check(hit.attempts == 2, "a ring hit spends an attempt")
+	check(hit.streak == 0 and is_equal_approx(hit.showtime_mult, 1.0), "a ring hit resets the streak")
+	check(hit.cash == 7 and hit.score == 20, "a ring hit pays no make cash")
+	check(not hit.last_result_made and not bool(hit.clean_makes.get(13, false)), "a ring hit is not a clean make")
+	check(not hit.is_first_ball, "a ring hit spends the first ball")
+	check(hit.phase == RunLogic.Phase.PLAYING and hit.ring_offer_pending, "a ring hit with attempts left opens the bonus path")
+	check(not hit.ring_showing(), "the ring is gone after it is collected")
+	check(hit.open_ring_offer() and hit.offer.size() == 3, "the bonus offer has three cards")
+	for card in hit.offer:
+		check(str(card.get("kind", "")) == Loadout.EQUIPMENT, "the bonus offer is equipment only")
+		check(str(card.get("kind", "")) != Loadout.PERK and str(card.get("kind", "")) != Loadout.CURSE, "the bonus offer has no perk or curse")
+	check(not hit.arm_debug_ring(), "debug B does not bring a collected ring back")
+	hit.begin_retry()
+	check(not hit.ring_showing() and hit.ring_side() == kept, "the retry keeps the side and hides the ring")
+	var spent := RunLogic.new()
+	spent.kick_number = 13
+	spent.resolve_kick("GOOD", 0.0, false)
+	check(not spent.ring_showing(), "making the kick without the ring spends it")
+	var last := RunLogic.new()
+	last.kick_number = 13
+	last.attempts = 1
+	last.resolve_kick("BONUS RING", 6.0, false)
+	check(last.phase == RunLogic.Phase.GAME_OVER and not last.ring_offer_pending, "the last attempt ends the run with no bonus offer")
+	check(not last.open_ring_offer(), "a finished run does not open the bonus offer")
+	var full := RunLogic.new()
+	full.kick_number = 13
+	full.cleats_id = Loadout.CANNON
+	full.cleats_rank = 6
+	full.helmet_id = Loadout.WIND_VISOR
+	full.helmet_rank = 6
+	full.gloves_id = Loadout.IRON_GRIP
+	full.gloves_rank = 6
+	full.attempts = 3
+	full.resolve_kick("BONUS RING", 6.0, false)
+	check(not full.open_ring_offer() and full.ring_offer_skipped, "no legal equipment skips the bonus offer")
+	check(ResultStamp.words(false, "BONUS RING", false, false, false, false)[0] == "BONUS RING", "the stamp reads BONUS RING")
 

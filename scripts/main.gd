@@ -58,6 +58,7 @@ var _mud: MeshInstance3D
 var _marks: Node3D
 var _stands: Node3D
 var _floods: Node3D
+var _ring: Sprite3D
 var _sky_mat: ShaderMaterial
 var sky_texture_path := ""
 var _weather_anchor: Node3D
@@ -92,6 +93,9 @@ const LIGHT_SPACING := 90.0
 const LIGHT_SIDE_PATH := "res://art/field/floodlight-sideline.png"
 const LIGHT_SIDE_B_PATH := "res://art/field/floodlight-sideline-b.png"
 const LIGHT_END_PATH := "res://art/field/floodlight-endzone.png"
+const RING_PATH := "res://art/field/bonus-coin.png"
+const RING_PIXEL := 3.0 / 713.0
+const RING_CENTER_Y := 5.33
 const GRASS_TILE_YARDS := 12.0
 const GRASS_PATH := "res://art/field/grass-tile.png"
 const SKY_CLEAR_PATH := "res://art/field/sky-clear.png"
@@ -234,6 +238,18 @@ func settle_kick() -> void:
 		run.consume_insurance()
 	run.resolve_kick(logic.result_text, logic.offset_yards, logic.perfect)
 	_cash_time = 0.0
+	_finish_resolved_kick()
+
+
+func _finish_resolved_kick() -> void:
+	if run.ring_offer_pending:
+		if run.open_ring_offer():
+			_remember_run()
+			return
+		if run.phase == RunLogic.Phase.PLAYING:
+			run.begin_retry()
+			load_current_kick()
+		return
 	if run.wants_upgrade():
 		run.roll_offer()
 		_remember_run()
@@ -826,6 +842,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		if forced != "":
 			force_weather(forced)
 			return
+	if key.keycode == KEY_B and run.phase == RunLogic.Phase.PLAYING and not run.awaiting_offer and not run.awaiting_mulligan and logic.phase == KickLogic.Phase.AIMING and not run.practicing:
+		if run.arm_debug_ring():
+			refresh_view()
+		return
 	if key.keycode == KEY_H and run.phase == RunLogic.Phase.PLAYING and not run.awaiting_offer and not run.awaiting_mulligan:
 		cycle_spot()
 		return
@@ -874,9 +894,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if run.awaiting_mulligan:
 		run.accept_pending_miss()
 		_cue("mulligan")
-		if run.phase == RunLogic.Phase.PLAYING:
-			run.begin_retry()
-			load_current_kick()
+		_finish_resolved_kick()
 		refresh_view()
 		return
 	if run.awaiting_offer:
@@ -1953,6 +1971,51 @@ func _build_uprights() -> void:
 	_pole(Vector3(0.2, crossbar_y, 0.2), Vector3(0, crossbar_y * 0.5, 0), yellow)
 	_fit_posts(KickConstants.POST_SEPARATION_YARDS)
 	_build_ribbons()
+	_build_ring()
+
+
+func _build_ring() -> void:
+	_ring = Sprite3D.new()
+	_ring.name = "BonusRing"
+	var tex := load(RING_PATH) as Texture2D
+	_ring.texture = tex
+	_ring.billboard = BaseMaterial3D.BILLBOARD_FIXED_Y
+	_ring.transparent = true
+	_ring.alpha_cut = SpriteBase3D.ALPHA_CUT_DISCARD
+	_ring.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	_ring.pixel_size = RING_PIXEL
+	_ring.centered = true
+	_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_ring.visible = false
+	var paint := StandardMaterial3D.new()
+	paint.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	paint.billboard_mode = BaseMaterial3D.BILLBOARD_FIXED_Y
+	paint.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+	paint.alpha_scissor_threshold = 0.45
+	paint.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	paint.cull_mode = BaseMaterial3D.CULL_DISABLED
+	paint.albedo_texture = tex
+	_ring.material_override = paint
+	_world.add_child(_ring)
+
+
+func _place_ring() -> void:
+	if _ring == null:
+		return
+	var show := run.ring_showing()
+	if not show:
+		_ring.visible = false
+		if logic.phase == KickLogic.Phase.AIMING:
+			logic.ring_active = false
+		return
+	if logic.phase == KickLogic.Phase.AIMING or not logic.ring_active:
+		var place: Dictionary = run.ring_place(logic.kick_distance, logic.start_lateral_yards, run.post_half_gap(), logic.aim_cap_degrees())
+		logic.ring_active = true
+		logic.ring_center = float(place["x"])
+		# The painted hoop sits 4 px left and 4 px above the canvas center.
+		var nudge := 4.0 * RING_PIXEL
+		_ring.position = Vector3(logic.ring_center + nudge, RING_CENTER_Y - nudge, 0.0)
+	_ring.visible = logic.result_text != "BONUS RING"
 
 
 func _build_ribbons() -> void:
@@ -2176,6 +2239,7 @@ func _place_world() -> void:
 		_mud.position = tee + Vector3(0.0, 0.06, 0.15)
 	_fit_posts(run.post_width())
 	_place_ribbons()
+	_place_ring()
 	_place_kicker(tee)
 	_place_arrow(tee)
 	_sample_trail()
@@ -2212,7 +2276,8 @@ func _step_kick_pose(delta: float) -> void:
 	if phase != KickLogic.Phase.FLIGHT and phase != KickLogic.Phase.RESULT:
 		return
 	if phase == KickLogic.Phase.RESULT and not run.practicing:
-		_pose = Kickers.reaction_pose(result_age, Kickers.is_make_result(logic.shanked, logic.result_text))
+		var celebrate := Kickers.is_make_result(logic.shanked, logic.result_text) or logic.result_text == "BONUS RING"
+		_pose = Kickers.reaction_pose(result_age, celebrate)
 		return
 	if not _swinging:
 		_swinging = true

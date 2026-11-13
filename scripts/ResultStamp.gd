@@ -32,7 +32,7 @@ static func words(shanked: bool, result: String, bank: bool, insured: bool, perf
 
 
 static func primary_lines(word: String) -> PackedStringArray:
-	if word == "WIDE LEFT" or word == "WIDE RIGHT" or word == "DOWN THE MIDDLE" or word == "BANK SHOT":
+	if word == "WIDE LEFT" or word == "WIDE RIGHT" or word == "DOWN THE MIDDLE" or word == "BANK SHOT" or word == "BONUS RING":
 		var parts := word.split(" ")
 		if word == "DOWN THE MIDDLE":
 			return PackedStringArray(["DOWN THE", "MIDDLE"])
