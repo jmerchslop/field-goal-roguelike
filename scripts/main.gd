@@ -1359,17 +1359,28 @@ func _ensure_field(distance: float) -> void:
 	var white := Color(0.93, 0.95, 0.92)
 	var yard := 0.0
 	while yard <= span + 0.01:
-		_add_flat(paint, 25.0, yard - 0.07, 0.14, 0.05, white)
+		var rank := yard_line_rank(span, yard)
+		if rank > 0:
+			var thick := _yard_line_thickness(span, yard, rank)
+			var ink := white
+			ink.a = _yard_line_alpha(span, yard, rank)
+			_add_flat(paint, 25.0, yard - thick * 0.5, thick, 0.05, ink)
 		yard += 5.0
 	_add_flat_at(paint, -25.0, near_z, 0.16, far_z - near_z, 0.05, white)
 	_add_flat_at(paint, 25.0, near_z, 0.16, far_z - near_z, 0.05, white)
 	var half := hash_row_half()
 	var tick := 0.0
 	while tick <= span + 0.01:
-		_add_dash(paint, -half, tick, 0.9, white)
-		_add_dash(paint, half, tick, 0.9, white)
-		if int(round(tick)) % 5 != 0:
-			_add_dash(paint, 0.0, tick, 0.42, white)
+		var spacing := hash_tick_spacing(span, tick)
+		if spacing > 0:
+			var tick_length := 0.9 if spacing <= 5 else 1.15
+			var thick := _hash_thickness(span, tick)
+			_add_dash_sized(paint, -half, tick, tick_length, thick, white)
+			_add_dash_sized(paint, half, tick, tick_length, thick, white)
+			if _center_tick(span, tick, spacing):
+				var dim := white
+				dim.a = 0.55
+				_add_dash_sized(paint, 0.0, tick, 0.42, thick * 0.7, dim)
 		tick += 1.0
 	_mesh_node(_marks, "Lines", paint.commit(), _vertex_mat())
 	_layout_stands(span)
@@ -1381,12 +1392,9 @@ func _ensure_field(distance: float) -> void:
 	hash_right.name = "HashRight"
 	hash_right.position = Vector3(half, 0.0, 0.0)
 	_marks.add_child(hash_right)
-	var number := 10
-	while number <= int(floor(span + 0.01)):
-		if number <= 200 or number % 50 == 0:
-			_yard_sign(-20.0, float(number), str(number))
-			_yard_sign(20.0, float(number), str(number))
-		number += 10
+	for number in yard_numbers_for(span):
+		_yard_sign(-YARD_NUMBER_X, float(number), str(number))
+		_yard_sign(YARD_NUMBER_X, float(number), str(number))
 
 
 func _mesh_node(parent: Node3D, node_name: String, mesh: Mesh, material: Material) -> void:
@@ -1400,8 +1408,11 @@ func _mesh_node(parent: Node3D, node_name: String, mesh: Mesh, material: Materia
 
 func _vertex_mat() -> StandardMaterial3D:
 	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	mat.vertex_color_use_as_albedo = true
-	mat.roughness = 0.92
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
 	return mat
 
 
@@ -1414,7 +1425,11 @@ func _add_flat_at(tool: SurfaceTool, x: float, z0: float, width: float, depth: f
 
 
 func _add_dash(tool: SurfaceTool, x: float, z: float, length: float, color: Color) -> void:
-	_add_quad(tool, Vector3(x, 0.07, z), length * 0.5, 0.04, color)
+	_add_dash_sized(tool, x, z, length, 0.08, color)
+
+
+func _add_dash_sized(tool: SurfaceTool, x: float, z: float, length: float, thick: float, color: Color) -> void:
+	_add_quad(tool, Vector3(x, 0.07, z), length * 0.5, thick * 0.5, color)
 
 
 func _add_quad(tool: SurfaceTool, center: Vector3, half_x: float, half_z: float, color: Color) -> void:
@@ -2575,13 +2590,200 @@ func _place_camera() -> void:
 		sun.directional_shadow_max_distance = maxf(160.0, at.z + 40.0)
 
 
+const YARD_PIXEL_SIZE := 0.0105
+const YARD_WORLD_H := 0.756
+const YARD_MIN_PX := 13.0
+const YARD_NEAR_YARDS := 80.0
+const YARD_NUMBER_X := 5.6
+
+
+func yard_line_rank(span: float, yard: float) -> int:
+	# 5 and 10 stay on a 35 or 75. Farther fields drop a line before it becomes a grill.
+	var y := int(round(yard))
+	if y < 0 or float(y) > span + 0.01:
+		return 0
+	if span <= YARD_NEAR_YARDS:
+		if y % 5 != 0:
+			return 0
+		return 10 if y % 10 == 0 else 5
+	var gap5 := _pixels_per_yard(span, float(y)) * 5.0
+	if y % 5 == 0 and gap5 >= 5.2:
+		return 10 if y % 10 == 0 else 5
+	if y % 10 == 0 and gap5 * 2.0 >= 4.2:
+		return 10
+	if y % 50 == 0 and gap5 * 10.0 >= 3.8:
+		return 50
+	if y % 100 == 0 and gap5 * 20.0 >= 3.0:
+		return 100
+	return 0
+
+
+func hash_tick_spacing(span: float, yard: float) -> int:
+	# 1 means every yard. 0 means no tick here. The two rows stay at the post x.
+	var y := int(round(yard))
+	if y < 0 or float(y) > span + 0.01:
+		return 0
+	if span <= YARD_NEAR_YARDS:
+		return 1
+	var ppy := _pixels_per_yard(span, float(y))
+	if ppy >= 3.2:
+		return 1
+	if y % 5 == 0 and ppy * 5.0 >= 5.0:
+		return 5
+	if y % 10 == 0 and ppy * 10.0 >= 4.0:
+		return 10
+	if y % 50 == 0 and ppy * 50.0 >= 4.0:
+		return 50
+	if y % 100 == 0 and ppy * 100.0 >= 2.5:
+		return 100
+	return 0
+
+
+func yard_numbers_for(span: float) -> PackedInt32Array:
+	var result := PackedInt32Array()
+	var tee := int(round(span))
+	if tee >= 10 and _number_fits(span, float(tee), -1.0):
+		result.append(tee)
+	var z := int(floor(span / 10.0)) * 10
+	if z >= tee:
+		z -= 10
+	var near_floor := span - YARD_NEAR_YARDS
+	while z >= 10 and float(z) > near_floor:
+		if _number_fits(span, float(z), _last_number(result)):
+			result.append(z)
+		z -= 10
+	var step := 50
+	var cursor := int(floor(maxf(near_floor, 0.0) / float(step))) * step
+	if result.size() > 0:
+		cursor = mini(cursor, _last_number(result) - 1)
+		cursor = int(floor(float(cursor) / float(step))) * step
+	var guard := 0
+	while cursor >= 10 and guard < 40:
+		guard += 1
+		if _number_fits(span, float(cursor), _last_number(result)):
+			result.append(cursor)
+			cursor -= step
+		elif step == 50:
+			step = 100
+			cursor = int(floor(float(cursor) / 100.0)) * 100
+		else:
+			cursor -= step
+	return result
+
+
+func yard_numbers_overlap(span: float) -> bool:
+	var nums := yard_numbers_for(span)
+	if nums.size() < 2:
+		return false
+	for index in nums.size() - 1:
+		var a := float(nums[index])
+		var b := float(nums[index + 1])
+		var gap := absf(_screen_y(span, Vector3(YARD_NUMBER_X, 1.1, a)) - _screen_y(span, Vector3(YARD_NUMBER_X, 1.1, b)))
+		var height := _number_px(span, a) + _number_px(span, b)
+		if gap <= height * 0.46:
+			return true
+	return false
+
+
+func _last_number(nums: PackedInt32Array) -> int:
+	if nums.is_empty():
+		return -1
+	return nums[nums.size() - 1]
+
+
+func _number_fits(span: float, z: float, previous: float) -> bool:
+	var height := _number_px(span, z)
+	if height < YARD_MIN_PX:
+		return false
+	if previous < 0.0:
+		return true
+	var gap := absf(_screen_y(span, Vector3(YARD_NUMBER_X, 1.1, z)) - _screen_y(span, Vector3(YARD_NUMBER_X, 1.1, previous)))
+	return gap > (height + _number_px(span, previous)) * 0.46
+
+
+func _yard_line_thickness(span: float, yard: float, rank: int) -> float:
+	if span <= YARD_NEAR_YARDS:
+		return 0.16 if rank >= 10 else 0.10
+	var ppy := maxf(_pixels_per_yard(span, yard), 0.05)
+	var target := 2.05 if rank >= 10 else 1.55
+	return clampf(target / ppy, 0.08, 0.2)
+
+
+func _yard_line_alpha(span: float, yard: float, rank: int) -> float:
+	if span <= YARD_NEAR_YARDS:
+		return 1.0 if rank >= 10 else 0.82
+	var gap := _pixels_per_yard(span, yard) * float(rank)
+	var floor_gap := 3.0
+	if rank == 5:
+		floor_gap = 5.2
+	elif rank == 10:
+		floor_gap = 4.2
+	elif rank == 50:
+		floor_gap = 3.8
+	var fade := clampf((gap - floor_gap) / 3.5, 0.0, 1.0)
+	var base := 0.78 if rank == 5 else 1.0
+	return base * lerpf(0.4, 1.0, fade)
+
+
+func _hash_thickness(span: float, yard: float) -> float:
+	if span <= YARD_NEAR_YARDS:
+		return 0.08
+	var ppy := maxf(_pixels_per_yard(span, yard), 0.05)
+	return clampf(1.7 / ppy, 0.06, 0.22)
+
+
+func _center_tick(span: float, yard: float, spacing: int) -> bool:
+	if spacing != 1 or int(round(yard)) % 5 == 0:
+		return false
+	if span <= YARD_NEAR_YARDS:
+		return true
+	return _pixels_per_yard(span, yard) >= 4.0
+
+
+func _pixels_per_yard(span: float, z: float) -> float:
+	var a := _screen_y(span, Vector3(0.0, 0.05, z))
+	var b := _screen_y(span, Vector3(0.0, 0.05, z + 1.0))
+	if a < 0.0 or b < 0.0:
+		return 0.0
+	return absf(a - b)
+
+
+func _number_px(span: float, z: float) -> float:
+	var a := _screen_y(span, Vector3(YARD_NUMBER_X, 1.1, z))
+	var b := _screen_y(span, Vector3(YARD_NUMBER_X, 1.1 + YARD_WORLD_H, z))
+	if a < 0.0 or b < 0.0:
+		return 0.0
+	return absf(a - b)
+
+
+func _screen_y(span: float, point: Vector3) -> float:
+	var rig := camera_rig(span, 0.0)
+	var cam: Vector3 = rig["position"]
+	var look: Vector3 = rig["look"]
+	var back := cam - look
+	if back.length_squared() < 0.001:
+		return -1.0
+	back = back.normalized()
+	var right := Vector3.UP.cross(back)
+	if right.length_squared() < 0.0001:
+		right = Vector3(1.0, 0.0, 0.0)
+	right = right.normalized()
+	var up := back.cross(right).normalized()
+	var rel := point - cam
+	var depth := rel.dot(-back)
+	if depth <= 0.2:
+		return -1.0
+	var ndc := (rel.dot(up) / depth) / tan(deg_to_rad(float(rig["fov"]) * 0.5))
+	return (0.5 - ndc * 0.5) * KickConstants.WINDOW_HEIGHT
+
+
 func _yard_sign(x: float, z: float, label: String) -> void:
 	var sign := Label3D.new()
 	sign.text = label
 	sign.font_size = 72
-	sign.pixel_size = 0.022
+	sign.pixel_size = YARD_PIXEL_SIZE
 	sign.modulate = Color(0.95, 0.96, 0.92)
-	sign.outline_size = 12
+	sign.outline_size = 8
 	sign.outline_modulate = Color(0.05, 0.12, 0.05)
 	sign.position = Vector3(x, 1.1, z)
 	# Face the kicker so the number is not backwards.

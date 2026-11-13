@@ -65,6 +65,7 @@ func _finish_live() -> void:
 	_check_pause_saves()
 	_check_aim_cone()
 	_check_ball_trail()
+	_check_markings()
 	_check_live_field()
 	_check_live_kick_sounds()
 	_release_sfx()
@@ -4760,6 +4761,41 @@ func _check_ball_trail() -> void:
 	check(game.run.practicing and game.trail_visible(), "practice swing gets the same trail")
 	game.load_current_kick()
 	check(game.trail_count() == 0, "practice clears before the next kick")
+	game.free()
+
+
+func _check_markings() -> void:
+	var shell := FileAccess.get_file_as_string("res://scripts/main.gd")
+	check(shell.find("KEY_H") >= 0 and shell.find("KEY_J") >= 0 and shell.find("KEY_K") >= 0 and shell.find("KEY_L") >= 0, "debug H, J, K, and L stay on their keys")
+	check(shell.find("grass-tile.png") >= 0 and shell.find("crowd-stand-strip-a.png") >= 0 and shell.find("sky-clear.png") >= 0, "grass, stands, and skies were not replaced")
+	check(shell.find("CONE_LENGTH_YARDS := 5.0") >= 0, "the Glass Cone stays a 5-yard wedge")
+	check(not ResourceLoader.exists("res://art/loadout/empty_perk.png"), "empty_perk.png was not added")
+	var packed: PackedScene = load("res://scenes/main.tscn")
+	var game = packed.instantiate()
+	get_root().add_child(game)
+	game._taking_pictures = true
+	var n35: PackedInt32Array = game.yard_numbers_for(35.0)
+	check(n35.find(35) >= 0 and n35.find(30) >= 0 and n35.find(20) >= 0 and n35.find(10) >= 0, "a 35-yard kick still numbers every 10 yards, got %s" % n35)
+	check(not game.yard_numbers_overlap(35.0), "35-yard numbers do not overlap")
+	check(game.yard_line_rank(35.0, 15.0) == 5 and game.yard_line_rank(35.0, 20.0) == 10, "35 yards still draws 5-yard lines and stronger 10-yard lines")
+	check(game.yard_line_rank(75.0, 25.0) == 5 and game.hash_tick_spacing(75.0, 30.0) == 1, "a 75-yard kick keeps 5-yard lines and yard-by-yard hashes")
+	var n75: PackedInt32Array = game.yard_numbers_for(75.0)
+	check(n75.find(75) >= 0 and n75.find(70) >= 0 and n75.find(60) >= 0 and not game.yard_numbers_overlap(75.0), "75-yard numbers stay on a readable every-10 run, got %s" % n75)
+	var n200: PackedInt32Array = game.yard_numbers_for(200.0)
+	check(n200.find(200) >= 0 and n200.find(190) >= 0 and n200.find(180) >= 0, "200 keeps the near numbers, got %s" % n200)
+	check(n200.find(140) < 0 and n200.find(150) < 0 and n200.find(160) < 0, "a 200-yard kick does not pile every-10 numbers toward the posts, got %s" % n200)
+	check(not game.yard_numbers_overlap(200.0) and not game.yard_numbers_overlap(500.0) and not game.yard_numbers_overlap(1000.0), "long-field numbers do not overlap")
+	check(game.yard_line_rank(200.0, 200.0) >= 5 and game.yard_line_rank(200.0, 20.0) == 0, "far 5-yard lines drop on a 200-yard kick before they pinstripe")
+	check(game.yard_line_rank(1000.0, 1000.0) >= 5 and game.yard_line_rank(1000.0, 20.0) == 0, "a 1000-yard field keeps near lines and drops the far grate")
+	check(game.hash_tick_spacing(35.0, 20.0) == 1 and game.hash_tick_spacing(200.0, 200.0) == 1, "hash ticks stay every yard near the tee")
+	check(game.hash_tick_spacing(1000.0, 10.0) != 1, "far hash ticks are not a 1-yard shimmer")
+	check(near(game.hash_row_half() * 2.0, KickConstants.POST_SEPARATION_YARDS), "hash rows stay 6.17 yards apart")
+	game._ensure_field(200.0)
+	var painted := {}
+	for child in game._marks.get_children():
+		if child is Label3D:
+			painted[str(child.text)] = true
+	check(painted.has("200") and painted.has("180") and not painted.has("140"), "the 200-yard field paints the near numbers and not the pile")
 	game.free()
 
 

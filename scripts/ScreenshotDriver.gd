@@ -66,6 +66,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "c3":
+		if not await _capture_c3():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "cone5":
 		if not await _capture_cone5():
 			get_tree().quit(1)
@@ -1254,6 +1260,70 @@ func _capture_trail() -> bool:
 		return false
 	board.load_current_kick()
 	return board.trail_count() == 0
+
+
+func _capture_c3() -> bool:
+	board.highlight = 1
+	board.selecting = true
+	board.confirm_kicker()
+	board.logic.aim_degrees = 0.0
+	board.logic.aim_base = 0.0
+	board.logic.start_lateral_yards = 0.0
+	board.run.spot_yards = 0.0
+	board.refresh_view()
+	if not await _capture("c3_35_center.png"):
+		return false
+	board.cycle_debug_distance()
+	board.logic.start_lateral_yards = -3.0
+	board.run.spot_yards = -3.0
+	board.refresh_view()
+	if not await _capture("c3_75_left_hash.png"):
+		return false
+	board.cycle_debug_distance()
+	board.logic.start_lateral_yards = 0.0
+	board.run.spot_yards = 0.0
+	board.logic.aim_degrees = 0.0
+	board.logic.aim_base = 0.0
+	board.refresh_view()
+	if not await _capture("c3_200.png"):
+		return false
+	board.logic.start_lateral_yards = -3.0
+	board.run.spot_yards = -3.0
+	board.refresh_view()
+	if not await _capture("c3_200_left_hash.png"):
+		return false
+	board.logic.start_lateral_yards = 6.0
+	board.run.spot_yards = 6.0
+	board.refresh_view()
+	if not await _capture("c3_200_wide.png"):
+		return false
+	board.logic.start_lateral_yards = 0.0
+	board.run.spot_yards = 0.0
+	board.force_weather(RunLogic.SQUEEZE)
+	if not await _capture("c3_squeeze.png"):
+		return false
+	board.force_weather(RunLogic.CLEAR)
+	board.cycle_debug_distance()
+	board.refresh_view()
+	if not await _capture("c3_500.png"):
+		return false
+	board.cycle_debug_distance()
+	board.refresh_view()
+	if not await _capture("c3_1000.png"):
+		return false
+	var attempts: int = board.run.attempts
+	var kick_number: int = board.run.kick_number
+	board.cycle_debug_distance()
+	board.logic.start_lateral_yards = 0.0
+	board.run.spot_yards = 0.0
+	board.refresh_view()
+	if not await _capture("c3_back_real.png"):
+		return false
+	print("C3 back kick ", board.run.kick_number, " attempts ", board.run.attempts, " preview ", board.preview_step(), " yards ", board.logic.kick_distance)
+	if board.run.attempts != attempts or board.run.kick_number != kick_number or board.preview_step() != 0 or not is_equal_approx(board.logic.kick_distance, 35.0):
+		print("distance preview did not restore the kick")
+		return false
+	return true
 
 
 func _capture_cone5() -> bool:
