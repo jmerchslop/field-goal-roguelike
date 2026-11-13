@@ -53,10 +53,16 @@ var stats := KickerStats.new()
 var offer: Array = []
 var cleats_id := ""
 var cleats_rank := 0
+var cleats2_id := ""
+var cleats2_rank := 0
 var helmet_id := ""
 var helmet_rank := 0
+var helmet2_id := ""
+var helmet2_rank := 0
 var gloves_id := ""
 var gloves_rank := 0
+var gloves2_id := ""
+var gloves2_rank := 0
 var perks: Array = []
 var curse_ids: Array = []
 var balls_kicked := 0
@@ -183,10 +189,16 @@ func new_run() -> void:
 	offer = []
 	cleats_id = ""
 	cleats_rank = 0
+	cleats2_id = ""
+	cleats2_rank = 0
 	helmet_id = ""
 	helmet_rank = 0
+	helmet2_id = ""
+	helmet2_rank = 0
 	gloves_id = ""
 	gloves_rank = 0
+	gloves2_id = ""
+	gloves2_rank = 0
 	perks = []
 	curse_ids = []
 	balls_kicked = 0
@@ -468,7 +480,7 @@ func has_curse(id: String) -> bool:
 
 
 func has_ice_cage() -> bool:
-	return helmet_id == Loadout.ICE_CAGE
+	return helmet_id == Loadout.ICE_CAGE or helmet2_id == Loadout.ICE_CAGE
 
 
 func shown_wind_speed() -> int:
@@ -1245,9 +1257,9 @@ func collects_at(offset: float, center: float, result_text: String, reached: boo
 func open_ring_offer() -> bool:
 	if not ring_offer_pending or phase != Phase.PLAYING:
 		return false
-	var cards := Loadout.draw_equipment_offer(loadout_state(), _offer_rng)
+	var cards := Loadout.draw_ring_offer(loadout_state(), _offer_rng)
 	ring_offer_pending = false
-	if cards.size() < 3:
+	if cards.is_empty():
 		ring_offer_skipped = true
 		return false
 	offer = cards
@@ -1274,26 +1286,70 @@ func _as_loadout_card(item) -> Dictionary:
 	return {"kind": Loadout.kind_of(id), "slot": Loadout.slot_of(id), "id": id, "rank": 1}
 
 
+func _pair(slot: String) -> Array:
+	if slot == Loadout.CLEATS:
+		return [cleats_id, cleats_rank, cleats2_id, cleats2_rank]
+	if slot == Loadout.HELMET:
+		return [helmet_id, helmet_rank, helmet2_id, helmet2_rank]
+	return [gloves_id, gloves_rank, gloves2_id, gloves2_rank]
+
+
+func _accept_equipment(slot: String, id: String, rank: int) -> bool:
+	if rank > Loadout.max_rank(id, run_mode) or rank < 1:
+		return false
+	var pair := _pair(slot)
+	var first := str(pair[0])
+	var first_rank := int(pair[1])
+	var second := str(pair[2])
+	var second_rank := int(pair[3])
+	if id == first:
+		return rank > first_rank
+	if id == second:
+		return rank > second_rank
+	if first == "":
+		return true
+	if second == "":
+		return true
+	return false
+
+
+func _store_equipment(slot: String, id: String, rank: int) -> void:
+	var pair := _pair(slot)
+	var first := str(pair[0])
+	var second := str(pair[2])
+	var into_second := first != "" and id != first
+	if slot == Loadout.CLEATS:
+		if into_second:
+			cleats2_id = id
+			cleats2_rank = rank
+		else:
+			cleats_id = id
+			cleats_rank = rank
+	elif slot == Loadout.HELMET:
+		if into_second:
+			helmet2_id = id
+			helmet2_rank = rank
+		else:
+			helmet_id = id
+			helmet_rank = rank
+	elif into_second:
+		gloves2_id = id
+		gloves2_rank = rank
+	else:
+		gloves_id = id
+		gloves_rank = rank
+	if second != "" and id == second:
+		pass
+
+
 func give(id: String, rank: int = 1) -> void:
 	_fixture_saved = false
 	var slot := Loadout.slot_of(id)
 	if slot == "":
 		return
 	var previous_bench := 0
-	if slot == Loadout.CLEATS:
-		if cleats_id != "" and cleats_id != id:
-			return
-		if rank > Loadout.max_rank(id, run_mode) or rank <= cleats_rank:
-			return
-	elif slot == Loadout.HELMET:
-		if helmet_id != "" and helmet_id != id:
-			return
-		if rank > Loadout.max_rank(id, run_mode) or rank <= helmet_rank:
-			return
-	elif slot == Loadout.GLOVES:
-		if gloves_id != "" and gloves_id != id:
-			return
-		if rank > Loadout.max_rank(id, run_mode) or rank <= gloves_rank:
+	if slot == Loadout.CLEATS or slot == Loadout.HELMET or slot == Loadout.GLOVES:
+		if not _accept_equipment(slot, id, rank):
 			return
 	elif slot == Loadout.PERK:
 		var have := _perk_rank(id)
@@ -1313,15 +1369,8 @@ func give(id: String, rank: int = 1) -> void:
 	var reroll_before := stats.rerolls_per_run
 	var doink_before := stats.doink_per_quarter
 	var practice_before := stats.practice_per_quarter
-	if slot == Loadout.CLEATS:
-		cleats_id = id
-		cleats_rank = rank
-	elif slot == Loadout.HELMET:
-		helmet_id = id
-		helmet_rank = rank
-	elif slot == Loadout.GLOVES:
-		gloves_id = id
-		gloves_rank = rank
+	if slot == Loadout.CLEATS or slot == Loadout.HELMET or slot == Loadout.GLOVES:
+		_store_equipment(slot, id, rank)
 	elif slot == Loadout.PERK:
 		var found := false
 		for item in perks:
@@ -1378,10 +1427,16 @@ func loadout_state() -> Dictionary:
 	return {
 		"cleats_id": cleats_id,
 		"cleats_rank": cleats_rank,
+		"cleats2_id": cleats2_id,
+		"cleats2_rank": cleats2_rank,
 		"helmet_id": helmet_id,
 		"helmet_rank": helmet_rank,
+		"helmet2_id": helmet2_id,
+		"helmet2_rank": helmet2_rank,
 		"gloves_id": gloves_id,
 		"gloves_rank": gloves_rank,
+		"gloves2_id": gloves2_id,
+		"gloves2_rank": gloves2_rank,
 		"perks": perks.duplicate(true),
 		"curses": curse_ids.duplicate(),
 		"curses_locked": curses_locked,
@@ -1409,10 +1464,16 @@ func owned_labels() -> Array:
 	var labels: Array = []
 	if cleats_id != "":
 		labels.append(Loadout.card_title(cleats_id, cleats_rank))
+	if cleats2_id != "":
+		labels.append(Loadout.card_title(cleats2_id, cleats2_rank))
 	if helmet_id != "":
 		labels.append(Loadout.card_title(helmet_id, helmet_rank))
+	if helmet2_id != "":
+		labels.append(Loadout.card_title(helmet2_id, helmet2_rank))
 	if gloves_id != "":
 		labels.append(Loadout.card_title(gloves_id, gloves_rank))
+	if gloves2_id != "":
+		labels.append(Loadout.card_title(gloves2_id, gloves2_rank))
 	for item in perks:
 		labels.append(Loadout.card_title(str(item.get("id", "")), int(item.get("rank", 1))))
 	for id in curse_ids:
@@ -1548,10 +1609,16 @@ func export_resume() -> Dictionary:
 		"place": place,
 		"cleats_id": cleats_id,
 		"cleats_rank": cleats_rank,
+		"cleats2_id": cleats2_id,
+		"cleats2_rank": cleats2_rank,
 		"helmet_id": helmet_id,
 		"helmet_rank": helmet_rank,
+		"helmet2_id": helmet2_id,
+		"helmet2_rank": helmet2_rank,
 		"gloves_id": gloves_id,
 		"gloves_rank": gloves_rank,
+		"gloves2_id": gloves2_id,
+		"gloves2_rank": gloves2_rank,
 		"perks": perks.duplicate(true),
 		"curses": curse_ids.duplicate(),
 		"banned_curses": banned_curses.duplicate(),
@@ -1575,10 +1642,16 @@ func import_resume(data: Dictionary) -> void:
 	kicker_id = str(data.get("kicker_id", ""))
 	cleats_id = str(data.get("cleats_id", ""))
 	cleats_rank = int(data.get("cleats_rank", 0))
+	cleats2_id = str(data.get("cleats2_id", ""))
+	cleats2_rank = int(data.get("cleats2_rank", 0))
 	helmet_id = str(data.get("helmet_id", ""))
 	helmet_rank = int(data.get("helmet_rank", 0))
+	helmet2_id = str(data.get("helmet2_id", ""))
+	helmet2_rank = int(data.get("helmet2_rank", 0))
 	gloves_id = str(data.get("gloves_id", ""))
 	gloves_rank = int(data.get("gloves_rank", 0))
+	gloves2_id = str(data.get("gloves2_id", ""))
+	gloves2_rank = int(data.get("gloves2_rank", 0))
 	perks = _dict_list(data.get("perks", []))
 	curse_ids = _string_list(data.get("curses", []))
 	banned_curses = _string_list(data.get("banned_curses", []))

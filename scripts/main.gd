@@ -59,6 +59,7 @@ var _marks: Node3D
 var _stands: Node3D
 var _floods: Node3D
 var _ring: Sprite3D
+var _ring_pop := -1.0
 var _sky_mat: ShaderMaterial
 var sky_texture_path := ""
 var _weather_anchor: Node3D
@@ -96,6 +97,7 @@ const LIGHT_END_PATH := "res://art/field/floodlight-endzone.png"
 const RING_PATH := "res://art/field/bonus-coin.png"
 const RING_PIXEL := 3.0 / 713.0
 const RING_CENTER_Y := 5.33
+const RING_POP_SEC := 0.25
 const GRASS_TILE_YARDS := 12.0
 const GRASS_PATH := "res://art/field/grass-tile.png"
 const SKY_CLEAR_PATH := "res://art/field/sky-clear.png"
@@ -710,6 +712,7 @@ func _process(delta: float) -> void:
 	_ribbon_time += delta
 	logic.sway(_sway_time)
 	_place_ribbons()
+	_tick_ring(delta)
 	_step_kick_pose(delta)
 	if _pose == "run":
 		Sfx.approach()
@@ -1981,7 +1984,7 @@ func _build_ring() -> void:
 	_ring.texture = tex
 	_ring.billboard = BaseMaterial3D.BILLBOARD_FIXED_Y
 	_ring.transparent = true
-	_ring.alpha_cut = SpriteBase3D.ALPHA_CUT_DISCARD
+	_ring.alpha_cut = SpriteBase3D.ALPHA_CUT_DISABLED
 	_ring.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
 	_ring.pixel_size = RING_PIXEL
 	_ring.centered = true
@@ -1990,8 +1993,8 @@ func _build_ring() -> void:
 	var paint := StandardMaterial3D.new()
 	paint.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	paint.billboard_mode = BaseMaterial3D.BILLBOARD_FIXED_Y
-	paint.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
-	paint.alpha_scissor_threshold = 0.45
+	paint.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	paint.alpha_antialiasing_mode = BaseMaterial3D.ALPHA_ANTIALIASING_OFF
 	paint.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
 	paint.cull_mode = BaseMaterial3D.CULL_DISABLED
 	paint.albedo_texture = tex
@@ -2002,20 +2005,41 @@ func _build_ring() -> void:
 func _place_ring() -> void:
 	if _ring == null:
 		return
-	var show := run.ring_showing()
-	if not show:
-		_ring.visible = false
-		if logic.phase == KickLogic.Phase.AIMING:
+	if logic.phase == KickLogic.Phase.AIMING:
+		_ring_pop = -1.0
+		_ring.scale = Vector3.ONE
+		_ring.modulate = Color.WHITE
+		if not run.ring_showing():
+			_ring.visible = false
 			logic.ring_active = false
-		return
-	if logic.phase == KickLogic.Phase.AIMING or not logic.ring_active:
+			return
 		var place: Dictionary = run.ring_place(logic.kick_distance, logic.start_lateral_yards, run.post_half_gap(), logic.aim_cap_degrees())
 		logic.ring_active = true
 		logic.ring_center = float(place["x"])
 		# The painted hoop sits 4 px left and 4 px above the canvas center.
 		var nudge := 4.0 * RING_PIXEL
 		_ring.position = Vector3(logic.ring_center + nudge, RING_CENTER_Y - nudge, 0.0)
-	_ring.visible = logic.result_text != "BONUS RING"
+		_ring.visible = true
+		return
+	if not logic.ring_active or _ring_pop >= RING_POP_SEC:
+		_ring.visible = false
+		return
+	var arrived := logic.reached_uprights and logic.ball_forward_yards + 0.05 >= logic.kick_distance
+	if logic.result_text == "BONUS RING" and arrived and _ring_pop < 0.0:
+		_ring_pop = 0.0
+	_ring.visible = true
+
+
+func _tick_ring(delta: float) -> void:
+	if _ring == null or _ring_pop < 0.0 or _ring_pop >= RING_POP_SEC:
+		return
+	_ring_pop += delta
+	var t := clampf(_ring_pop / RING_POP_SEC, 0.0, 1.0)
+	var grown := lerpf(1.0, 1.2, t)
+	_ring.scale = Vector3(grown, grown, 1.0)
+	_ring.modulate.a = 1.0 - t
+	if t >= 1.0:
+		_ring.visible = false
 
 
 func _build_ribbons() -> void:

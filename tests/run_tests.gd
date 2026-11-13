@@ -69,6 +69,7 @@ func _finish_live() -> void:
 	_check_pause_saves()
 	_check_playing_card_live()
 	_check_floodlights_live()
+	_check_ring_flight_live()
 	_check_aim_cone()
 	_check_ball_trail()
 	_check_markings()
@@ -5297,6 +5298,137 @@ func _check_bonus_ring() -> void:
 	full.gloves_rank = 6
 	full.attempts = 3
 	full.resolve_kick("BONUS RING", 6.0, false)
-	check(not full.open_ring_offer() and full.ring_offer_skipped, "no legal equipment skips the bonus offer")
+	check(full.open_ring_offer() and full.offer.size() == 3, "a filled loadout still gets a second-pair offer")
+	for card in full.offer:
+		var owned: bool = str(card.get("id", "")) == Loadout.CANNON or str(card.get("id", "")) == Loadout.WIND_VISOR or str(card.get("id", "")) == Loadout.IRON_GRIP
+		check(not owned and int(card.get("rank", 0)) == 1, "the second-pair card is a new style at rank I")
+	var doubled := RunLogic.new()
+	doubled.run_mode = "standard"
+	doubled.kick_number = 13
+	doubled.cleats_id = Loadout.CANNON
+	doubled.cleats_rank = 6
+	doubled.cleats2_id = Loadout.PINPOINT
+	doubled.cleats2_rank = 6
+	doubled.helmet_id = Loadout.WIND_VISOR
+	doubled.helmet_rank = 6
+	doubled.helmet2_id = Loadout.SCOUT_LID
+	doubled.helmet2_rank = 6
+	doubled.gloves_id = Loadout.IRON_GRIP
+	doubled.gloves_rank = 6
+	doubled.gloves2_id = Loadout.GUIDE_GLOVES
+	doubled.gloves2_rank = 6
+	doubled.attempts = 3
+	doubled.resolve_kick("BONUS RING", 6.0, false)
+	check(not doubled.open_ring_offer() and doubled.ring_offer_skipped, "standard with two styles in every type skips the ring offer")
+	var fourth := RunLogic.new()
+	fourth.run_mode = "endless"
+	fourth.kick_number = 147
+	fourth.cleats_id = Loadout.CANNON
+	fourth.cleats_rank = 1
+	fourth.cleats2_id = Loadout.PINPOINT
+	fourth.cleats2_rank = 1
+	fourth.helmet_id = Loadout.DRIVE_LID
+	fourth.helmet_rank = 1
+	fourth.helmet2_id = Loadout.TRUE_LID
+	fourth.helmet2_rank = 1
+	fourth.gloves_id = Loadout.IRON_GRIP
+	fourth.gloves_rank = 1
+	fourth.gloves2_id = Loadout.GUIDE_GLOVES
+	fourth.gloves2_rank = 1
+	fourth.attempts = 3
+	fourth.resolve_kick("BONUS RING", 6.0, false)
+	check(fourth.open_ring_offer(), "the fourth endless ring falls through to rank-ups")
+	for card in fourth.offer:
+		check(int(card.get("rank", 0)) > 1, "the fourth ring does not offer a third style")
+		check(str(card.get("kind", "")) == Loadout.EQUIPMENT, "the fourth ring stays equipment")
+	var helmeted := RunLogic.new()
+	helmeted.kick_number = 13
+	helmeted.give(Loadout.DRIVE_LID, 1)
+	helmeted.attempts = 3
+	helmeted.resolve_kick("BONUS RING", 6.0, false)
+	check(helmeted.open_ring_offer(), "a helmeted kicker gets a ring offer")
+	var saw_drive := false
+	var saw_rank := false
+	var slots := {}
+	for card in helmeted.offer:
+		if str(card.get("id", "")) == Loadout.DRIVE_LID:
+			saw_drive = true
+		if int(card.get("rank", 0)) > 1:
+			saw_rank = true
+		slots[str(card.get("slot", ""))] = true
+		check(str(card.get("kind", "")) == Loadout.EQUIPMENT, "the ring offer has no perk or curse")
+	check(not saw_drive and not saw_rank, "the ring offer is not a Drive Lid rank-up")
+	check(slots.has(Loadout.CLEATS) and slots.has(Loadout.HELMET) and slots.has(Loadout.GLOVES), "the ring offer spreads across types")
+	var before_second := helmeted.helmet2_id
+	helmeted.skip_offer()
+	check(helmeted.helmet2_id == before_second and helmeted.cleats_id == "" and helmeted.gloves_id == "", "skipping the ring offer opens nothing")
+	helmeted.give(Loadout.TRUE_LID, 1)
+	check(helmeted.helmet_id == Loadout.DRIVE_LID and helmeted.helmet2_id == Loadout.TRUE_LID, "a second helmet style is kept beside the first")
+	helmeted.give(Loadout.SCOUT_LID, 1)
+	check(helmeted.helmet2_id == Loadout.TRUE_LID, "a type cannot hold a third style")
+	helmeted.give(Loadout.DRIVE_LID, 1)
+	check(helmeted.helmet_rank == 1 and helmeted.helmet2_id == Loadout.TRUE_LID, "the same style is not copied into the second slot")
+	var later: Array = Loadout.legal_equipment(helmeted.loadout_state())
+	var third := false
+	var drive_up := false
+	var true_up := false
+	for card in later:
+		if str(card.get("slot", "")) != Loadout.HELMET:
+			continue
+		var cid := str(card.get("id", ""))
+		if cid != Loadout.DRIVE_LID and cid != Loadout.TRUE_LID:
+			third = true
+		if cid == Loadout.DRIVE_LID and int(card.get("rank", 0)) == 2:
+			drive_up = true
+		if cid == Loadout.TRUE_LID and int(card.get("rank", 0)) == 2:
+			true_up = true
+	check(not third and drive_up and true_up, "a later offer ranks either helmet and never a third style")
+	var shop := RunLogic.new()
+	shop.new_run()
+	shop.give(Loadout.DRIVE_LID, 1)
+	shop.open_shop()
+	var shop_gear := false
+	for item in shop.shop_stock:
+		if Loadout.slot_of(str(item)) != "":
+			shop_gear = true
+	check(not shop_gear and shop.helmet2_id == "", "the shop does not open a second slot")
+	var solo := KickerStats.new()
+	Kickers.apply_to(solo, Kickers.WALK_ON)
+	Loadout.apply(solo, {"helmet_id": Loadout.DRIVE_LID, "helmet_rank": 1, "run_mode": "standard"}, true, 1.0)
+	var both := KickerStats.new()
+	Kickers.apply_to(both, Kickers.WALK_ON)
+	Loadout.apply(both, {"helmet_id": Loadout.DRIVE_LID, "helmet_rank": 1, "helmet2_id": Loadout.TRUE_LID, "helmet2_rank": 1, "run_mode": "standard"}, true, 1.15)
+	check(both.range_bonus > solo.range_bonus and both.angle_scale < solo.angle_scale, "both helmet styles apply, and Howling plus Phil reach the second piece")
 	check(ResultStamp.words(false, "BONUS RING", false, false, false, false)[0] == "BONUS RING", "the stamp reads BONUS RING")
+
+
+func _check_ring_flight_live() -> void:
+	OS.set_environment("FG_SHOTS", "")
+	var packed: PackedScene = load("res://scenes/main.tscn")
+	var game = packed.instantiate()
+	get_root().add_child(game)
+	game._taking_pictures = true
+	game.run.kick_number = 13
+	game.run.arm_debug_ring()
+	game.load_current_kick()
+	check(game._ring.visible, "the ring is on screen before the kick")
+	game.logic.phase = KickLogic.Phase.FLIGHT
+	game.logic.result_text = "BONUS RING"
+	game.logic.reached_uprights = true
+	game.logic.kick_distance = 62.0
+	game.logic.ball_forward_yards = 20.0
+	game.logic.ring_active = true
+	game._place_ring()
+	check(game._ring.visible, "the ring stays up while the ball is still in flight")
+	game.logic.result_text = "WIDE LEFT"
+	game.logic.ball_forward_yards = 62.0
+	game._place_ring()
+	game._tick_ring(0.3)
+	check(game._ring.visible and game._ring_pop < 0.0, "a miss does not pop or hide the ring")
+	game.logic.result_text = "BONUS RING"
+	game._place_ring()
+	check(game._ring.visible and game._ring_pop >= 0.0, "threading the ring starts the collect pop when the ball arrives")
+	game._tick_ring(0.3)
+	check(not game._ring.visible, "the collect pop fades the ring out")
+	game.free()
 

@@ -1091,49 +1091,55 @@ func _process(_delta: float) -> void:
 		queue_redraw()
 
 
+func _rail_gap(left: Dictionary, right: Dictionary) -> float:
+	if bool(right.get("second", false)):
+		return 8.0
+	var left_slot := str(left.get("slot", ""))
+	var right_slot := str(right.get("slot", ""))
+	if left_slot != right_slot and (right_slot == Loadout.PERK or right_slot == Loadout.CURSE or left_slot == Loadout.PERK):
+		return 22.0
+	return 8.0
+
+
 func _draw_loadout_rail(run: RunLogic) -> void:
 	slot_hits = []
-	var entries: Array = [
-		{"name": "Cleats", "id": run.cleats_id, "rank": run.cleats_rank, "slot": Loadout.CLEATS},
-		{"name": "Helmet", "id": run.helmet_id, "rank": run.helmet_rank, "slot": Loadout.HELMET},
-		{"name": "Gloves", "id": run.gloves_id, "rank": run.gloves_rank, "slot": Loadout.GLOVES},
+	var entries: Array = []
+	var gear: Array = [
+		[Loadout.CLEATS, "Cleats", run.cleats_id, run.cleats_rank, run.cleats2_id, run.cleats2_rank],
+		[Loadout.HELMET, "Helmet", run.helmet_id, run.helmet_rank, run.helmet2_id, run.helmet2_rank],
+		[Loadout.GLOVES, "Gloves", run.gloves_id, run.gloves_rank, run.gloves2_id, run.gloves2_rank],
 	]
+	for row in gear:
+		entries.append({"name": str(row[1]), "id": str(row[2]), "rank": int(row[3]), "slot": str(row[0]), "second": false})
+		if str(row[4]) != "":
+			entries.append({"name": str(row[1]), "id": str(row[4]), "rank": int(row[5]), "slot": str(row[0]), "second": true})
 	for i in 2:
 		var perk_id := ""
 		var perk_rank := 0
 		if i < run.perks.size():
 			perk_id = str(run.perks[i].get("id", ""))
 			perk_rank = int(run.perks[i].get("rank", 1))
-		entries.append({"name": "Perk", "id": perk_id, "rank": perk_rank, "slot": Loadout.PERK})
+		entries.append({"name": "Perk", "id": perk_id, "rank": perk_rank, "slot": Loadout.PERK, "second": false})
 	for i in 2:
 		var curse_id := ""
 		if i < run.curse_ids.size():
 			curse_id = str(run.curse_ids[i])
-		entries.append({"name": "Curse", "id": curse_id, "rank": 0, "slot": Loadout.CURSE})
-	# One row at the top: equipment, then perks, then curses, with a gap between groups.
+		entries.append({"name": "Curse", "id": curse_id, "rank": 0, "slot": Loadout.CURSE, "second": false})
+	# A second style uses the same 48px frame. Three of them still fit on the 1280-wide bar.
 	var slot_w := 48.0
-	var inner_gap := 8.0
-	var group_gap := 22.0
-	var equip_w := slot_w * 3.0 + inner_gap * 2.0
-	var pair_w := slot_w * 2.0 + inner_gap
-	var total := equip_w + group_gap + pair_w + group_gap + pair_w
-	var cursor := (KickConstants.WINDOW_WIDTH - total) * 0.5
+	var width := 0.0
+	for i in entries.size():
+		width += slot_w
+		if i + 1 < entries.size():
+			width += _rail_gap(entries[i], entries[i + 1])
+	var cursor := (KickConstants.WINDOW_WIDTH - width) * 0.5
 	var row_y := 8.0
-	var xs: Array = []
-	for i in 3:
-		xs.append(cursor)
-		cursor += slot_w + inner_gap
-	cursor += group_gap - inner_gap
-	for i in 2:
-		xs.append(cursor)
-		cursor += slot_w + inner_gap
-	cursor += group_gap - inner_gap
-	for i in 2:
-		xs.append(cursor)
-		cursor += slot_w + inner_gap
 	for i in entries.size():
 		var entry: Dictionary = entries[i]
-		var rect := Rect2(float(xs[i]), row_y, slot_w, slot_w)
+		var rect := Rect2(cursor, row_y, slot_w, slot_w)
+		cursor += slot_w
+		if i + 1 < entries.size():
+			cursor += _rail_gap(entry, entries[i + 1])
 		slot_hits.append({
 			"rect": rect,
 			"id": str(entry["id"]),

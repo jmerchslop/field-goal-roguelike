@@ -84,6 +84,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "r2":
+		if not await _capture_r2():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "r1":
 		if not await _capture_r1():
 			get_tree().quit(1)
@@ -1356,6 +1362,94 @@ func _capture_c3() -> bool:
 	return true
 
 
+func _capture_r2() -> bool:
+	board.highlight = 1
+	board.confirm_kicker()
+	board.force_weather(RunLogic.CLEAR)
+	board.run.attempts = 3
+	board.run.give(Loadout.DRIVE_LID, 1)
+	if not board.run.arm_debug_ring():
+		print("ring debug did not arm")
+		return false
+	board.run.wind_speed = 0
+	board.run.wind_direction = 0.0
+	board.load_current_kick()
+	var center: float = board.logic.ring_center
+	var dist: float = board.logic.kick_distance
+	var aim: float = rad_to_deg(atan((center - board.logic.start_lateral_yards) / dist))
+	board.logic.aim_degrees = aim
+	board.logic.aim_base = aim
+	_swing_meter(80.0, 0.0)
+	if board.logic.phase != KickLogic.Phase.FLIGHT:
+		print("flight did not start ", board.logic.phase)
+		return false
+	board.logic.advance(board.logic.flight_duration * 0.55)
+	board.refresh_view()
+	if not board._ring.visible or board.logic.ball_forward_yards >= board.logic.kick_distance:
+		print("ring hidden in flight ", board._ring.visible, " ball ", board.logic.ball_forward_yards)
+		return false
+	if not await _capture("r2_flight_ring.png"):
+		return false
+	board.load_current_kick()
+	board.run.attempts = 3
+	var away := -8.0 if center > 0.0 else 8.0
+	board.logic.aim_degrees = away
+	board.logic.aim_base = away
+	_swing_meter(80.0, 0.0)
+	if board.logic.phase == KickLogic.Phase.FLIGHT:
+		board.logic.advance(board.logic.flight_duration)
+	if board.logic.result_text == "BONUS RING":
+		print("the miss threaded the ring")
+		return false
+	board.result_age = 0.9
+	board.settle_kick()
+	if not board.run.ring_showing() or not board._ring.visible:
+		print("ring missing after the miss")
+		return false
+	if not await _capture("r2_miss_retry.png"):
+		return false
+	board.load_current_kick()
+	board.run.attempts = 3
+	center = board.logic.ring_center
+	dist = board.logic.kick_distance
+	aim = rad_to_deg(atan((center - board.logic.start_lateral_yards) / dist))
+	board.logic.aim_degrees = aim
+	board.logic.aim_base = aim
+	_swing_meter(90.0, 0.0)
+	if board.logic.phase == KickLogic.Phase.FLIGHT:
+		board.logic.advance(board.logic.flight_duration)
+	if board.logic.result_text != "BONUS RING":
+		print("collect missed ", board.logic.result_text, " offset ", board.logic.offset_yards, " center ", center)
+		return false
+	board.refresh_view()
+	board._tick_ring(0.3)
+	board.result_age = 0.9
+	board.settle_kick()
+	if not board.run.awaiting_offer:
+		print("ring offer did not open")
+		return false
+	for card in board.run.offer:
+		if str(card.get("id", "")) == Loadout.DRIVE_LID or int(card.get("rank", 0)) > 1:
+			print("offer repeated Drive Lid ", card)
+			return false
+	if not await _capture("r2_ring_offer.png"):
+		return false
+	var helmet_card := -1
+	for i in board.run.offer.size():
+		if str(board.run.offer[i].get("slot", "")) == Loadout.HELMET:
+			helmet_card = i
+	if helmet_card < 0 or not board.run.pick_card(helmet_card):
+		print("no second helmet to pick")
+		return false
+	board._after_cards()
+	if board.run.helmet_id != Loadout.DRIVE_LID or board.run.helmet2_id == "":
+		print("second helmet missing ", board.run.helmet_id, board.run.helmet2_id)
+		return false
+	if not await _capture("r2_two_helmets.png"):
+		return false
+	return true
+
+
 func _capture_r1() -> bool:
 	board.highlight = 0
 	board.confirm_kicker()
@@ -1415,6 +1509,8 @@ func _capture_r1() -> bool:
 	print("RING result ", board.logic.result_text, " offset ", board.logic.offset_yards, " center ", center, " aim ", aim)
 	if board.logic.result_text != "BONUS RING":
 		return false
+	board.refresh_view()
+	board._tick_ring(0.3)
 	board.result_age = 0.30
 	board._step_kick_pose(0.0)
 	board.refresh_view()

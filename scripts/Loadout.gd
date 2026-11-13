@@ -495,20 +495,26 @@ static func _perk_rank(state: Dictionary, id: String) -> int:
 static func legal_equipment(state: Dictionary) -> Array:
 	var cards: Array = []
 	var slots := [
-		[CLEATS, str(state.get("cleats_id", "")), int(state.get("cleats_rank", 0)), CLEAT_IDS],
-		[HELMET, str(state.get("helmet_id", "")), int(state.get("helmet_rank", 0)), HELMET_IDS],
-		[GLOVES, str(state.get("gloves_id", "")), int(state.get("gloves_rank", 0)), GLOVE_IDS],
+		[CLEATS, str(state.get("cleats_id", "")), int(state.get("cleats_rank", 0)), str(state.get("cleats2_id", "")), int(state.get("cleats2_rank", 0)), CLEAT_IDS],
+		[HELMET, str(state.get("helmet_id", "")), int(state.get("helmet_rank", 0)), str(state.get("helmet2_id", "")), int(state.get("helmet2_rank", 0)), HELMET_IDS],
+		[GLOVES, str(state.get("gloves_id", "")), int(state.get("gloves_rank", 0)), str(state.get("gloves2_id", "")), int(state.get("gloves2_rank", 0)), GLOVE_IDS],
 	]
+	var mode := str(state.get("run_mode", "standard"))
 	for slot in slots:
 		var slot_name := str(slot[0])
 		var owned_id := str(slot[1])
 		var rank := int(slot[2])
-		var pool: Array = slot[3]
+		var second_id := str(slot[3])
+		var second_rank := int(slot[4])
+		var pool: Array = slot[5]
 		if owned_id == "":
 			for id in pool:
 				cards.append(_card(EQUIPMENT, slot_name, str(id), 1))
-		elif rank < max_rank(owned_id, str(state.get("run_mode", "standard"))):
-			cards.append(_card(EQUIPMENT, slot_name, owned_id, rank + 1))
+		else:
+			if rank < max_rank(owned_id, mode):
+				cards.append(_card(EQUIPMENT, slot_name, owned_id, rank + 1))
+			if second_id != "" and second_rank < max_rank(second_id, mode):
+				cards.append(_card(EQUIPMENT, slot_name, second_id, second_rank + 1))
 	return cards
 
 
@@ -533,7 +539,7 @@ static func legal_curses(state: Dictionary) -> Array:
 	if bool(state.get("curses_locked", false)) or owned.size() >= 2:
 		return []
 	var banned: Array = state.get("banned_curses", [])
-	var blocked_ice := str(state.get("helmet_id", "")) == ICE_CAGE
+	var blocked_ice := str(state.get("helmet_id", "")) == ICE_CAGE or str(state.get("helmet2_id", "")) == ICE_CAGE
 	var cards: Array = []
 	for id in CURSE_IDS:
 		if owned.has(id) or banned.has(id):
@@ -548,22 +554,95 @@ static func card_key(card) -> String:
 	return "%s|%s" % [str(card.get("id", "")), int(card.get("rank", 0))]
 
 
-static func draw_equipment_offer(state: Dictionary, rng: RandomNumberGenerator) -> Array:
-	var pool := legal_equipment(state)
-	if pool.is_empty():
-		return []
+static func _style_rows(state: Dictionary) -> Array:
+	return [
+		[CLEATS, str(state.get("cleats_id", "")), int(state.get("cleats_rank", 0)), str(state.get("cleats2_id", "")), int(state.get("cleats2_rank", 0)), CLEAT_IDS],
+		[HELMET, str(state.get("helmet_id", "")), int(state.get("helmet_rank", 0)), str(state.get("helmet2_id", "")), int(state.get("helmet2_rank", 0)), HELMET_IDS],
+		[GLOVES, str(state.get("gloves_id", "")), int(state.get("gloves_rank", 0)), str(state.get("gloves2_id", "")), int(state.get("gloves2_rank", 0)), GLOVE_IDS],
+	]
+
+
+static func draw_ring_offer(state: Dictionary, rng: RandomNumberGenerator) -> Array:
+	# One new style per type first, so a filled helmet does not crowd out cleats and gloves.
+	var rows := _style_rows(state)
 	var cards: Array = []
-	var bag: Array = pool.duplicate()
-	while cards.size() < 3:
-		if bag.is_empty():
-			bag = pool.duplicate()
-		var index := rng.randi_range(0, bag.size() - 1)
-		cards.append(bag[index])
-		bag.remove_at(index)
-		if cards.size() >= pool.size() and cards.size() >= 3:
+	var used := {}
+	var second_bags: Array = []
+	var empty_bags: Array = []
+	for row in rows:
+		var slot_name := str(row[0])
+		var owned := str(row[1])
+		var second := str(row[3])
+		var pool: Array = row[5]
+		if owned != "" and second == "":
+			var bag: Array = []
+			for id in pool:
+				if str(id) == owned:
+					continue
+				bag.append(_card(EQUIPMENT, slot_name, str(id), 1))
+			if not bag.is_empty():
+				second_bags.append(bag)
+		elif owned == "":
+			var bag: Array = []
+			for id in pool:
+				bag.append(_card(EQUIPMENT, slot_name, str(id), 1))
+			if not bag.is_empty():
+				empty_bags.append(bag)
+	for bag in second_bags:
+		if cards.size() >= 3:
 			break
-	while cards.size() < 3:
-		cards.append(pool[cards.size() % pool.size()])
+		var options: Array = bag
+		var pick: Dictionary = options[rng.randi_range(0, options.size() - 1)]
+		var key := str(pick.get("id", ""))
+		if used.has(key):
+			continue
+		cards.append(pick)
+		used[key] = true
+	var leftovers: Array = []
+	for bag in empty_bags:
+		if cards.size() >= 3:
+			break
+		var options: Array = bag
+		var open: Array = []
+		for card in options:
+			if not used.has(str(card.get("id", ""))):
+				open.append(card)
+		if open.is_empty():
+			continue
+		var pick: Dictionary = open[rng.randi_range(0, open.size() - 1)]
+		cards.append(pick)
+		used[str(pick.get("id", ""))] = true
+		for card in open:
+			if str(card.get("id", "")) != str(pick.get("id", "")):
+				leftovers.append(card)
+	var guard := 0
+	while cards.size() < 3 and not leftovers.is_empty() and guard < 12:
+		guard += 1
+		var pick: Dictionary = leftovers[rng.randi_range(0, leftovers.size() - 1)]
+		leftovers.erase(pick)
+		var key := str(pick.get("id", ""))
+		if used.has(key):
+			continue
+		cards.append(pick)
+		used[key] = true
+	if cards.size() >= 3 or str(state.get("run_mode", "standard")) != "endless":
+		return cards
+	var mode := str(state.get("run_mode", "endless"))
+	for row in rows:
+		var slot_name := str(row[0])
+		var pairs := [[str(row[1]), int(row[2])], [str(row[3]), int(row[4])]]
+		for pair in pairs:
+			var owned_id := str(pair[0])
+			var owned_rank := int(pair[1])
+			if owned_id == "" or owned_rank >= max_rank(owned_id, mode):
+				continue
+			var key := "%s|%s" % [owned_id, owned_rank + 1]
+			if used.has(key):
+				continue
+			cards.append(_card(EQUIPMENT, slot_name, owned_id, owned_rank + 1))
+			used[key] = true
+			if cards.size() >= 3:
+				return cards
 	return cards
 
 
@@ -746,6 +825,98 @@ static func _index_kind(offer: Array, kind: String) -> int:
 	return -1
 
 
+static func _apply_piece(stats: KickerStats, item_id: String, item_rank: int, item_fx: int, howling: bool, item_scale: float, acc: Dictionary) -> void:
+	# Adds and multiplier gaps stack. A second style never replaces the first.
+	if item_id == CANNON:
+		acc["range"] = float(acc["range"]) + float(cannon_yards(item_rank))
+	elif item_id == PINPOINT:
+		acc["perfect"] = float(acc["perfect"]) + 2.0 * float(item_fx)
+		acc["good"] = float(acc["good"]) + 3.0 * float(item_fx)
+	elif item_id == ANCHOR:
+		var factor := _scale_factor(pow(0.85, float(item_fx)), howling, item_scale)
+		acc["power"] = float(acc["power"]) * factor
+		acc["accuracy"] = float(acc["accuracy"]) * factor
+	elif item_id == STICKER:
+		acc["drift"] = float(acc["drift"]) * _scale_factor(pow(0.80, float(item_fx)), howling, item_scale)
+	elif item_id == WIND_VISOR:
+		stats.flag_reader = item_rank >= 1
+		stats.path_percent = KickLogic.path_percent_for_rank(item_rank)
+		stats.laser_line = stats.path_percent > 0.0
+	elif item_id == ICE_CAGE:
+		stats.ice_cage = true
+		stats.ice_veins = true
+		if item_fx >= 2:
+			acc["accuracy"] = float(acc["accuracy"]) * _scale_factor(0.90, howling, item_scale)
+		var odd := 3
+		while odd <= item_fx:
+			acc["perfect"] = float(acc["perfect"]) + 1.0
+			odd += 2
+		var even := 4
+		while even <= item_fx:
+			acc["good"] = float(acc["good"]) + 2.0
+			even += 2
+	elif item_id == SCOUT_LID:
+		stats.rerolls_per_run += _scout_rerolls(item_fx)
+		if item_fx >= 4:
+			stats.practice_per_quarter += 1 + int((item_fx - 4) / 2.0)
+	elif item_id == DRIVE_LID:
+		acc["range"] = float(acc["range"]) + float(drive_yards(item_rank))
+	elif item_id == TRUE_LID:
+		stats.angle_scale *= _scale_factor(pow(0.90, float(item_fx)), howling, item_scale)
+	elif item_id == SHELTER_LID:
+		var shelter := _scale_factor(pow(0.80, float(item_fx)), howling, item_scale)
+		if stats.shelter_factor <= 0.0 or is_equal_approx(stats.shelter_factor, 1.0):
+			stats.shelter_factor = shelter
+		else:
+			stats.shelter_factor *= shelter
+	elif item_id == DOINK_CAP:
+		if item_fx <= 5:
+			stats.doink_per_quarter = item_fx
+		elif item_fx == 6:
+			stats.doink_per_quarter = 5
+		else:
+			stats.doink_per_quarter = item_fx
+		stats.doink_carry = item_fx >= 6
+	elif item_id == IRON_GRIP:
+		var cut := 2.0 * float(mini(item_fx, 2))
+		stats.red_tip_noise = maxf(stats.red_tip_noise - cut, 1.0)
+		if item_fx >= 3:
+			stats.red_tip_start += 3.0
+		if item_fx >= 4:
+			stats.red_tip_start += 3.0
+		if item_fx >= 5:
+			stats.red_tip_start += 3.0
+		stats.red_tip_off = item_fx >= 6
+	elif item_id == REPLAY_GLOVES:
+		if item_fx >= 7:
+			stats.practice_per_quarter += item_fx
+		else:
+			stats.practice_per_quarter += mini(item_fx, 5)
+		stats.practice_carry = item_fx >= 6
+	elif item_id == HIGH_AIR:
+		acc["range"] = float(acc["range"]) + float(high_air_yards(item_rank))
+		stats.thin_air = true
+	elif item_id == GUIDE_GLOVES:
+		var guide := _scale_factor(guide_factor(item_rank), howling, item_scale)
+		if is_equal_approx(stats.guide_factor, 1.0):
+			stats.guide_factor = guide
+		else:
+			stats.guide_factor *= guide
+	elif item_id == PATIENT_GLOVES:
+		acc["power"] = float(acc["power"]) * _scale_factor(pow(0.85, float(item_fx)), howling, item_scale)
+	elif item_id == HUSH_GLOVES:
+		stats.hush_mph += float(item_fx)
+	elif item_id == WEATHER_WRAPS:
+		if item_fx <= 1:
+			stats.weather_cut = maxi(stats.weather_cut, 1)
+		elif item_fx == 2:
+			stats.weather_cut = maxi(stats.weather_cut, 2)
+		else:
+			stats.weather_cut = maxi(stats.weather_cut, 3)
+		if item_fx >= 4:
+			stats.wraps_yards += 2.0 * float(item_fx - 3)
+
+
 # stats already has the kicker's base kit. This adds the owned pieces.
 # howling makes equipment and perk numbers 15% stronger. Curse upsides are not included.
 static func apply(stats: KickerStats, state: Dictionary, howling: bool, item_scale: float = 1.0) -> void:
@@ -755,96 +926,34 @@ static func apply(stats: KickerStats, state: Dictionary, howling: bool, item_sca
 	var power_mul := 1.0
 	var accuracy_mul := 1.0
 	var drift_mul := 1.0
-	var cleats := str(state.get("cleats_id", ""))
-	var cleat_rank := int(state.get("cleats_rank", 0))
-	var helmet := str(state.get("helmet_id", ""))
-	var helmet_rank := int(state.get("helmet_rank", 0))
-	var gloves := str(state.get("gloves_id", ""))
-	var glove_rank := int(state.get("gloves_rank", 0))
-	var cleat_fx := effect_rank(cleat_rank)
-	if cleats == CANNON:
-		range_add += float(cannon_yards(cleat_rank))
-	elif cleats == PINPOINT:
-		perfect_add += 2.0 * float(cleat_fx)
-		good_add += 3.0 * float(cleat_fx)
-	elif cleats == ANCHOR:
-		var factor := _scale_factor(pow(0.85, float(cleat_fx)), howling, item_scale)
-		power_mul *= factor
-		accuracy_mul *= factor
-	elif cleats == STICKER:
-		var factor := _scale_factor(pow(0.80, float(cleat_fx)), howling, item_scale)
-		drift_mul *= factor
-	var helmet_fx := effect_rank(helmet_rank)
-	if helmet == WIND_VISOR:
-		stats.flag_reader = helmet_rank >= 1
-		stats.path_percent = KickLogic.path_percent_for_rank(helmet_rank)
-		stats.laser_line = stats.path_percent > 0.0
-	elif helmet == ICE_CAGE:
-		stats.ice_cage = true
-		stats.ice_veins = true
-		if helmet_fx >= 2:
-			accuracy_mul *= _scale_factor(0.90, howling, item_scale)
-		var odd := 3
-		while odd <= helmet_fx:
-			perfect_add += 1.0
-			odd += 2
-		var even := 4
-		while even <= helmet_fx:
-			good_add += 2.0
-			even += 2
-	elif helmet == SCOUT_LID:
-		stats.rerolls_per_run += _scout_rerolls(helmet_fx)
-		if helmet_fx >= 4:
-			stats.practice_per_quarter += 1 + int((helmet_fx - 4) / 2.0)
-	elif helmet == DRIVE_LID:
-		range_add += float(drive_yards(helmet_rank))
-	elif helmet == TRUE_LID:
-		stats.angle_scale *= _scale_factor(pow(0.90, float(helmet_fx)), howling, item_scale)
-	elif helmet == SHELTER_LID:
-		stats.shelter_factor = _scale_factor(pow(0.80, float(helmet_fx)), howling, item_scale)
-	elif helmet == DOINK_CAP:
-		if helmet_fx <= 5:
-			stats.doink_per_quarter = helmet_fx
-		elif helmet_fx == 6:
-			stats.doink_per_quarter = 5
-		else:
-			stats.doink_per_quarter = helmet_fx
-		stats.doink_carry = helmet_fx >= 6
-	var glove_fx := effect_rank(glove_rank)
-	if gloves == IRON_GRIP:
-		var cut := 2.0 * float(mini(glove_fx, 2))
-		stats.red_tip_noise = maxf(stats.red_tip_noise - cut, 1.0)
-		if glove_fx >= 3:
-			stats.red_tip_start += 3.0
-		if glove_fx >= 4:
-			stats.red_tip_start += 3.0
-		if glove_fx >= 5:
-			stats.red_tip_start += 3.0
-		stats.red_tip_off = glove_fx >= 6
-	elif gloves == REPLAY_GLOVES:
-		if glove_fx >= 7:
-			stats.practice_per_quarter += glove_fx
-		else:
-			stats.practice_per_quarter += mini(glove_fx, 5)
-		stats.practice_carry = glove_fx >= 6
-	elif gloves == HIGH_AIR:
-		range_add += float(high_air_yards(glove_rank))
-		stats.thin_air = true
-	elif gloves == GUIDE_GLOVES:
-		stats.guide_factor = _scale_factor(guide_factor(glove_rank), howling, item_scale)
-	elif gloves == PATIENT_GLOVES:
-		power_mul *= _scale_factor(pow(0.85, float(glove_fx)), howling, item_scale)
-	elif gloves == HUSH_GLOVES:
-		stats.hush_mph = float(glove_fx)
-	elif gloves == WEATHER_WRAPS:
-		if glove_fx <= 1:
-			stats.weather_cut = 1
-		elif glove_fx == 2:
-			stats.weather_cut = 2
-		else:
-			stats.weather_cut = 3
-		if glove_fx >= 4:
-			stats.wraps_yards = 2.0 * float(glove_fx - 3)
+	var pieces: Array = [
+		[str(state.get("cleats_id", "")), int(state.get("cleats_rank", 0))],
+		[str(state.get("cleats2_id", "")), int(state.get("cleats2_rank", 0))],
+		[str(state.get("helmet_id", "")), int(state.get("helmet_rank", 0))],
+		[str(state.get("helmet2_id", "")), int(state.get("helmet2_rank", 0))],
+		[str(state.get("gloves_id", "")), int(state.get("gloves_rank", 0))],
+		[str(state.get("gloves2_id", "")), int(state.get("gloves2_rank", 0))],
+	]
+	var acc := {
+		"range": range_add,
+		"perfect": perfect_add,
+		"good": good_add,
+		"power": power_mul,
+		"accuracy": accuracy_mul,
+		"drift": drift_mul,
+	}
+	for piece in pieces:
+		var item_id := str(piece[0])
+		var item_rank := int(piece[1])
+		if item_id == "":
+			continue
+		_apply_piece(stats, item_id, item_rank, effect_rank(item_rank), howling, item_scale, acc)
+	range_add = float(acc["range"])
+	perfect_add = float(acc["perfect"])
+	good_add = float(acc["good"])
+	power_mul = float(acc["power"])
+	accuracy_mul = float(acc["accuracy"])
+	drift_mul = float(acc["drift"])
 	var hero_add := 0.0
 	var storm := 0.0
 	var drill := 0.0
