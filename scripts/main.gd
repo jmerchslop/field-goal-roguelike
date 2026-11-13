@@ -2877,7 +2877,13 @@ const YARD_TARGET_PX := 13.0
 const YARD_MAX_SCALE := 12.0
 const YARD_NEAR_YARDS := 80.0
 const YARD_GAP_RATIO := 0.46
-const YARD_NUMBER_X := 5.6
+# Sidelines are the white lines at ±25 (the grass is 54 yards wide). The old
+# columns sat at ±5.6, between the hash and the wide spot, so a 62 sat on the cone.
+# 15 yards off center is 10 yards inside that sideline, clear of every kick spot.
+const FIELD_SIDELINE_X := 25.0
+const YARD_NUMBER_X := 15.0
+# Cull still measures at the old column so the C3B set of numbers does not change.
+const YARD_MEASURE_X := 5.6
 
 
 func yard_line_rank(span: float, yard: float) -> int:
@@ -3093,8 +3099,8 @@ func _shown_px(span: float, z: float, scale: float) -> float:
 
 
 func _number_gap(span: float, a: float, b: float) -> float:
-	var ya := _screen_y(span, Vector3(YARD_NUMBER_X, 1.1, a))
-	var yb := _screen_y(span, Vector3(YARD_NUMBER_X, 1.1, b))
+	var ya := _screen_y(span, Vector3(YARD_MEASURE_X, 1.1, a))
+	var yb := _screen_y(span, Vector3(YARD_MEASURE_X, 1.1, b))
 	if ya < 0.0 or yb < 0.0:
 		return 0.0
 	return absf(ya - yb)
@@ -3148,8 +3154,8 @@ func _pixels_per_yard(span: float, z: float) -> float:
 
 
 func _number_px(span: float, z: float) -> float:
-	var a := _screen_y(span, Vector3(YARD_NUMBER_X, 1.1, z))
-	var b := _screen_y(span, Vector3(YARD_NUMBER_X, 1.1 + YARD_WORLD_H, z))
+	var a := _screen_y(span, Vector3(YARD_MEASURE_X, 1.1, z))
+	var b := _screen_y(span, Vector3(YARD_MEASURE_X, 1.1 + YARD_WORLD_H, z))
 	if a < 0.0 or b < 0.0:
 		return 0.0
 	return absf(a - b)

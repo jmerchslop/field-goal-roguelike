@@ -4821,6 +4821,33 @@ func _check_markings() -> void:
 		if child is Label3D:
 			painted[str(child.text)] = true
 	check(painted.has("200") and painted.has("180") and painted.has("100") and not painted.has("140"), "the 200-yard field paints the near numbers, a later number, and not the pile")
+	var expected := {
+		35: "35,30,20,10",
+		75: "75,70,60,50,40,30,20,10",
+		200: "200,190,180,170,160,100",
+		500: "500,490,480,470,460,450,440,400,350,250",
+		1000: "1000,990,980,970,960,950,940,930,920,900,850,800,750,650,450,50",
+	}
+	for span in [35, 75, 200, 500, 1000]:
+		var got := ""
+		for yard in game.yard_numbers_for(float(span)):
+			if got != "":
+				got += ","
+			got += str(yard)
+		check(got == str(expected[span]), "the %s-yard number set changed from the C3B cull, got %s" % [span, got])
+	for span in [35.0, 75.0, 200.0, 500.0, 1000.0]:
+		game._ensure_field(span)
+		var signs := 0
+		for child in game._marks.get_children():
+			if not child is Label3D:
+				continue
+			signs += 1
+			var label := child as Label3D
+			var x := absf(label.position.x)
+			check(x >= 9.0, "a yard number center is within 9 yards of midfield")
+			var half_w := label.get_aabb().size.x * 0.5
+			check(x + half_w < 25.0, "a yard number sits outside the sideline at %s" % span)
+		check(signs > 0, "yard numbers were painted at %s" % span)
 	game.free()
 
 

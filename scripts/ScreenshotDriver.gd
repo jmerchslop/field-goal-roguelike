@@ -84,6 +84,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "c4":
+		if not await _capture_c4():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "r2":
 		if not await _capture_r2():
 			get_tree().quit(1)
@@ -1358,6 +1364,61 @@ func _capture_c3() -> bool:
 	print("C3 back kick ", board.run.kick_number, " attempts ", board.run.attempts, " preview ", board.preview_step(), " yards ", board.logic.kick_distance)
 	if board.run.attempts != attempts or board.run.kick_number != kick_number or board.preview_step() != 0 or not is_equal_approx(board.logic.kick_distance, 35.0):
 		print("distance preview did not restore the kick")
+		return false
+	return true
+
+
+func _capture_c4() -> bool:
+	board.highlight = 1
+	board.confirm_kicker()
+	board.force_weather(RunLogic.CLEAR)
+	board.run.wind_speed = 0
+	board.run.wind_direction = 0.0
+	board.load_current_kick()
+	var attempts: int = board.run.attempts
+	var kick_number: int = board.run.kick_number
+	if not await _capture("c4_35_center.png"):
+		return false
+	board.run.kick_number = 13
+	board.run.spot_yards = 6.0
+	board.load_current_kick()
+	if not is_equal_approx(board.logic.kick_distance, 62.0):
+		print("kick 13 is ", board.logic.kick_distance)
+		return false
+	if not await _capture("c4_62_right_wide.png"):
+		return false
+	board.run.kick_number = 1
+	board.run.spot_yards = 0.0
+	board.load_current_kick()
+	board.cycle_debug_distance()
+	var guard := 0
+	while absf(board.run.spot_yards - (-3.0)) > 0.05 and guard < 6:
+		board.cycle_spot()
+		guard += 1
+	if absf(board.logic.kick_distance - 75.0) > 0.1 or absf(board.run.spot_yards - (-3.0)) > 0.05:
+		print("75 left hash ", board.logic.kick_distance, " spot ", board.run.spot_yards)
+		return false
+	if not await _capture("c4_75_left_hash.png"):
+		return false
+	board.run.spot_yards = 0.0
+	board.logic.start_lateral_yards = 0.0
+	board.logic.sync_tee()
+	board.cycle_debug_distance()
+	board.refresh_view()
+	if not await _capture("c4_200.png"):
+		return false
+	board.cycle_debug_distance()
+	board.refresh_view()
+	if not await _capture("c4_500.png"):
+		return false
+	board.cycle_debug_distance()
+	board.refresh_view()
+	if not await _capture("c4_1000.png"):
+		return false
+	board.cycle_debug_distance()
+	board.refresh_view()
+	if board.preview_step() != 0 or board.run.attempts != attempts or board.run.kick_number != kick_number:
+		print("C4 back kick ", board.run.kick_number, " attempts ", board.run.attempts, " preview ", board.preview_step())
 		return false
 	return true
 
