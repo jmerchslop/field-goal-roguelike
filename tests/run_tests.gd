@@ -59,10 +59,12 @@ func _run() -> void:
 	_check_broadcast_hud()
 	_check_equipment_xxiv()
 	_check_six_icons()
+	_check_playing_card()
 
 
 func _finish_live() -> void:
 	_check_pause_saves()
+	_check_playing_card_live()
 	_check_aim_cone()
 	_check_ball_trail()
 	_check_markings()
@@ -4973,4 +4975,76 @@ func _check_live_field() -> void:
 	check(source.find("puddle") < 0 and source.find("wet_grass") < 0 and source.find("snow_ground") < 0, "this paste did not add puddles, wet grass, or snow on the ground")
 	check(source.find("func _shift_weather") >= 0 and source.find("KEY_0") >= 0 and source.find("KEY_8") >= 0, "Shift+0 through Shift+8 are still the weather keys")
 	game.free()
+
+
+func _check_playing_card() -> void:
+	check(ResourceLoader.exists(SelectCard.FRAME_PATH), "the Playing Card frame is imported")
+	check(not ResourceLoader.exists("res://art/ui/character-select-lock.jpg") and not ResourceLoader.exists("res://character-select-lock.jpg"), "the lock JPEG is not a game sprite")
+	check(not ResourceLoader.exists("res://art/loadout/empty_perk.png"), "empty_perk.png was not added")
+	var hud := FileAccess.get_file_as_string("res://scripts/hud.gd")
+	check(hud.find("SelectCard.FRAME_PATH") >= 0 and hud.find("playing-card") < 0 or hud.find("FRAME_PATH") >= 0, "the select screen composites the playing card frame")
+	check(hud.find("character-select-lock") < 0 and hud.find("Broadcast Bezel") < 0 and hud.find("Coin Window") < 0 and hud.find("Locker Plaque") < 0, "rejected frames and the lock JPEG are not drawn")
+	check(hud.find("Choose your kicker") < 0, "the old wide-panel select title is gone")
+	var ids: PackedStringArray = SelectCard.order()
+	check(ids.size() == 8 and ids[0] == Kickers.BIG_BRUCE and ids[1] == Kickers.WALK_ON and ids[2] == Kickers.PHIL and ids[3] == Kickers.GARY and ids[4] == Kickers.VEX and ids[5] == Kickers.COLE and ids[6] == Kickers.WILLOW and ids[7] == Kickers.CARLOS, "grid order is Bruce, Walk-On, Phil, Gary, Vex, Cole, Willow, Carlos")
+	var rects: Array = SelectCard.grid_rects()
+	check(rects.size() == 8, "the select grid has eight cards")
+	for rect in rects:
+		var card: Rect2 = rect
+		check(card.size.y > card.size.x and absf(card.size.x / card.size.y - 5.0 / 7.0) < 0.03, "cards keep the 5:7 playing-card shape, got %s" % card.size)
+	check(SelectCard.card_name(Kickers.WALK_ON) == "THE WALK ON" and SelectCard.ball_line(Kickers.WALK_ON) == "TEAM ISSUE", "Walk-On copy has no hyphen")
+	check(SelectCard.yard_cap(Kickers.BIG_BRUCE) == 65 and SelectCard.yard_cap(Kickers.WALK_ON) == 60 and SelectCard.yard_cap(Kickers.PHIL) == 55 and SelectCard.yard_cap(Kickers.GARY) == 65, "starter and Phil and Gary caps stay the no-item 100 percent range")
+	check(SelectCard.yard_cap(Kickers.COLE) == 70 and SelectCard.yard_cap(Kickers.WILLOW) == 50 and SelectCard.yard_cap(Kickers.CARLOS) == 66, "Cole, Willow, and Carlos caps stay the no-item 100 percent range")
+	check(SelectCard.yard_cap(Kickers.VEX) < 0 and SelectCard.corner_text(Kickers.VEX, true) == "MAX" and SelectCard.corner_text(Kickers.VEX, true) != "20" and SelectCard.corner_text(Kickers.VEX, true) != "1000", "Vex has no numeric yard cap")
+	check(SelectCard.corner_text(Kickers.PHIL, false) == ".." and SelectCard.corner_text(Kickers.VEX, false) == "..", "locked corners use a glyph-safe mark instead of a hyphen")
+	check(SelectCard.kit_lines(Kickers.VEX)[0] == "INFINITE RANGE" and SelectCard.ball_line(Kickers.VEX) == "THE FLYING SAUCER", "unlocked Vex shows the saucer kit")
+	var safe := true
+	var bad := ""
+	for line in SelectCard.every_line():
+		if not SelectCard.glyph_safe(line):
+			safe = false
+			bad = line
+	check(safe, "select copy has no hyphen, apostrophe, ampersand, or parentheses, got %s" % bad)
+	check(Kickers.unlock_hint(Kickers.WILLOW).find("5") >= 0 and Kickers.unlock_hint(Kickers.CARLOS).find("100") >= 0, "stored unlock rules were not rewritten")
+	check(not KickConstants.debug_unlock_all_kickers, "debug_unlock_all_kickers stays false")
+	var shell := FileAccess.get_file_as_string("res://scripts/main.gd")
+	check(shell.find("KEY_H") >= 0 and shell.find("KEY_J") >= 0 and shell.find("KEY_K") >= 0 and shell.find("KEY_L") >= 0 and shell.find("KEY_F9") >= 0, "debug H, J, K, L, and F9 stay on their keys")
+	check(SelectCard.step_highlight(0, -1, 0) == 3 and SelectCard.step_highlight(3, 1, 0) == 0 and SelectCard.step_highlight(0, 0, -1) == 4 and SelectCard.step_highlight(1, 0, 1) == 5, "arrow movement reaches every card")
+	var records = get_root().get_node("SaveData")
+	var saved: Dictionary = records.unlocks.duplicate()
+	for id in Kickers.UNLOCKABLE:
+		records.unlocks[id] = false
+	check(Kickers.is_unlocked(Kickers.BIG_BRUCE) and Kickers.is_unlocked(Kickers.WALK_ON), "Bruce and The Walk-On stay unlocked")
+	var locked_ok := true
+	for id in Kickers.UNLOCKABLE:
+		if Kickers.is_unlocked(str(id)):
+			locked_ok = false
+	check(locked_ok, "unlockable kickers stay locked on a fresh save without debug_unlock_all_kickers")
+	records.unlocks = saved
+
+
+func _check_playing_card_live() -> void:
+	var records = get_root().get_node("SaveData")
+	var saved: Dictionary = records.unlocks.duplicate()
+	for id in Kickers.UNLOCKABLE:
+		records.unlocks[id] = false
+	OS.set_environment("FG_SHOTS", "")
+	var packed: PackedScene = load("res://scenes/main.tscn")
+	var game = packed.instantiate()
+	get_root().add_child(game)
+	game._taking_pictures = true
+	game.open_select()
+	check(game.highlight == 1 and game.selecting, "a new select highlights The Walk-On")
+	game.highlight = 4
+	game.confirm_kicker()
+	check(game.selecting and game.run.kicker_id != Kickers.VEX, "Space on locked Vex does not start a run")
+	game.highlight = 0
+	game.confirm_kicker()
+	check(not game.selecting and game.run.kicker_id == Kickers.BIG_BRUCE, "Space on Bruce starts the run as Bruce")
+	game.open_select()
+	game.highlight = 1
+	game.confirm_kicker()
+	check(not game.selecting and game.run.kicker_id == Kickers.WALK_ON, "Space on The Walk-On starts that run")
+	game.free()
+	records.unlocks = saved
 

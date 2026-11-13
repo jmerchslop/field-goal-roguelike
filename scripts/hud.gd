@@ -514,50 +514,192 @@ func kicker_slot_at(point: Vector2) -> int:
 	return -1
 
 
+var _card_frames := {}
+var _card_busts := {}
+
+
 func _draw_kicker_select() -> void:
-	draw_rect(Rect2(0, 0, KickConstants.WINDOW_WIDTH, KickConstants.WINDOW_HEIGHT), Color(0.05, 0.08, 0.12, 0.72))
-	_text_centered("Choose your kicker", 36.0, 28, KickConstants.COLOR_TEXT)
-	kicker_rects = []
-	var count := Kickers.ALL.size()
-	var columns := 4
-	var gap_x := 14.0
-	var gap_y := 10.0
-	var width := (KickConstants.WINDOW_WIDTH - 36.0 - gap_x * float(columns - 1)) / float(columns)
-	var rows := int(ceil(float(count) / float(columns)))
-	var height := minf(300.0, (KickConstants.WINDOW_HEIGHT - 88.0 - gap_y * float(rows - 1)) / float(rows))
-	for i in count:
+	# The stadium stays behind a dark gutter. The lock JPEG is not drawn.
+	draw_rect(Rect2(0, 0, KickConstants.WINDOW_WIDTH, KickConstants.WINDOW_HEIGHT), Color(0.02, 0.025, 0.03, 0.78))
+	_pg_centered("CHOOSE YOUR KICKER", 16.0, 18, Color(0.95, 0.92, 0.84))
+	kicker_rects = SelectCard.grid_rects()
+	var picked := int(game.highlight)
+	for i in kicker_rects.size():
 		var info: Dictionary = Kickers.ALL[i]
-		var col := i % columns
-		var row := int(i / columns)
-		var rect := Rect2(18.0 + float(col) * (width + gap_x), 52.0 + float(row) * (height + gap_y), width, height)
-		kicker_rects.append(rect)
-		var picked := int(game.highlight) == i
-		var unlocked := Kickers.is_unlocked(str(info["id"]))
-		draw_rect(rect, Color(0.06, 0.08, 0.1, 0.94))
-		var border := Color(0.45, 0.48, 0.5)
-		if picked:
-			border = KickConstants.COLOR_ATTEMPT
-		draw_rect(rect, border, false, 4.0 if picked else 2.0)
-		var portrait := Rect2(rect.position + Vector2(8, 8), Vector2(width - 16, minf(110.0, height * 0.36)))
-		_draw_portrait(info, portrait)
-		if not unlocked:
-			draw_rect(portrait, Color(0.02, 0.03, 0.04, 0.55))
-		var y := portrait.position.y + portrait.size.y + 18.0
-		_text(Vector2(rect.position.x + 10, y), str(info["name"]), 16, KickConstants.COLOR_ATTEMPT)
-		y += 22.0
-		if unlocked:
-			_text(Vector2(rect.position.x + 10, y), str(info.get("range_line", "")), 15, KickConstants.COLOR_TEXT)
-			y += 20.0
-			y = _draw_wrapped_at(str(info["excels"]), rect.position.x + 10, y, width - 20, 13)
-			y += 6.0
-			_text(Vector2(rect.position.x + 10, y), str(info["ball_name"]), 14, KickConstants.COLOR_GOOD)
-			y += 18.0
-			_draw_wrapped_at(str(info["ball_description"]), rect.position.x + 10, y, width - 20, 12)
-		else:
-			_text(Vector2(rect.position.x + 10, y), "LOCKED", 16, KickConstants.COLOR_MISS)
-			y += 24.0
-			_draw_wrapped_at(str(info.get("unlock", "")), rect.position.x + 10, y, width - 20, 14)
-	_text_centered("1–8 highlight.  Space or click again to start.", 700.0, 18, KickConstants.COLOR_TEXT)
+		_draw_playing_card(kicker_rects[i], str(info["id"]), Kickers.is_unlocked(str(info["id"])), i == picked)
+	_pg_centered("1 TO 8 HIGHLIGHT. SPACE OR CLICK AGAIN TO START.", 694.0, 14, Color(0.95, 0.92, 0.84))
+
+
+func _draw_playing_card(rect: Rect2, id: String, unlocked: bool, picked: bool) -> void:
+	var shadow := rect.position + Vector2(7, 8)
+	_fill_round(Rect2(shadow, rect.size), rect.size.y * (9.0 / 134.0), Color(0.0, 0.0, 0.0, 0.72))
+	var window := _card_slice(rect, SelectCard.WIN_X, SelectCard.WIN_Y, SelectCard.WIN_W, SelectCard.WIN_H)
+	draw_rect(window, Color(0.03, 0.03, 0.035))
+	_draw_card_bust(id, window, unlocked)
+	var frame := _card_frame(Vector2i(int(rect.size.x), int(rect.size.y)))
+	if frame != null:
+		draw_texture_rect(frame, rect, false)
+	var cream := Color(0.95, 0.92, 0.84)
+	var orange := Color(0.95, 0.58, 0.18)
+	var ink := cream if unlocked else orange
+	var rank := SelectCard.corner_text(id, unlocked)
+	var rank_px := maxi(9, int(rect.size.y * 0.048))
+	if unlocked:
+		_pg(rank, rect.position + Vector2(rect.size.x * 0.045, rect.size.y * 0.012), rank_px, ink)
+		var rank_w := BitmapFonts.measure_px("ui", rank, rank_px)
+		_pg(rank, rect.position + Vector2(rect.size.x * 0.955 - float(rank_w), rect.size.y * 0.905), rank_px, ink)
+	else:
+		# A painted dash. Pixel Gothic has no hyphen, and a period pair is too small to read here.
+		var dash := Vector2(rect.size.x * 0.09, maxf(3.0, rect.size.y * 0.012))
+		draw_rect(Rect2(rect.position + Vector2(rect.size.x * 0.055, rect.size.y * 0.028), dash), ink)
+		draw_rect(Rect2(rect.position + Vector2(rect.size.x * 0.855, rect.size.y * 0.925), dash), ink)
+	var band := _card_slice(rect, 0.1, SelectCard.BAND_Y, 0.8, SelectCard.BAND_H)
+	_pg_block(SelectCard.card_name(id), band, maxi(8, int(rect.size.y * 0.04)), ink)
+	var well := _card_slice(rect, 0.08, SelectCard.WELL_Y, 0.84, SelectCard.WELL_H)
+	var body := maxi(7, int(rect.size.y * 0.03))
+	if unlocked:
+		var kits := SelectCard.kit_lines(id)
+		var ball := SelectCard.ball_line(id)
+		if kits.size() > 1 and not _well_fits(kits, ball, well, body):
+			kits = PackedStringArray([kits[kits.size() - 1]])
+		var lines: PackedStringArray = kits.duplicate()
+		lines.append(ball)
+		_pg_stack(lines, well, body, cream, lines.size() - 1, Color(0.42, 0.82, 0.4))
+	else:
+		var locked := PackedStringArray(["LOCKED"])
+		for line in _pg_wrap(SelectCard.unlock_line(id), int(well.size.x), body):
+			locked.append(line)
+		_pg_stack(locked, well, body, orange, -1, orange)
+	if picked:
+		_stroke_round(rect.grow(3.0), rect.size.y * (10.0 / 134.0), Color(0.96, 0.78, 0.28), 3.0)
+
+
+func _card_slice(rect: Rect2, x: float, y: float, w: float, h: float) -> Rect2:
+	return Rect2(rect.position + Vector2(rect.size.x * x, rect.size.y * y), Vector2(rect.size.x * w, rect.size.y * h))
+
+
+func _well_fits(kits: PackedStringArray, ball: String, well: Rect2, size: int) -> bool:
+	var lines := kits.size() + 1
+	if ball == "":
+		lines = kits.size()
+	var height := lines * (size + 2)
+	if height > int(well.size.y):
+		return false
+	var widest := BitmapFonts.measure_px("ui", ball, size)
+	for line in kits:
+		widest = maxi(widest, BitmapFonts.measure_px("ui", line, size))
+	return widest <= int(well.size.x)
+
+
+func _pg_centered(text: String, y: float, size: int, color: Color) -> void:
+	var width := BitmapFonts.measure_px("ui", text, size)
+	_pg(text, Vector2((KickConstants.WINDOW_WIDTH - float(width)) * 0.5, y), size, color)
+
+
+func _pg_block(text: String, area: Rect2, size: int, color: Color) -> void:
+	var lines := _pg_wrap(text, int(area.size.x), size)
+	if lines.is_empty():
+		return
+	var step := size + 1
+	var block_h := lines.size() * step
+	var y := area.position.y + maxf(0.0, (area.size.y - float(block_h)) * 0.5)
+	for line in lines:
+		var width := BitmapFonts.measure_px("ui", line, size)
+		_pg(line, Vector2(area.position.x + (area.size.x - float(width)) * 0.5, y), size, color)
+		y += float(step)
+
+
+func _pg_stack(lines: PackedStringArray, area: Rect2, size: int, color: Color, green_at: int, green: Color) -> void:
+	if lines.is_empty():
+		return
+	var step := size + 2
+	var block_h := lines.size() * step
+	var y := area.position.y + maxf(0.0, (area.size.y - float(block_h)) * 0.5)
+	for i in lines.size():
+		var ink := green if i == green_at else color
+		var width := BitmapFonts.measure_px("ui", lines[i], size)
+		_pg(lines[i], Vector2(area.position.x + (area.size.x - float(width)) * 0.5, y), size, ink)
+		y += float(step)
+
+
+func _card_frame(size: Vector2i) -> Texture2D:
+	var key := "%d,%d" % [size.x, size.y]
+	if _card_frames.has(key):
+		return _card_frames[key]
+	var source := load(SelectCard.FRAME_PATH) as Texture2D
+	if source == null:
+		return null
+	var image := source.get_image()
+	if image == null:
+		return null
+	image = image.duplicate()
+	image.resize(size.x, size.y, Image.INTERPOLATE_NEAREST)
+	var picture := ImageTexture.create_from_image(image)
+	_card_frames[key] = picture
+	return picture
+
+
+func _draw_card_bust(id: String, window: Rect2, unlocked: bool) -> void:
+	var path := BroadcastHud.head_path(id)
+	var source := _portrait_texture(path)
+	if source == null:
+		return
+	var image := source.get_image()
+	if image == null:
+		return
+	var used := image.get_used_rect()
+	if used.size.x < 2.0 or used.size.y < 2.0:
+		used = Rect2i(0, 0, image.get_width(), image.get_height())
+	var dest := Vector2i(maxi(1, int(window.size.x)), maxi(1, int(window.size.y)))
+	var scale := maxf(float(dest.x) / float(used.size.x), float(dest.y) / float(used.size.y))
+	var crop_w := int(round(float(dest.x) / scale))
+	var crop_h := int(round(float(dest.y) / scale))
+	crop_w = mini(crop_w, int(used.size.x))
+	crop_h = mini(crop_h, int(used.size.y))
+	var crop_x := int(used.position.x) + int((int(used.size.x) - crop_w) / 2)
+	# Keep the head. Extra height is trimmed off the chest, not the helmet.
+	var crop_y := int(used.position.y)
+	var key := "%s:%d,%d:%s" % [id, dest.x, dest.y, "on" if unlocked else "dim"]
+	var picture: Texture2D = _card_busts.get(key)
+	if picture == null:
+		var crop := image.get_region(Rect2i(crop_x, crop_y, crop_w, crop_h))
+		crop.resize(dest.x, dest.y, Image.INTERPOLATE_NEAREST)
+		picture = ImageTexture.create_from_image(crop)
+		_card_busts[key] = picture
+	draw_texture_rect(picture, Rect2(window.position, Vector2(dest)), false)
+	if not unlocked:
+		draw_rect(Rect2(window.position, Vector2(dest)), Color(0.02, 0.025, 0.04, 0.42))
+
+
+func _fill_round(rect: Rect2, radius: float, color: Color) -> void:
+	draw_colored_polygon(_round_points(rect, radius), color)
+
+
+func _stroke_round(rect: Rect2, radius: float, color: Color, width: float) -> void:
+	var points := _round_points(rect, radius)
+	if points.is_empty():
+		return
+	points.append(points[0])
+	draw_polyline(points, color, width, false)
+
+
+func _round_points(rect: Rect2, radius: float) -> PackedVector2Array:
+	var r := clampf(radius, 2.0, minf(rect.size.x, rect.size.y) * 0.5)
+	var points := PackedVector2Array()
+	var centers := [
+		rect.position + Vector2(r, r),
+		rect.position + Vector2(rect.size.x - r, r),
+		rect.position + Vector2(rect.size.x - r, rect.size.y - r),
+		rect.position + Vector2(r, rect.size.y - r),
+	]
+	var sweeps := [PI, PI * 1.5, 0.0, PI * 0.5]
+	for corner in 4:
+		var center: Vector2 = centers[corner]
+		var start: float = sweeps[corner]
+		for step in 5:
+			var angle := start + float(step) * (PI * 0.5) / 4.0
+			points.append(center + Vector2(cos(angle), sin(angle)) * r)
+	return points
 
 
 var _portraits := {}

@@ -78,6 +78,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "f2":
+		if not await _capture_f2():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "cone5":
 		if not await _capture_cone5():
 			get_tree().quit(1)
@@ -1329,6 +1335,61 @@ func _capture_c3() -> bool:
 	if board.run.attempts != attempts or board.run.kick_number != kick_number or board.preview_step() != 0 or not is_equal_approx(board.logic.kick_distance, 35.0):
 		print("distance preview did not restore the kick")
 		return false
+	return true
+
+
+func _lock_roster(vex_open: bool) -> void:
+	for id in Kickers.UNLOCKABLE:
+		board.get_node("/root/SaveData").unlocks[id] = id == Kickers.VEX and vex_open
+
+
+func _capture_slot(file_name: String, slot: int) -> bool:
+	board.refresh_view()
+	await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+	var image: Image = board.get_viewport().get_texture().get_image()
+	var rect: Rect2 = board._hud.kicker_rects[slot]
+	var box := Rect2i(int(rect.position.x) - 12, int(rect.position.y) - 12, int(rect.size.x) + 28, int(rect.size.y) + 28)
+	box = box.intersection(Rect2i(0, 0, image.get_width(), image.get_height()))
+	var crop: Image = image.get_region(box)
+	var path := shot_dir.path_join(file_name)
+	var err: Error = crop.save_png(path)
+	if err != OK:
+		print("FAILED to save ", path, " error ", err)
+		return false
+	print("Saved ", path, " ", crop.get_width(), "x", crop.get_height())
+	return true
+
+
+func _capture_f2() -> bool:
+	_lock_roster(false)
+	board.open_select()
+	board.highlight = 1
+	board.refresh_view()
+	if not await _capture("f2_select_fresh.png"):
+		return false
+	if not await _capture_slot("f2_walkon_card.png", 1):
+		return false
+	if not await _capture_slot("f2_phil_locked.png", 2):
+		return false
+	board.highlight = 0
+	board.refresh_view()
+	if not await _capture("f2_highlight.png"):
+		return false
+	board.highlight = 1
+	board.confirm_kicker()
+	if board.selecting or board.run.kicker_id != Kickers.WALK_ON:
+		print("Walk-On did not start")
+		return false
+	if not await _capture("f2_walkon_kick.png"):
+		return false
+	_lock_roster(true)
+	board.open_select()
+	board.highlight = 4
+	board.refresh_view()
+	if not await _capture_slot("f2_vex_card.png", 4):
+		return false
+	_lock_roster(false)
 	return true
 
 

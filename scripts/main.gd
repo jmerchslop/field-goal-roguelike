@@ -319,7 +319,7 @@ func open_select() -> void:
 	selecting = true
 	showing_records = false
 	front.screen = FrontEnd.Screen.SELECT
-	highlight = -1
+	highlight = 1
 	_show_fresh_unlocks()
 	refresh_view()
 
@@ -332,6 +332,13 @@ func _show_fresh_unlocks() -> void:
 
 
 func _select_input(event: InputEvent) -> void:
+	if event is InputEventMouseMotion:
+		var moved := event as InputEventMouseMotion
+		var hover: int = _hud.kicker_slot_at(moved.position)
+		if hover >= 0 and hover != highlight:
+			highlight = hover
+			refresh_view()
+		return
 	if event is InputEventMouseButton:
 		var mouse := event as InputEventMouseButton
 		if mouse.pressed and mouse.button_index == MOUSE_BUTTON_LEFT:
@@ -390,6 +397,18 @@ func _select_input(event: InputEvent) -> void:
 		refresh_view()
 	elif key.keycode == KEY_8 or key.keycode == KEY_KP_8:
 		highlight = 7
+		refresh_view()
+	elif key.keycode == KEY_LEFT or Settings.pressed_event(event, "menu_left"):
+		highlight = SelectCard.step_highlight(highlight, -1, 0)
+		refresh_view()
+	elif key.keycode == KEY_RIGHT or Settings.pressed_event(event, "menu_right"):
+		highlight = SelectCard.step_highlight(highlight, 1, 0)
+		refresh_view()
+	elif key.keycode == KEY_UP or Settings.pressed_event(event, "menu_up"):
+		highlight = SelectCard.step_highlight(highlight, 0, -1)
+		refresh_view()
+	elif key.keycode == KEY_DOWN or Settings.pressed_event(event, "menu_down"):
+		highlight = SelectCard.step_highlight(highlight, 0, 1)
 		refresh_view()
 	elif Settings.pressed_event(event, "confirm"):
 		confirm_kicker()
@@ -965,7 +984,7 @@ func _start_new_run() -> void:
 	front.gate = ""
 	front.came_from_gate = true
 	selecting = true
-	highlight = -1
+	highlight = 1
 	showing_records = false
 	front.screen = FrontEnd.Screen.SELECT
 	refresh_view()
@@ -1157,7 +1176,7 @@ func _apply_menu_choice(choice: String) -> void:
 			return
 		front.screen = FrontEnd.Screen.SELECT
 		selecting = true
-		highlight = -1
+		highlight = 1
 		showing_records = false
 
 
