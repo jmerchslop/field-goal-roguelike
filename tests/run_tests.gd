@@ -61,11 +61,13 @@ func _run() -> void:
 	_check_six_icons()
 	_check_playing_card()
 	_check_reactions()
+	_check_floodlights()
 
 
 func _finish_live() -> void:
 	_check_pause_saves()
 	_check_playing_card_live()
+	_check_floodlights_live()
 	_check_aim_cone()
 	_check_ball_trail()
 	_check_markings()
@@ -5129,5 +5131,61 @@ func _check_reaction_live() -> void:
 	game.settle_kick()
 	game._place_world()
 	check(game._pose == "idle" and game._kicker_behind() > KickLogic.PLANT_Z, "a miss with attempts left returns to idle at the start spot")
+	game.free()
+
+
+func _check_floodlights() -> void:
+	check(ResourceLoader.exists("res://art/field/floodlight-sideline.png"), "the 8-lamp sideline gantry is imported")
+	check(ResourceLoader.exists("res://art/field/floodlight-sideline-b.png"), "the 6-lamp sideline gantry is imported")
+	check(ResourceLoader.exists("res://art/field/floodlight-endzone.png"), "the end-zone floodlight bank is imported")
+	check(not ResourceLoader.exists("res://art/field/floodlight-lock.jpg") and not ResourceLoader.exists("res://LOOK_TARGETS/floodlight-lock.jpg"), "the floodlight lock JPEG is not a game sprite")
+	var shell := FileAccess.get_file_as_string("res://scripts/main.gd")
+	check(shell.find("floodlight-lock") < 0, "the lock JPEG is not stamped into the kick scene")
+	check(shell.find("KEY_H") >= 0 and shell.find("KEY_J") >= 0 and shell.find("KEY_K") >= 0 and shell.find("KEY_L") >= 0, "debug H, J, K, and L stay on their keys")
+	check(not KickConstants.debug_unlock_all_kickers, "debug_unlock_all_kickers stays false")
+	check(not ResourceLoader.exists("res://art/loadout/empty_perk.png"), "empty_perk.png was not added")
+
+
+func _check_floodlights_live() -> void:
+	OS.set_environment("FG_SHOTS", "")
+	var packed: PackedScene = load("res://scenes/main.tscn")
+	var game = packed.instantiate()
+	get_root().add_child(game)
+	game._taking_pictures = true
+	var short: Dictionary = game.floodlight_plan(35.0)
+	var long: Dictionary = game.floodlight_plan(200.0)
+	var far: Dictionary = game.floodlight_plan(500.0)
+	var mile: Dictionary = game.floodlight_plan(1000.0)
+	var short_z: PackedFloat32Array = short["left_z"]
+	var long_z: PackedFloat32Array = long["left_z"]
+	check(short_z.size() != long_z.size() or absf(short_z[0] - long_z[0]) > 1.0, "a 200-yard field does not reuse the 35-yard tower layout")
+	var spans: Array[float] = [200.0, 500.0, 1000.0]
+	var plans: Array = [long, far, mile]
+	for index in spans.size():
+		var plan: Dictionary = plans[index]
+		var span := spans[index]
+		var zs: PackedFloat32Array = plan["left_z"]
+		var along := false
+		for z in zs:
+			if z > 2.0 and z < span - 2.0:
+				along = true
+		check(along and zs.size() > 0 and plan["right_z"].size() > 0, "sideline towers run from the tee toward the posts at %s yards" % span)
+	var kinds := {}
+	for kind in long["left_kind"]:
+		kinds[int(kind)] = true
+	for kind in long["right_kind"]:
+		kinds[int(kind)] = true
+	check(kinds.has(0) and kinds.has(1), "both the 8-lamp and 6-lamp towers are used")
+	check(long["left_z"] != long["right_z"] or long["left_kind"] != long["right_kind"], "the two sidelines are not identical copies")
+	game._ensure_field(1000.0)
+	var floods: Node = game._floods
+	check(floods != null and floods.get_child_count() == int(mile["count"]) and floods.get_child_count() < 80, "floodlights are a handful of sprites, got %s" % (0 if floods == null else floods.get_child_count()))
+	var end_bank := false
+	for child in floods.get_children():
+		if str(child.name) == "EndBank":
+			end_bank = true
+	check(end_bank, "the end-zone bank is in the kick scene")
+	var left_rig: Dictionary = game.camera_rig(200.0, -3.0)
+	check(not is_equal_approx(float(left_rig["look"].x), 0.0), "a hash preview still does not re-center the posts")
 	game.free()
 

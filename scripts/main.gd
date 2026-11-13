@@ -57,6 +57,7 @@ var _crossbar: MeshInstance3D
 var _mud: MeshInstance3D
 var _marks: Node3D
 var _stands: Node3D
+var _floods: Node3D
 var _sky_mat: ShaderMaterial
 var sky_texture_path := ""
 var _weather_anchor: Node3D
@@ -79,6 +80,18 @@ const STAND_X := 27.45
 const STAND_HEIGHT := 14.0
 const STAND_TILE := 28.0
 const STAND_BOWL_Z := -2.4
+# Lamp underside sits on the 14-yard roof. Empty canvas padding is not steel.
+const LIGHT_SIDE_PIXEL := 14.0 / 569.0
+const LIGHT_END_PIXEL := 14.0 / 370.0
+# The low kick camera looks up at a roof that is closer than the mast, so the
+# lamps have to sit a little above the 14-yard wall or the stands swallow them.
+const LIGHT_SIDE_LIFT := 0.95
+const LIGHT_SIDE_OUT := 3.2
+const LIGHT_END_BACK := 2.6
+const LIGHT_SPACING := 90.0
+const LIGHT_SIDE_PATH := "res://art/field/floodlight-sideline.png"
+const LIGHT_SIDE_B_PATH := "res://art/field/floodlight-sideline-b.png"
+const LIGHT_END_PATH := "res://art/field/floodlight-endzone.png"
 const GRASS_TILE_YARDS := 12.0
 const GRASS_PATH := "res://art/field/grass-tile.png"
 const SKY_CLEAR_PATH := "res://art/field/sky-clear.png"
@@ -1742,6 +1755,100 @@ func _place_weather() -> void:
 		process.direction = local_grav.normalized()
 
 
+func floodlight_plan(span: float) -> Dictionary:
+	# Short walls get two towers a side, like the lock. Longer walls step by 90 yards.
+	# Right is staggered half a bay and starts on the 6-lamp tower, so the sides do not match.
+	var left_z := PackedFloat32Array()
+	var right_z := PackedFloat32Array()
+	var left_kind := PackedInt32Array()
+	var right_kind := PackedInt32Array()
+	if span < 50.0:
+		# The close camera only frames the far corner of each sideline.
+		left_z.append(2.4)
+		left_z.append(6.0)
+		right_z.append(3.6)
+		right_z.append(7.4)
+	elif span < 120.0:
+		left_z.append(10.0)
+		left_z.append(32.0)
+		right_z.append(18.0)
+		right_z.append(42.0)
+	else:
+		var z := 40.0
+		while z < span - 18.0:
+			left_z.append(z)
+			z += LIGHT_SPACING
+		z = 40.0 + LIGHT_SPACING * 0.5
+		while z < span - 18.0:
+			right_z.append(z)
+			z += LIGHT_SPACING
+	for i in left_z.size():
+		left_kind.append(0 if i % 2 == 0 else 1)
+	for i in right_z.size():
+		right_kind.append(1 if i % 2 == 0 else 0)
+	return {
+		"left_z": left_z,
+		"right_z": right_z,
+		"left_kind": left_kind,
+		"right_kind": right_kind,
+		"end_z": STAND_BOWL_Z - LIGHT_END_BACK,
+		"side_x": STAND_X + LIGHT_SIDE_OUT,
+		"count": left_z.size() + right_z.size() + 1,
+	}
+
+
+func _layout_floodlights(span: float) -> void:
+	if _floods == null:
+		_floods = Node3D.new()
+		_floods.name = "Floodlights"
+		_world.add_child(_floods)
+	for child in _floods.get_children():
+		_floods.remove_child(child)
+		child.free()
+	var plan := floodlight_plan(span)
+	var left_z: PackedFloat32Array = plan["left_z"]
+	var right_z: PackedFloat32Array = plan["right_z"]
+	var left_kind: PackedInt32Array = plan["left_kind"]
+	var right_kind: PackedInt32Array = plan["right_kind"]
+	var side_x := float(plan["side_x"])
+	for i in left_z.size():
+		_add_floodlight(-side_x, left_z[i], left_kind[i], false)
+	for i in right_z.size():
+		_add_floodlight(side_x, right_z[i], right_kind[i], false)
+	_add_floodlight(0.0, float(plan["end_z"]), 2, true)
+
+
+func _add_floodlight(x: float, z: float, kind: int, end_zone: bool) -> void:
+	var path := LIGHT_END_PATH if end_zone else (LIGHT_SIDE_PATH if kind == 0 else LIGHT_SIDE_B_PATH)
+	var tex := load(path) as Texture2D
+	var sprite := Sprite3D.new()
+	sprite.name = "EndBank" if end_zone else ("Tower8" if kind == 0 else "Tower6")
+	sprite.texture = tex
+	sprite.billboard = BaseMaterial3D.BILLBOARD_FIXED_Y
+	sprite.transparent = true
+	sprite.alpha_cut = SpriteBase3D.ALPHA_CUT_DISCARD
+	sprite.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	sprite.pixel_size = LIGHT_END_PIXEL if end_zone else LIGHT_SIDE_PIXEL
+	sprite.centered = true
+	sprite.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var paint := StandardMaterial3D.new()
+	paint.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	paint.billboard_mode = BaseMaterial3D.BILLBOARD_FIXED_Y
+	paint.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+	paint.alpha_scissor_threshold = 0.45
+	paint.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	paint.cull_mode = BaseMaterial3D.CULL_DISABLED
+	paint.albedo_texture = tex
+	sprite.material_override = paint
+	var canvas_h := 640.0 if end_zone else 1024.0
+	var foot_row := 624.0 if end_zone else 1008.0
+	var lift := (foot_row - canvas_h * 0.5) * sprite.pixel_size
+	if not end_zone:
+		lift += LIGHT_SIDE_LIFT
+	sprite.position = Vector3(x, lift, z)
+	_floods.add_child(sprite)
+
+
 func _build_stadium() -> void:
 	# One node per wall. Each wall is a single mesh with up to three surfaces.
 	_stands = Node3D.new()
@@ -1771,6 +1878,7 @@ func _layout_stands(span: float) -> void:
 	_paint_stand(_stands.get_node("Left"), -STAND_X, far_z, near_z, _STAND_LEFT, true)
 	_paint_stand(_stands.get_node("Right"), STAND_X, far_z, near_z, _STAND_RIGHT, true)
 	_paint_stand(_stands.get_node("Bowl"), 0.0, -STAND_X, STAND_X, _STAND_BOWL, false)
+	_layout_floodlights(span)
 
 
 func _paint_stand(wall: MeshInstance3D, fixed: float, start: float, finish: float, pattern: Array[int], along_z: bool) -> void:

@@ -84,6 +84,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "g6":
+		if not await _capture_g6():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "g5":
 		if not await _capture_g5():
 			get_tree().quit(1)
@@ -1341,6 +1347,83 @@ func _capture_c3() -> bool:
 	if board.run.attempts != attempts or board.run.kick_number != kick_number or board.preview_step() != 0 or not is_equal_approx(board.logic.kick_distance, 35.0):
 		print("distance preview did not restore the kick")
 		return false
+	return true
+
+
+func _capture_g6() -> bool:
+	board.highlight = 1
+	board.selecting = true
+	board.confirm_kicker()
+	board.logic.aim_degrees = 0.0
+	board.logic.aim_base = 0.0
+	board.force_weather(RunLogic.CLEAR)
+	board.refresh_view()
+	if not await _capture("g6_35_center.png"):
+		return false
+	if not await _capture_roof("g6_roof_crop.png"):
+		return false
+	board.cycle_debug_distance()
+	board.cycle_debug_distance()
+	board.refresh_view()
+	if not await _capture("g6_200.png"):
+		return false
+	board.logic.start_lateral_yards = -3.0
+	board.run.spot_yards = -3.0
+	board.logic.sync_tee()
+	board.refresh_view()
+	if not await _capture("g6_200_hash.png"):
+		return false
+	board.logic.start_lateral_yards = 6.0
+	board.run.spot_yards = 6.0
+	board.logic.sync_tee()
+	board.refresh_view()
+	if not await _capture("g6_200_wide.png"):
+		return false
+	board.logic.start_lateral_yards = 0.0
+	board.run.spot_yards = 0.0
+	board.logic.sync_tee()
+	board.cycle_debug_distance()
+	board.refresh_view()
+	if not await _capture("g6_500.png"):
+		return false
+	if not await _capture("g6_mix.png"):
+		return false
+	board.cycle_debug_distance()
+	board.refresh_view()
+	if not await _capture("g6_1000.png"):
+		return false
+	var attempts: int = board.run.attempts
+	var kick_number: int = board.run.kick_number
+	board.cycle_debug_distance()
+	board.force_weather(RunLogic.CLEAR)
+	board.refresh_view()
+	if board.preview_step() != 0 or board.run.attempts != attempts or board.run.kick_number != kick_number:
+		print("J did not restore the kick")
+		return false
+	if not await _capture("g6_back_real.png"):
+		return false
+	board.force_weather(RunLogic.RAIN)
+	board.refresh_view()
+	if not await _capture("g6_rain.png"):
+		return false
+	board.force_weather(RunLogic.CLEAR)
+	return true
+
+
+func _capture_roof(file_name: String) -> bool:
+	board.refresh_view()
+	await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+	var image: Image = board.get_viewport().get_texture().get_image()
+	# Left sideline roof, where the gantry should clear the stands.
+	var box := Rect2i(0, 0, 240, 160)
+	var crop: Image = image.get_region(box)
+	var path := shot_dir.path_join(file_name)
+	var err: Error = crop.save_png(path)
+	if err != OK:
+		print("FAILED to save ", path, " error ", err)
+		return false
+	print("Saved ", path, " ", crop.get_width(), "x", crop.get_height())
 	return true
 
 
