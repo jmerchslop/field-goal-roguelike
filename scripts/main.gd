@@ -1392,9 +1392,11 @@ func _ensure_field(distance: float) -> void:
 	hash_right.name = "HashRight"
 	hash_right.position = Vector3(half, 0.0, 0.0)
 	_marks.add_child(hash_right)
-	for number in yard_numbers_for(span):
-		_yard_sign(-YARD_NUMBER_X, float(number), str(number))
-		_yard_sign(YARD_NUMBER_X, float(number), str(number))
+	for item in _yard_plan(span):
+		var number := int(item["yard"])
+		var scale := float(item["scale"])
+		_yard_sign(-YARD_NUMBER_X, float(number), str(number), scale)
+		_yard_sign(YARD_NUMBER_X, float(number), str(number), scale)
 
 
 func _mesh_node(parent: Node3D, node_name: String, mesh: Mesh, material: Material) -> void:
@@ -2030,6 +2032,10 @@ func _place_world() -> void:
 	_apply_sky(run.weather)
 	_apply_weather(run.weather)
 	_apply_ball_sprite()
+	# The cone and the kicker read the spot directly. The ball reads ball_lateral_yards,
+	# which stays on the previous mark until sync_tee(). A teed ball has to follow the spot.
+	if logic.phase != KickLogic.Phase.FLIGHT and logic.phase != KickLogic.Phase.RESULT:
+		logic.sync_tee()
 	var tee := _tee_position()
 	var spot := _ball_position()
 	_ball.position = spot
@@ -2592,8 +2598,11 @@ func _place_camera() -> void:
 
 const YARD_PIXEL_SIZE := 0.0105
 const YARD_WORLD_H := 0.756
-const YARD_MIN_PX := 13.0
+const YARD_MIN_PX := 7.0
+const YARD_TARGET_PX := 13.0
+const YARD_MAX_SCALE := 12.0
 const YARD_NEAR_YARDS := 80.0
+const YARD_GAP_RATIO := 0.46
 const YARD_NUMBER_X := 5.6
 
 
@@ -2641,64 +2650,180 @@ func hash_tick_spacing(span: float, yard: float) -> int:
 
 func yard_numbers_for(span: float) -> PackedInt32Array:
 	var result := PackedInt32Array()
-	var tee := int(round(span))
-	if tee >= 10 and _number_fits(span, float(tee), -1.0):
-		result.append(tee)
-	var z := int(floor(span / 10.0)) * 10
-	if z >= tee:
-		z -= 10
-	var near_floor := span - YARD_NEAR_YARDS
-	while z >= 10 and float(z) > near_floor:
-		if _number_fits(span, float(z), _last_number(result)):
-			result.append(z)
-		z -= 10
-	var step := 50
-	var cursor := int(floor(maxf(near_floor, 0.0) / float(step))) * step
-	if result.size() > 0:
-		cursor = mini(cursor, _last_number(result) - 1)
-		cursor = int(floor(float(cursor) / float(step))) * step
-	var guard := 0
-	while cursor >= 10 and guard < 40:
-		guard += 1
-		if _number_fits(span, float(cursor), _last_number(result)):
-			result.append(cursor)
-			cursor -= step
-		elif step == 50:
-			step = 100
-			cursor = int(floor(float(cursor) / 100.0)) * 100
-		else:
-			cursor -= step
+	for item in _yard_plan(span):
+		result.append(int(item["yard"]))
 	return result
 
 
+func yard_number_scale(span: float, yard: int) -> float:
+	for item in _yard_plan(span):
+		if int(item["yard"]) == yard:
+			return float(item["scale"])
+	return 1.0
+
+
 func yard_numbers_overlap(span: float) -> bool:
-	var nums := yard_numbers_for(span)
-	if nums.size() < 2:
+	var plan := _yard_plan(span)
+	if plan.size() < 2:
 		return false
-	for index in nums.size() - 1:
-		var a := float(nums[index])
-		var b := float(nums[index + 1])
-		var gap := absf(_screen_y(span, Vector3(YARD_NUMBER_X, 1.1, a)) - _screen_y(span, Vector3(YARD_NUMBER_X, 1.1, b)))
-		var height := _number_px(span, a) + _number_px(span, b)
-		if gap <= height * 0.46:
+	for index in plan.size() - 1:
+		var a: Dictionary = plan[index]
+		var b: Dictionary = plan[index + 1]
+		var az := float(a["yard"])
+		var bz := float(b["yard"])
+		var gap := _number_gap(span, az, bz)
+		var height := _shown_px(span, az, float(a["scale"])) + _shown_px(span, bz, float(b["scale"]))
+		if gap <= height * _gap_ratio(span):
 			return true
 	return false
 
 
-func _last_number(nums: PackedInt32Array) -> int:
-	if nums.is_empty():
-		return -1
-	return nums[nums.size() - 1]
+# Closest ~80 yards stay on every 10 while a 7px digit still clears the next one.
+# After that, every 50. A 50 that would overlap or sit under 7px is skipped, and the
+# next mark is a 100. Far marks grow toward 13px when the gap allows it, and they stop
+# before they stack on the posts. A 35 or a 75 keeps every 10 all the way, shrinking a
+# far digit instead of dropping it.
+func _yard_plan(span: float) -> Array:
+	var plan: Array = []
+	var marks := _ten_yard_marks(span)
+	if span <= YARD_NEAR_YARDS + 0.01:
+		return _pack_required(span, marks)
+	var near_floor := span - YARD_NEAR_YARDS
+	for yard in marks:
+		if yard != int(round(span)) and float(yard) < near_floor - 0.5:
+			break
+		if not _fits_fixed(span, float(yard), plan, 1.0):
+			break
+		var full: Dictionary = {"yard": yard, "scale": 1.0}
+		plan.append(full)
+	# Every 50 from here to the posts. Skip a mark that would overlap or sit under 7px.
+	# What remains is every 50 where it fits, and every 100 (or wider) where it does not.
+	var cursor := _next_below(_plan_last(plan), 50, span)
+	var guard := 0
+	while cursor >= 50 and guard < 40:
+		guard += 1
+		var scale := _best_far_scale(span, float(cursor), plan, float(cursor - 50))
+		if scale > 0.0:
+			var kept: Dictionary = {"yard": cursor, "scale": scale}
+			plan.append(kept)
+		cursor -= 50
+	return plan
 
 
-func _number_fits(span: float, z: float, previous: float) -> bool:
-	var height := _number_px(span, z)
+func _ten_yard_marks(span: float) -> PackedInt32Array:
+	var result := PackedInt32Array()
+	var tee := int(round(span))
+	if tee >= 10:
+		result.append(tee)
+	var z := int(floor(span / 10.0)) * 10
+	if z >= tee:
+		z -= 10
+	while z >= 10:
+		result.append(z)
+		z -= 10
+	return result
+
+
+func _pack_required(span: float, marks: PackedInt32Array) -> Array:
+	# Every mark stays. Far digits shrink until each pair clears the gap.
+	var heights: Array = []
+	for yard in marks:
+		heights.append(_number_px(span, float(yard)))
+	for _pass in 24:
+		var dirty := false
+		for index in range(1, marks.size()):
+			var gap := _number_gap(span, float(marks[index - 1]), float(marks[index]))
+			var limit := (gap - 0.15) / _gap_ratio(span)
+			var prev_h: float = float(heights[index - 1])
+			var here_h: float = float(heights[index])
+			if prev_h + here_h <= limit:
+				continue
+			dirty = true
+			var overflow := prev_h + here_h - limit
+			var far_floor := 1.6
+			var cut := minf(overflow, maxf(0.0, here_h - far_floor))
+			heights[index] = here_h - cut
+			overflow -= cut
+			if overflow > 0.01:
+				heights[index - 1] = prev_h - overflow
+		if not dirty:
+			break
+	var plan: Array = []
+	for index in marks.size():
+		var natural := _number_px(span, float(marks[index]))
+		var scale := 1.0
+		if natural > 0.01:
+			scale = minf(1.0, float(heights[index]) / natural)
+		var entry: Dictionary = {"yard": int(marks[index]), "scale": maxf(scale, 0.05)}
+		plan.append(entry)
+	return plan
+
+
+func _fits_fixed(span: float, z: float, plan: Array, scale: float) -> bool:
+	var height := _shown_px(span, z, scale)
 	if height < YARD_MIN_PX:
 		return false
-	if previous < 0.0:
+	if plan.is_empty():
 		return true
-	var gap := absf(_screen_y(span, Vector3(YARD_NUMBER_X, 1.1, z)) - _screen_y(span, Vector3(YARD_NUMBER_X, 1.1, previous)))
-	return gap > (height + _number_px(span, previous)) * 0.46
+	var prev: Dictionary = plan[plan.size() - 1]
+	var prev_px := _shown_px(span, float(prev["yard"]), float(prev["scale"]))
+	var gap := _number_gap(span, float(prev["yard"]), z)
+	return gap > (height + prev_px) * YARD_GAP_RATIO
+
+
+func _best_far_scale(span: float, z: float, plan: Array, next_z: float) -> float:
+	var natural := _number_px(span, z)
+	if natural < 0.05:
+		return 0.0
+	var room := YARD_TARGET_PX
+	if not plan.is_empty():
+		var prev: Dictionary = plan[plan.size() - 1]
+		var prev_px := _shown_px(span, float(prev["yard"]), float(prev["scale"]))
+		var gap := _number_gap(span, float(prev["yard"]), z)
+		room = gap / YARD_GAP_RATIO - prev_px - 0.45
+	var own := minf(YARD_TARGET_PX, minf(natural * YARD_MAX_SCALE, room))
+	# Leave a 7px slot for the next mark when the gap can actually hold two.
+	if next_z >= 50.0:
+		var ahead := _number_gap(span, z, next_z)
+		var pair := ahead / YARD_GAP_RATIO - 0.45
+		if pair >= YARD_MIN_PX * 2.0 + 1.6:
+			own = minf(own, pair - YARD_MIN_PX - 0.8)
+	if own < YARD_MIN_PX:
+		return 0.0
+	return own / natural
+
+
+func _plan_last(plan: Array) -> int:
+	if plan.is_empty():
+		return -1
+	var last: Dictionary = plan[plan.size() - 1]
+	return int(last["yard"])
+
+
+func _next_below(yard: int, step: int, span: float) -> int:
+	if yard < 0:
+		return int(floor(span / float(step))) * step
+	return int(floor(float(yard - 1) / float(step))) * step
+
+
+func _gap_ratio(span: float) -> float:
+	# A 35 or 75 has to keep every 10. The ink is shorter than the em box, so those
+	# required digits may sit closer than a long-field mark.
+	if span <= YARD_NEAR_YARDS + 0.01:
+		return 0.22
+	return YARD_GAP_RATIO
+
+
+func _shown_px(span: float, z: float, scale: float) -> float:
+	return _number_px(span, z) * scale
+
+
+func _number_gap(span: float, a: float, b: float) -> float:
+	var ya := _screen_y(span, Vector3(YARD_NUMBER_X, 1.1, a))
+	var yb := _screen_y(span, Vector3(YARD_NUMBER_X, 1.1, b))
+	if ya < 0.0 or yb < 0.0:
+		return 0.0
+	return absf(ya - yb)
 
 
 func _yard_line_thickness(span: float, yard: float, rank: int) -> float:
@@ -2777,15 +2902,20 @@ func _screen_y(span: float, point: Vector3) -> float:
 	return (0.5 - ndc * 0.5) * KickConstants.WINDOW_HEIGHT
 
 
-func _yard_sign(x: float, z: float, label: String) -> void:
+func _yard_sign(x: float, z: float, label: String, scale: float = 1.0) -> void:
 	var sign := Label3D.new()
 	sign.text = label
 	sign.font_size = 72
-	sign.pixel_size = YARD_PIXEL_SIZE
+	sign.pixel_size = YARD_PIXEL_SIZE * scale
 	sign.modulate = Color(0.95, 0.96, 0.92)
 	sign.outline_size = 8
 	sign.outline_modulate = Color(0.05, 0.12, 0.05)
-	sign.position = Vector3(x, 1.1, z)
+	var world_h := YARD_WORLD_H * maxf(scale, 0.05)
+	var center_y := 1.1
+	var bottom := center_y - world_h * 0.5
+	if bottom < 0.2:
+		center_y += 0.2 - bottom
+	sign.position = Vector3(x, center_y, z)
 	# Face the kicker so the number is not backwards.
 	sign.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	var parent: Node3D = _marks if _marks != null else _world

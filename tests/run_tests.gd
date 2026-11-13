@@ -4780,10 +4780,28 @@ func _check_markings() -> void:
 	check(game.yard_line_rank(35.0, 15.0) == 5 and game.yard_line_rank(35.0, 20.0) == 10, "35 yards still draws 5-yard lines and stronger 10-yard lines")
 	check(game.yard_line_rank(75.0, 25.0) == 5 and game.hash_tick_spacing(75.0, 30.0) == 1, "a 75-yard kick keeps 5-yard lines and yard-by-yard hashes")
 	var n75: PackedInt32Array = game.yard_numbers_for(75.0)
-	check(n75.find(75) >= 0 and n75.find(70) >= 0 and n75.find(60) >= 0 and not game.yard_numbers_overlap(75.0), "75-yard numbers stay on a readable every-10 run, got %s" % n75)
+	var seventy_five_ok := true
+	for yard in [75, 70, 60, 50, 40, 30, 20, 10]:
+		if n75.find(yard) < 0:
+			seventy_five_ok = false
+	check(seventy_five_ok and not game.yard_numbers_overlap(75.0), "a 75-yard kick numbers every 10 yards to the posts, got %s" % n75)
+	check(game.yard_number_scale(35.0, 10) > 0.98 and game.yard_number_scale(35.0, 35) > 0.98, "a 35-yard kick keeps the full-size numbers")
 	var n200: PackedInt32Array = game.yard_numbers_for(200.0)
 	check(n200.find(200) >= 0 and n200.find(190) >= 0 and n200.find(180) >= 0, "200 keeps the near numbers, got %s" % n200)
-	check(n200.find(140) < 0 and n200.find(150) < 0 and n200.find(160) < 0, "a 200-yard kick does not pile every-10 numbers toward the posts, got %s" % n200)
+	check(n200.find(170) >= 0 and n200.find(100) >= 0 and n200.size() > 3, "a 200-yard kick continues past the first three numbers, got %s" % n200)
+	check(n200.find(140) < 0 and n200.find(150) < 0, "a 200-yard kick does not pile the overlapping every-10 marks, got %s" % n200)
+	var n500: PackedInt32Array = game.yard_numbers_for(500.0)
+	var n1000: PackedInt32Array = game.yard_numbers_for(1000.0)
+	var far_500 := false
+	var far_1000 := false
+	for yard in n500:
+		if int(yard) <= 300:
+			far_500 = true
+	for yard in n1000:
+		if int(yard) <= 500:
+			far_1000 = true
+	check(n500.size() > 3 and n500.find(400) >= 0 and far_500, "a 500-yard kick keeps mid-field and far-field numbers, got %s" % n500)
+	check(n1000.size() > 3 and far_1000, "a 1000-yard kick keeps mid-field and far-field numbers, got %s" % n1000)
 	check(not game.yard_numbers_overlap(200.0) and not game.yard_numbers_overlap(500.0) and not game.yard_numbers_overlap(1000.0), "long-field numbers do not overlap")
 	check(game.yard_line_rank(200.0, 200.0) >= 5 and game.yard_line_rank(200.0, 20.0) == 0, "far 5-yard lines drop on a 200-yard kick before they pinstripe")
 	check(game.yard_line_rank(1000.0, 1000.0) >= 5 and game.yard_line_rank(1000.0, 20.0) == 0, "a 1000-yard field keeps near lines and drops the far grate")
@@ -4795,7 +4813,7 @@ func _check_markings() -> void:
 	for child in game._marks.get_children():
 		if child is Label3D:
 			painted[str(child.text)] = true
-	check(painted.has("200") and painted.has("180") and not painted.has("140"), "the 200-yard field paints the near numbers and not the pile")
+	check(painted.has("200") and painted.has("180") and painted.has("100") and not painted.has("140"), "the 200-yard field paints the near numbers, a later number, and not the pile")
 	game.free()
 
 
@@ -4930,6 +4948,27 @@ func _check_live_field() -> void:
 	var calm := (game._rain.process_material as ParticleProcessMaterial).gravity
 	check(absf(calm.x) < 0.2, "calm rain falls without a sideways lean, gravity %s" % calm)
 	check(near(KickLogic.wind_range_delta(10.0, 0.0, 0, false), 4.0), "wind range math is unchanged")
+	game.force_weather(RunLogic.CLEAR)
+	game.logic.phase = KickLogic.Phase.AIMING
+	game.logic.aim_degrees = 0.0
+	for dist in [75.0, 200.0]:
+		game.logic.kick_distance = dist
+		for spot in [-6.0, -3.0, 0.0, 3.0, 6.0]:
+			game.logic.ball_lateral_yards = 42.0
+			game.logic.start_lateral_yards = spot
+			game.run.spot_yards = spot
+			game._place_world()
+			var tee_x: float = game._tee_position().x
+			var ball_x: float = game._ball_position().x
+			var kicker_x: float = game._kicker_sprite.position.x
+			var cone_x: float = float(game.aim_corridor["origin"].x)
+			check(near(tee_x, spot) and near(ball_x, spot) and near(cone_x, spot), "the teed ball and the cone share spot %s at %s yards, ball %s cone %s" % [spot, dist, ball_x, cone_x])
+			check(near(kicker_x, spot - 1.45), "the kicker stands beside spot %s, got %s" % [spot, kicker_x])
+			check(near(float(game.aim_corridor["length"]), 5.0), "the cone stays 5 yards on spot %s" % spot)
+			var rig: Dictionary = game.camera_rig(dist, spot)
+			check(near(float(rig["look"].x), spot) and not (absf(spot) > 0.5 and near(float(rig["look"].x), 0.0)), "the camera stays on spot %s and does not re-center the posts" % spot)
+	check(near(game.hash_row_half() * 2.0, 6.17), "hash rows stay 6.17 yards apart after the spot pass")
+	check(near(KickConstants.HASH_OFFSET_YARDS, 3.0) and near(KickConstants.WIDE_OFFSET_YARDS, 6.0), "spots stay at hash ±3 and wide ±6")
 	var source := FileAccess.get_file_as_string("res://scripts/main.gd")
 	check(source.find("puddle") < 0 and source.find("wet_grass") < 0 and source.find("snow_ground") < 0, "this paste did not add puddles, wet grass, or snow on the ground")
 	check(source.find("func _shift_weather") >= 0 and source.find("KEY_0") >= 0 and source.find("KEY_8") >= 0, "Shift+0 through Shift+8 are still the weather keys")
