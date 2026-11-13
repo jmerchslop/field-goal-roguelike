@@ -705,6 +705,8 @@ func _process(delta: float) -> void:
 		_sync_kick_audio(phase_before, forward_before)
 		if logic.insured:
 			run.consume_insurance()
+		if phase_before != KickLogic.Phase.RESULT and logic.phase == KickLogic.Phase.RESULT:
+			_step_kick_pose(0.0)
 		settle_kick()
 		if logic.phase == KickLogic.Phase.POWER or logic.phase == KickLogic.Phase.ACCURACY:
 			_approach_time += delta
@@ -2101,6 +2103,9 @@ func _step_kick_pose(delta: float) -> void:
 		return
 	if phase != KickLogic.Phase.FLIGHT and phase != KickLogic.Phase.RESULT:
 		return
+	if phase == KickLogic.Phase.RESULT and not run.practicing:
+		_pose = Kickers.reaction_pose(result_age, Kickers.is_make_result(logic.shanked, logic.result_text))
+		return
 	if not _swinging:
 		_swinging = true
 		_swing_time = 0.0
@@ -2185,6 +2190,8 @@ func pose_for_shot(mode: String) -> void:
 func _kicker_art_path() -> String:
 	if run.kicker_id == "":
 		return ""
+	if _pose.begins_with("react_"):
+		return Kickers.field_frame(run.kicker_id, _pose)
 	var pose := "idle"
 	if _pose == "run":
 		pose = "run"
@@ -2206,14 +2213,65 @@ func _place_kicker(tee: Vector3) -> void:
 	if path == "":
 		_kicker_sprite.visible = false
 		return
+	var reacting := _pose.begins_with("react_")
 	if str(_kicker_sprite.get_meta("art", "")) != path:
-		_fit_sprite(_kicker_sprite, path)
+		if reacting:
+			_apply_reaction_frame(path)
+		else:
+			_fit_sprite(_kicker_sprite, path)
 		_kicker_sprite.set_meta("art", path)
+	if reacting:
+		# Same pixels-per-yard as this kicker's follow-through. Feet stay on row 565.
+		var px := _kick_pixel_size(run.kicker_id)
+		_kicker_sprite.pixel_size = px
+		_kicker_sprite.region_enabled = false
+		_kicker_sprite.centered = true
+		var foot := (565.0 - 360.0) * px
+		_kicker_sprite.position = tee + Vector3(-1.45, foot, KickLogic.PLANT_Z)
+		return
 	var height := _kicker_sprite.pixel_size * _kicker_sprite.region_rect.size.y
 	var bob := 0.0
 	if _pose == "run":
 		bob = sin((_run_time + _swing_time) * 16.0) * 0.05
 	_kicker_sprite.position = tee + Vector3(-1.45, height * 0.5 + bob, _kicker_behind())
+
+
+var _kick_pixels := {}
+
+
+func _kick_pixel_size(id: String) -> float:
+	if _kick_pixels.has(id):
+		return float(_kick_pixels[id])
+	var height := 2.7
+	var follow := Kickers.field_frame(id, "follow")
+	var tex := load(follow) as Texture2D
+	if tex != null:
+		var image := tex.get_image()
+		if image != null:
+			var used := image.get_used_rect()
+			if used.size.y > 1.0:
+				height = 2.7 / float(used.size.y)
+			else:
+				height = 2.7 / 360.0
+		else:
+			height = 2.7 / 360.0
+	else:
+		height = 2.7 / 360.0
+	_kick_pixels[id] = height
+	return height
+
+
+func _apply_reaction_frame(path: String) -> void:
+	var tex := load(path) as Texture2D
+	if tex == null:
+		_kicker_sprite.visible = false
+		return
+	_kicker_sprite.texture = tex
+	_kicker_sprite.visible = true
+	_kicker_sprite.region_enabled = false
+	_kicker_sprite.centered = true
+	_kicker_sprite.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	_kicker_sprite.pixel_size = _kick_pixel_size(run.kicker_id)
 
 
 func _tee_position() -> Vector3:

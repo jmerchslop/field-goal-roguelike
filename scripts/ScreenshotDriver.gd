@@ -84,6 +84,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "g5":
+		if not await _capture_g5():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "cone5":
 		if not await _capture_cone5():
 			get_tree().quit(1)
@@ -1334,6 +1340,120 @@ func _capture_c3() -> bool:
 	print("C3 back kick ", board.run.kick_number, " attempts ", board.run.attempts, " preview ", board.preview_step(), " yards ", board.logic.kick_distance)
 	if board.run.attempts != attempts or board.run.kick_number != kick_number or board.preview_step() != 0 or not is_equal_approx(board.logic.kick_distance, 35.0):
 		print("distance preview did not restore the kick")
+		return false
+	return true
+
+
+func _show_reaction(result: String, age: float, shanked: bool) -> void:
+	board.logic.phase = KickLogic.Phase.RESULT
+	board.logic.result_text = result
+	board.logic.shanked = shanked
+	board.logic.perfect = false
+	board.logic.power = 80.0
+	board.logic.offset_yards = 1.5
+	board.logic.accuracy_error = 6.0
+	board.logic.bank_shot = false
+	board.logic.insured = false
+	board.run.practicing = false
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.awaiting_offer = false
+	board.result_age = age
+	board._step_kick_pose(0.0)
+	board.refresh_view()
+
+
+func _capture_g5() -> bool:
+	board.highlight = 1
+	board.selecting = true
+	board.confirm_kicker()
+	board.logic.aim_degrees = 0.0
+	board.logic.aim_base = 0.0
+	_show_reaction("GOOD", 0.25, false)
+	if board._pose != "react_up":
+		print("make did not reach the fist, pose ", board._pose)
+		return false
+	if not await _capture("g5_walkon_make_up.png"):
+		return false
+	_show_reaction("GOOD", 0.55, false)
+	if not await _capture("g5_walkon_make_down.png"):
+		return false
+	_show_reaction("SHORT", 0.55, false)
+	if not await _capture("g5_walkon_miss_slump.png"):
+		return false
+	board.run.kicker_id = Kickers.BIG_BRUCE
+	_show_reaction("GOOD", 0.25, false)
+	if board._kicker_art_path().find("big-bruce") < 0:
+		print("Bruce used ", board._kicker_art_path())
+		return false
+	if not await _capture("g5_bruce_make.png"):
+		return false
+	board.run.kicker_id = Kickers.COLE
+	_show_reaction("GOOD", 0.05, false)
+	if board._kicker_art_path().find("cole/") < 0:
+		print("Cole used ", board._kicker_art_path())
+		return false
+	if not await _capture("g5_cole_hands.png"):
+		return false
+	board.run.kicker_id = Kickers.WALK_ON
+	board.cycle_debug_distance()
+	board.cycle_debug_distance()
+	_show_reaction("GOOD", 0.25, false)
+	if not await _capture("g5_200_or_1000.png"):
+		return false
+	var attempts: int = board.run.attempts
+	var kick_number: int = board.run.kick_number
+	board.cycle_debug_distance()
+	board.cycle_debug_distance()
+	board.cycle_debug_distance()
+	if board.preview_step() != 0 or board.run.attempts != attempts or board.run.kick_number != kick_number:
+		print("J did not restore the kick")
+		return false
+	board.logic.phase = KickLogic.Phase.RESULT
+	board.logic.result_text = "GOOD"
+	board.logic.shanked = false
+	board.logic.perfect = false
+	board.logic.power = 80.0
+	board.logic.offset_yards = 1.5
+	board.logic.accuracy_error = 6.0
+	board.logic.bank_shot = false
+	board.logic.insured = false
+	board.run.practicing = false
+	board.run.kick_resolved = false
+	board.run.awaiting_offer = false
+	board.result_age = 0.9
+	board.settle_kick()
+	if not board.run.awaiting_offer:
+		print("offer did not open after the stamp hold")
+		return false
+	if not await _capture("g5_offer_after.png"):
+		return false
+	board.run.awaiting_offer = false
+	board.run.kick_resolved = false
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.attempts = 3
+	board.logic.phase = KickLogic.Phase.RESULT
+	board.logic.result_text = "WIDE LEFT"
+	board.logic.shanked = false
+	board.result_age = 0.9
+	board.settle_kick()
+	board._place_world()
+	if board._pose != "idle":
+		print("retry did not return to idle, pose ", board._pose)
+		return false
+	if not await _capture("g5_retry_idle.png"):
+		return false
+	board.run.practicing = true
+	board.logic.phase = KickLogic.Phase.RESULT
+	board.logic.result_text = "GOOD"
+	board.result_age = 0.4
+	board._swinging = true
+	board._swing_time = 0.4
+	board._early_swing = false
+	board._step_kick_pose(0.0)
+	if board._pose.begins_with("react_"):
+		print("practice played a reaction")
+		return false
+	if not await _capture("g5_practice_swing.png"):
 		return false
 	return true
 

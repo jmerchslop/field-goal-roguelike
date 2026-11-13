@@ -60,6 +60,7 @@ func _run() -> void:
 	_check_equipment_xxiv()
 	_check_six_icons()
 	_check_playing_card()
+	_check_reactions()
 
 
 func _finish_live() -> void:
@@ -5023,6 +5024,29 @@ func _check_playing_card() -> void:
 	records.unlocks = saved
 
 
+func _check_reactions() -> void:
+	check(ResultStamp.HOLD_SEC == 0.8, "the result stamp hold stays 0.8 seconds")
+	check(Kickers.reaction_pose(0.0, true) == "react_front" and Kickers.reaction_pose(0.1, false) == "react_front", "the reaction starts by turning to the front")
+	check(Kickers.reaction_pose(0.2, true) == "react_up" and Kickers.reaction_pose(0.44, true) == "react_up", "a make pumps a fist at 0.18 seconds")
+	check(Kickers.reaction_pose(0.2, false) == "react_hands" and Kickers.reaction_pose(0.5, false) == "react_slump", "a miss uses the hands pose, then the slump")
+	check(Kickers.reaction_pose(0.5, true) == "react_down", "a make holds the fists-down pose after 0.45 seconds")
+	check(Kickers.is_make_result(false, "GOOD") and not Kickers.is_make_result(true, "GOOD") and not Kickers.is_make_result(false, "SHORT") and not Kickers.is_make_result(false, "DOINK") and not Kickers.is_make_result(false, "WIDE LEFT"), "makes and misses use the existing judging")
+	var poses := ["react_front", "react_up", "react_down", "react_hands", "react_slump"]
+	var files := ["00-front.png", "make-01-up.png", "make-02-down.png", "miss-01-hands.png", "miss-02-slump.png"]
+	for id in [Kickers.WALK_ON, Kickers.BIG_BRUCE, Kickers.PHIL, Kickers.GARY, Kickers.VEX, Kickers.COLE, Kickers.WILLOW, Kickers.CARLOS]:
+		for i in poses.size():
+			var path := Kickers.field_frame(id, poses[i])
+			check(path.ends_with(files[i]) and path.find(id.replace("_", "-")) >= 0 or (id == Kickers.PHIL and path.find("pharmacist") >= 0 and path.ends_with(files[i])) or (id == Kickers.BIG_BRUCE and path.find("big-bruce") >= 0 and path.ends_with(files[i])), "%s plays its own %s, got %s" % [id, files[i], path])
+			check(id == Kickers.WALK_ON or path.find("walk-on") < 0, "%s does not borrow Walk-On for %s" % [id, files[i]])
+	var shell := FileAccess.get_file_as_string("res://scripts/main.gd")
+	var hud := FileAccess.get_file_as_string("res://scripts/hud.gd")
+	check(shell.find("reaction_pose") >= 0 and shell.find("_kicker_sprite") >= 0 and hud.find("make-01-up") < 0 and hud.find("00-front") < 0, "the reaction is a frame on the field kicker, not a screen overlay")
+	check(shell.find("KEY_H") >= 0 and shell.find("KEY_J") >= 0 and shell.find("KEY_K") >= 0 and shell.find("KEY_L") >= 0, "debug H, J, K, and L stay on their keys")
+	check(not KickConstants.debug_unlock_all_kickers, "debug_unlock_all_kickers stays false")
+	check(not ResourceLoader.exists("res://art/loadout/empty_perk.png"), "empty_perk.png was not added")
+	check(shell.find("hold_ready") >= 0 and hud.find("ResultStamp") >= 0, "the stamp still gates the offer on the existing hold")
+
+
 func _check_playing_card_live() -> void:
 	var records = get_root().get_node("SaveData")
 	var saved: Dictionary = records.unlocks.duplicate()
@@ -5047,4 +5071,63 @@ func _check_playing_card_live() -> void:
 	check(not game.selecting and game.run.kicker_id == Kickers.WALK_ON, "Space on The Walk-On starts that run")
 	game.free()
 	records.unlocks = saved
+	_check_reaction_live()
+
+
+func _check_reaction_live() -> void:
+	OS.set_environment("FG_SHOTS", "")
+	var packed: PackedScene = load("res://scenes/main.tscn")
+	var game = packed.instantiate()
+	get_root().add_child(game)
+	game._taking_pictures = true
+	game.highlight = 1
+	game.confirm_kicker()
+	game.logic.phase = KickLogic.Phase.RESULT
+	game.logic.result_text = "GOOD"
+	game.logic.shanked = false
+	game.run.practicing = false
+	game.result_age = 0.25
+	game._step_kick_pose(0.0)
+	game._place_world()
+	var made_path: String = game._kicker_art_path()
+	check(game._pose == "react_up" and made_path.find("make-01-up") >= 0 and made_path.find("walk-on") >= 0, "a judged make leaves follow-through for Walk-On's fist, got %s" % made_path)
+	check(game._kicker_sprite is Sprite3D and absf(game._kicker_sprite.position.z - game._tee_position().z - KickLogic.PLANT_Z) < 0.05, "the reaction stays on the follow-through spot in the world")
+	game.logic.result_text = "SHORT"
+	game.result_age = 0.55
+	game._step_kick_pose(0.0)
+	var miss_path: String = game._kicker_art_path()
+	check(game._pose == "react_slump" and miss_path.find("miss-02-slump") >= 0 and miss_path.find("make-") < 0, "a miss uses the slump, not a make frame, got %s" % miss_path)
+	game.logic.shanked = true
+	game.logic.result_text = "GOOD"
+	game.result_age = 0.3
+	game._step_kick_pose(0.0)
+	check(game._kicker_art_path().find("miss-01-hands") >= 0, "a shank uses the miss hands pose")
+	game.logic.shanked = false
+	game.run.practicing = true
+	game.logic.phase = KickLogic.Phase.RESULT
+	game.result_age = 0.4
+	game._swinging = true
+	game._swing_time = 0.4
+	game._early_swing = false
+	game._step_kick_pose(0.0)
+	check(game._pose == "follow" and game._kicker_art_path().find("follow") >= 0, "Practice Swing stays on follow-through")
+	game.run.practicing = false
+	game.run.kicker_id = Kickers.COLE
+	game.logic.phase = KickLogic.Phase.RESULT
+	game.logic.result_text = "GOOD"
+	game.result_age = 0.05
+	game._step_kick_pose(0.0)
+	var cole: String = game._kicker_art_path()
+	check(cole.find("cole/") >= 0 and cole.ends_with("00-front.png") and cole.find("walk-on") < 0, "Cole faces front on his own frame, got %s" % cole)
+	game.run.attempts = 3
+	game.run.kick_resolved = false
+	game.run.awaiting_offer = false
+	game.run.phase = RunLogic.Phase.PLAYING
+	game.logic.result_text = "SHORT"
+	game.logic.shanked = false
+	game.result_age = 0.9
+	game.settle_kick()
+	game._place_world()
+	check(game._pose == "idle" and game._kicker_behind() > KickLogic.PLANT_Z, "a miss with attempts left returns to idle at the start spot")
+	game.free()
 

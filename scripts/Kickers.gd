@@ -291,12 +291,32 @@ static func aliases(id: String) -> Array:
 	return []
 
 
+static func is_make_result(shanked: bool, result: String) -> bool:
+	# GOOD covers PERFECT, DOWN THE MIDDLE, BANK SHOT, and INSURED.
+	# A doink that stays a miss, a shank, and the wide / short calls do not.
+	return not shanked and result == "GOOD"
+
+
+static func reaction_pose(age: float, made: bool) -> String:
+	# Measured from the moment the result stamp starts.
+	if age < 0.18:
+		return "react_front"
+	if age < 0.45:
+		return "react_up" if made else "react_hands"
+	return "react_down" if made else "react_slump"
+
+
 static func field_frame(id: String, pose: String) -> String:
 	_ensure_art()
 	var mine: Dictionary = _frames.get(id, {})
 	var direct := str(mine.get(pose, ""))
 	if direct != "":
 		return direct
+	# A missing reaction beat uses Walk-On's matching frame, not follow-through.
+	if pose.begins_with("react_"):
+		if id != WALK_ON:
+			return str(_frames.get(WALK_ON, {}).get(pose, ""))
+		return ""
 	for other in ["idle", "run", "plant", "follow", "portrait"]:
 		if other == pose:
 			continue
@@ -536,6 +556,16 @@ static func _ensure_art() -> void:
 
 
 static func _pose_of(stem: String) -> String:
+	if stem.find("miss_02") >= 0 or stem.find("slump") >= 0:
+		return "react_slump"
+	if stem.find("miss_01") >= 0 or stem.find("hands") >= 0:
+		return "react_hands"
+	if stem.find("make_02") >= 0:
+		return "react_down"
+	if stem.find("make_01") >= 0:
+		return "react_up"
+	if stem.find("00_front") >= 0 or stem.ends_with("_front"):
+		return "react_front"
 	if stem.find("follow") >= 0:
 		return "follow"
 	if stem.find("plant") >= 0:
