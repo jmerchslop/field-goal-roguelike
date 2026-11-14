@@ -1,600 +1,676 @@
 # Item, kit, range, and cash audit
 
-Generated: 2026-11-12
+Generated: 2026-11-14
 
-**Loadout items:** 26 (12 equipment, 6 perks, 8 curses)
+**Loadout items:** 32 (18 equipment, 6 perks, 8 curses)
 **Vitamins:** 11 (10 belt vitamins and B12 Shot)
 **Kickers:** 8
 **Kits:** 8
-**Mismatches:** 80
+**Mismatches:** 11 (the five multiplier cards, split into the ranks that still move and the ranks that copy XII, plus Vex's clearance line)
 
-This report compares the words on screen with the effects in code. Nothing in the game was changed. Numbers below were taken from `Loadout.apply`, `Loadout.effect_line`, `Kickers.apply_to`, `KickLogic.carry_plan`, `KickLogic.format_number`, and `RunLogic` cash and shop functions.
+Numbers below were taken from `Loadout.effect_line`, `Loadout.apply` / `_apply_piece`, `Loadout.cannon_yards`, `Loadout.drive_yards`, `Loadout.high_air_yards`, `Loadout.effect_rank`, `Kickers.apply_to`, `KickLogic.carry_plan`, and `RunLogic.prepare_kick_stats`. A headless run on 2026-11-14 confirmed the range totals and the needle speeds.
 
-`format_number` prints a tenth and rounds half away from zero. Anchor and Sticker cards use that printer. The needles use the unrounded factor.
+### What changed since the 2026-11-12 audit
 
-Equipment rank caps are coded: Standard VI, Endless XII. Perk caps: Standard III, Endless VI. Curses stay rank 1. Those caps exist. No rank in that span is missing from `max_rank`.
+- Five equipment styles are in the game: True Lid, Shelter Lid, Guide Gloves, Patient Gloves, Hush Gloves. Drive Lid was already in the 2026-11-12 file.
+- Equipment ranks run I–XXIV in Endless and I–VI in Standard. Perks stay I–III Standard and I–VI Endless. Curses stay rank 1.
+- `effect_rank` freezes most equipment effects at rank XII. Cannon Cleats, Drive Lid, and High-Air Gloves do not. They use a late yard table from XIII through XXIV.
+- The wording pass updated perk cards for ranks IV–VI, the Wind Visor mph line, the Ice Cage cumulative line, and the Scout / Doink / Replay / Weather Wraps lines so they follow `effect_rank`. Those old mismatches are gone.
+- Anchor and Sticker cards now print two decimals of the factor (`_two_decimals`) instead of a tenth. The needles still use the unrounded power, so a smaller mismatch remains. True Lid, Patient Gloves, and Shelter Lid have the same kind of rounding.
+- The Bonus Ring can put a second, different style in a filled equipment type. At most two styles per type. Each ranks on its own. Normal offers and the shop do not open that second slot.
+- UNDER THE LIGHTS is a boss. Standard kick 10 is a 50/50 roll with The Squeeze. Endless draws it with the other four bosses. Both needles are ×1.35 on top of the kicker and the items. Posts stay 6.17 yards wide.
+- Endless opens the Vitamin Shop on every kick number divisible by 5, not only 5, 10, and 15. Standard is still only 5, 10, and 15.
+- Willow's Synchronicity now puts a range loadout card on the first generated offer (Cannon, Drive Lid, High-Air, or Glass Leg at rank I). It does not force a Protein Shake onto the shop.
 
-Style lock, as coded: picking a cleat, helmet, or glove rejects any other id in that slot. A second different perk is allowed. A third perk id is rejected. A second curse is allowed and then `curses_locked` blocks more curses. Ranks still upgrade an owned id. Glass Leg cannot be taken the first time if the attempt cap is already 2 or less. Ice Cage rejects the Iced curse.
+`format_number` still prints a tenth and rounds half away from zero. The multiplier cards do not use it. They use `_two_decimals`.
 
-Howling Wind multiplies equipment and perk additive numbers by 1.15 after they are summed, and it widens multiplier gaps with `boost_factor`. Curse upside yards and curse Mult are not in that 1.15. Phil's Compounding and Gary's Lucky Ball then pass through `scale_amount` / `scale_gap`. The tables below are with neither of those scales and without Howling Wind. Big Game copies the kicker's base needle, bands, and red-tip values back over the loadout, then still applies vitamins. Range bonuses are not stripped.
+Style lock, as coded: a type holds one style until a Bonus Ring card puts a different style in the second slot. A third style of that type is rejected. A second different perk is allowed. A third perk id is rejected. A second curse is allowed and then `curses_locked` blocks more curses. Glass Leg cannot be taken the first time if the attempt cap is already 2 or less. Ice Cage, in either helmet slot, rejects the Iced curse.
+
+Howling Wind multiplies the summed equipment and perk yard, band, hero, storm, and drill numbers by 1.15, and it widens each multiplier gap with `boost_factor` before the pieces multiply together. Both pieces of a doubled type go through that same pass. Curse upside yards and curse Mult are not in the equipment 1.15. Phil's Compounding (item scale 1.15) and Gary's Lucky Ball then pass through `scale_amount` / `scale_gap`, again on both pieces. The tables below are with neither of those scales and without Howling Wind, unless a row says otherwise.
+
+Big Game copies the kicker's base needle speeds, bands, and red-tip values back over the loadout, then still applies vitamins. Range bonuses from gear are not stripped. UNDER THE LIGHTS does not do that. It only multiplies needle speed.
 
 The aiming HUD does not show a max-range number. The "{yards} yd" line is the kick's required distance. After the kick, the result detail line prints `max range` from `carry_plan` travel.
 
 ## 1. Loadout items
 
+Second-slot rule, from `_apply_piece`: each owned style is applied in full. Additions add. Multipliers multiply. Flags stay on if either piece sets them. Nothing in one equipment type writes the same stat twice, because each type has only one style that touches a given stat. Cannon is the only cleat that adds yards. Drive Lid is the only helmet that adds yards. High-Air is the only glove that adds yards. So no doubled type has two range bonuses. Cannon plus Drive Lid (different types) do add.
+
+Howling and Phil apply to both pieces. The additives are summed first, then Howling's 1.15 and Phil's `scale_amount` hit the sum. Each multiplier is widened on its own, then the factors multiply.
+
+Soft cap: `effect_rank` is `min(rank, 12)`. Ranks XIII–XXIV of every item below except Cannon, Drive Lid, and High-Air keep the rank XII card line and the rank XII effect. That is rank redundancy, not a card/code disagreement, because the card uses `effect_rank` too.
+
 ### Cannon Cleats
 
 - **id:** `cannon_cleats`
 - **slot:** cleats
-- **rank cap:** Standard VI, Endless XII
-- **card text:** `"+{6 × rank} yd"` at every rank. Rank I is "+6 yd". Rank VI is "+36 yd". Rank XII is "+72 yd".
-- **actual effect:** `range_bonus += 6 × rank`. The number is the total for that rank, not an extra 6 on top of the previous rank's bonus. It is included in max range. Big Game keeps it. Howling Wind multiplies it by 1.15 with the other equipment and perk yards.
-- **match:** yes, ranks I–XII
+- **rank cap:** Standard VI, Endless XXIV
+- **soft cap:** none. XIII–XXIV use `_CANNON_LATE`, not `6 × rank`.
+- **card text:** `"+{cannon_yards} yd"` at every rank. The function is the effect.
+- **actual effect:** `range_bonus += cannon_yards(rank)`. Total for that rank. Big Game keeps it. Howling multiplies it by 1.15 with the other equipment and perk yards. A second style in another type that also adds yards (Drive Lid or High-Air) adds on top.
+- **match:** yes, ranks I–XXIV
+
+| Rank | Yards |
+| --- | --- |
+| I–XII | 6, 12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72 |
+| XIII–XXIV | 97, 125, 156, 190, 227, 267, 310, 356, 405, 457, 512, 570 |
 
 ### Pinpoint Cleats
 
 - **id:** `pinpoint_cleats`
 - **slot:** cleats
-- **rank cap:** Standard VI, Endless XII
-- **card text:** `"PERFECT +{2 × rank}, good +{3 × rank}"`. Rank I is "PERFECT +2, good +3". Rank VI is "PERFECT +12, good +18". Rank XII is "PERFECT +24, good +36".
-- **actual effect:** adds those amounts to the kicker's perfect band and good band. Totals, not stacked leftovers. Big Game removes the band adds. Howling Wind multiplies the adds by 1.15.
-- **match:** yes, ranks I–XII
+- **rank cap:** Standard VI, Endless XXIV
+- **soft cap:** from XIII. `effect_rank` stays 12. Card and code both stay PERFECT +24, good +36.
+- **card text:** `"PERFECT +{2 × effect_rank}, good +{3 × effect_rank}"`.
+- **actual effect:** those amounts are added to the perfect band and the good band. Totals, not leftovers. Big Game removes the band adds. Howling multiplies the adds by 1.15. No other cleat adds bands, so a second cleat does not stack this.
+- **match:** yes, ranks I–XXIV
+
+Rank I is +2 / +3. Rank VI is +12 / +18. Rank XII through XXIV is +24 / +36.
 
 ### Anchor Cleats
 
 - **id:** `anchor_cleats`
 - **slot:** cleats
-- **rank cap:** Standard VI, Endless XII
-- **card text:** `"Needles ×{format_number(0.85 ^ rank)}"`. The printed tenths are 0.9, 0.7, 0.6, 0.5, 0.4, 0.4, 0.3, 0.3, 0.2, 0.2, 0.2, 0.1 for ranks I–XII.
-- **actual effect:** both needle speeds are multiplied by the unrounded `0.85 ^ rank`: 0.85, 0.7225, 0.614125, 0.522006, 0.443705, 0.377150, 0.320577, 0.272491, 0.231617, 0.196874, 0.167343, 0.142242. A higher rank replaces the previous factor. It does not stack a second 0.85. Big Game restores the kicker's base needle speeds, so this mul is off during Big Game.
-- **match:** mismatch, every rank. The card's tenth is not the factor the needles use. Ranks VI and V both print ×0.4. Ranks VIII and VII both print ×0.3. Ranks IX–XI all print ×0.2.
+- **rank cap:** Standard VI, Endless XXIV
+- **soft cap:** from XIII. The factor stays `0.85^12`.
+- **card text:** `"Needles ×{hundredths of 0.85^effect_rank}"`.
+- **actual effect:** both needle speeds are multiplied by the unrounded `0.85^effect_rank`. A higher rank replaces the previous factor. It does not stack a second 0.85. Big Game restores the kicker's base needle speeds, so this mul is off during Big Game. Patient Gloves multiply only the power needle, after this, if both are owned. Hero Ball's ×0.80 also multiplies after.
+- **match:** yes at rank I (×0.85). Mismatch at II–XXIV. The card rounds to hundredths. The needles use the full power. XIII–XXIV print and use the same values as XII.
+
+| Rank | Card | Factor used |
+| --- | --- | --- |
+| I | ×0.85 | 0.85 |
+| II | ×0.72 | 0.7225 |
+| III | ×0.61 | 0.614125 |
+| IV | ×0.52 | 0.52200625 |
+| V | ×0.44 | 0.4437053125 |
+| VI | ×0.38 | 0.377149515625 |
+| VII | ×0.32 | 0.32057708828125 |
+| VIII | ×0.27 | 0.27249052503906 |
+| IX | ×0.23 | 0.2316169462832 |
+| X | ×0.20 | 0.19687440434072 |
+| XI | ×0.17 | 0.16734324368961 |
+| XII–XXIV | ×0.14 | 0.14224175713617 |
 
 ### Sticker Cleats
 
 - **id:** `sticker_cleats`
 - **slot:** cleats
-- **rank cap:** Standard VI, Endless XII
-- **card text:** `"Drift ×{format_number(0.80 ^ rank)}"`. Printed tenths: 0.8, 0.6, 0.5, 0.4, 0.3, 0.3, 0.2, 0.2, 0.1, 0.1, 0.1, 0.1.
-- **actual effect:** `drift_factor` is the unrounded `0.80 ^ rank`: 0.8, 0.64, 0.512, 0.4096, 0.32768, 0.262144, 0.209715, 0.167772, 0.134218, 0.107374, 0.085899, 0.068719. Rank I matches. Later ranks do not. Big Game does not clear drift.
-- **match:** yes at rank I. Mismatch at ranks II–XII.
+- **rank cap:** Standard VI, Endless XXIV
+- **soft cap:** from XIII. The factor stays `0.80^12`.
+- **card text:** `"Drift ×{hundredths of 0.80^effect_rank}"`.
+- **actual effect:** `drift_factor` is the unrounded `0.80^effect_rank`. Big Game does not clear drift. No other cleat writes `drift_factor`.
+- **match:** yes at I (×0.80) and II (×0.64). Mismatch at III–XXIV.
+
+| Rank | Card | Factor used |
+| --- | --- | --- |
+| I | ×0.80 | 0.8 |
+| II | ×0.64 | 0.64 |
+| III | ×0.51 | 0.512 |
+| VI | ×0.26 | 0.262144 |
+| XII–XXIV | ×0.07 | 0.068719476736 |
+
+Ranks IV, V, VII, VIII, IX, X, and XI round the same way. The card is the hundredths of `0.80^effect_rank`. The drift code uses the full power.
 
 ### Wind Visor
 
 - **id:** `wind_visor`
 - **slot:** helmet
-- **rank cap:** Standard VI, Endless XII
-- **card text:** Rank I `"Shows wind mph and an arrow"`. Ranks II–V `"Dotted path for {percent}% of this kick"` with 40, 55, 70, 85. Rank VI and Endless VII–XII `"Dotted path for the full flight"`.
-- **HUD:** wind name always. With `flag_reader`, `"{mph} mph   cross {cross}   tail {tail}"` and the flag arrow. The dotted path is drawn for `path_percent` of this kick.
-- **actual effect:** rank I sets the readout and the arrow, and `path_percent_for_rank` is 0, so no path. Ranks II–V use 40, 55, 70, 85. Rank VI and above use 100. The readout and arrow stay on at every rank, including II–XII. Big Game does not turn this off.
-- **match:** rank I yes. Ranks II–XII mismatch: the path percent matches the card, but the mph line and arrow still run and the card no longer says so.
+- **rank cap:** Standard VI, Endless XXIV
+- **soft cap:** the path percent stops growing at VI (`min(rank, 6)` inside `path_percent_for_rank`). XIII–XXIV match XII, which already matches VI.
+- **card text:** Rank I `"Shows wind mph and an arrow"`. Ranks II–V `"Wind mph and arrow. Dotted path for {40, 55, 70, 85}% of this kick"`. Rank VI and above `"Wind mph and arrow. Dotted path for the full flight, ending at the posts"`.
+- **actual effect:** rank I sets the readout and the arrow, and the path percent is 0. Ranks II–V use 40, 55, 70, 85. Rank VI and above use 100. Big Game does not turn this off. A second helmet does not clear the path. Only Wind Visor writes it.
+- **match:** yes, ranks I–XXIV
 
 ### Ice Cage
 
 - **id:** `ice_cage`
 - **slot:** helmet
-- **rank cap:** Standard VI, Endless XII
-- **card text:** I `"No red-tip penalty. Immune to Iced."` II `"Also accuracy needle ×0.90"` III `"Also PERFECT +1"` IV `"Also good +2"` V `"PERFECT +2 total"` VI and VII–XII `"Good +4 total"`.
-- **actual effect:** every rank sets red-tip immunity (`ice_veins`) and blocks the Iced curse and the Iced meter hide. Rank II and up also multiply accuracy needle speed by 0.90 (power needle unchanged). Perfect bonus, one point at each odd rank from III up: +1, +1, +2, +2, +3, +3, +4, +4, +5, +5 at ranks III–XII. Good bonus, +2 at each even rank from IV up: +2, +2, +4, +4, +6, +6, +8, +8, +10 at ranks IV–XII. On the Walk-On's base bands (±1.5 / ±6) that is absolute bands 2.5/6, 2.5/8, 3.5/8, 3.5/10, 4.5/10, 4.5/12, 5.5/12, 5.5/14, 6.5/14, 6.5/16 at ranks III–XII. Big Game clears `ice_veins` and the band adds. The Iced-curse block still keys off the helmet id.
-- **match:** rank I yes. Rank II mismatch: the card only names ×0.90. Rank III mismatch: the card only names PERFECT +1. Rank IV mismatch: the card only names good +2. Rank V mismatch: perfect +2 is right, and good +2, ×0.90, and Iced immunity are still on. Rank VI mismatch: good +4 is right, and perfect is +2, not unstated. Ranks VII–XII mismatch: the card stays "Good +4 total" while perfect and good keep rising as above.
+- **rank cap:** Standard VI, Endless XXIV
+- **soft cap:** from XIII. `effect_rank` stays 12, so perfect stays +5 and good stays +10.
+- **card text:** `_ice_cage_line(effect_rank)`. Rank I is immunity only. Rank II adds accuracy ×0.90. Later ranks append the running perfect and good totals.
+- **actual effect:** every rank sets `ice_veins` and blocks the Iced curse, in either helmet slot. Rank II and up multiply accuracy speed by 0.90. Perfect +1 at each odd rank from III. Good +2 at each even rank from IV. At XII that is perfect +5 and good +10. Big Game clears `ice_veins` and the band adds. The Iced-curse block still keys off either helmet id.
+- **match:** yes, ranks I–XXIV
+
+Rank VI card, confirmed live: `"No red-tip penalty. Immune to Iced. Accuracy needle ×0.90. PERFECT +2, good +4"`. Rank XII and XIII–XXIV: perfect +5, good +10, still ×0.90.
 
 ### Scout Lid
 
 - **id:** `scout_lid`
 - **slot:** helmet
-- **rank cap:** Standard VI, Endless XII
-- **card text:** Ranks I–III `"+{rank} reroll"`. IV `"+3 rerolls, and one Practice Swing a quarter"`. V `"+4 rerolls, and one Practice Swing a quarter"`. VI and VII–XII `"+5 rerolls, and two Practice Swings a quarter"`.
-- **actual effect:** added rerolls are 1, 2, 3, 3, 4, 5, then `rank - 1` (6 through 11 at VII–XII). Practice swings per quarter: 0 through rank III, then 1, 1, 2, 2, 3, 3, 4, 4, 5 at ranks IV–XII. These add to the kicker's own rerolls. Picking the rank adds the gain to rerolls left and practice charges immediately.
-- **match:** yes for ranks I–VI. Mismatch for VII–XII: the card stays at +5 rerolls and two practice swings. Code is +6 and 2, +7 and 3, +8 and 3, +9 and 4, +10 and 4, +11 and 5.
+- **rank cap:** Standard VI, Endless XXIV
+- **soft cap:** from XIII. Rerolls stay at 11 and practice stays at 5 per quarter.
+- **card text:** I–III `"+{rank} reroll"`. IV `"+3 rerolls, and one Practice Swing a quarter"`. V `"+4 rerolls, and one Practice Swing a quarter"`. VI `"+5 rerolls, and two Practice Swings a quarter"`. Above VI, `"+{rank-1} rerolls, and {practice} Practice Swings a quarter"` using `effect_rank`.
+- **actual effect:** `_scout_rerolls` and `_scout_practice` are what the card prints. Practice from Replay Gloves, a different slot, adds on top.
+- **match:** yes, ranks I–XXIV
+
+Rank XII and XIII–XXIV: +11 rerolls and five practice swings a quarter.
 
 ### Doink Cap
 
 - **id:** `doink_cap`
 - **slot:** helmet
-- **rank cap:** Standard VI, Endless XII
-- **card text:** Ranks I–V `"{rank} doink-to-good a quarter"`. Rank VI and VII–XII `"5 doink-to-good a quarter, unused carry (max 5)"`.
-- **actual effect:** ranks I–V grant that many doink-to-good charges and do not carry. Rank VI grants 5 and carries unused charges, capped at another 5. Ranks VII–XII grant `rank` charges (7 through 12) and carry unused charges capped at that same number, not at 5.
-- **match:** yes for ranks I–VI. Mismatch for VII–XII.
+- **rank cap:** Standard VI, Endless XXIV
+- **soft cap:** from XIII. Charges stay at 12, carry max stays at 12.
+- **card text:** I–V `"{rank} doink-to-good a quarter"`. VI `"5 doink-to-good a quarter, unused carry (max 5)"`. VII–XII and XIII–XXIV `"{effect_rank} doink-to-good a quarter, unused carry (max {effect_rank})"`, except VI's special line. Rank XII prints 12 and max 12.
+- **actual effect:** I–V grant that many charges and do not carry. VI grants 5 and carries, cap 5. VII–XII grant `effect_rank` charges and carry up to that number. XIII–XXIV stay at 12.
+- **match:** yes, ranks I–XXIV
 
 ### Drive Lid
 
 - **id:** `drive_lid`
 - **slot:** helmet
-- **rank cap:** Standard VI, Endless XII
-- **card text:** `"+{4 × rank} yd"`. Rank I "+4 yd". Rank VI "+24 yd". Rank XII "+48 yd".
-- **actual effect:** `range_bonus += 4 × rank`. Total for that rank. Big Game keeps it. Howling Wind multiplies it by 1.15 with other equipment yards. No sprite, so the icon draws "Drive".
-- **match:** yes, ranks I–XII
+- **rank cap:** Standard VI, Endless XXIV
+- **soft cap:** none. XIII–XXIV use `_DRIVE_LATE`.
+- **card text:** `"+{drive_yards} yd"`.
+- **actual effect:** `range_bonus += drive_yards(rank)`. Big Game keeps it. Adds with Cannon Cleats and High-Air Gloves. Howling multiplies the sum by 1.15.
+- **match:** yes, ranks I–XXIV
+
+| Rank | Yards |
+| --- | --- |
+| I–XII | 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48 |
+| XIII–XXIV | 65, 84, 105, 128, 153, 180, 209, 240, 273, 308, 345, 384 |
+
+### True Lid
+
+- **id:** `true_lid`
+- **slot:** helmet
+- **rank cap:** Standard VI, Endless XXIV
+- **soft cap:** from XIII. The factor stays `0.90^12`.
+- **card text:** `"Hook ×{hundredths of 0.90^effect_rank}"`. Rank I is ×0.90. Rank VI is ×0.53. Rank XII–XXIV is ×0.28.
+- **actual effect:** `angle_scale` is multiplied by the unrounded `0.90^effect_rank`. A second helmet does not write `angle_scale`. Big Game does not reset `angle_scale` in the big-game overwrite block.
+- **match:** yes at I (0.90) and II (0.81). Mismatch at III–XXIV. Rank VI's card says ×0.53. The hook uses 0.531441. Rank XII's card says ×0.28. The hook uses 0.282429536481.
+
+### Shelter Lid
+
+- **id:** `shelter_lid`
+- **slot:** helmet
+- **rank cap:** Standard VI, Endless XXIV
+- **soft cap:** from XIII. The factor stays `0.80^12`.
+- **card text:** `"Headwind loss ×{hundredths of 0.80^effect_rank}"`. Rank I is ×0.80. Rank VI is ×0.26. Rank XII–XXIV is ×0.07.
+- **actual effect:** a negative wind-range term is multiplied by the unrounded `0.80^effect_rank` (`shelter_factor`). Tailwind is not reduced. Rank I matches. Rank II is 0.64 and the card says ×0.64. Later ranks round.
+- **match:** yes at I and II. Mismatch at III–XXIV. Rank XII's card says ×0.07. The factor used is 0.068719476736.
 
 ### Iron Grip
 
 - **id:** `iron_grip`
 - **slot:** gloves
-- **rank cap:** Standard VI, Endless XII
-- **card text:** Ranks I–II `"Red-tip noise −{2 × rank}"`. III `"Noise −4 (min ±1), red tip 3 later"`. IV `"Noise −4 (min ±1), red tip 6 later"`. V `"Noise −4 (min ±1), red tip 9 later"`. VI and VII–XII `"Red tip never triggers"`.
-- **actual effect:** noise starts at 5. The cut is `2 × min(rank, 2)`, floored at 1, so rank I is ±3 and rank II and up are ±1. Red-tip start begins at 95 and gains +3 at rank III, +3 more at IV, and +3 more at V (98, 101, 104). Rank VI and up set `red_tip_off`, so the red tip does not add noise. Big Game restores the base red-tip start, noise, and turns `red_tip_off` off.
-- **match:** yes, ranks I–XII. The rank VI sentence still matches VII–XII because the off switch does not grow.
+- **rank cap:** Standard VI, Endless XXIV
+- **soft cap:** the red-tip switch is already fully off at VI (`effect_rank >= 6`). VII–XXIV do not change it. XIII–XXIV match XII.
+- **card text:** I–II `"Red-tip noise −{2 × rank}"`. III–V name noise −4 and a later red-tip start. VI and above `"Red tip never triggers"`.
+- **actual effect:** noise starts at 5. The cut is `2 × min(effect_rank, 2)`, floored at 1, so rank I is ±3 and rank II and up are ±1. Red-tip start begins at 95 and gains +3 at III, IV, and V (98, 101, 104). Rank VI and up set `red_tip_off`. Big Game restores the base red-tip values and clears `red_tip_off`.
+- **match:** yes, ranks I–XXIV
 
 ### Replay Gloves
 
 - **id:** `replay_gloves`
 - **slot:** gloves
-- **rank cap:** Standard VI, Endless XII
-- **card text:** Ranks I–V `"{rank} practice swing a quarter"`. Rank VI and VII–XII `"5 practice swings, unused carry (max 5)"`.
-- **actual effect:** ranks I–V add that many practice swings and do not carry. Rank VI adds 5 and carries unused swings, capped at 5. Ranks VII–XII add `rank` swings (7 through 12) and carry unused swings capped at that number, not at 5.
-- **match:** yes for ranks I–VI. Mismatch for VII–XII.
+- **rank cap:** Standard VI, Endless XXIV
+- **soft cap:** from XIII. Swings stay at 12 and the carry max stays at 12.
+- **card text:** I–V `"{rank} practice swing a quarter"`. VI `"5 practice swings, unused carry (max 5)"`. VII and up use `effect_rank` for both the count and the carry max. XII–XXIV say 12 and max 12.
+- **actual effect:** the same counts. `practice_carry` turns on at rank VI. Scout Lid's practice, a different slot, adds.
+- **match:** yes, ranks I–XXIV
 
 ### High-Air Gloves
 
-- **id:** `high_air`
+- **id:** `high_air_gloves`
 - **slot:** gloves
-- **rank cap:** Standard VI, Endless XII
-- **card text:** `"+{2 × rank} yd, tailwind range ×1.5"`.
-- **actual effect:** `range_bonus += 2 × rank`, and positive wind range (tailwind only) is multiplied by 1.5. Headwind is not multiplied. Big Game keeps the yards and the tailwind flag.
-- **match:** yes, ranks I–XII
+- **rank cap:** Standard VI, Endless XXIV
+- **soft cap:** none. XIII–XXIV use `_AIR_LATE`.
+- **card text:** `"+{high_air_yards} yd, tailwind range ×1.5"`.
+- **actual effect:** `range_bonus += high_air_yards(rank)` and `thin_air` is set, so a positive wind-range term is ×1.5. The yards add with Cannon and Drive Lid.
+- **match:** yes, ranks I–XXIV
+
+| Rank | Yards |
+| --- | --- |
+| I–XII | 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24 |
+| XIII–XXIV | 32, 41, 51, 62, 74, 87, 101, 116, 132, 149, 167, 186 |
+
+### Guide Gloves
+
+- **id:** `guide_gloves`
+- **slot:** gloves
+- **rank cap:** Standard VI, Endless XXIV
+- **soft cap:** from XIII. The hook factor stays 0.28.
+- **card text:** `"GOOD locks: hook ×{0.50 − 0.02 × (effect_rank − 1)}"`. Rank I is ×0.50. Rank VI is ×0.40. Rank XII–XXIV is ×0.28.
+- **actual effect:** `guide_factor` is that exact hundredth. A good-band miss uses it to shrink the hook. No other glove writes it.
+- **match:** yes, ranks I–XXIV
+
+### Patient Gloves
+
+- **id:** `patient_gloves`
+- **slot:** gloves
+- **rank cap:** Standard VI, Endless XXIV
+- **soft cap:** from XIII. The factor stays `0.85^12`.
+- **card text:** `"Power needle ×{hundredths of 0.85^effect_rank}"`. Same printed hundredths as Anchor. Rank I is ×0.85. Rank VI is ×0.38. Rank XII–XXIV is ×0.14.
+- **actual effect:** only `power_speed` is multiplied by the unrounded `0.85^effect_rank`. The accuracy needle is not. Anchor, if also owned, multiplies both needles, so the power needle is hit twice. Big Game restores base power speed, so this mul is off during Big Game.
+- **match:** yes at rank I. Mismatch at II–XXIV, same hundredths gap as Anchor.
+
+### Hush Gloves
+
+- **id:** `hush_gloves`
+- **slot:** gloves
+- **rank cap:** Standard VI, Endless XXIV
+- **soft cap:** from XIII. Ignored wind stays at 12 mph.
+- **card text:** `"First {effect_rank} mph of wind ignored"`. Rank I is 1. Rank VI is 6. Rank XII–XXIV is 12.
+- **actual effect:** `hush_mph` is subtracted from the blown wind speed before drift and wind range, floored at 0. Howling scales the wind vector before this subtraction.
+- **match:** yes, ranks I–XXIV
 
 ### Weather Wraps
 
 - **id:** `weather_wraps`
 - **slot:** gloves
-- **rank cap:** Standard VI, Endless XII
-- **card text:** I `"Rain, snow, and mud penalties cut in half"`. II `"Rain, snow, and mud penalties ignored"`. III `"Also ignores Monsoon's rain and mud"`. IV `"Penalties ignored, +2 yd unless CLEAR"`. V `"Penalties ignored, +4 yd unless CLEAR"`. VI and VII–XII `"Penalties ignored, +6 yd unless CLEAR"`.
-- **actual effect:** rank I halves rain needle speed, snow yards, and mud power span, and does not stop Monsoon. Rank II ignores plain rain, snow, and mud, and Monsoon still applies. Rank III and up ignore Monsoon rain and mud as well. From rank IV, yards are `2 × (rank - 3)` when the weather is not CLEAR: 2, 4, 6, 8, 10, 12, 14, 16, 18 at ranks IV–XII. Howling Wind multiplies those yards by 1.15. CLEAR adds none.
-- **match:** yes for ranks I–VI. Mismatch for VII–XII: the card stays at +6 yd. Code is +8 through +18.
+- **rank cap:** Standard VI, Endless XXIV
+- **soft cap:** from XIII. The bonus stays +18 yards.
+- **card text:** I halves rain, snow, and mud. II ignores those three. III also ignores Monsoon's rain and mud. IV and up `"Penalties ignored, +{2 × (effect_rank − 3)} yd unless CLEAR"`. Rank VI is +6. Rank XII–XXIV is +18.
+- **actual effect:** `weather_cut` is 1, 2, then 3 from rank III up. `wraps_yards` is `2 × (effect_rank − 3)` from rank IV. That bonus is added in `prepare_kick_stats` when the weather is not CLEAR, and Howling multiplies that bonus by 1.15 before it is added.
+- **match:** yes, ranks I–XXIV
 
 ### Deep Bench
 
 - **id:** `deep_bench`
 - **slot:** perk
 - **rank cap:** Standard III, Endless VI
-- **card text:** Ranks I–II `"Attempt cap +{rank} and attempts +{rank}"`. Rank III and Endless IV–VI `"Cap stays. +1 attempt now and each quarter if below cap"`.
-- **actual effect:** the cap increase is `min(rank, 2)`, then clamped to 5. Taking the rank adds that cap gain to current attempts. Rank III and up also set the spare: +1 attempt immediately if below the cap, and +1 at each quarter refill if below the cap. Ranks IV–VI do not raise the cap or the spare past rank III.
-- **match:** yes for ranks I–III. Mismatch for IV–VI: those ranks reuse rank III's effect.
+- **card text:** I–II `"Attempt cap +{rank} and attempts +{rank}"`. III `"Cap stays. +1 attempt now and each quarter if below cap"`. IV `"Cap stays. Halfway to +1 extra attempt. Spare stays."`. V `"+1 attempt cap and +1 attempt now. Spare stays."`. VI `"+1 more attempt cap and +1 attempt now. Spare stays."`.
+- **actual effect:** `Loadout.apply` raises the cap by `min(rank, 2)` only, and sets the spare from rank III. Ranks IV–VI add cap through `give`'s bank: rank IV adds 0.5 toward an extra cap, rank V grants one cap and one attempt, rank VI grants one more. A save that stores `bench_extra_cap` keeps those grants on rebuild.
+- **match:** yes, ranks I–VI
 
 ### Hot Streak
 
 - **id:** `hot_streak`
 - **slot:** perk
 - **rank cap:** Standard III, Endless VI
-- **card text:** I `"Streak step +0.5"`. II `"Streak step +0.75"`. III and IV–VI `"Streak step +1.0"`.
-- **actual effect:** replaces the base step of 0.25. Rank I is 0.5. Rank II is 0.75. Rank III and up is `1.0 + 0.25 × (rank - 3)`: 1.0, 1.25, 1.5, 1.75 at ranks III–VI. The HUD Mult uses `1 + step × streak`, then Showtime's stored double.
-- **match:** yes for ranks I–III. Mismatch for IV–VI: the card stays at +1.0 while the step is 1.25, 1.5, and 1.75.
+- **card text:** I `"+0.5"`, II `"+0.75"`, III `"+1.0"`, IV `"+1.25"`, V `"+1.5"`, VI `"+1.75"`.
+- **actual effect:** replaces the base step of 0.25 with 0.5, 0.75, then `1.0 + 0.25 × (rank − 3)`. The HUD Mult uses `1 + step × streak`, then Showtime's stored double.
+- **match:** yes, ranks I–VI
 
 ### Storm Chaser
 
 - **id:** `storm_chaser`
 - **slot:** perk
 - **rank cap:** Standard III, Endless VI
-- **card text:** I `"+0.2 Mult per mph of crosswind"`. II `"+0.4 Mult per mph of crosswind"`. III and IV–VI `"+0.6 Mult per mph of crosswind"`.
-- **actual effect:** `0.2 × rank` Mult per mph of crosswind: 0.2, 0.4, 0.6, 0.8, 1.0, 1.2 at ranks I–VI. Howling Wind multiplies that rate by 1.15.
-- **match:** yes for ranks I–III. Mismatch for IV–VI.
+- **card text:** `"+{0.2 × rank} Mult per mph of crosswind"` through VI (0.2, 0.4, 0.6, 0.8, 1.0, 1.2).
+- **actual effect:** `storm_bonus` is `0.2 × rank` per mph of crosswind. Howling multiplies that rate by 1.15.
+- **match:** yes, ranks I–VI
 
 ### Hero Ball
 
 - **id:** `hero_ball`
 - **slot:** perk
 - **rank cap:** Standard III, Endless VI
-- **card text:** I `"+1.0 Mult, both needles ×0.80"`. II `"+1.5 Mult, both needles ×0.80"`. III and IV–VI `"+2.0 Mult, both needles ×0.80"`.
-- **actual effect:** Mult add is 1.0, 1.5, then `2.0 + 0.5 × (rank - 3)`: 2.0, 2.5, 3.0, 3.5 at ranks III–VI. Both needles stay at ×0.80 at every rank. Big Game removes the needle slow and keeps the Mult. Howling Wind multiplies the Mult by 1.15 and widens the 0.80 gap.
-- **match:** yes for ranks I–III. Mismatch for IV–VI: the Mult keeps rising and the card stays at +2.0.
+- **card text:** Mult +1.0, +1.5, +2.0, +2.5, +3.0, +3.5 at I–VI, and `"both needles ×0.80"` at every rank.
+- **actual effect:** the Mult add matches the card. Both needles are multiplied by 0.80 at every rank. Big Game removes the needle slow and keeps the Mult. Howling multiplies the Mult by 1.15 and widens the 0.80 gap. Anchor and Patient multiply after this.
+- **match:** yes, ranks I–VI
 
 ### Glass Leg
 
 - **id:** `glass_leg`
 - **slot:** perk
 - **rank cap:** Standard III, Endless VI
-- **card text:** I `"+8 yd, attempt cap −1"`. II `"+16 yd total, no extra cap loss"`. III and IV–VI `"+24 yd total, no extra cap loss"`.
-- **actual effect:** `range_bonus += 8 × rank` (8, 16, 24, 32, 40, 48). The attempt cap is reduced by 1 once, floored at 1, at every rank. It is not reduced again at rank II or higher. The first take is refused when the cap is already 2 or less.
-- **match:** yes for ranks I–III. Mismatch for IV–VI: yards are 32, 40, and 48, not 24.
+- **card text:** I `"+8 yd, attempt cap −1"`. II–VI `"+{8 × rank} yd total, no extra cap loss"`.
+- **actual effect:** `range_bonus += 8 × rank` (8, 16, 24, 32, 40, 48). The attempt cap drops by 1 once, floored at 1, at every rank. The first take is refused when the cap is already 2 or less.
+- **match:** yes, ranks I–VI
 
 ### Two-Minute Drill
 
 - **id:** `two_minute_drill`
 - **slot:** perk
 - **rank cap:** Standard III, Endless VI
-- **card text:** I `"Boss kicks +0.5 Mult, on top of ×1.5"`. II `"Boss kicks +1.0 Mult, on top of ×1.5"`. III and IV–VI `"Boss kicks +1.5 Mult, on top of ×1.5"`.
-- **actual effect:** adds `0.5 × rank` Mult on top of the boss score ×1.5: 0.5, 1.0, 1.5, 2.0, 2.5, 3.0 at ranks I–VI. Howling Wind multiplies this add by 1.15.
-- **match:** yes for ranks I–III. Mismatch for IV–VI.
+- **card text:** `"Boss kicks +{0.5 × rank} Mult, on top of ×1.5"` at I–VI (0.5 through 3.0).
+- **actual effect:** `drill_bonus` is `0.5 × rank` and is added on top of the boss score multiplier. Howling multiplies the add by 1.15. It applies on every boss, including UNDER THE LIGHTS.
+- **match:** yes, ranks I–VI
 
 ### Iced
 
 - **id:** `iced`
 - **slot:** curse
-- **rank cap:** 1 in both modes
+- **rank cap:** 1
 - **card text:** `"Down: meter hides 0.4s after Space. Up: +0.5 Mult"`
-- **HUD:** the curse name, unless Howling Wind replaces the curse list with its own line.
-- **actual effect:** +0.5 Mult. While the meter is running, the meter stays visible until 0.4 seconds after it starts, then stays hidden. Ice Cage blocks the hide and blocks taking this curse. The +0.5 Mult is not multiplied by Howling Wind's 1.15.
+- **actual effect:** +0.5 Mult. The meter hides 0.4 seconds after it starts. Ice Cage in either helmet slot blocks the hide and blocks taking this curse. The +0.5 Mult is not multiplied by Howling's equipment 1.15. Phil's scale does scale curse Mult.
 - **match:** yes
 
 ### Shanky Cleats
 
 - **id:** `shanky_cleats`
 - **slot:** curse
-- **rank cap:** 1
 - **card text:** `"Down: accuracy error ×1.5. Up: +0.5 Mult"`
-- **actual effect:** `angle_scale` is 1.5, so the hook degrees from accuracy error are ×1.5. +0.5 Mult. The Mult is not multiplied by Howling Wind's 1.15.
+- **actual effect:** `angle_scale` is multiplied by 1.5, and Mult gains 0.5. True Lid's hook reduction multiplies `angle_scale` as well, so the two factors multiply.
 - **match:** yes
 
 ### Heavy Ball
 
 - **id:** `heavy_ball`
 - **slot:** curse
-- **rank cap:** 1
 - **card text:** `"Down: −4 yd. Up: accuracy error ×0.85"`
-- **actual effect:** `carry_plan` subtracts 4 yards after wind and weather range. `angle_scale` is 0.85. The 4 yards are not in `range_bonus`, so they show up in the result line's max range, not as a loadout yard add. Howling Wind does not shrink or grow this 4.
+- **actual effect:** travel loses 4 yards in `carry_plan`, and `angle_scale` is multiplied by 0.85. The −4 is not in the equipment Howling 1.15.
 - **match:** yes
 
 ### Howling Wind
 
 - **id:** `howling_wind`
 - **slot:** curse
-- **rank cap:** 1
 - **card text:** `"Down: wind ×1.5. Up: equipment and perks ×1.15"`
-- **HUD:** `"Howling Wind   wind ×1.5   items ×1.15"` instead of the curse-name list.
-- **actual effect:** the wind vector used for drift and wind range is ×1.5, and the shown mph is that speed rounded. Equipment and perk additive yards, perfect adds, good adds, Hero Ball, Storm Chaser, and Two-Minute Drill are ×1.15. Anchor, Sticker, Ice Cage's 0.90, and Hero Ball's 0.80 have their gap from 1.0 widened by 15%. Curse upside yards and curse Mult are not ×1.15. Weather Wraps' bonus yards are ×1.15 because they are applied with the Howling check.
+- **actual effect:** the wind vector is multiplied by 1.5 before Hush Gloves subtract. Equipment and perk additives listed above are multiplied by 1.15 after they are summed. Multiplier gaps are widened by 1.15. Both pieces of a doubled type are inside that sum. Curse upside yards are not in the 1.15. The Weather Wraps non-CLEAR yard bonus is multiplied by 1.15 on its own, before it is added.
 - **match:** yes
 
 ### Shaky Arrow
 
 - **id:** `shaky_arrow`
 - **slot:** curse
-- **rank cap:** 1
 - **card text:** `"Down: aim sways ±3°. Up: +6 yd"`
-- **actual effect:** during aiming, the aim is `aim_base + sin(time × 1.6) × 3` degrees, clamped to ±12. +6 yards in `range_bonus`. The path preview uses `aim_base` and does not include the sway. The +6 is not multiplied by Howling Wind's 1.15.
+- **actual effect:** the aim mark sways, and `range_bonus` gains 6. That +6 is a curse upside, so Howling's equipment 1.15 does not multiply it. Phil's scale does.
 - **match:** yes
 
 ### Narrow Posts
 
 - **id:** `narrow_posts`
 - **slot:** curse
-- **rank cap:** 1
 - **card text:** `"Down: posts 5.17 yd. Up: +0.5 Mult"`
-- **actual effect:** post width is 5.17 yards and the make/miss half-gap is 2.585, the same numbers as The Squeeze. +0.5 Mult. The Mult is not multiplied by Howling Wind's 1.15.
+- **actual effect:** `post_width` is 5.17 when this curse is owned or the weather is The Squeeze. UNDER THE LIGHTS does not narrow the posts. The +0.5 Mult is a curse upside.
 - **match:** yes
 
 ### Stone Toe
 
 - **id:** `stone_toe`
 - **slot:** curse
-- **rank cap:** 1
 - **card text:** `"Down: power needle ×1.20. Up: +6 yd"`
-- **actual effect:** power needle speed ×1.20. +6 yards in `range_bonus`. Big Game keeps the ×1.20 and resets other loadout needle changes. The +6 is not multiplied by Howling Wind's 1.15.
+- **actual effect:** power speed is multiplied by 1.20. That is a faster needle, a downside. Big Game keeps this 1.20 and strips meter-help slows. UNDER THE LIGHTS multiplies after it, so the power needle is ×1.20 × 1.35. The +6 yards is a curse upside.
 - **match:** yes
 
 ### Tight Window
 
 - **id:** `tight_window`
 - **slot:** curse
-- **rank cap:** 1
 - **card text:** `"Down: PERFECT and good −2. Up: +0.5 Mult"`
-- **actual effect:** after other band adds, both bands lose 2, floored at 1, and perfect is not allowed to exceed good. +0.5 Mult. Big Game applies the −2 again on the kicker's base bands. The Mult is not multiplied by Howling Wind's 1.15.
+- **actual effect:** both bands lose 2, floored at 1, and perfect is not allowed to exceed good. Big Game reapplies this shrink after it restores the kicker's base bands. The +0.5 Mult is a curse upside.
 - **match:** yes
 
 ## 2. Vitamins and shop services
 
-Prices below are the shelf prices. Phil's House Account charges 0 for every id, including B12. Selling pays `floor(charged price / 2)`, so Phil's sell pays 0. A use is removed from the belt immediately. Ball vitamins are cleared when the kick resolves, including a miss, so the retry does not still have them. Phil's 15% and Gary's Lucky Ball scale the vitamin numbers through the same `item_effect_scale` as loadout numbers.
+Belt vitamins are one use. They are not equipment. Card lines are `Vitamins.effect_line`.
 
-### Protein Shake
+| Id | Price | Card | Coded effect |
+| --- | --- | --- | --- |
+| `protein_shake` | 4 | `"+6 yd this kick"` | `range_bonus += 6`, then Phil's scale and `round_tenth` |
+| `magnesium` | 4 | `"Needles ×0.7 this kick"` | both needle speeds ×0.7, gap-scaled if Phil or Lucky Ball is on |
+| `omega_3` | 5 | good band wipes the angle; the +5 perfect score bonus turns off; the perfect cash dollar can still pay | sets `stats.omega` |
+| `electrolyte_tabs` | 6 | `"A miss keeps the attempt"` | a miss does not spend an attempt, including a Bonus Ring miss |
+| `vitamin_d` | 5 | `"Ignore rain, snow, and mud"` | clears rain, snow, and mud flags. Monsoon's extras are not in that clear |
+| `pre_workout` | 4 | `"+0.5 Mult if this kick is made"` | +0.5 Mult on a make, scaled by Phil |
+| `zinc` | 5 | `"Reroll this kick's wind and weather"` | one reroll of wind and weather, then the bottle is consumed. A second use says `"Already rerolled"` |
+| `lutein` | 5 | `"Wind numbers and a full dotted path"` | `flag_reader`, `laser_line`, path percent at least 100 |
+| `pickle_juice` | 5 | `"Sideways wind drift ×0.5"` | `drift_factor` ×0.5, gap-scaled |
+| `tart_cherry` | 6 | `"Remove one curse"` | opens the curse picker. It does not enter the active vitamin list |
+| `b12_shot` | 7 | `"+1 attempt"` | +1 attempt, once per shop visit, up to the cap. Not a belt item |
 
-- **id:** `protein_shake`
-- **price:** 4
-- **shop text:** `"+6 yd this kick"`
-- **actual effect:** +6 yards on that attempt, scaled by Phil or Gary. Cleared when the kick resolves. Willow's first shop opening forces this bottle into the first shelf slot if it was not already drawn.
-- **match:** yes
-
-### Magnesium
-
-- **id:** `magnesium`
-- **price:** 4
-- **shop text:** `"Needles ×0.7 this kick"`
-- **actual effect:** both needle speeds ×0.7 for that attempt. One bottle is ×0.7. Big Game does not remove it, because vitamins are applied after Big Game restores base needle speeds.
-- **match:** yes
-
-### Omega-3
-
-- **id:** `omega_3`
-- **price:** 5
-- **shop text:** `"Good band wipes the angle error"`
-- **actual effect:** if the accuracy press is inside the good band, the angle error is set to 0. The perfect score bonus of +5 is also suppressed for that make. Cash still uses the original perfect flag. The card does not mention the score bonus.
-- **match:** mismatch
-
-### Electrolyte Tabs
-
-- **id:** `electrolyte_tabs`
-- **price:** 6
-- **shop text:** `"A miss keeps the attempt"`
-- **actual effect:** a miss does not subtract an attempt and does not end the run for 0 attempts. The bottle is still cleared, so the retry does not keep the protection.
-- **match:** yes
-
-### Vitamin D
-
-- **id:** `vitamin_d`
-- **price:** 5
-- **shop text:** `"Ignore rain, snow, and mud"`
-- **actual effect:** for that attempt, rain, snow, and mud flags are off, including Monsoon's rain and mud. It does not add the Weather Wraps yards.
-- **match:** yes
-
-### Pre-Workout
-
-- **id:** `pre_workout`
-- **price:** 4
-- **shop text:** `"+0.5 Mult if this kick is made"`
-- **actual effect:** on a make, +0.5 Mult, scaled by Phil or Gary. A miss pays no Mult and still consumes it.
-- **match:** yes
-
-### Zinc
-
-- **id:** `zinc`
-- **price:** 5
-- **shop text:** `"Reroll this kick's wind and weather"`
-- **actual effect:** instant. Rerolls this kick's wind and weather once. A second Zinc on the same kick shows `"Already rerolled"` and is not consumed. It does not sit in the active-vitamin list, so Phil's Gelcap does not see it.
-- **match:** yes
-
-### Lutein
-
-- **id:** `lutein`
-- **price:** 5
-- **shop text:** `"Wind numbers and a full dotted path"`
-- **actual effect:** for that attempt, the mph readout and a 100% dotted path turn on. Cleared when the kick resolves.
-- **match:** yes
-
-### Pickle Juice
-
-- **id:** `pickle_juice`
-- **price:** 5
-- **shop text:** `"Sideways wind drift ×0.5"`
-- **actual effect:** drift factor ×0.5 for that attempt. Phil or Gary scale the gap from 1.0.
-- **match:** yes
-
-### Tart Cherry
-
-- **id:** `tart_cherry`
-- **price:** 6
-- **shop text:** `"Remove one curse"`
-- **actual effect:** instant. With no curse, the note is `"No curse to remove"`. With curses, the overlay asks which one. Esc cancels and the bottle stays. Removing one spends the bottle.
-- **match:** yes
-
-### B12 Shot
-
-- **id:** `b12_shot`
-- **price:** 7
-- **shop text:** `"B12 Shot"` and `"+1 attempt"`. Also `"SOLD"` after a buy and `"At cap"` when attempts are already at the cap.
-- **actual effect:** instant, not a belt item, once per shop visit. Adds 1 attempt, not above the cap. If already at the cap, the buy does nothing. Short cash flashes the price red and adds no words.
-- **match:** yes
+Shelf reroll starts at $2 and rises by $1 after each purchase. It is cash. Phil does not zero it. Sell pays half the price charged, rounded down. Phil's charged price is 0, so the refund is 0. A full belt shows `"Belt full: sell first"`.
 
 ### Shelf reroll
 
-- **shop text:** `"Reroll ({key}): ${price}"`. The price number is the live cost.
-- **actual effect:** starts at 2 and increases by 1 after each paid reroll. It spends cash, not a loadout reroll. Too little cash flashes red and adds no words. Phil does not make this free.
-- **match:** yes
+Matches the live price string `"Reroll ({key}): ${price}"`.
 
 ### Sell and a full belt
 
-- **shop text:** the footer names sell and leave. A refused buy can show `"Belt full: sell first"`.
-- **actual effect:** the belt has 2 slots. Sell pays half the charged price, rounded down, only while the shop is open. Leave closes the shop. A buy into a full belt is refused with that sentence.
-- **match:** yes
-
-No shop string states the make / perfect / middle / boss cash table. Those rules are only in code. See section 5.
+The belt has two slots. Sell is only in the shop. A buy without enough cash turns the price red and adds no words.
 
 ## 3. Kicker kits and balls
 
-Base max range here is `carry_plan` at the stated power, 0 wind, no items, no weather penalty. For a normal kicker that result does not depend on the kick's required distance. For Vex it does. The 35-yard column uses kick distance 35. Accuracy is the rating in the kicker table. Perfect and good bands start at `1.5 × accuracy / 100` and `6 × accuracy / 100`.
+Base max range here is `carry_plan` at 100% power, 0 wind, no items, no weather penalty, kick distance 35 unless noted. Vex depends on the required distance. Perfect and good bands start at `1.5 × accuracy / 100` and `6 × accuracy / 100`.
 
-| Kicker | Accuracy | Bands | 100% power, no items |
-| --- | --- | --- | --- |
-| Big Bruce | 90 | ±1.35 / ±5.40 | 65 yd |
-| The Walk-On | 100 | ±1.50 / ±6.00 | 60 yd |
-| Phil The Pharmacist | 112 | ±1.68 / ±6.72 | 55 yd |
-| Gary the Goat | 98 | ±1.47 / ±5.88 | 65 yd |
-| Vex | 94 | ±1.41 / ±5.64 | kick distance + 20 yd |
-| Cole Lang | 120 | ±1.80 / ±7.20 | 70 yd |
-| Willow Reed | 88 | ±1.32 / ±5.28 | 50 yd |
-| Carlos Hernandez | 96 | ±1.44 / ±5.76 | 66 yd |
+| Kicker | Accuracy | Bands | 100% power, no items | Needle ball mult |
+| --- | --- | --- | --- | --- |
+| Big Bruce | 90 | ±1.35 / ±5.40 | 65 yd | 1.00 |
+| The Walk-On | 100 | ±1.50 / ±6.00 | 60 yd | 1.00 |
+| Phil The Pharmacist | 112 | ±1.68 / ±6.72 | 55 yd | 1.00 |
+| Gary the Goat | 98 | ±1.47 / ±5.88 | 65 yd | 1.00 |
+| Vex | 94 | ±1.41 / ±5.64 | kick distance + 20 yd | 1.00 |
+| Cole Lang | 120 | ±1.80 / ±7.20 | 70 yd | 1.00 |
+| Willow Reed | 88 | ±1.32 / ±5.28 | 50 yd | 0.50 |
+| Carlos Hernandez | 96 | ±1.44 / ±5.76 | 66 yd | 1.15 |
+
+Cole's ball multiplier is 1.00 in `Kickers.apply_to`. It is not 0.90. Carlos is 1.15. Willow is 0.50. Those multiply the needle omega on top of `power_speed` and `accuracy_speed`.
 
 ### Big Bruce
 
 - **Select range:** `"65 yd"`
-- **Kit text:** `"Farm Strength. A press under 80% still kicks at 80%."` HUD kit line `"Farm Strength"`.
-- **actual effect:** `power_floor` is 80. A locked power under 80 is treated as 80 before range. A 100% lock stays 100. Full power is `16 + 0.49 × 100` = 65 yards before wind and items.
+- **Kit text:** `"Farm Strength. A press under 80% still kicks at 80%."`
+- **actual effect:** `power_floor` is 80. Full power is `16 + 0.49 × 100` = 65 yards before wind and items.
 - **match:** yes
-- **Ball:** `"The Farm Ball"`. `"A light hay ball. Wind moves it 10% more than a normal ball. A doink stays a doink."`
-- **actual effect:** `ball_type` `farm_ball` multiplies sideways drift by 1.10. Nothing turns a doink into a make.
+- **Ball:** `"The Farm Ball"`. Wind drift ×1.10. A doink stays a doink.
 - **match:** yes
 
 ### The Walk-On
 
 - **Select range:** `"60 yd"`
-- **Kit text:** `"Earns His Spot. 2 rerolls a run."` HUD kit line `"Earns His Spot"`.
-- **actual effect:** `rerolls_per_run` is set to 2. Other kickers keep the default 1, before Scout Lid. Full power is `16 + 0.44 × 100` = 60 yards.
+- **Kit text:** `"Earns His Spot. 2 rerolls a run."`
+- **actual effect:** `rerolls_per_run` is 2. Full power is `16 + 0.44 × 100` = 60 yards. `ball_speed_mult` is 1.
 - **match:** yes
-- **Ball:** `"Team-Issue"`. `"A normal ball. No special trick."`
-- **actual effect:** `ball_type` `standard`. No extra drift, range, or needle change. `ball_speed_mult` stays 1.
+- **Ball:** `"Team-Issue"`. No trick.
 - **match:** yes
 
 ### Phil The Pharmacist
 
 - **Select range:** `"55 yd"`
-- **Kit text:** `"House Account. Compounding. Shop items are free and 15% stronger."` Downside on the card: `"55 yards with nothing on. Rerolls still cost cash."` HUD kit line `"House Account"`.
-- **actual effect:** full power is `16 + 0.39 × 100` = 55 yards. `house_account` makes every `item_price` return 0, including B12. The shop shelf reroll still charges its cash cost. `compounding` sets item scale to 1.15. That scale hits equipment yards and bands, perk numbers, curse upside yards and curse Mult, and vitamin numbers. It is not limited to shop goods. Factors move by widening the gap from 1.0. Yard amounts then pass through `round_tenth`.
-- **match:** mismatch. The 15% is not only shop items.
-- **Ball:** `"The Gelcap"`. `"A vitamin used on this attempt adds +0.5 Mult on a make."`
-- **actual effect:** if at least one ball vitamin is active when a make is scored, +0.5 Mult once. It is not +0.5 per bottle. Zinc and Tart Cherry do not count, because they never enter the active list. The 0.5 is not scaled by Compounding.
+- **Kit text:** `"House Account. Shop goods are free, including B12. Shelf rerolls still cost cash. Compounding. Your items are 15% stronger: equipment, perks, curse upsides, and vitamins, not only shop bottles."`
+- **actual effect:** full power is 55 yards. `item_price` is 0, including B12. The shelf reroll still costs cash. Item scale is 1.15 and hits equipment, perks, curse upsides, and vitamins, including both pieces of a doubled type.
+- **match:** yes
+- **Ball:** `"The Gelcap"`. One active ball vitamin adds +0.5 Mult once on a make. Not scaled by Compounding. Zinc and Tart Cherry do not count.
 - **match:** yes
 
 ### Gary the Goat
 
 - **Select range:** `"65 yd"`
-- **Kit text:** `"Good As Gold. The good band counts as PERFECT."` HUD kit line `"Good As Gold"`.
-- **actual effect:** a lock inside the good band sets accuracy error to 0 and `perfect` true, including the perfect cash dollar. Full power is 65 yards, same range slope as Bruce, without the power floor.
+- **Kit text:** `"Good As Gold. The good band counts as PERFECT."`
+- **actual effect:** a good-band lock is a true perfect, including the perfect cash dollar. Full power is 65 yards. No power floor.
 - **match:** yes
-- **Ball:** `"Lucky Ball"`. `"Each first-try make boosts item numbers by 3% for the rest of the run."`
-- **actual effect:** each make on the first ball of that kick adds one stack. Item scale is multiplied by `1 + 0.03 × stacks` for the rest of the run. A miss does not add a stack. The same amounts Compounding scales are the ones this hits.
+- **Ball:** `"Lucky Ball"`. Each first-try make adds 3% item scale for the rest of the run. A miss does not. A Bonus Ring miss clears the first-ball flag, so the later make of that kick does not add a stack.
 - **match:** yes
 
 ### Vex
 
 - **Select range:** `"Infinite Range & Beyond"`
-- **Kit text:** `"Infinite Range & Beyond. 88% power clears by 5 yards."` HUD kit line `"Infinite Range & Beyond"`.
-- **actual effect:** `range_base` and `range_per_power` are 0. Travel is `kick distance + 5 + (power - 88) × 1.25`, plus items and wind range. At 88% the added clearance is 5 yards before wind and penalties. At 100% it is 20 yards. If power is at least 88 and wind or a penalty would leave the ball short of the posts, travel is raised back to the kick distance. It is not raised back up to a 5-yard clearance. There is no separate yard cap.
-- **match:** mismatch. "Clears by 5 yards" is the no-wind number. A headwind, snow, or Heavy Ball can shrink that clearance, down to just reaching the posts.
-- **Ball:** `"The Flying Saucer"`. `"Curves left like 8 mph of west wind, on top of the real wind."`
-- **actual effect:** 8 mph is subtracted from the crosswind component before drift and wind range. That is on top of the real wind, and Howling Wind then scales the combined vector.
+- **Kit text:** `"Infinite Range & Beyond. 88% power clears by 5 yards."`
+- **actual effect:** travel is `kick distance + 5 + (power − 88) × 1.25`, plus items and wind. At 88% with no wind the clearance is 5 yards. At 100% it is 20 yards. If power is at least 88 and a headwind or a penalty would leave the ball short, travel is raised only back to the kick distance, not back up to a 5-yard clearance.
+- **match:** mismatch. A headwind, snow, or Heavy Ball can shrink the 5-yard clearance down to just reaching the posts.
+- **Ball:** `"The Flying Saucer"`. 8 mph is subtracted from the crosswind before drift and wind range. Howling then scales the combined vector.
 - **match:** yes
 
 ### Cole Lang
 
 - **Select range:** `"70 yd"`
-- **Kit text:** `"Brand Deal. Loadout offers stay. The Vitamin Shop does not."` HUD kit line `"Brand Deal"`.
-- **actual effect:** after a make on kick 5, 10, or 15, the loadout offer still runs and `open_shop` is skipped. Full power is `16 + 0.54 × 100` = 70 yards. `ball_speed_mult` stays 1.
+- **Kit text:** `"Brand Deal. Loadout offers stay. The Vitamin Shop does not."`
+- **actual effect:** `follow_offer` skips the shop. The loadout offer still runs. Full power is `16 + 0.54 × 100` = 70 yards. `ball_speed_mult` is 1.00.
 - **match:** yes
-- **Ball:** `"Showtime"`. `"A down-the-middle make doubles stored Mult, and that kick scores with the doubled Mult."`
-- **actual effect:** on a down-the-middle make, the Mult used for that kick's score is doubled, and the stored Showtime factor is then doubled for later kicks. The stored factor also multiplies the normal streak Mult. A miss sets the stored factor back to 1.
+- **Ball:** `"Showtime"`. A down-the-middle make doubles the Mult used for that score and doubles the stored Showtime factor afterward. A miss sets the stored factor back to 1.
 - **match:** yes
 
 ### Willow Reed
 
 - **Select range:** `"50 yd"`
-- **Kit text:** `"Synchronicity. The first shop opening includes a range vitamin."` HUD kit line `"Synchronicity"`.
-- **actual effect:** the first time the shop opens, if Protein Shake is not already one of the three bottles, shelf slot 1 is replaced with Protein Shake. Later openings and paid rerolls are not forced. It does not add a range loadout card. Full power is `16 + 0.34 × 100` = 50 yards before that vitamin is used. Using Protein Shake adds 6 yards on that attempt, so the kick can travel 56 yards with no other range items.
+- **Kit text:** `"Synchronicity. The first loadout offer includes a range item."`
+- **actual effect:** the first generated offer of the run swaps in Cannon, Drive Lid, High-Air, or Glass Leg at rank I when that card is legal. Later offers and rerolls are normal. It does not force a shop bottle. Full power is `16 + 0.34 × 100` = 50 yards.
 - **match:** yes
-- **Ball:** `"The Chill Ball"`. `"Both needles run at half speed. Items and weather still stack on top."`
-- **actual effect:** `ball_speed_mult` is 0.50, so both the power sweep and the accuracy sweep take twice as long before items and weather. Magnesium, Anchor, rain, and the other speed multipliers still stack on that half speed.
+- **Ball:** `"The Chill Ball"`. `ball_speed_mult` is 0.50. Items and weather still stack on top, including UNDER THE LIGHTS ×1.35.
 - **match:** yes
 
 ### Carlos Hernandez
 
 - **Select range:** `"66 yd"`
-- **Kit text:** `"Numero Dos. A 95–100 lock is a true PERFECT."` Downside on the card: `"94 and below is a normal accuracy swing."` HUD kit line `"Numero Dos"`.
-- **actual effect:** if the locked power is from 95 through 100, accuracy error is set to 0 and the kick is perfect, including through red-tip noise. A power of 94 or below uses the normal accuracy swing. An auto-shank never reaches this check. Full power is `16 + 0.50 × 100` = 66 yards.
+- **Kit text:** `"Numero Dos. A 95–100 lock is a true PERFECT."` A power of 94 or below is a normal accuracy swing.
+- **actual effect:** power from 95 through 100 forces accuracy error to 0 and `perfect` true. An auto-shank never reaches this check. Full power is `16 + 0.50 × 100` = 66 yards.
 - **match:** yes
-- **Ball:** `"The Not So Secret Weapon"`. `"Both needles run 15% faster. Items and weather still stack on top."`
-- **actual effect:** `ball_speed_mult` is 1.15. Items and weather still multiply needle speed on top.
+- **Ball:** `"The Not So Secret Weapon"`. `ball_speed_mult` is 1.15. Items and weather still multiply on top.
 - **match:** yes
 
 ## 4. Max-range formula
 
-The live kick calls `power_for_range` first. If the kicker's power floor is above 0 and the locked power is below it, the power used for range is the floor. Bruce's floor is 80. Everyone else has floor 0. `carry_plan` then runs in this order:
+`carry_plan` at 0 wind, confirmed headless on 2026-11-14. Order:
 
-1. Build the wind vector. Crosswind is `speed × sin(direction)`. Head or tail is `speed × cos(direction)`. Vex subtracts 8 mph from the crosswind. Howling Wind multiplies the combined speed by 1.5.
-2. Wind range is `head_or_tail mph × 0.4`. High-Air Gloves multiply that change by 1.5 only when it is positive.
-3. If the kicker has clearance (Vex): `travel = kick distance + 5 + (power - 88) × 1.25 + range_bonus + wind range`.
-4. Otherwise: `travel = 16 + range_per_power × power + range_bonus + wind range`.
-5. If snow is punishing range, subtract 4 yards, or 2 if Weather Wraps rank I has halved it.
-6. If the weather is THIN AIR, add 4 yards. This is separate from High-Air's tailwind multiplier.
-7. If Heavy Ball is active, subtract 4 yards.
-8. Floor at 0.
-9. If Vex's power is at least 88 and travel is still short of the kick distance, set travel to the kick distance.
+1. Wind vector. Vex subtracts 8 mph from the crosswind. Howling multiplies the combined speed by 1.5. Hush Gloves then subtract mph, floored at 0.
+2. Wind range is `head_or_tail mph × 0.4`. High-Air multiplies a positive change by 1.5. Shelter Lid multiplies a negative change by `shelter_factor`.
+3. Vex: `travel = kick distance + 5 + (power − 88) × 1.25 + range_bonus + wind range`.
+4. Everyone else: `travel = 16 + range_per_power × power + range_bonus + wind range`.
+5. Snow, thin air (+4), and Heavy Ball (−4) apply after that.
+6. If Vex is at 88% or more and travel is still short of the posts, travel is raised to the kick distance.
 
-`range_bonus` before that call is the sum of Cannon, Drive Lid, High-Air, and Glass Leg yards, times 1.15 if Howling Wind is active, plus Shaky Arrow and Stone Toe at +6 each with no Howling 1.15, then Phil or Gary's scale. Weather Wraps yards are added after that, only when weather is not CLEAR, and those yards are ×1.15 under Howling Wind. Protein Shake is added when vitamins are applied.
+Worked examples, 100% power, 0 wind, no vitamin, no Howling, no Phil:
 
-The result detail line's "max range" is this travel. The aiming HUD does not show it.
+| Build | Travel |
+| --- | --- |
+| Big Bruce, no items | 65 yd |
+| Big Bruce, Cannon VI | 101 yd |
+| Big Bruce, Cannon XII | 137 yd |
+| Big Bruce, Cannon XXIV | 635 yd |
+| Big Bruce, Drive Lid VI | 89 yd |
+| Big Bruce, Drive Lid XII | 113 yd |
+| Big Bruce, Drive Lid XXIV | 449 yd |
+| Big Bruce, Cannon XXIV + Drive Lid XXIV | 1019 yd |
+| Willow, Cannon XXIV + Drive Lid XXIV | 1004 yd |
+| Cole, Cannon XXIV + Drive Lid XXIV | 1024 yd |
 
-Worked examples use 0 wind, no weather penalty, no Howling Wind, and no Phil or Gary scale. Kick distance is 35 yards except where noted. They call `carry_plan` at the stated power.
+No two styles in one equipment type both add range. Cannon, Drive Lid, and High-Air are three different types, and their yards add. Bruce with all three at XXIV would be 65 + 570 + 384 + 186 = 1205 yards. That pair is not a doubled type.
 
-- Big Bruce, no items, 100% power: **65 yd** (`16 + 0.49 × 100`).
-- Big Bruce, Cannon Cleats rank VI, 100% power: **101 yd** (65 + 36).
-- Big Bruce, Cannon Cleats rank XII, 100% power: **137 yd** (65 + 72).
-- Big Bruce, Drive Lid rank VI, 100% power: **89 yd** (65 + 24).
-- Big Bruce, Drive Lid rank XII, 100% power: **113 yd** (65 + 48).
-- Willow, no items, 100% power: **50 yd** (`16 + 0.34 × 100`).
-- Willow with the Synchronicity Protein Shake used, and no other range item: **56 yd**. The shop gift does not add range until that bottle is used.
-- Vex, no items, 88% power, kick distance 35: **40 yd** (35 + 5).
-- Vex, no items, 100% power, kick distance 35: **55 yd** (35 + 20).
-- Vex, Cannon Cleats rank I, 88% power, kick distance 35: **46 yd**.
-- Vex, Cannon Cleats rank I, 100% power, kick distance 35: **61 yd**.
-- The same Vex 100% kick with no items at kick distance 50 travels **70 yd**. A normal kicker's 100% travel does not change with the required distance. Bruce is still 65 at a 50-yard kick.
+Vex, no items, 100% power, kick distance 35: 55 yd (35 + 20). The same kick at distance 50: 70 yd.
 
 ## 5. Cash and Vitamin Shop rules
 
-Cash starts at 0 on every new run. It is not written into the save. A finished run does not carry it forward.
+Cash starts at 0. It is not written into the save.
 
-`cash_payout` pays 0 on a miss. A make pays 3, plus 1 if the kick was perfect, plus 1 if it was down the middle, plus 2 if it was a boss kick. Those can stack. Omega-3 can suppress the +5 score bonus and still leave the perfect dollar on the original perfect flag. Gary's Good As Gold makes a good-band lock count as perfect for that dollar. The HUD shows `"${cash}"` and, when the payout is above 0, `"+${amount}"`. No sentence on the shop or the HUD states the 3 / 1 / 1 / 2 table.
+`cash_payout` pays 0 on a miss, including a Bonus Ring collect. A make pays 3, plus 1 if perfect, plus 1 if down the middle, plus 2 if it was a boss. Those stack. Omega-3 can suppress the +5 perfect score bonus and still leave the perfect dollar. Gary's Good As Gold makes a good-band lock count as perfect for that dollar.
 
-The shop opens only after a make on kick 5, 10, or 15. That is the same in Standard and Endless. Later Endless kicks do not open it. Cole's Brand Deal skips it. The loadout offer still happens. The first opening of a run is the one Willow can force a Protein Shake into.
+Standard shops open after a make on kick 5, 10, or 15. Endless shops open after a make on every kick number divisible by 5 (5, 10, 15, 20, 25, and so on). Cole's Brand Deal skips the shop. The loadout offer still happens.
 
-Shelf reroll starts at $2 and rises by $1 after each purchase. It is cash. Phil does not zero it. The on-screen `"Reroll ({key}): ${price}"` matches that live price.
+The first shelf reroll of a visit is $2 and each purchase adds $1. Phil does not zero that. B12 is $7 unless Phil is playing, once per visit, and it does not use a belt slot.
 
-The belt has two slots. Sell is allowed only in the shop and pays half the price that was charged, rounded down. Phil's charged price is 0, so the refund is 0. A buy with a full belt shows `"Belt full: sell first"` and does not take the bottle. A buy without enough cash turns the price red and adds no words. Leave closes the shop. B12 is separate from the belt, costs 7 unless Phil is playing, adds one attempt up to the cap, and can be bought once per visit.
+## 6. Bosses and item interactions
 
-There is no shop sentence that says Phil's bottles are free. The price line prints `$0` because `item_price` returns 0. That display matches the code. Cole has no shop to show an exception on. Willow's rule is not written in the shop. It is only the character-select line, which matches the force on the first opening.
+Boss weather is the condition name. Wind still comes from the kick table. Retries keep the rolled boss.
 
-## 6. Mismatch index
+| Boss | Where | What the code changes | Items |
+| --- | --- | --- | --- |
+| Iced | Standard kick 5. Endless pool. | Meter hides the way the Iced curse does, unless Ice Cage or Ice Veins is on. | Ice Cage blocks the hide. No needle multiplier. |
+| The Squeeze | Standard kick 10, 50/50 with UNDER THE LIGHTS. Endless pool. | Posts are 5.17 yards wide. | Narrow Posts does not stack a second shrink. No needle multiplier. |
+| Monsoon | Standard kick 15. Endless pool. | Rain and mud together. Weather Wraps rank III ignores both. | Vitamin D clears plain rain, snow, and mud, not the Monsoon extras. |
+| Big Game | Standard kick 20. Endless pool. | Meter-help is stripped. Needle speeds, bands, and red-tip flags are copied from the bare kicker. Stone Toe's ×1.20 power needle stays. Tight Window's −2 bands are applied again. Vitamins still apply after that copy. Range gear is kept. | Anchor, Patient Gloves, Hero Ball's needle slow, and Ice Cage's band adds are off. UNDER THE LIGHTS is not this boss, so it does not strip meter help. |
+| UNDER THE LIGHTS | Standard kick 10, the other half of the roll, stored at `new_run` so the kick 5 shop matches. Endless pool. | Both `power_speed` and `accuracy_speed` ×1.35 after kicker, gear, and vitamins. Rain still multiplies accuracy omega after that. Posts stay 6.17. Wind is the kick 10 table (10–15 mph in Standard). No rain, snow, or mud from the boss itself. Glare is visual only. Practice Swing does not get the ×1.35. | Meter-help items stay on. Two-Minute Drill still adds its boss Mult. |
 
-- `anchor_cleats` rank I: card says Needles ×0.9. Code multiplies both needles by 0.85.
-- `anchor_cleats` rank II: card says ×0.7. Code uses 0.7225.
-- `anchor_cleats` rank III: card says ×0.6. Code uses 0.614125.
-- `anchor_cleats` rank IV: card says ×0.5. Code uses 0.522006.
-- `anchor_cleats` rank V: card says ×0.4. Code uses 0.443705.
-- `anchor_cleats` rank VI: card says ×0.4, the same tenth as rank V. Code uses 0.377150.
-- `anchor_cleats` rank VII: card says ×0.3. Code uses 0.320577.
-- `anchor_cleats` rank VIII: card says ×0.3, the same tenth as rank VII. Code uses 0.272491.
-- `anchor_cleats` rank IX: card says ×0.2. Code uses 0.231617.
-- `anchor_cleats` rank X: card says ×0.2. Code uses 0.196874.
-- `anchor_cleats` rank XI: card says ×0.2. Code uses 0.167343.
-- `anchor_cleats` rank XII: card says ×0.1. Code uses 0.142242.
-- `sticker_cleats` rank II: card says Drift ×0.6. Code uses 0.64.
-- `sticker_cleats` rank III: card says ×0.5. Code uses 0.512.
-- `sticker_cleats` rank IV: card says ×0.4. Code uses 0.4096.
-- `sticker_cleats` rank V: card says ×0.3. Code uses 0.32768.
-- `sticker_cleats` rank VI: card says ×0.3, the same tenth as rank V. Code uses 0.262144.
-- `sticker_cleats` rank VII: card says ×0.2. Code uses 0.209715.
-- `sticker_cleats` rank VIII: card says ×0.2. Code uses 0.167772.
-- `sticker_cleats` rank IX: card says ×0.1. Code uses 0.134218.
-- `sticker_cleats` rank X: card says ×0.1. Code uses 0.107374.
-- `sticker_cleats` rank XI: card says ×0.1. Code uses 0.085899.
-- `sticker_cleats` rank XII: card says ×0.1, the same tenth as ranks IX–XI. Code uses 0.068719.
-- `wind_visor` ranks II–XII: the path percent matches the card. The mph readout and arrow still run, and the card no longer says so.
-- `ice_cage` rank II: the card only says the accuracy needle ×0.90. Red-tip immunity and Iced immunity still run.
-- `ice_cage` rank III: the card only says PERFECT +1. The ×0.90 and the immunities still run.
-- `ice_cage` rank IV: the card only says good +2. Perfect +1, ×0.90, and the immunities still run.
-- `ice_cage` rank V: the card says PERFECT +2 total. Good is also +2, the accuracy needle is still ×0.90, and the immunities still run.
-- `ice_cage` rank VI: the card says Good +4 total. Perfect bonus is +2, the accuracy needle is still ×0.90, and the immunities still run.
-- `ice_cage` rank VII: the card still says Good +4 total. Code is perfect +3 and good +4, plus ×0.90 and the immunities.
-- `ice_cage` rank VIII: the card still says Good +4 total. Code is perfect +3 and good +6, plus ×0.90 and the immunities.
-- `ice_cage` rank IX: the card still says Good +4 total. Code is perfect +4 and good +6, plus ×0.90 and the immunities.
-- `ice_cage` rank X: the card still says Good +4 total. Code is perfect +4 and good +8, plus ×0.90 and the immunities.
-- `ice_cage` rank XI: the card still says Good +4 total. Code is perfect +5 and good +8, plus ×0.90 and the immunities.
-- `ice_cage` rank XII: the card still says Good +4 total. Code is perfect +5 and good +10, plus ×0.90 and the immunities.
-- `scout_lid` rank VII: the card says +5 rerolls and two practice swings. Code adds 6 rerolls and 2 practice swings.
-- `scout_lid` rank VIII: the card says +5 and two. Code adds 7 rerolls and 3 practice swings.
-- `scout_lid` rank IX: the card says +5 and two. Code adds 8 rerolls and 3 practice swings.
-- `scout_lid` rank X: the card says +5 and two. Code adds 9 rerolls and 4 practice swings.
-- `scout_lid` rank XI: the card says +5 and two. Code adds 10 rerolls and 4 practice swings.
-- `scout_lid` rank XII: the card says +5 and two. Code adds 11 rerolls and 5 practice swings.
-- `doink_cap` rank VII: the card says 5 charges and carry max 5. Code grants 7 and carries up to 7.
-- `doink_cap` rank VIII: the card says 5 and max 5. Code grants 8 and carries up to 8.
-- `doink_cap` rank IX: the card says 5 and max 5. Code grants 9 and carries up to 9.
-- `doink_cap` rank X: the card says 5 and max 5. Code grants 10 and carries up to 10.
-- `doink_cap` rank XI: the card says 5 and max 5. Code grants 11 and carries up to 11.
-- `doink_cap` rank XII: the card says 5 and max 5. Code grants 12 and carries up to 12.
-- `replay_gloves` rank VII: the card says 5 swings and carry max 5. Code grants 7 and carries up to 7.
-- `replay_gloves` rank VIII: the card says 5 and max 5. Code grants 8 and carries up to 8.
-- `replay_gloves` rank IX: the card says 5 and max 5. Code grants 9 and carries up to 9.
-- `replay_gloves` rank X: the card says 5 and max 5. Code grants 10 and carries up to 10.
-- `replay_gloves` rank XI: the card says 5 and max 5. Code grants 11 and carries up to 11.
-- `replay_gloves` rank XII: the card says 5 and max 5. Code grants 12 and carries up to 12.
-- `weather_wraps` rank VII: the card says +6 yd unless CLEAR. Code adds 8.
-- `weather_wraps` rank VIII: the card says +6 yd. Code adds 10.
-- `weather_wraps` rank IX: the card says +6 yd. Code adds 12.
-- `weather_wraps` rank X: the card says +6 yd. Code adds 14.
-- `weather_wraps` rank XI: the card says +6 yd. Code adds 16.
-- `weather_wraps` rank XII: the card says +6 yd. Code adds 18.
-- `deep_bench` rank IV: reuses rank III. Cap stays at +2 and the spare attempt does not grow.
-- `deep_bench` rank V: reuses rank III. Same cap and spare.
-- `deep_bench` rank VI: reuses rank III. Same cap and spare.
-- `hot_streak` rank IV: the card says streak step +1.0. Code sets the step to 1.25.
-- `hot_streak` rank V: the card says +1.0. Code sets the step to 1.5.
-- `hot_streak` rank VI: the card says +1.0. Code sets the step to 1.75.
-- `storm_chaser` rank IV: the card says +0.6 per mph. Code adds 0.8 per mph.
-- `storm_chaser` rank V: the card says +0.6 per mph. Code adds 1.0 per mph.
-- `storm_chaser` rank VI: the card says +0.6 per mph. Code adds 1.2 per mph.
-- `hero_ball` rank IV: the card says +2.0 Mult. Code adds 2.5. Needles stay ×0.80.
-- `hero_ball` rank V: the card says +2.0 Mult. Code adds 3.0.
-- `hero_ball` rank VI: the card says +2.0 Mult. Code adds 3.5.
-- `glass_leg` rank IV: the card says +24 yd total. Code adds 32. The cap loss stays at 1.
-- `glass_leg` rank V: the card says +24 yd total. Code adds 40.
-- `glass_leg` rank VI: the card says +24 yd total. Code adds 48.
-- `two_minute_drill` rank IV: the card says +1.5 Mult. Code adds 2.0 on top of the boss ×1.5.
-- `two_minute_drill` rank V: the card says +1.5 Mult. Code adds 2.5.
-- `two_minute_drill` rank VI: the card says +1.5 Mult. Code adds 3.0.
-- `omega_3`: the card says the good band wipes the angle error. The code also turns off the +5 perfect score bonus. Cash can still pay the perfect dollar.
-- `phil` Compounding: the card says shop items are 15% stronger. The 15% also scales equipment, perks, curse upside numbers, and vitamin numbers.
-- `vex` kit: the card says 88% power clears by 5 yards. That is the no-wind clearance. Headwind, snow, or Heavy Ball can shrink it, and the code only guarantees the ball reaches the posts.
+The kick 10 roll uses its own generator, so it does not shift the weather sequence. Debug Shift+9 forces UNDER THE LIGHTS until the kick is left. Shift+6 is still The Squeeze.
+
+Needle rate is `omega_base × (speed / base) × ball_speed_mult`. Stored speeds below are after `prepare_kick_stats`. The live rate also multiplies `ball_speed_mult` (Walk-On 1, Cole 1, Carlos 1.15).
+
+| Build | Power speed | Accuracy speed | Live rate vs a bare Walk-On |
+| --- | --- | --- | --- |
+| Walk-On, no items | 100 | 120 | 1.00 |
+| Walk-On, UNDER THE LIGHTS | 135 | 162 | 1.35 |
+| Walk-On, lights + Anchor VI | 50.915 | 61.098 | 0.509 |
+| Walk-On, lights + Anchor XXIV | 19.203 | 23.043 | 0.192 |
+| Carlos, no items | 100 | 120 | 1.15 |
+| Carlos, UNDER THE LIGHTS | 135 | 162 | 1.5525 |
+| Carlos, lights + Anchor XXIV | 19.203 | 23.043 | 0.221 |
+| Cole, no items | 100 | 120 | 1.00 |
+| Cole, UNDER THE LIGHTS | 135 | 162 | 1.35 |
+| Cole, lights + Anchor XXIV | 19.203 | 23.043 | 0.192 |
+
+Anchor XXIV is the strongest needle slow. It is the same factor as Anchor XII. Hero Ball's ×0.80 is weaker. Patient Gloves slow only the power needle, and at XII they use the same 0.14224 factor on power alone.
+
+## 7. Balance sheet
+
+Blank cells are ranks that item cannot reach. "Next rank adds nothing" is the first rank where the coded gain is 0, or under 5% of the previous rank's gain. Cannon, Drive, and High-Air never hit that inside I–XXIV. Their late steps stay large.
+
+### Equipment
+
+| Item | Boosts | I | VI | XII | XXIV | Shape | First flat or tiny step |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Cannon Cleats | range yards | +6 | +36 | +72 | +570 | flat +6 through XII, then a rising late table | none through XXIV |
+| Pinpoint Cleats | perfect / good bands | +2 / +3 | +12 / +18 | +24 / +36 | same as XII | flat +2 / +3 per rank, then capped | XIII |
+| Anchor Cleats | both needle speeds | ×0.85 | ×0.377 | ×0.142 | same as XII | shrinking factor, then capped | XIII |
+| Sticker Cleats | drift | ×0.80 | ×0.262 | ×0.069 | same as XII | shrinking factor, then capped | XIII |
+| Wind Visor | wind readout, path percent | readout, 0% path | 100% path | 100% path | 100% path | path rises through VI, then flat | VII |
+| Ice Cage | red-tip off, Iced block, accuracy ×0.90, bands | immunity | ×0.90, +2 / +4 | ×0.90, +5 / +10 | same as XII | bands rise through XII, then capped | XIII |
+| Scout Lid | rerolls, practice | +1 reroll | +5 rerolls, 2 practice | +11 rerolls, 5 practice | same as XII | rises through XII, then capped | XIII |
+| Doink Cap | doink-to-good charges | 1 | 5, carry 5 | 12, carry 12 | same as XII | rises through XII, then capped | XIII |
+| Drive Lid | range yards | +4 | +24 | +48 | +384 | flat +4 through XII, then a rising late table | none through XXIV |
+| True Lid | hook factor | ×0.90 | ×0.531 | ×0.282 | same as XII | shrinking factor, then capped | XIII |
+| Shelter Lid | headwind loss | ×0.80 | ×0.262 | ×0.069 | same as XII | shrinking factor, then capped | XIII |
+| Iron Grip | red-tip noise and start, then off | noise −2 | red tip off | red tip off | red tip off | noise caps at II, off switch at VI | VII |
+| Replay Gloves | practice swings | 1 | 5, carry 5 | 12, carry 12 | same as XII | rises through XII, then capped | XIII |
+| High-Air Gloves | range yards, tailwind ×1.5 | +2 | +12 | +24 | +186 | flat +2 through XII, then a rising late table | none through XXIV |
+| Guide Gloves | good-lock hook | ×0.50 | ×0.40 | ×0.28 | same as XII | flat −0.02 per rank, then capped | XIII |
+| Patient Gloves | power needle | ×0.85 | ×0.377 | ×0.142 | same as XII | shrinking factor, then capped | XIII |
+| Hush Gloves | wind mph ignored | 1 | 6 | 12 | same as XII | flat +1 mph, then capped | XIII |
+| Weather Wraps | weather cut, then yards | half penalties | ignore + 6 yd | ignore + 18 yd | same as XII | +2 yd per rank from IV, then capped | XIII |
+
+### Perks
+
+| Item | Boosts | I | VI | XII | XXIV | Shape | First flat step |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Deep Bench | attempt cap, spare | cap +1 | another cap on top of V | | | rises at I, II, V, VI; IV is half a cap | none inside I–VI |
+| Hot Streak | streak step | 0.50 | 1.75 | | | +0.25 per rank after II | none inside I–VI |
+| Storm Chaser | mult per crosswind mph | 0.2 | 1.2 | | | flat +0.2 per rank | none inside I–VI |
+| Hero Ball | mult, both needles ×0.80 | +1.0 | +3.5 | | | +0.5 mult per rank after I; needle slow is flat | needle slow is flat at every rank |
+| Glass Leg | yards, cap −1 once | +8 yd, cap −1 | +48 yd | | | flat +8 yd; the cap loss does not repeat | cap loss adds nothing from II |
+| Two-Minute Drill | boss mult | +0.5 | +3.0 | | | flat +0.5 per rank | none inside I–VI |
+
+### Curses
+
+| Item | Downside | Upside |
+| --- | --- | --- |
+| Iced | meter hides 0.4 s after Space, unless Ice Cage | +0.5 Mult |
+| Shanky Cleats | accuracy error ×1.5 | +0.5 Mult |
+| Heavy Ball | −4 yd | accuracy error ×0.85 |
+| Howling Wind | wind ×1.5 | equipment and perks ×1.15 |
+| Shaky Arrow | aim sways ±3° | +6 yd |
+| Narrow Posts | posts 5.17 yd | +0.5 Mult |
+| Stone Toe | power needle ×1.20 | +6 yd |
+| Tight Window | perfect and good −2 | +0.5 Mult |
+
+### Vitamins
+
+| Item | Boosts | Effect | Shape |
+| --- | --- | --- | --- |
+| Protein Shake | range | +6 yd this kick | one rank |
+| Magnesium | both needles | ×0.7 this kick | one rank |
+| Omega-3 | angle, perfect score | good band wipes the angle; +5 perfect score bonus off | one rank |
+| Electrolyte Tabs | attempt | a miss keeps the attempt | one rank |
+| Vitamin D | weather | ignore rain, snow, and mud | one rank |
+| Pre-Workout | mult | +0.5 on a make | one rank |
+| Zinc | wind and weather | one reroll | one rank |
+| Lutein | wind display | mph line and a full path | one rank |
+| Pickle Juice | drift | ×0.5 | one rank |
+| Tart Cherry | curse | remove one | one rank |
+| B12 Shot | attempt | +1, once per shop visit | one rank |
+
+### Rank redundancy
+
+- Pinpoint, Anchor, Sticker, Ice Cage, Scout Lid, Doink Cap, True Lid, Shelter Lid, Replay Gloves, Guide Gloves, Patient Gloves, Hush Gloves, and Weather Wraps: ranks XIII–XXIV copy rank XII. The card text copies it too.
+- Wind Visor: the path is already the full flight at VI. Ranks VII–XXIV add no path and no readout.
+- Iron Grip: the red tip is already off at VI. Ranks VII–XXIV add nothing.
+- Glass Leg: the attempt-cap loss happens once. Ranks II–VI add yards only.
+- Hero Ball: the ×0.80 needle slow does not change after rank I. Later ranks add Mult only.
+
+### Outliers
+
+Coded size at the top rank that item can reach, next to others in the same slot. No recommendation.
+
+- Cannon XXIV is +570 yards. The other cleats at XXIV are a band add that froze at XII, a ×0.142 needle factor, or a ×0.069 drift factor.
+- Drive Lid XXIV is +384 yards. The other helmets at XXIV are a frozen XII utility (path, charges, rerolls, a hook factor, a headwind factor).
+- High-Air XXIV is +186 yards plus tailwind ×1.5. The other gloves at XXIV are a frozen XII utility.
+- Glass Leg VI is +48 yards. Two-Minute Drill VI is +3.0 boss Mult. Hot Streak VI is a 1.75 streak step. Those are the perk yard and mult extremes.
+- Anchor XII (and XXIV) multiplies both needles by 0.142. Hero Ball multiplies both by 0.80 at every rank. Patient Gloves reach 0.142 on the power needle only.
+- Stone Toe speeds the power needle up (×1.20) and pays +6 yards. The other curse upsides are +0.5 Mult or +6 yards with a different downside.
+
+## 8. Mismatch index
+
+Fixed since 2026-11-12, and not repeated below: perk cards IV–VI, Wind Visor mph line, Ice Cage cumulative line, Scout Lid, Doink Cap, Replay Gloves, and Weather Wraps ranks past VI, Willow's shop-vitamin sentence, and Phil's "shop items only" sentence.
+
+- `anchor_cleats` ranks II–XII: the card prints hundredths of `0.85^rank`. The needles use the full power. Rank II prints ×0.72 and uses 0.7225. Rank XII prints ×0.14 and uses 0.14224175713617.
+- `anchor_cleats` ranks XIII–XXIV: same card and same factor as XII.
+- `sticker_cleats` ranks III–XII: the card prints hundredths of `0.80^rank`. Drift uses the full power. Rank III prints ×0.51 and uses 0.512. Rank XII prints ×0.07 and uses 0.068719476736. Ranks I and II match.
+- `sticker_cleats` ranks XIII–XXIV: same as XII.
+- `true_lid` ranks III–XII: the card prints hundredths of `0.90^rank`. The hook uses the full power. Rank VI prints ×0.53 and uses 0.531441. Rank XII prints ×0.28 and uses 0.282429536481. Ranks I and II match.
+- `true_lid` ranks XIII–XXIV: same as XII.
+- `patient_gloves` ranks II–XII: same hundredths gap as Anchor, on the power needle only. Rank I matches.
+- `patient_gloves` ranks XIII–XXIV: same as XII.
+- `shelter_lid` ranks III–XII: the card prints hundredths of `0.80^rank`. Headwind loss uses the full power. Rank XII prints ×0.07 and uses 0.068719476736. Ranks I and II match.
+- `shelter_lid` ranks XIII–XXIV: same as XII.
+- `vex` kit line: `"88% power clears by 5 yards."` That is the no-wind number. A headwind, snow, or Heavy Ball can shrink the clearance, down to just reaching the posts.
