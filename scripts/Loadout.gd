@@ -70,6 +70,24 @@ static func rank_label(rank: int) -> String:
 	return str(_ROMAN[index])
 
 
+static func tip_lock_yards(rank: int) -> float:
+	if rank < 6:
+		return 0.0
+	return 5.0 + float(rank - 6)
+
+
+static func _visor_line(rank: int) -> String:
+	var resist := int(round(KickLogic.visor_resistance(rank) * 100.0))
+	var shown := int(KickLogic.path_percent_for_rank(rank))
+	if shown <= 0:
+		if rank <= 1:
+			return "Shows wind mph and an arrow. %d%% wind resistance." % resist
+		return "Wind mph and an arrow. %d%% wind resistance." % resist
+	if shown >= 100:
+		return "Wind mph and an arrow. %d%% wind resistance. Dotted path for the full flight, ending at the posts." % resist
+	return "Wind mph and an arrow. %d%% wind resistance. Dotted path for %d%% of this kick." % [resist, shown]
+
+
 static func effect_rank(rank: int) -> int:
 	return mini(maxi(rank, 0), 12)
 
@@ -406,12 +424,7 @@ static func effect_line(id: String, rank: int) -> String:
 		SHELTER_LID:
 			return _with_late_yards("Headwind loss ×%s" % _two_decimals(shelter_factor_for(rank)), rank)
 		WIND_VISOR:
-			if rank <= 1:
-				return "Shows wind mph and an arrow"
-			var shown := int(KickLogic.path_percent_for_rank(rank))
-			if shown >= 100:
-				return "Wind mph and arrow. Dotted path for the full flight, ending at the posts"
-			return "Wind mph and arrow. Dotted path for %d%% of this kick" % shown
+			return _visor_line(rank)
 		ICE_CAGE:
 			return _ice_cage_line(rank)
 		SCOUT_LID:
@@ -446,7 +459,7 @@ static func effect_line(id: String, rank: int) -> String:
 				return "Noise -4 (min ±1). The red tip starts 6 later on the power meter."
 			if rank == 5:
 				return "Noise -4 (min ±1). The red tip starts 9 later on the power meter."
-			return "Red tip never triggers"
+			return "Noise -4 (min ±1). The red tip starts 9 later on the power meter. Locking power in the red tip pays +%d yd." % int(tip_lock_yards(rank))
 		REPLAY_GLOVES:
 			var swings := replay_swings(rank)
 			if rank == 1:
@@ -549,7 +562,7 @@ static func effect_line(id: String, rank: int) -> String:
 		SHANKY:
 			return "Down: accuracy error ×1.5. Up: +1.0 Mult"
 		HEAVY:
-			return "Down: -4 yd. Up: accuracy error ×0.85"
+			return "Down: 2% of the kick distance, at least 2 yd. Up: accuracy error ×0.85"
 		HOWLING:
 			return "Down: wind ×1.5. Up: equipment and perks ×1.10"
 		SHAKY:
@@ -962,6 +975,7 @@ static func _apply_piece(stats: KickerStats, item_id: String, item_rank: int, it
 		stats.flag_reader = item_rank >= 1
 		stats.path_percent = KickLogic.path_percent_for_rank(item_rank)
 		stats.laser_line = stats.path_percent > 0.0
+		stats.visor_resist = KickLogic.visor_resistance(item_rank)
 	elif item_id == ICE_CAGE:
 		stats.ice_cage = true
 		stats.ice_veins = true
@@ -1002,7 +1016,7 @@ static func _apply_piece(stats: KickerStats, item_id: String, item_rank: int, it
 			stats.red_tip_start += 3.0
 		if item_fx >= 5:
 			stats.red_tip_start += 3.0
-		stats.red_tip_off = item_fx >= 6
+		stats.tip_lock_yards = maxf(stats.tip_lock_yards, tip_lock_yards(item_rank))
 	elif item_id == REPLAY_GLOVES:
 		stats.practice_per_quarter += replay_swings(item_rank)
 		stats.practice_carry = item_rank >= 6

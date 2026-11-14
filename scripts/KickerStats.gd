@@ -39,6 +39,8 @@ var angle_scale := 1.0
 var guide_factor := 1.0
 var shelter_factor := 1.0
 var hush_mph := 0.0
+var visor_resist := 0.0
+var tip_lock_yards := 0.0
 var thin_air := false
 var flag_reader := false
 var laser_line := false
@@ -104,6 +106,8 @@ func reset() -> void:
 	guide_factor = 1.0
 	shelter_factor = 1.0
 	hush_mph = 0.0
+	visor_resist = 0.0
+	tip_lock_yards = 0.0
 	thin_air = false
 	flag_reader = false
 	laser_line = false

@@ -3,6 +3,7 @@
 Generated: 2026-11-14
 BAL1: needle slow floor 0.35, gentler Anchor / Patient / Sticker / Shelter tables, and multiplier cards use the printed hundredths.
 BAL2: Endless ranks XIII–XXIV do something for every equipment style except Wind Visor and Iron Grip. Range late tables are shorter. Curse upsides are higher, and Howling's item boost is ×1.10.
+RW1: Iron Grip VI+ keeps the red tip and pays +5 yd at VI, plus 1 yd per rank, for a power lock in the tip (+23 at XXIV). Heavy Ball's downside is max(2, 2% of the kick distance). Wind Visor resists 10/15/20% at I/II/III and stays at 20%, and the dotted path starts at IV (40%) and is full at VIII.
 
 **Loadout items:** 32 (18 equipment, 6 perks, 8 curses)
 **Vitamins:** 11 (10 belt vitamins and B12 Shot)
@@ -16,7 +17,8 @@ Numbers below were taken from `Loadout.effect_line`, `Loadout.apply` / `_apply_p
 
 - Five equipment styles are in the game: True Lid, Shelter Lid, Guide Gloves, Patient Gloves, Hush Gloves. Drive Lid was already in the 2026-11-12 file.
 - Equipment ranks run I–XXIV in Endless and I–VI in Standard. Perks stay I–III Standard and I–VI Endless. Curses stay rank 1.
-- BAL2: Cannon, Drive Lid, and High-Air use a shorter XIII–XXIV yard table. Count items keep growing at half their old step. Anchor, Sticker, True Lid, Shelter, Guide, Patient, and Hush keep the XII multiplier and add +1 yd per rank past XII. Wind Visor and Iron Grip still stop at VI.
+- BAL2: Cannon, Drive Lid, and High-Air use a shorter XIII–XXIV yard table. Count items keep growing at half their old step. Anchor, Sticker, True Lid, Shelter, Guide, Patient, and Hush keep the XII multiplier and add +1 yd per rank past XII.
+- RW1: Iron Grip no longer turns the red tip off. From VI the tip stays on and a tip lock pays 5 + (rank - 6) yards. Heavy Ball replaces the flat −4 with max(2, 2% of kick distance). Wind Visor adds 10/15/20% blown-wind resistance and shifts the dotted path so IV is 40% and VIII is 100%.
 - The wording pass updated perk cards for ranks IV–VI, the Wind Visor mph line, the Ice Cage cumulative line, and the Scout / Doink / Replay / Weather Wraps lines so they follow `effect_rank`. Those old mismatches are gone.
 - BAL1 replaces the Anchor and Patient `0.85^rank` curve, and the Sticker and Shelter `0.80^rank` curve, with the rank I–XII tables below. XIII–XXIV still copy XII. True Lid's hook now uses the same hundredths the card prints. Item, perk, and vitamin slows are multiplied, floored at 0.35, and only then multiplied by Stone Toe, UNDER THE LIGHTS, rain, and ball speed.
 - The Bonus Ring can put a second, different style in a filled equipment type. At most two styles per type. Each ranks on its own. Normal offers and the shop do not open that second slot.
@@ -40,7 +42,7 @@ Second-slot rule, from `_apply_piece`: each owned style is applied in full. Addi
 
 Howling and Phil apply to both pieces. The additives are summed first, then Howling's 1.15 and Phil's `scale_amount` hit the sum. Each multiplier is widened on its own, then the factors multiply.
 
-Soft cap: Wind Visor and Iron Grip still stop growing at VI. The other equipment styles change at every rank from XIII through XXIV. Count items use a half step. The shield styles keep the XII multiplier and add flat yards.
+Soft cap: Wind Visor's path is full at VIII and its resistance stays at 20% from III. Iron Grip's tip-lock yards keep growing through XXIV. The other equipment styles change at every rank from XIII through XXIV. Count items use a half step. The shield styles keep the XII multiplier and add flat yards.
 
 ### Cannon Cleats
 
@@ -104,9 +106,9 @@ Rank I is +2 / +3. Rank VI is +12 / +18. Rank XII is +24 / +36. Each rank past X
 - **id:** `wind_visor`
 - **slot:** helmet
 - **rank cap:** Standard VI, Endless XXIV
-- **soft cap:** the path percent stops growing at VI (`min(rank, 6)` inside `path_percent_for_rank`). XIII–XXIV match XII, which already matches VI.
-- **card text:** Rank I `"Shows wind mph and an arrow"`. Ranks II–V `"Wind mph and arrow. Dotted path for {40, 55, 70, 85}% of this kick"`. Rank VI and above `"Wind mph and arrow. Dotted path for the full flight, ending at the posts"`.
-- **actual effect:** rank I sets the readout and the arrow, and the path percent is 0. Ranks II–V use 40, 55, 70, 85. Rank VI and above use 100. Big Game does not turn this off. A second helmet does not clear the path. Only Wind Visor writes it.
+- **soft cap:** resistance stays at 20% from III. The path reaches 100% at VIII (`min(rank, 8)` inside `path_percent_for_rank`). IX–XXIV match VIII.
+- **card text:** Rank I `"Shows wind mph and an arrow. 10% wind resistance."` Rank II is 15% and still no path. Rank III is 20% and still no path. Rank IV `"Wind mph and an arrow. 20% wind resistance. Dotted path for 40% of this kick."` V–VII are 55, 70, and 85. Rank VIII and above name the full flight.
+- **actual effect:** ranks I–III set the readout and the arrow, resist 10/15/20% of blown wind, and draw no path. From IV, resistance stays 20% and the path is 40, 55, 70, 85, then 100 at VIII and up. Resistance multiplies blown speed after Howling and before Hush, drift, and wind-range. Big Game does not turn this off. A second helmet does not clear the path. Only Wind Visor writes it. Lutein still forces the path to 100.
 - **match:** yes, ranks I–XXIV
 
 ### Ice Cage
@@ -183,9 +185,9 @@ Rank XII and XIII–XXIV: +11 rerolls and five practice swings a quarter.
 - **id:** `iron_grip`
 - **slot:** gloves
 - **rank cap:** Standard VI, Endless XXIV
-- **soft cap:** the red-tip switch is already fully off at VI (`effect_rank >= 6`). VII–XXIV do not change it. XIII–XXIV match XII.
-- **card text:** I–II `"Red-tip noise −{2 × rank}"`. III–V name noise −4 and a later red-tip start. VI and above `"Red tip never triggers"`.
-- **actual effect:** noise starts at 5. The cut is `2 × min(effect_rank, 2)`, floored at 1, so rank I is ±3 and rank II and up are ±1. Red-tip start begins at 95 and gains +3 at III, IV, and V (98, 101, 104). Rank VI and up set `red_tip_off`. Big Game restores the base red-tip values and clears `red_tip_off`.
+- **soft cap:** the noise cut and the tip-start delay stop at V. From VI the tip-lock yards keep growing, +1 yd per rank, through XXIV.
+- **card text:** I–II `"Red-tip noise -{2 × rank}"`. III–V name noise -4 and a later red-tip start. VI and above keep that taming and add `"Locking power in the red tip pays +{5 + rank - 6} yd."`
+- **actual effect:** noise starts at 5. The cut is `2 × min(effect_rank, 2)`, floored at 1, so rank I is ±3 and rank II and up are ±1. Red-tip start begins at 95 and gains +3 at III, IV, and V (98, 101, 104). Those tames stay on at VI–XXIV. Iron Grip does not set `red_tip_off`. A power lock at or above `red_tip_start` adds `tip_lock_yards`, which is 0 through V, 5 at VI, and 23 at XXIV. Ice Cage's `ice_veins` still skips the tip, so those yards do not pay while Ice Cage is owned. Big Game restores the base red-tip values and clears `red_tip_off`.
 - **match:** yes, ranks I–XXIV
 
 ### Replay Gloves
@@ -328,8 +330,8 @@ Rank XII and XIII–XXIV: +11 rerolls and five practice swings a quarter.
 
 - **id:** `heavy_ball`
 - **slot:** curse
-- **card text:** `"Down: −4 yd. Up: accuracy error ×0.85"`
-- **actual effect:** travel loses 4 yards in `carry_plan`, and `angle_scale` is multiplied by 0.85. The −4 is not in the equipment Howling 1.15.
+- **card text:** `"Down: 2% of the kick distance, at least 2 yd. Up: accuracy error ×0.85"`
+- **actual effect:** travel and the shank max-range lose `max(2, kick_distance * 0.02)` after snow and thin air. That is 2 yd at 35 and 75, 4 at 200, 10 at 500, and 20 at 1000. `angle_scale` is still ×0.85. The penalty is not in the equipment Howling 1.10.
 - **match:** yes
 
 ### Howling Wind
@@ -497,7 +499,7 @@ Cole's ball multiplier is 1.00 in `Kickers.apply_to`. It is not 0.90. Carlos is 
 2. Wind range is `head_or_tail mph × 0.4`. High-Air multiplies a positive change by 1.5. Shelter Lid multiplies a negative change by `shelter_factor`.
 3. Vex: `travel = kick distance + 5 + (power − 88) × 1.25 + range_bonus + wind range`.
 4. Everyone else: `travel = 16 + range_per_power × power + range_bonus + wind range`.
-5. Snow, thin air (+4), and Heavy Ball (−4) apply after that.
+5. Snow, thin air (+4), and Heavy Ball (max(2, 2% of the kick distance)) apply after that.
 6. If Vex is at 88% or more and travel is still short of the posts, travel is raised to the kick distance.
 
 Worked examples, 100% power, 0 wind, no vitamin, no Howling, no Phil:
@@ -577,14 +579,14 @@ Blank cells are ranks that item cannot reach. "Next rank adds nothing" is the fi
 | Pinpoint Cleats | perfect / good bands | +2 / +3 | +12 / +18 | +24 / +36 | same as XII | flat +2 / +3 per rank, then capped | XIII |
 | Anchor Cleats | both needle speeds | ×0.85 | ×0.58 | ×0.40 | same as XII | BAL1 table, then capped. Slow floor 0.35 can raise a stack | XIII |
 | Sticker Cleats | drift | ×0.90 | ×0.53 | ×0.28 | same as XII | BAL1 table, then capped | XIII |
-| Wind Visor | wind readout, path percent | readout, 0% path | 100% path | 100% path | 100% path | path rises through VI, then flat | VII |
+| Wind Visor | wind readout, resistance, path percent | 10% resist, no path | 20% resist, 70% path | 20% resist, full path | 20% resist, full path | resistance caps at III, path full at VIII | IX |
 | Ice Cage | red-tip off, Iced block, accuracy ×0.90, bands | immunity | ×0.90, +2 / +4 | ×0.90, +5 / +10 | same as XII | bands rise through XII, then capped | XIII |
 | Scout Lid | rerolls, practice | +1 reroll | +5 rerolls, 2 practice | +11 rerolls, 5 practice | same as XII | rises through XII, then capped | XIII |
 | Doink Cap | doink-to-good charges | 1 | 5, carry 5 | 12, carry 12 | same as XII | rises through XII, then capped | XIII |
 | Drive Lid | range yards | +4 | +24 | +48 | +297 | flat +4 through XII, then the BAL2 late table | none through XXIV |
 | True Lid | hook factor | ×0.90 | ×0.53 | ×0.28 | same as XII | hundredths of 0.90^rank, then capped | XIII |
 | Shelter Lid | headwind loss | ×0.90 | ×0.53 | ×0.28 | same as XII | BAL1 table, then capped | XIII |
-| Iron Grip | red-tip noise and start, then off | noise −2 | red tip off | red tip off | red tip off | noise caps at II, off switch at VI | VII |
+| Iron Grip | red-tip noise and start, then tip-lock yards | noise -2 | tip on, +5 yd | tip on, +11 yd | tip on, +23 yd | noise caps at II, yards grow from VI | none through XXIV |
 | Replay Gloves | practice swings | 1 | 5, carry 5 | 12, carry 12 | same as XII | rises through XII, then capped | XIII |
 | High-Air Gloves | range yards, tailwind ×1.5 | +2 | +12 | +24 | +144 | flat +2 through XII, then the BAL2 late table. Tailwind stays ×1.5 | none through XXIV |
 | Guide Gloves | good-lock hook | ×0.50 | ×0.40 | ×0.28 | same as XII | flat −0.02 per rank, then capped | XIII |
@@ -609,7 +611,7 @@ Blank cells are ranks that item cannot reach. "Next rank adds nothing" is the fi
 | --- | --- | --- |
 | Iced | meter hides 0.4 s after Space, unless Ice Cage | +0.75 Mult |
 | Shanky Cleats | accuracy error ×1.5 | +1.0 Mult |
-| Heavy Ball | −4 yd | accuracy error ×0.85 |
+| Heavy Ball | max(2, 2% of kick distance) | accuracy error ×0.85 |
 | Howling Wind | wind ×1.5 | equipment and perks ×1.10 |
 | Shaky Arrow | aim sways ±3° | +10 yd |
 | Narrow Posts | posts 5.17 yd | +0.75 Mult |
@@ -634,8 +636,8 @@ Blank cells are ranks that item cannot reach. "Next rank adds nothing" is the fi
 
 ### Rank redundancy
 
-- Wind Visor: the path is already the full flight at VI. Ranks VII–XXIV add no path and no readout. BAL2 leaves this.
-- Iron Grip: the red tip is already off at VI. Ranks VII–XXIV add nothing. BAL2 leaves this.
+- Wind Visor: the path is the full flight at VIII and resistance is already 20% at III. Ranks IX–XXIV add nothing.
+- Iron Grip: the tip-lock bonus keeps adding 1 yard per rank from VI through XXIV.
 - Every other equipment style changes from XIII through XXIV. Count items take a half step. Shield styles keep the XII multiplier and add +1 yd per rank.
 - Glass Leg: the attempt-cap loss happens once. Ranks II–VI add yards only.
 - Hero Ball: the ×0.80 needle slow does not change after rank I. Later ranks add Mult only.

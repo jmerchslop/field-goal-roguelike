@@ -320,11 +320,24 @@ static func wind_range_delta(speed: float, direction_degrees: float, low_drive: 
 	return change
 
 
-# Rank I is 0. Rank II is 40. Each rank through VI adds 15. VII and up stay at 100.
+# RW1 moves the old path two ranks later. I–III stay at 0. IV is the old II (40).
+# VIII is the old VI (100). A rank-3 shift would miss that table.
 static func path_percent_for_rank(rank: int) -> float:
-	if rank < 2:
+	if rank < 4:
 		return 0.0
-	return 40.0 + 15.0 * float(mini(rank, 6) - 2)
+	return 40.0 + 15.0 * float(mini(rank, 8) - 4)
+
+
+static func visor_resistance(rank: int) -> float:
+	if rank <= 1:
+		return 0.10
+	if rank == 2:
+		return 0.15
+	return 0.20
+
+
+static func heavy_penalty(distance: float) -> float:
+	return maxf(2.0, distance * 0.02)
 
 
 # The same line the ball is drawn on. At the posts, the wind term is the full drift.
@@ -647,6 +660,8 @@ func _shank() -> void:
 	var blown_dir := rad_to_deg(atan2(cross, head))
 	if howling_wind:
 		blown *= 1.5
+	if stats.visor_resist > 0.0:
+		blown *= maxf(0.0, 1.0 - stats.visor_resist)
 	drift_yards = drift_at_uprights(blown, blown_dir, kick_distance, 0, 0, stats.ball_type) * stats.drift_factor
 	var wind_range := wind_range_delta(blown, blown_dir, 0, stats.thin_air)
 	if stats.clearance:
@@ -658,7 +673,7 @@ func _shank() -> void:
 	if thin_air_weather:
 		max_range += 4.0
 	if heavy_ball:
-		max_range -= 4.0
+		max_range -= heavy_penalty(kick_distance)
 	if max_range < kick_distance:
 		max_range = kick_distance
 	travel_yards = max_range
@@ -821,6 +836,8 @@ func carry_plan(ranged_power: float, angle_degrees: float) -> Dictionary:
 	var blown_dir := rad_to_deg(atan2(cross, head))
 	if howling_wind:
 		blown *= 1.5
+	if stats.visor_resist > 0.0:
+		blown *= maxf(0.0, 1.0 - stats.visor_resist)
 	if stats.hush_mph > 0.0:
 		blown = maxf(0.0, blown - stats.hush_mph)
 	var drift := drift_at_uprights(blown, blown_dir, kick_distance, 0, 0, stats.ball_type) * stats.drift_factor
@@ -838,7 +855,8 @@ func carry_plan(ranged_power: float, angle_degrees: float) -> Dictionary:
 	if thin_air_weather:
 		travel += 4.0
 	if heavy_ball:
-		travel -= 4.0
+		travel -= heavy_penalty(kick_distance)
+	travel += _tip_lock_bonus(ranged_power)
 	if travel < 0.0:
 		travel = 0.0
 	# 88% and above clears the posts even if a headwind or a penalty would otherwise leave it short.
@@ -850,6 +868,16 @@ func carry_plan(ranged_power: float, angle_degrees: float) -> Dictionary:
 		"angle": angle_degrees,
 		"reached": travel >= kick_distance,
 	}
+
+
+func _tip_lock_bonus(ranged_power: float) -> float:
+	if stats.tip_lock_yards <= 0.0:
+		return 0.0
+	if stats.ice_veins or stats.red_tip_off:
+		return 0.0
+	if ranged_power + 0.0001 < stats.red_tip_start:
+		return 0.0
+	return stats.tip_lock_yards
 
 
 # Yard samples of the preview, cropped to path_percent of this flight. Step is 0.5 yards.

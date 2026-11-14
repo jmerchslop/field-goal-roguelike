@@ -51,6 +51,7 @@ func _run() -> void:
 	_check_ball_art()
 	_check_full_rerolls()
 	_check_wind_visor_path()
+	_check_rw1()
 	_check_drive_lid_and_power_safety()
 	_check_m2_kickers()
 	_check_honest_cards_and_bench()
@@ -1306,7 +1307,7 @@ func _check_wind_and_pool() -> void:
 	check(readout.find("10 mph") >= 0 and readout.find("cross") >= 0 and readout.find("tail") >= 0, "check 7 the readout is '%s'" % readout)
 	check(near(KickLogic.crosswind_mph(10.0, 90.0), 10.0, 0.02) and near(KickLogic.head_tail_mph(10.0, 90.0), 0.0, 0.02), "10 mph at 90° is all crosswind")
 	reader.give(Loadout.WIND_VISOR, 2)
-	check(reader.stats.laser_line and near(reader.stats.path_percent, 40.0), "Wind Visor II draws 40% of this kick")
+	check(not reader.stats.laser_line and near(reader.stats.path_percent, 0.0) and near(reader.stats.visor_resist, 0.15), "Wind Visor II is 15% resistance and still has no path")
 	check(reader.upcoming_winds().is_empty(), "Wind Visor II does not list future winds")
 	var preview := KickLogic.path_lateral(0.0, 14.0, 0.0, 35.0, walk_drift)
 	check(near(preview, walk_drift * 0.16, 0.02), "check 7 the wind curve is still quadratic, lateral %s" % preview)
@@ -1807,7 +1808,7 @@ func _check_curses_and_rarity() -> void:
 	_lock_power_at(heavy, 50.0)
 	var plain := KickLogic.new()
 	_lock_power_at(plain, 50.0)
-	check(near(heavy.max_range, plain.max_range - 4.0), "Heavy Ball takes 4 yards off max range")
+	check(near(heavy.max_range, plain.max_range - 2.0), "Heavy Ball takes the 2 yard floor off a 35-yard kick")
 	records.reset_save()
 	var ended := RunLogic.new()
 	ended.start_with_kicker(Kickers.WALK_ON)
@@ -2065,11 +2066,11 @@ func _check_rank_caps_and_range() -> void:
 	var visor := RunLogic.new()
 	visor.new_run()
 	visor.give(Loadout.WIND_VISOR, 4)
-	check(near(visor.stats.path_percent, 70.0) and visor.upcoming_winds().is_empty() and not visor.stats.wind_preview, "Wind Visor IV is 70% of this kick and does not preview later kicks")
+	check(near(visor.stats.path_percent, 40.0) and near(visor.stats.visor_resist, 0.20) and visor.upcoming_winds().is_empty() and not visor.stats.wind_preview, "Wind Visor IV is 40% of this kick, 20% resistance, and does not preview later kicks")
 	visor.give(Loadout.WIND_VISOR, 5)
-	check(near(visor.stats.path_percent, 85.0), "Wind Visor V is 85% of this kick")
+	check(near(visor.stats.path_percent, 55.0), "Wind Visor V is 55% of this kick")
 	visor.give(Loadout.WIND_VISOR, 6)
-	check(near(visor.stats.path_percent, 100.0) and visor.upcoming_winds().is_empty(), "Wind Visor VI is the full path and still has no future winds")
+	check(near(visor.stats.path_percent, 70.0) and visor.upcoming_winds().is_empty(), "Wind Visor VI is 70% of the path and still has no future winds")
 	var cage := RunLogic.new()
 	cage.new_run()
 	cage.give(Loadout.ICE_CAGE, 4)
@@ -2083,7 +2084,7 @@ func _check_rank_caps_and_range() -> void:
 	grip.give(Loadout.IRON_GRIP, 5)
 	check(near(grip.stats.red_tip_start, 104.0) and near(grip.stats.red_tip_noise, 1.0), "Iron Grip V pushes Bruce's red tip from 95 to 104")
 	grip.give(Loadout.IRON_GRIP, 6)
-	check(grip.stats.red_tip_off, "Iron Grip VI turns the red tip off")
+	check(not grip.stats.red_tip_off and near(grip.stats.red_tip_start, 104.0) and near(grip.stats.red_tip_noise, 1.0) and near(grip.stats.tip_lock_yards, 5.0), "Iron Grip VI keeps the tip and pays +5 yd")
 	grip.force_weather(RunLogic.BIG_GAME)
 	grip.prepare_kick_stats()
 	check(not grip.stats.red_tip_off and near(grip.stats.red_tip_start, 95.0), "Big Game turns Iron Grip's red-tip help off")
@@ -2429,7 +2430,7 @@ func _check_vitamin_shop() -> void:
 	var lutein := RunLogic.new()
 	lutein.new_run()
 	lutein.give(Loadout.WIND_VISOR, 3)
-	check(lutein.stats.flag_reader and near(lutein.stats.path_percent, 55.0), "Wind Visor III shows 55% of this kick")
+	check(lutein.stats.flag_reader and near(lutein.stats.path_percent, 0.0) and near(lutein.stats.visor_resist, 0.20), "Wind Visor III is 20% resistance and still has no path")
 	lutein.belt[0] = Vitamins.LUTEIN
 	lutein.use_belt(0)
 	lutein.prepare_kick_stats()
@@ -3490,12 +3491,95 @@ func _check_full_rerolls() -> void:
 	check(skipped_again == 0 and shop.belt == belt_now and not shop.shop_b12_bought, "the second F also replaces every shelf and still ignores the belt and B12")
 
 
+func _check_rw1() -> void:
+	for rank in range(1, 6):
+		var tame := RunLogic.new()
+		tame.start_with_kicker(Kickers.BIG_BRUCE)
+		tame.give(Loadout.IRON_GRIP, rank)
+		check(not tame.stats.red_tip_off and near(tame.stats.tip_lock_yards, 0.0), "Iron Grip %s does not turn the tip off or add yards" % rank)
+	check(near(Loadout.tip_lock_yards(5), 0.0) and near(Loadout.tip_lock_yards(6), 5.0) and near(Loadout.tip_lock_yards(7), 6.0) and near(Loadout.tip_lock_yards(24), 23.0), "Iron Grip tip-lock yards are +5 at VI and +1 per rank to +23")
+	var below := _tip_kick(90.0, 5.0, false)
+	var plain := _tip_kick(90.0, 0.0, false)
+	var locked := _tip_kick(95.0, 5.0, false)
+	var open := _tip_kick(95.0, 0.0, false)
+	var top := _tip_kick(100.0, 23.0, false)
+	var top_plain := _tip_kick(100.0, 0.0, false)
+	check(near(below, plain), "a lock below the red tip adds no Iron Grip yards, got %s vs %s" % [below, plain])
+	check(near(locked, open + 5.0), "an Iron Grip VI tip lock adds exactly 5 yards, got %s vs %s" % [locked, open])
+	check(near(top, top_plain + 23.0), "an Iron Grip XXIV tip lock adds exactly 23 yards, got %s vs %s" % [top, top_plain])
+	var caged := _tip_kick(100.0, 5.0, true)
+	check(near(caged, top_plain), "Ice Cage still skips the tip, so Iron Grip yards do not pay, got %s vs %s" % [caged, top_plain])
+	var cage := RunLogic.new()
+	cage.start_with_kicker(Kickers.BIG_BRUCE)
+	cage.give(Loadout.ICE_CAGE, 1)
+	cage.give(Loadout.IRON_GRIP, 6)
+	check(cage.stats.ice_veins and not cage.stats.red_tip_off and near(cage.stats.tip_lock_yards, 5.0), "Ice Cage still owns the tip-off next to Iron Grip VI")
+	for dist in [35.0, 75.0, 200.0, 500.0, 1000.0]:
+		var want := 2.0
+		if dist >= 200.0:
+			want = dist * 0.02
+		check(near(KickLogic.heavy_penalty(dist), want), "Heavy Ball at %s yards is %s, got %s" % [dist, want, KickLogic.heavy_penalty(dist)])
+	var heavy := KickLogic.new()
+	heavy.kick_distance = 500.0
+	heavy.heavy_ball = true
+	heavy.stats.angle_scale = 0.85
+	var light := KickLogic.new()
+	light.kick_distance = 500.0
+	check(near(float(heavy.carry_plan(80.0, 0.0)["travel"]), float(light.carry_plan(80.0, 0.0)["travel"]) - 10.0), "Heavy Ball takes 10 yards off a 500-yard kick")
+	check(near(heavy.stats.angle_scale, 0.85), "Heavy Ball still multiplies accuracy error by 0.85")
+	var owned := RunLogic.new()
+	owned.start_with_kicker(Kickers.WALK_ON)
+	owned.give(Loadout.HEAVY)
+	check(near(owned.stats.angle_scale, 0.85) and owned.stats.heavy_ball, "giving Heavy Ball keeps the accuracy upside")
+	check(Loadout.effect_line(Loadout.HEAVY, 1) == "Down: 2% of the kick distance, at least 2 yd. Up: accuracy error ×0.85", "the Heavy Ball card states the percent rule")
+	var resists := {1: 0.10, 2: 0.15, 3: 0.20, 4: 0.20, 8: 0.20, 24: 0.20}
+	for rank in resists:
+		check(near(KickLogic.visor_resistance(int(rank)), float(resists[rank])), "Wind Visor rank %s resistance" % rank)
+	var cross_plain := _blown_kick(10.0, 90.0, 0.0, false, 0.0)
+	var cross_cut := _blown_kick(10.0, 90.0, 0.10, false, 0.0)
+	check(near(float(cross_cut["drift"]), float(cross_plain["drift"]) * 0.90), "10% Visor resistance cuts crosswind drift")
+	var head_plain := _blown_kick(10.0, 180.0, 0.0, false, 0.0)
+	var head_cut := _blown_kick(10.0, 180.0, 0.20, false, 0.0)
+	check(float(head_cut["travel"]) > float(head_plain["travel"]), "20% Visor resistance shrinks a headwind's range loss")
+	var howled := _blown_kick(10.0, 90.0, 0.20, true, 0.0)
+	check(near(float(howled["drift"]), float(cross_plain["drift"]) * 1.2), "Visor resistance applies after Howling, got %s vs %s" % [howled["drift"], cross_plain["drift"]])
+	var hushed := _blown_kick(10.0, 90.0, 0.20, false, 3.0)
+	var hush_only := _blown_kick(10.0, 90.0, 0.0, false, 3.0)
+	check(absf(float(hushed["drift"])) < absf(float(hush_only["drift"])), "Visor resistance still stacks with Hush")
+	var lutein := RunLogic.new()
+	lutein.new_run()
+	lutein.belt[0] = Vitamins.LUTEIN
+	lutein.use_belt(0)
+	lutein.prepare_kick_stats()
+	check(near(lutein.stats.path_percent, 100.0) and lutein.stats.laser_line, "Lutein alone still forces the full path")
+
+
+func _tip_kick(power: float, yards: float, iced: bool) -> float:
+	var kick := KickLogic.new()
+	kick.kick_distance = 60.0
+	kick.stats.range_base = 20.0
+	kick.stats.range_per_power = 0.4
+	kick.stats.red_tip_start = 95.0
+	kick.stats.tip_lock_yards = yards
+	kick.stats.ice_veins = iced
+	return float(kick.carry_plan(power, 0.0)["travel"])
+
+
+func _blown_kick(speed: float, direction: float, resist: float, howling: bool, hush: float) -> Dictionary:
+	var kick := KickLogic.new()
+	kick.kick_distance = 50.0
+	kick.wind_speed = int(speed)
+	kick.wind_direction = direction
+	kick.howling_wind = howling
+	kick.stats.visor_resist = resist
+	kick.stats.hush_mph = hush
+	return kick.carry_plan(80.0, 0.0)
+
+
 func _check_wind_visor_path() -> void:
-	for rank in [1, 2, 3, 4, 5, 6, 8, 12]:
-		var expected := 0.0
-		if rank >= 2:
-			expected = 40.0 + 15.0 * float(mini(rank, 6) - 2)
-		check(near(KickLogic.path_percent_for_rank(rank), expected), "Wind Visor rank %s covers %s percent of this kick" % [rank, expected])
+	var visor_paths := {1: 0.0, 2: 0.0, 3: 0.0, 4: 40.0, 5: 55.0, 6: 70.0, 7: 85.0, 8: 100.0, 12: 100.0}
+	for rank in visor_paths:
+		check(near(KickLogic.path_percent_for_rank(int(rank)), float(visor_paths[rank])), "Wind Visor rank %s covers %s percent of this kick" % [rank, visor_paths[rank]])
 	var rules := FileAccess.get_file_as_string("res://scripts/Loadout.gd")
 	var hud := FileAccess.get_file_as_string("res://scripts/hud.gd")
 	check(rules.find("previews wind") < 0 and rules.find("helmet_rank - 5") < 0 and rules.find("wind_preview") < 0, "Wind Visor card text and rules do not forecast later kicks")
@@ -3511,7 +3595,7 @@ func _check_wind_visor_path() -> void:
 	endless.run_mode = "endless"
 	endless.give(Loadout.WIND_VISOR, 8)
 	check(near(endless.stats.path_percent, 100.0) and endless.upcoming_winds().is_empty() and not endless.stats.wind_preview, "Endless rank VIII keeps the full path and adds no visor bonus")
-	check(Loadout.effect_line(Loadout.WIND_VISOR, 8).find("full flight") >= 0 and Loadout.effect_line(Loadout.WIND_VISOR, 3).find("55") >= 0, "the tooltip matches 55% at III and the full flight past VI")
+	check(Loadout.effect_line(Loadout.WIND_VISOR, 8).find("full flight") >= 0 and Loadout.effect_line(Loadout.WIND_VISOR, 3).find("Dotted") < 0 and Loadout.effect_line(Loadout.WIND_VISOR, 4).find("40%") >= 0, "Visor III has no path and Visor IV is 40 percent")
 	var walk := _visor_kick(Kickers.WALK_ON, 12.0, 90.0)
 	var bruce := _visor_kick(Kickers.BIG_BRUCE, 12.0, 90.0)
 	check(bruce.preview_plan()["drift"] > float(walk.preview_plan()["drift"]) * 1.05, "the Farm Ball preview drifts more than Team-Issue in the same wind")
@@ -4036,9 +4120,9 @@ func _check_honest_cards_and_bench() -> void:
 	anchor_run.new_run()
 	anchor_run.give(Loadout.ANCHOR, 6)
 	check(near(anchor_run.stats.power_speed, 58.0), "Anchor VI needles use the table value 0.58")
-	check(Loadout.effect_line(Loadout.WIND_VISOR, 1) == "Shows wind mph and an arrow", "Wind Visor I still names the mph and arrow")
-	check(Loadout.effect_line(Loadout.WIND_VISOR, 2) == "Wind mph and arrow. Dotted path for 40% of this kick", "Wind Visor II names the mph and the 40 percent path")
-	check(Loadout.effect_line(Loadout.WIND_VISOR, 6).begins_with("Wind mph and arrow.") and Loadout.effect_line(Loadout.WIND_VISOR, 12).find("full flight") >= 0, "Wind Visor VI through XII keep the mph line and the full path")
+	check(Loadout.effect_line(Loadout.WIND_VISOR, 1) == "Shows wind mph and an arrow. 10% wind resistance.", "Wind Visor I names the mph, the arrow, and 10% resistance")
+	check(Loadout.effect_line(Loadout.WIND_VISOR, 2) == "Wind mph and an arrow. 15% wind resistance.", "Wind Visor II names 15% resistance and no path")
+	check(Loadout.effect_line(Loadout.WIND_VISOR, 6).find("70%") >= 0 and Loadout.effect_line(Loadout.WIND_VISOR, 12).find("full flight") >= 0, "Wind Visor VI is 70% and XII is the full path")
 	check(Loadout.effect_line(Loadout.ICE_CAGE, 6) == "No red-tip penalty. Immune to Iced. Accuracy needle ×0.90. Perfect +2, Good +4", "Ice Cage VI lists the full package")
 	check(Loadout.effect_line(Loadout.ICE_CAGE, 12) == "No red-tip penalty. Immune to Iced. Accuracy needle ×0.90. Perfect +5, Good +10", "Ice Cage XII lists the grown bands")
 	check(Loadout.effect_line(Loadout.SCOUT_LID, 7) == "+6 rerolls, and two Practice Swings each quarter", "Scout Lid VII says +6 rerolls and two swings")
@@ -4332,8 +4416,8 @@ func _check_ribbons_visor_and_aim_cap() -> void:
 	plain.wind_direction = 90.0
 	var kept := plain.carry_plan(100.0, 0.0)
 	check(near(float(kept["drift"]), 10.0 * 0.0065 * plain.kick_distance), "crosswind drift math is unchanged")
-	check(near(KickLogic.path_percent_for_rank(2), 40.0) and near(KickLogic.path_percent_for_rank(3), 55.0) and near(KickLogic.path_percent_for_rank(4), 70.0) and near(KickLogic.path_percent_for_rank(5), 85.0) and near(KickLogic.path_percent_for_rank(6), 100.0) and near(KickLogic.path_percent_for_rank(12), 100.0), "visor ranks II–XII keep the same path percents")
-	check(Loadout.effect_line(Loadout.WIND_VISOR, 6).find("ending at the posts") >= 0 and Loadout.effect_line(Loadout.WIND_VISOR, 2).find("40") >= 0, "a full visor path says it ends at the posts, and rank II stays at 40 percent")
+	check(near(KickLogic.path_percent_for_rank(4), 40.0) and near(KickLogic.path_percent_for_rank(5), 55.0) and near(KickLogic.path_percent_for_rank(6), 70.0) and near(KickLogic.path_percent_for_rank(7), 85.0) and near(KickLogic.path_percent_for_rank(8), 100.0) and near(KickLogic.path_percent_for_rank(12), 100.0), "visor ranks IV–XII use the shifted path percents")
+	check(Loadout.effect_line(Loadout.WIND_VISOR, 8).find("ending at the posts") >= 0 and Loadout.effect_line(Loadout.WIND_VISOR, 4).find("40%") >= 0, "a full visor path says it ends at the posts, and rank IV is 40 percent")
 	var long_path := KickLogic.new()
 	long_path.kick_distance = 40.0
 	long_path.stats.range_base = 16.0
@@ -4607,7 +4691,7 @@ func _check_soft_caps() -> void:
 	var iron_high := RunLogic.new()
 	iron_high.start_with_kicker(Kickers.WALK_ON)
 	_equip(iron_high, Loadout.IRON_GRIP, 24)
-	check(_same_effect(iron_low.stats, iron_high.stats), "Iron Grip stays finished after VI")
+	check(not iron_low.stats.red_tip_off and not iron_high.stats.red_tip_off and near(iron_low.stats.tip_lock_yards, 11.0) and near(iron_high.stats.tip_lock_yards, 23.0), "Iron Grip XII pays +11 and XXIV pays +23")
 	check(Loadout.effect_line(Loadout.WIND_VISOR, 24).find("full flight") >= 0, "Wind Visor XXIV still describes the full path")
 	check(Loadout.effect_line(Loadout.ANCHOR, 24) == "Needles ×0.40 and +12 yd", "Anchor XXIV shows the floor factor and +12 yd")
 	check(Loadout.effect_line(Loadout.SCOUT_LID, 24).begins_with("+17 rerolls"), "Scout Lid XXIV reads 17 rerolls, got %s" % Loadout.effect_line(Loadout.SCOUT_LID, 24))

@@ -108,6 +108,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "rw1":
+		if not await _capture_rw1():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "c4":
 		if not await _capture_c4():
 			get_tree().quit(1)
@@ -1587,6 +1593,76 @@ func _capture_b5c() -> bool:
 	if not _beams_on_tee("1000"):
 		return false
 	if not await _capture("b5c_1000.png"):
+		return false
+	return true
+
+
+func _capture_rw1() -> bool:
+	board.highlight = 1
+	board.confirm_kicker()
+	board.force_weather(RunLogic.CLEAR)
+	board.run.set_wind(0.0, 0.0)
+	if not _offer_card(Loadout.IRON_GRIP, 6, Loadout.GLOVES):
+		return false
+	if Loadout.effect_line(Loadout.IRON_GRIP, 6).find("+5 yd") < 0:
+		print("iron grip card ", Loadout.effect_line(Loadout.IRON_GRIP, 6))
+		return false
+	if not await _capture("rw1_iron_grip_vi_card.png"):
+		return false
+	if not _offer_card(Loadout.HEAVY, 1, Loadout.CURSE):
+		return false
+	if Loadout.effect_line(Loadout.HEAVY, 1).find("2%") < 0:
+		print("heavy card ", Loadout.effect_line(Loadout.HEAVY, 1))
+		return false
+	if not await _capture("rw1_heavy_ball_card.png"):
+		return false
+	if not _offer_card(Loadout.WIND_VISOR, 4, Loadout.HELMET):
+		return false
+	var visor_line := Loadout.effect_line(Loadout.WIND_VISOR, 4)
+	if visor_line.find("20%") < 0 or visor_line.find("40%") < 0:
+		print("visor card ", visor_line)
+		return false
+	if not await _capture("rw1_visor_iv_card.png"):
+		return false
+	board.run.awaiting_offer = false
+	board.run.offer = []
+	board.run.give(Loadout.HEAVY)
+	board.load_current_kick()
+	board.run.set_wind(0.0, 0.0)
+	board.logic.wind_speed = 0
+	board.logic.wind_direction = 0.0
+	var guard := 0
+	while absf(board.logic.kick_distance - 500.0) > 0.1 and guard < 6:
+		board.cycle_debug_distance()
+		guard += 1
+	board.refresh_view()
+	if absf(board.logic.kick_distance - 500.0) > 0.1 or not board.logic.heavy_ball:
+		print("heavy 500 ", board.logic.kick_distance, " heavy ", board.logic.heavy_ball)
+		return false
+	var plain := KickLogic.new()
+	plain.kick_distance = 500.0
+	plain.stats = board.logic.stats
+	plain.heavy_ball = false
+	plain.wind_speed = 0
+	var bare_travel := float(plain.carry_plan(100.0, 0.0)["travel"])
+	var heavy_travel := float(board.logic.max_range_at_full_power())
+	var hit := bare_travel - heavy_travel
+	if absf(hit - 10.0) > 0.05:
+		print("heavy penalty ", hit)
+		return false
+	if not await _capture("rw1_heavy_500.png"):
+		return false
+	return true
+
+
+func _offer_card(id: String, rank: int, slot: String) -> bool:
+	var kind := Loadout.kind_of(id)
+	board.run.force_offer([{"id": id, "rank": rank, "kind": kind, "slot": slot}])
+	board.run.roll_offer()
+	board.run.awaiting_offer = true
+	board.refresh_view()
+	if board.run.offer.is_empty() or str(board.run.offer[0].get("id", "")) != id:
+		print("offer missed ", id)
 		return false
 	return true
 
