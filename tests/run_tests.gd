@@ -5547,6 +5547,8 @@ func _check_light_beams() -> void:
 	var left_x := _plan_mean_x(game.light_beam_plan(75.0, Vector3(-3.0, 0.0, 75.0)))
 	var right_x := _plan_mean_x(game.light_beam_plan(75.0, Vector3(3.0, 0.0, 75.0)))
 	check(left_x < mid_x - 1.5 and right_x > mid_x + 1.5, "a new hash moves the aim points, left %s center %s right %s" % [left_x, mid_x, right_x])
+	for dist in [35.0, 75.0, 200.0, 500.0, 1000.0]:
+		_check_ground_blend(game, dist)
 	check(near(game.beam_breath(0.0), 1.0) and near(game.beam_breath(2.0), 1.0), "the beam breath returns every 2 seconds")
 	check(near(game.beam_breath(0.5), 1.15) and near(game.beam_breath(1.5), 0.85), "beam intensity breathes plus or minus 15 percent")
 	check(game.BEAM_BREATH_SEC >= 1.5, "the beam breath is not a flicker")
@@ -5556,12 +5558,15 @@ func _check_light_beams() -> void:
 	check(near(game.BEAM_POOL, 0.15), "ground pools are about 15 percent")
 	game.force_weather(RunLogic.CLEAR)
 	check(not game.lights_show() and int(game.lights_look["beams"]) == 0, "a normal kick has no light beams")
+	_check_live_ground(game, float(game.logic.kick_distance), false)
+	check(_glare_hidden(game), "a normal kick has no lamp glare")
 	check(_dusk_channel(game, 0) > 0.99 and _dusk_channel(game, 2) > 0.99, "a normal sky is not dusk tinted")
 	check(game._stand_mats.size() > 0 and near(game._stand_mats[0].albedo_color.r, 1.0), "stands stay full strength on a normal kick")
 	game.run.practicing = true
 	game.run.weather = RunLogic.LIGHTS
 	game.refresh_view()
 	check(not game.lights_show() and int(game.lights_look["beams"]) == 0, "practice swing does not turn the beams on")
+	check(_glare_hidden(game), "practice swing does not turn the glare on")
 	game.run.practicing = false
 	game.force_weather(RunLogic.LIGHTS)
 	game.glare_time = 0.5
@@ -5571,20 +5576,26 @@ func _check_light_beams() -> void:
 	var held_spot := float(game.logic.start_lateral_yards)
 	_aim_live_kick(game, 35.0, 0.0)
 	check(_pools_near_tee(game, Vector3(0.0, 0.0, 35.0)), "35 center pools sit on the tee")
+	_check_live_ground(game, 35.0, true)
 	_aim_live_kick(game, 75.0, 0.0)
 	var live_mid := _pool_mean_x(game)
 	_aim_live_kick(game, 75.0, -3.0)
 	check(_pool_mean_x(game) < live_mid - 1.5, "changing only the hash moves the beams on the field")
 	check(_pools_near_tee(game, Vector3(-3.0, 0.0, 75.0)), "75 left-hash pools follow the kicker")
+	_check_live_ground(game, 75.0, true)
 	_aim_live_kick(game, 75.0, 3.0)
 	check(_pool_mean_x(game) > live_mid + 1.5, "a right hash moves the beams the other way")
 	check(_pools_near_tee(game, Vector3(3.0, 0.0, 75.0)), "75 right-hash pools follow the kicker")
 	_aim_live_kick(game, 200.0, 0.0)
 	check(_pools_near_tee(game, Vector3(0.0, 0.0, 200.0)), "200 yard pools sit on the tee")
+	_check_live_ground(game, 200.0, true)
 	_aim_live_kick(game, 500.0, 0.0)
 	check(_pools_near_tee(game, Vector3(0.0, 0.0, 500.0)), "500 yard pools sit on the tee")
+	_check_live_ground(game, 500.0, true)
 	_aim_live_kick(game, 1000.0, 6.0)
 	check(_pools_near_tee(game, Vector3(6.0, 0.0, 1000.0)), "1000 yard pools sit on the tee")
+	_check_live_ground(game, 1000.0, true)
+	check(_glare_count(game) >= 1, "a facing bank has a glare on the boss kick")
 	var retry_tee := Vector3(6.0, 0.0, 1000.0)
 	var retry_x := _pool_mean_x(game)
 	game.run.awaiting_offer = true
@@ -5628,6 +5639,8 @@ func _check_light_beams() -> void:
 	check(game.lights_show() and game._beams.visible and _pools_near_tee(game, Vector3(held_spot, 0.0, held_dist)), "a retry of the same kick brings the beams back on that tee")
 	game.force_weather(RunLogic.CLEAR)
 	check(not game.lights_show() and int(game.lights_look["beams"]) == 0, "the next kick without the boss has no beams")
+	_check_live_ground(game, game.logic.kick_distance, false)
+	check(_glare_hidden(game), "a normal kick hides the lamp glare")
 	var shell := FileAccess.get_file_as_string("res://scripts/hud.gd")
 	check(shell.find("_draw_lights_glare") < 0, "the flat sky haze is gone")
 	game.free()
@@ -5652,11 +5665,18 @@ func _assert_beam_aims(game, dist: float, spot: float, label: String) -> void:
 		var points: PackedVector3Array = item["points"]
 		check(points.size() >= 4, "%s beam has a shaft" % label)
 		var head: Vector3 = points[0]
-		var hold: Vector3 = points[2]
+		var plunge: Vector3 = points[points.size() - 2]
 		var tail: Vector3 = points[points.size() - 1]
 		check(head.distance_to(origin) < 0.05, "%s shaft starts at the lamp" % label)
-		check(hold.y > 6.0 and Vector2(hold.x - landing.x, hold.z - landing.z).length() < 8.0, "%s shaft reaches the air just in front of the kicker" % label)
+		var horiz := Vector2(plunge.x - tail.x, plunge.z - tail.z).length()
+		var angle := rad_to_deg(atan2(plunge.y - tail.y, maxf(horiz, 0.001)))
+		check(horiz >= 8.0, "%s plunge starts %.2f yards out" % [label, horiz])
+		check(angle >= 55.0, "%s plunge is %.1f degrees, shallower than 55" % [label, angle])
+		check(plunge.z > tail.z, "%s plunge comes toward the camera" % label)
 		check(Vector2(tail.x - tee.x, tail.z - tee.z).length() <= 4.0, "%s shaft ends on the kicker" % label)
+		check(game.glare_alpha_at(origin.distance_to(tee), 1.15) <= 0.12, "%s glare stays off the tee" % label)
+		if bool(item["end"]):
+			check(bool(item["glare"]), "%s end-zone bank faces the camera but has no glare" % label)
 		if bool(item["end"]):
 			ends += 1
 			check(origin.z < 1.0, "%s end-zone lamp stays behind the posts" % label)
@@ -5718,6 +5738,82 @@ func _pools_near_tee(game, tee: Vector3) -> bool:
 		if Vector2(at.x - tee.x, at.z - tee.z).length() > 4.0:
 			return false
 	return count >= 4 and count <= 8
+
+
+func _check_ground_blend(game, dist: float) -> void:
+	var cover: Dictionary = game.ground_cover(dist)
+	var half := float(cover["half_x"])
+	var min_z := float(cover["min_z"])
+	var jump := 0.0
+	var rows: Array[float] = [dist * 0.55, -20.0, min_z * 0.5]
+	for z in rows:
+		var prev := float(game.ground_luma(0.0, z, dist, true))
+		var x := 4.0
+		while x <= half + 0.01:
+			var luma := float(game.ground_luma(x, z, dist, true))
+			jump = maxf(jump, absf(luma - prev))
+			prev = luma
+			x += 4.0
+	var prev_z := float(game.ground_luma(0.0, 4.0, dist, true))
+	var z := 0.0
+	while z >= min_z - 0.01:
+		var luma_z := float(game.ground_luma(0.0, z, dist, true))
+		jump = maxf(jump, absf(luma_z - prev_z))
+		prev_z = luma_z
+		var prev_side := float(game.ground_luma(36.0, z + 4.0, dist, true))
+		var side := float(game.ground_luma(36.0, z, dist, true))
+		jump = maxf(jump, absf(side - prev_side))
+		z -= 4.0
+	check(jump < 0.05, "ground brightness has no boxed edge at %s yards (jump %.3f)" % [dist, jump])
+	check(float(game.ground_fade(0.0, dist * 0.5, dist)) < 0.02, "the playable strip stays grass at %s" % dist)
+	check(float(game.ground_fade(half, dist * 0.5, dist)) > 0.98, "the side of the view fades out at %s" % dist)
+	check(float(game.ground_fade(0.0, min_z, dist)) > 0.98, "past the posts fades out at %s" % dist)
+	var rig: Dictionary = game.camera_rig(dist, 6.0)
+	var cam: Vector3 = rig["position"]
+	var fov := float(rig["fov"])
+	var h_half := atan(tan(deg_to_rad(fov) * 0.5) * (1280.0 / 720.0))
+	var need := absf(cam.x) + (cam.z - min_z) * tan(h_half)
+	check(half + 0.01 >= need, "the ground cover reaches a hashed camera at %s (need %.1f have %.1f)" % [dist, need, half])
+
+
+func _check_live_ground(game, dist: float, dusk: bool) -> void:
+	var cover: Dictionary = game.ground_cover(dist)
+	var half := float(cover["half_x"])
+	var min_z := float(cover["min_z"])
+	var skirt: MeshInstance3D = game._marks.get_node("GrassSkirt")
+	var box := skirt.mesh.get_aabb()
+	check(box.position.x <= -half + 1.0 and box.position.x + box.size.x >= half - 1.0, "the skirt covers the view width at %s" % dist)
+	check(box.position.z <= min_z + 1.0, "the skirt covers past the posts at %s" % dist)
+	var edge: Variant = skirt.material_override.get_shader_parameter("edge_color")
+	var blue := -1.0
+	if edge is Vector3:
+		blue = (edge as Vector3).z
+	elif edge is Color:
+		blue = (edge as Color).b
+	if dusk:
+		check(blue < 0.86 and blue > 0.7, "the lights wash the ground extension at %s (blue %.2f)" % [dist, blue])
+	else:
+		check(blue > 0.9, "a normal kick does not dusk-wash the ground (blue %.2f)" % blue)
+
+
+func _glare_count(game) -> int:
+	var count := 0
+	if game._beams == null:
+		return 0
+	for child in game._beams.get_children():
+		if not str(child.name).begins_with("Glare"):
+			continue
+		count += 1
+		var flare: MeshInstance3D = child
+		var size := flare.mesh.get_aabb().size
+		check(size.x < 18.0 and size.y < 18.0 and size.z < 18.0, "glare is a lamp flare, not a full-screen quad")
+	return count
+
+
+func _glare_hidden(game) -> bool:
+	if game._beams == null:
+		return true
+	return not game._beams.visible
 
 
 func _dusk_channel(game, index: int) -> float:

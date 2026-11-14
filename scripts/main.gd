@@ -64,6 +64,8 @@ var glare_time := 0.0
 var _beams: Node3D
 var _beam_mat: ShaderMaterial
 var _pool_mat: ShaderMaterial
+var _glare_mat: ShaderMaterial
+var _skirt_mat: ShaderMaterial
 var _beam_span := -1.0
 var _beam_tee_x := 0.0
 var _beam_tee_z := -1.0
@@ -121,6 +123,13 @@ const BEAM_BREATH := 0.15
 const BEAM_PEAK := 0.30
 const BEAM_POOL := 0.15
 const BEAM_FADE_POW := 1.35
+const GLARE_PEAK := 0.40
+const GLARE_RADIUS := 5.5
+const PLAY_HALF := 27.0
+const PLAY_Z := -8.0
+const CLEAR_EDGE := Color(0.64, 0.80, 0.95)
+const PLUNGE_DEGREES := 58.0
+const PLUNGE_RUN := 8.2
 # About 35% darker than white, pulled toward cool navy. Stands are about 20% darker.
 const DUSK_SKY := Color(0.58, 0.66, 0.82)
 const DUSK_STAND := Color(0.78, 0.80, 0.84)
@@ -1440,14 +1449,14 @@ func _ensure_field(distance: float) -> void:
 	_marks = Node3D.new()
 	_marks.name = "Markings"
 	_world.add_child(_marks)
-	var rig := camera_rig(span, 0.0)
-	var back := float(rig["position"].z) - span
-	var far_z := span + back + 8.0
-	var near_z := -8.0
+	var cover := ground_cover(span)
+	var far_z: float = cover["max_z"]
+	var near_z := PLAY_Z
 	var length := far_z - near_z
 	var mid_z := (far_z + near_z) * 0.5
 	_paint_box(_marks, Vector3(54, 0.4, length), Vector3(0, -0.2, mid_z), Color(0.18, 0.32, 0.16))
-	_paint_grass(27.0, near_z, far_z)
+	_paint_grass(PLAY_HALF, near_z, far_z)
+	_paint_ground_skirt(cover)
 	var paint := SurfaceTool.new()
 	paint.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var white := Color(0.93, 0.95, 0.92)
@@ -1579,7 +1588,7 @@ func _paint_grass(half_x: float, z0: float, z1: float) -> void:
 	body.material_override = _grass_material()
 	body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_marks.add_child(body)
-	grass_bounds = {"min_z": z0, "max_z": z1, "tile": GRASS_TILE_YARDS}
+	grass_bounds = {"min_z": z0, "max_z": z1, "half_x": half_x, "tile": GRASS_TILE_YARDS}
 
 
 func _grass_material() -> StandardMaterial3D:
@@ -1591,6 +1600,100 @@ func _grass_material() -> StandardMaterial3D:
 	if texture != null:
 		paint.albedo_texture = texture
 	return paint
+
+
+func ground_cover(span: float) -> Dictionary:
+	# The playable strip is 54 yards wide and stops 8 yards past the posts.
+	# Past 75 yards the camera's view is much wider than that, and it sees
+	# ground behind the posts, so the cover has to reach the frustum and then fade.
+	var rig := camera_rig(span, 0.0)
+	var cam: Vector3 = rig["position"]
+	var fov := float(rig["fov"])
+	var aspect := KickConstants.WINDOW_WIDTH / KickConstants.WINDOW_HEIGHT
+	var h_half := atan(tan(deg_to_rad(fov) * 0.5) * aspect)
+	var past := maxf(80.0, span * 0.25)
+	var min_z := PLAY_Z - past
+	var dist := cam.z - min_z
+	var half := dist * tan(h_half) * 1.25 + 16.0
+	return {
+		"half_x": maxf(half, PLAY_HALF + 40.0),
+		"min_z": min_z,
+		"max_z": cam.z + 8.0,
+		"play_half": PLAY_HALF,
+		"play_z": PLAY_Z,
+	}
+
+
+func ground_fade(x: float, z: float, span: float) -> float:
+	var cover := ground_cover(span)
+	var half: float = cover["half_x"]
+	var min_z: float = cover["min_z"]
+	var fade_x := 0.0
+	if half > PLAY_HALF + 0.01:
+		fade_x = smoothstep(PLAY_HALF, half, absf(x))
+	var fade_z := 0.0
+	if z < PLAY_Z and min_z < PLAY_Z - 0.01:
+		var t := clampf((PLAY_Z - z) / (PLAY_Z - min_z), 0.0, 1.0)
+		fade_z = t * t * (3.0 - 2.0 * t)
+	return clampf(maxf(fade_x, fade_z), 0.0, 1.0)
+
+
+func ground_luma(x: float, z: float, span: float, dusk: bool) -> float:
+	var fade := ground_fade(x, z, span)
+	var edge := DUSK_SKY if dusk else CLEAR_EDGE
+	var edge_l := edge.r * 0.2126 + edge.g * 0.7152 + edge.b * 0.0722
+	return lerpf(0.36, edge_l, fade)
+
+
+func _paint_ground_skirt(cover: Dictionary) -> void:
+	var half: float = cover["half_x"]
+	var min_z: float = cover["min_z"]
+	var max_z: float = cover["max_z"]
+	var y := 0.025
+	var tool := SurfaceTool.new()
+	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	_add_skirt_quad(tool, PLAY_HALF, half, min_z, max_z, y)
+	_add_skirt_quad(tool, -half, -PLAY_HALF, min_z, max_z, y)
+	_add_skirt_quad(tool, -PLAY_HALF, PLAY_HALF, min_z, PLAY_Z, y)
+	var body := MeshInstance3D.new()
+	body.name = "GrassSkirt"
+	body.mesh = tool.commit()
+	_ensure_skirt_material(cover)
+	body.material_override = _skirt_mat
+	body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_marks.add_child(body)
+	grass_bounds["min_z"] = min_z
+	grass_bounds["half_x"] = half
+	grass_bounds["max_z"] = max_z
+
+
+func _add_skirt_quad(tool: SurfaceTool, x0: float, x1: float, z0: float, z1: float, y: float) -> void:
+	var corners := [
+		Vector3(x0, y, z0),
+		Vector3(x1, y, z0),
+		Vector3(x1, y, z1),
+		Vector3(x0, y, z1),
+	]
+	for index in [0, 1, 2, 0, 2, 3]:
+		tool.set_normal(Vector3.UP)
+		tool.add_vertex(corners[index])
+
+
+func _ensure_skirt_material(cover: Dictionary) -> void:
+	if _skirt_mat == null:
+		var shader := Shader.new()
+		shader.code = "shader_type spatial;\nrender_mode unshaded, cull_disabled;\nuniform sampler2D grass_tex : source_color, filter_nearest, repeat_enable;\nuniform vec3 edge_color = vec3(0.64, 0.80, 0.95);\nuniform float play_half = 27.0;\nuniform float cover_half = 80.0;\nuniform float play_z = -8.0;\nuniform float cover_z = -80.0;\nuniform float tile = 12.0;\nvarying vec3 world_pos;\nvoid vertex() {\n\tworld_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;\n}\nvoid fragment() {\n\tvec3 grass = texture(grass_tex, world_pos.xz / tile).rgb;\n\tfloat fade_x = smoothstep(play_half, cover_half, abs(world_pos.x));\n\tfloat fade_z = 0.0;\n\tif (world_pos.z < play_z) {\n\t\tfloat t = clamp((play_z - world_pos.z) / max(play_z - cover_z, 0.001), 0.0, 1.0);\n\t\tfade_z = t * t * (3.0 - 2.0 * t);\n\t}\n\tfloat fade = max(fade_x, fade_z);\n\tALBEDO = mix(grass, edge_color, fade);\n}\n"
+		_skirt_mat = ShaderMaterial.new()
+		_skirt_mat.shader = shader
+		var texture := load(GRASS_PATH) as Texture2D
+		if texture != null:
+			_skirt_mat.set_shader_parameter("grass_tex", texture)
+		_skirt_mat.set_shader_parameter("tile", GRASS_TILE_YARDS)
+		_skirt_mat.set_shader_parameter("edge_color", Vector3(CLEAR_EDGE.r, CLEAR_EDGE.g, CLEAR_EDGE.b))
+	_skirt_mat.set_shader_parameter("play_half", PLAY_HALF)
+	_skirt_mat.set_shader_parameter("cover_half", float(cover["half_x"]))
+	_skirt_mat.set_shader_parameter("play_z", PLAY_Z)
+	_skirt_mat.set_shader_parameter("cover_z", float(cover["min_z"]))
 
 
 func sky_path_for(weather: String) -> String:
@@ -2134,6 +2237,9 @@ func _apply_lights_look() -> void:
 		_sky_mat.set_shader_parameter("dusk_tint", Vector3(sky.r, sky.g, sky.b))
 	for paint in _stand_mats:
 		paint.albedo_color = stands
+	if _skirt_mat != null:
+		var edge := DUSK_SKY if on else CLEAR_EDGE
+		_skirt_mat.set_shader_parameter("edge_color", Vector3(edge.r, edge.g, edge.b))
 	var shown := 0
 	if on and _beams != null:
 		for child in _beams.get_children():
@@ -2169,6 +2275,13 @@ func _ensure_beam_materials() -> void:
 	_pool_mat.render_priority = -6
 	_pool_mat.set_shader_parameter("peak", BEAM_POOL)
 	_pool_mat.set_shader_parameter("breath", 1.0)
+	var glare_shader := Shader.new()
+	glare_shader.code = "shader_type spatial;\nrender_mode unshaded, blend_add, cull_disabled, depth_draw_never, shadows_disabled, fog_disabled;\nuniform float peak = 0.40;\nuniform float breath = 1.0;\nuniform vec3 warm = vec3(1.0, 0.96, 0.86);\nvoid fragment() {\n\tvec2 p = UV * 2.0 - 1.0;\n\tfloat soft = smoothstep(1.0, 0.2, dot(p, p));\n\tALBEDO = warm;\n\tALPHA = peak * breath * soft;\n}\n"
+	_glare_mat = ShaderMaterial.new()
+	_glare_mat.shader = glare_shader
+	_glare_mat.render_priority = -7
+	_glare_mat.set_shader_parameter("peak", GLARE_PEAK)
+	_glare_mat.set_shader_parameter("breath", 1.0)
 
 
 func _pulse_beams() -> void:
@@ -2179,6 +2292,8 @@ func _pulse_beams() -> void:
 		scale = beam_breath(glare_time)
 	_beam_mat.set_shader_parameter("breath", scale)
 	_pool_mat.set_shader_parameter("breath", scale)
+	if _glare_mat != null:
+		_glare_mat.set_shader_parameter("breath", scale)
 
 
 func light_beam_plan(span: float, tee: Vector3) -> Array:
@@ -2266,16 +2381,40 @@ func _aim_landing(tower: Dictionary, tee: Vector3, slot: int) -> Vector3:
 	return Vector3(tee.x + offset.x, 0.0, tee.z + offset.y)
 
 
-func _shaft_hold(origin: Vector3, landing: Vector3, cam: Vector3) -> Vector3:
-	# Just in front of the tee, but not so high that the close camera
-	# throws the bright end out the top of the frame.
-	var z := landing.z - 5.0
-	if z < 1.0:
-		z = landing.z
-	var ahead := maxf(cam.z - z, 2.0)
-	var max_y := cam.y + ahead * 0.30
-	var y := clampf(minf(origin.y * 0.55, max_y), 4.8, 9.0)
-	return Vector3(landing.x, y, z)
+func _plunge_point(landing: Vector3, cam: Vector3) -> Vector3:
+	# The last stretch starts at least 8 yards out and drops toward the camera.
+	# A low hold five yards toward the posts is what made the shafts look flat.
+	var z := landing.z + PLUNGE_RUN
+	var x := landing.x
+	var front := cam.z - 1.25
+	if z > front:
+		z = front
+		var dz := maxf(z - landing.z, 0.05)
+		var need := sqrt(maxf(PLUNGE_RUN * PLUNGE_RUN - dz * dz, 0.0))
+		x = landing.x + need
+	var horiz := Vector2(x - landing.x, z - landing.z).length()
+	var y := 0.15 + horiz * tan(deg_to_rad(PLUNGE_DEGREES))
+	return Vector3(x, y, z)
+
+
+func _lamp_faces_camera(origin: Vector3, end_zone: bool, cam: Vector3) -> bool:
+	var forward := Vector3(0.0, -0.15, 1.0)
+	if not end_zone:
+		var side := signf(origin.x)
+		if side == 0.0:
+			side = 1.0
+		forward = Vector3(-side, -0.2, 0.45)
+	forward = forward.normalized()
+	var to_cam := cam - origin
+	if to_cam.length_squared() < 0.01:
+		return false
+	return forward.dot(to_cam.normalized()) > 0.25
+
+
+func glare_alpha_at(dist: float, breath: float = 1.0) -> float:
+	var t := clampf(dist / GLARE_RADIUS, 0.0, 1.0)
+	var soft := 1.0 - smoothstep(0.2, 1.0, t)
+	return GLARE_PEAK * breath * soft
 
 
 func _beam_from_tower(tower: Dictionary, span: float, tee: Vector3, slot: int) -> Dictionary:
@@ -2290,25 +2429,24 @@ func _beam_from_tower(tower: Dictionary, span: float, tee: Vector3, slot: int) -
 	var widths := PackedFloat32Array()
 	if end:
 		lip = Vector3(lerpf(origin.x, landing.x, 0.12), STAND_HEIGHT + 0.55, lerpf(origin.z, landing.z, 0.08))
-		widths = PackedFloat32Array([8.0, 10.0, 7.0, 4.5, 3.2])
+		widths = PackedFloat32Array([8.0, 10.0, 6.0, 3.2])
 	else:
 		var side := signf(x)
 		if side == 0.0:
 			side = 1.0
-		# Clear the roof, then run the shaft across the field to the tee.
+		# Clear the roof, then run high and plunge toward the camera.
 		lip = Vector3(x - side * (LIGHT_SIDE_OUT + 0.75), maxf(origin.y - 0.35, STAND_HEIGHT + 0.45), lerpf(z, landing.z, 0.12))
-		widths = PackedFloat32Array([8.0, 10.0, 7.0, 4.5, 3.2])
-	# The bright end sits just in front of the tee, low enough to stay in the
-	# close camera. A point straight overhead leaves the frame and reads as sky.
+		widths = PackedFloat32Array([8.0, 10.0, 6.0, 3.2])
 	var cam: Vector3 = camera_rig(span, tee.x)["position"]
-	var hold := _shaft_hold(origin, landing, cam)
-	var over := Vector3(landing.x, 5.4, landing.z)
-	var points := PackedVector3Array([origin, lip, hold, over, grass])
+	var plunge := _plunge_point(landing, cam)
+	var points := PackedVector3Array([origin, lip, plunge, grass])
 	return {
 		"end": end,
 		"origin": origin,
 		"lip": lip,
 		"landing": landing,
+		"plunge": plunge,
+		"glare": _lamp_faces_camera(origin, end, cam),
 		"points": points,
 		"widths": widths,
 	}
@@ -2356,6 +2494,15 @@ func _layout_light_beams(span: float) -> void:
 		pool.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		pool.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
 		_beams.add_child(pool)
+		if bool(item["glare"]):
+			var origin: Vector3 = item["origin"]
+			var glare := MeshInstance3D.new()
+			glare.name = "Glare%d" % (index - 1)
+			glare.mesh = _glare_mesh(cam, origin, GLARE_RADIUS)
+			glare.material_override = _glare_mat
+			glare.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			glare.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
+			_beams.add_child(glare)
 
 
 func _beam_mesh(points: PackedVector3Array, widths: PackedFloat32Array, cam: Vector3) -> ArrayMesh:
@@ -2410,6 +2557,30 @@ func _beam_ribbon(tool: SurfaceTool, points: PackedVector3Array, widths: PackedF
 func _beam_vertex(tool: SurfaceTool, corner: Dictionary) -> void:
 	tool.set_uv(corner["uv"])
 	tool.add_vertex(corner["at"])
+
+
+func _glare_mesh(cam: Vector3, origin: Vector3, radius: float) -> ArrayMesh:
+	var to_cam := cam - origin
+	if to_cam.length_squared() < 0.01:
+		to_cam = Vector3(0.0, 0.0, 1.0)
+	var normal := to_cam.normalized()
+	var up := Vector3.UP
+	if absf(normal.dot(up)) > 0.92:
+		up = Vector3.RIGHT
+	var right := up.cross(normal).normalized()
+	var cam_up := normal.cross(right).normalized()
+	var center := origin + normal * 0.35
+	var tool := SurfaceTool.new()
+	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var corners := [
+		{"at": center - right * radius - cam_up * radius, "uv": Vector2(0, 0)},
+		{"at": center + right * radius - cam_up * radius, "uv": Vector2(1, 0)},
+		{"at": center + right * radius + cam_up * radius, "uv": Vector2(1, 1)},
+		{"at": center - right * radius + cam_up * radius, "uv": Vector2(0, 1)},
+	]
+	for index in [0, 1, 2, 0, 2, 3]:
+		_beam_vertex(tool, corners[index])
+	return tool.commit()
 
 
 func _pool_mesh(half_x: float, half_z: float) -> ArrayMesh:
