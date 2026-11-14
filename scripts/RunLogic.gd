@@ -507,7 +507,7 @@ func prepare_kick_stats() -> void:
 	if stats.wraps_yards > 0.0 and weather != CLEAR:
 		var bonus := stats.wraps_yards
 		if has_curse(Loadout.HOWLING):
-			bonus *= 1.15
+			bonus *= Loadout.HOWLING_ITEM
 		stats.range_bonus += bonus
 	if weather == BIG_GAME:
 		var base := KickerStats.new()
@@ -558,9 +558,15 @@ func cycle_range_fixture() -> void:
 	_strip_range_preview()
 	cleats_id = Loadout.CANNON
 	cleats_rank = 24
-	if _range_step == 3:
-		helmet_id = Loadout.DRIVE_LID
-		helmet_rank = 24
+	helmet_id = Loadout.DRIVE_LID
+	helmet_rank = 24
+	if _range_step == 2:
+		return
+	gloves_id = Loadout.HIGH_AIR
+	gloves_rank = 24
+	perks = [{"id": Loadout.GLASS_LEG, "rank": 6}]
+	curse_ids = [Loadout.SHAKY, Loadout.STONE]
+	active_vitamins = {Vitamins.PROTEIN: 1}
 
 
 func cycle_style_fixture() -> void:

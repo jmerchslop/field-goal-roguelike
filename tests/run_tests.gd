@@ -1666,12 +1666,12 @@ func _check_curses_and_rarity() -> void:
 	check(not iced.meter_hidden(false, 1.0), "Iced does not hide the meter before the meter starts")
 	iced.set_wind(0.0, 0.0)
 	iced.resolve_kick("GOOD", 2.0, false)
-	check(iced.score_line.find("0.50 curse") >= 0, "Iced shows +0.5 Mult, got %s" % iced.score_line)
+	check(iced.score_line.find("0.75 curse") >= 0, "Iced shows +0.75 Mult, got %s" % iced.score_line)
 	var howl := RunLogic.new()
 	howl.new_run()
 	howl.give(Loadout.CANNON, 1)
 	howl.give(Loadout.HOWLING)
-	check(near(howl.stats.range_bonus, 6.0 * 1.15), "Howling Wind makes Cannon Cleats 15% stronger")
+	check(near(howl.stats.range_bonus, 6.0 * 1.10), "Howling Wind makes Cannon Cleats 10% stronger")
 	check(howl.shown_wind_speed() == 0, "calm wind stays calm under Howling Wind")
 	howl.set_wind(10.0, 90.0)
 	check(howl.shown_wind_speed() == 15, "Howling Wind shows 15 mph when the saved wind is 10")
@@ -2059,7 +2059,7 @@ func _check_rank_caps_and_range() -> void:
 	howl.new_run()
 	howl.give(Loadout.HOWLING)
 	howl.give(Loadout.TWO_MINUTE, 1)
-	check(near(howl.stats.drill_mult, 0.5 * 1.15), "Howling Wind boosts Two-Minute Drill by 15%")
+	check(near(howl.stats.drill_mult, 0.5 * 1.10), "Howling Wind boosts Two-Minute Drill by 10%")
 	var locked := RunLogic.new()
 	locked.new_run()
 	locked.give(Loadout.DEEP_BENCH, 1)
@@ -2639,7 +2639,7 @@ func _check_endless_and_farm() -> void:
 	bruce.give(Loadout.STONE)
 	bruce.give(Loadout.SHAKY)
 	var piled := bruce.stats.range_base + bruce.stats.range_per_power * 100.0 + bruce.stats.range_bonus
-	check(piled >= 200.0 and near(piled, 221.0), "Bruce's range pile reaches about 221 yards, got %s" % piled)
+	check(piled >= 200.0 and near(piled, 229.0), "Bruce's range pile reaches about 229 yards, got %s" % piled)
 	var walk := RunLogic.new()
 	walk.start_with_kicker(Kickers.WALK_ON)
 	walk.give(Loadout.CANNON, 12)
@@ -2651,7 +2651,7 @@ func _check_endless_and_farm() -> void:
 	walk.give(Loadout.STONE)
 	walk.give(Loadout.SHAKY)
 	var walk_pile := walk.stats.range_base + walk.stats.range_per_power * 100.0 + walk.stats.range_bonus
-	check(walk_pile >= 200.0 and near(walk_pile, 216.0), "Walk-On's range pile reaches about 216 yards, got %s" % walk_pile)
+	check(walk_pile >= 200.0 and near(walk_pile, 224.0), "Walk-On's range pile reaches about 224 yards, got %s" % walk_pile)
 	var howl := RunLogic.new()
 	howl.start_with_kicker(Kickers.BIG_BRUCE)
 	howl.run_mode = "endless"
@@ -2660,7 +2660,7 @@ func _check_endless_and_farm() -> void:
 	howl.give(Loadout.GLASS_LEG, 6)
 	howl.give(Loadout.HOWLING)
 	var howled := howl.stats.range_base + howl.stats.range_per_power * 100.0 + howl.stats.range_bonus
-	check(near(howled, 65.0 + (72.0 + 24.0 + 48.0) * 1.15), "Howling Wind multiplies the Endless range bonuses, got %s" % howled)
+	check(near(howled, 65.0 + (72.0 + 24.0 + 48.0) * 1.10), "Howling Wind multiplies the Endless range bonuses, got %s" % howled)
 	var low := KickLogic.new()
 	Kickers.apply_to(low.stats, Kickers.BIG_BRUCE)
 	low.kick_distance = 48.0
@@ -3538,7 +3538,7 @@ func _check_drive_lid_and_power_safety() -> void:
 	check(near(bruce.stats.range_base + bruce.stats.range_per_power * 100.0 + bruce.stats.range_bonus, 69.0), "Drive Lid I makes that Bruce 69 yards")
 	check(near(bruce.stats.range_bonus, 4.0) and not bruce.stats.flag_reader and not bruce.stats.thin_air, "Drive Lid I is only +4 yards")
 	bruce.give(Loadout.HOWLING)
-	check(near(bruce.stats.range_bonus, 4.6), "Howling Wind makes Drive Lid I +4.6 yards")
+	check(near(bruce.stats.range_bonus, 4.4), "Howling Wind makes Drive Lid I +4.4 yards")
 	var big := RunLogic.new()
 	big.start_with_kicker(Kickers.BIG_BRUCE)
 	big.give(Loadout.DRIVE_LID, 1)
@@ -4392,9 +4392,9 @@ func _check_equipment_xxiv() -> void:
 		check(Loadout.cannon_yards(rank) == 6 * rank, "Cannon rank %d stays 6 times the rank" % rank)
 		check(Loadout.drive_yards(rank) == 4 * rank, "Drive Lid rank %d stays 4 times the rank" % rank)
 		check(Loadout.high_air_yards(rank) == 2 * rank, "High-Air rank %d stays 2 times the rank" % rank)
-	var cannon_late := [97, 125, 156, 190, 227, 267, 310, 356, 405, 457, 512, 570]
-	var drive_late := [65, 84, 105, 128, 153, 180, 209, 240, 273, 308, 345, 384]
-	var air_late := [32, 41, 51, 62, 74, 87, 101, 116, 132, 149, 167, 186]
+	var cannon_late := [90, 111, 134, 159, 187, 216, 248, 282, 318, 357, 398, 441]
+	var drive_late := [61, 75, 90, 107, 126, 146, 167, 190, 214, 240, 268, 297]
+	var air_late := [30, 37, 44, 52, 61, 71, 81, 92, 104, 116, 130, 144]
 	for i in cannon_late.size():
 		var rank := 13 + i
 		check(Loadout.cannon_yards(rank) == int(cannon_late[i]), "Cannon %s is the table total" % Loadout.rank_label(rank))
@@ -4417,11 +4417,12 @@ func _check_equipment_xxiv() -> void:
 	var bruce_lid := _full_power_range(Kickers.BIG_BRUCE, "", 0, Loadout.DRIVE_LID, 12)
 	check(near(bruce_lid, 113.0), "Bruce with Drive Lid XII is 113 yards, got %s" % bruce_lid)
 	var willow := _two_power_range(Kickers.WILLOW)
-	check(near(willow, 1004.0), "Willow with Cannon XXIV and Drive Lid XXIV is 1004, got %s" % willow)
+	check(near(willow, 788.0), "Willow with Cannon XXIV and Drive Lid XXIV is 788, got %s" % willow)
 	var cole := _two_power_range(Kickers.COLE)
-	check(near(cole, 1024.0), "Cole with Cannon XXIV and Drive Lid XXIV is 1024, got %s" % cole)
-	check(near(_one_power_range(Kickers.WILLOW), 620.0), "Willow with only Cannon XXIV is 620")
-	check(near(_one_power_range(Kickers.COLE), 640.0), "Cole with only Cannon XXIV is 640")
+	check(near(cole, 808.0), "Cole with Cannon XXIV and Drive Lid XXIV is 808, got %s" % cole)
+	check(willow < 1000.0 and cole < 1000.0, "Cannon XXIV plus Drive XXIV is short of 1000")
+	check(near(_one_power_range(Kickers.WILLOW), 491.0), "Willow with only Cannon XXIV is 491")
+	check(near(_one_power_range(Kickers.COLE), 511.0), "Cole with only Cannon XXIV is 511")
 	var stacked := RunLogic.new()
 	stacked.start_with_kicker(Kickers.COLE)
 	stacked.run_mode = "endless"
@@ -4464,22 +4465,77 @@ func _two_power_range(kicker_id: String) -> float:
 	return _full_power_range(kicker_id, Loadout.CANNON, 24, Loadout.DRIVE_LID, 24)
 
 
+func _pace_range(kicker_id: String, air_rank: int, helpers: bool) -> float:
+	var run := RunLogic.new()
+	run.start_with_kicker(kicker_id)
+	run.run_mode = "endless"
+	run.cleats_id = Loadout.CANNON
+	run.cleats_rank = 24
+	run.helmet_id = Loadout.DRIVE_LID
+	run.helmet_rank = 24
+	run.gloves_id = Loadout.HIGH_AIR
+	run.gloves_rank = air_rank
+	if helpers:
+		run.perks = [{"id": Loadout.GLASS_LEG, "rank": 6}]
+		run.curse_ids = [Loadout.SHAKY, Loadout.STONE]
+		run.active_vitamins[Vitamins.PROTEIN] = 1
+	run.prepare_kick_stats()
+	var kick := KickLogic.new()
+	kick.stats = run.stats
+	kick.wind_speed = 0
+	kick.wind_direction = 0.0
+	return kick.max_range_at_full_power()
+
+
 func _one_power_range(kicker_id: String) -> float:
 	return _full_power_range(kicker_id, Loadout.CANNON, 24, "", 0)
 
 
 func _check_soft_caps() -> void:
-	var names := [Loadout.PINPOINT, Loadout.ANCHOR, Loadout.STICKER, Loadout.ICE_CAGE, Loadout.SCOUT_LID, Loadout.DOINK_CAP, Loadout.REPLAY_GLOVES, Loadout.WEATHER_WRAPS, Loadout.IRON_GRIP]
-	for id in names:
+	var growing := [Loadout.PINPOINT, Loadout.ANCHOR, Loadout.STICKER, Loadout.ICE_CAGE, Loadout.SCOUT_LID, Loadout.DOINK_CAP, Loadout.REPLAY_GLOVES, Loadout.WEATHER_WRAPS, Loadout.TRUE_LID, Loadout.SHELTER_LID, Loadout.GUIDE_GLOVES, Loadout.PATIENT_GLOVES, Loadout.HUSH_GLOVES]
+	for id in growing:
+		var frozen := Loadout.effect_line(str(id), 12)
+		for rank in range(13, 25):
+			check(Loadout.effect_line(str(id), rank) != frozen, "%s rank %s does something past XII" % [Loadout.piece_name(str(id)), rank])
 		var low := RunLogic.new()
 		low.start_with_kicker(Kickers.WALK_ON)
+		low.run_mode = "endless"
 		_equip(low, str(id), 12)
 		var high := RunLogic.new()
 		high.start_with_kicker(Kickers.WALK_ON)
+		high.run_mode = "endless"
 		_equip(high, str(id), 24)
-		check(_same_effect(low.stats, high.stats), "%s at XXIV matches its XII effect" % Loadout.piece_name(str(id)))
-		check(Loadout.effect_line(str(id), 13) == Loadout.effect_line(str(id), 12), "%s card text freezes at XII" % Loadout.piece_name(str(id)))
+		check(not _same_effect(low.stats, high.stats), "%s at XXIV is stronger than XII" % Loadout.piece_name(str(id)))
+	var iron_low := RunLogic.new()
+	iron_low.start_with_kicker(Kickers.WALK_ON)
+	_equip(iron_low, Loadout.IRON_GRIP, 12)
+	var iron_high := RunLogic.new()
+	iron_high.start_with_kicker(Kickers.WALK_ON)
+	_equip(iron_high, Loadout.IRON_GRIP, 24)
+	check(_same_effect(iron_low.stats, iron_high.stats), "Iron Grip stays finished after VI")
 	check(Loadout.effect_line(Loadout.WIND_VISOR, 24).find("full flight") >= 0, "Wind Visor XXIV still describes the full path")
+	check(Loadout.effect_line(Loadout.ANCHOR, 24) == "Needles ×0.40 and +12 yd", "Anchor XXIV shows the floor factor and +12 yd")
+	check(Loadout.effect_line(Loadout.SCOUT_LID, 24).begins_with("+17 rerolls"), "Scout Lid XXIV reads 17 rerolls, got %s" % Loadout.effect_line(Loadout.SCOUT_LID, 24))
+	check(Loadout.effect_line(Loadout.SHANKY, 1).find("+1.0 Mult") >= 0, "Shanky Cleats shows +1.0 Mult")
+	check(Loadout.effect_line(Loadout.STONE, 1).find("+10 yd") >= 0, "Stone Toe shows +10 yd")
+	var strong := _pace_range(Kickers.COLE, 24, true)
+	var short_air := _pace_range(Kickers.COLE, 18, true)
+	var bruce_pair := _two_power_range(Kickers.BIG_BRUCE)
+	check(near(strong, 1026.0, 0.1) and strong >= 1000.0, "Cole's strong build makes 1000, got %s" % strong)
+	check(near(short_air, 953.0, 0.1) and short_air < 1000.0, "Cole with High-Air XVIII is short, got %s" % short_air)
+	check(near(bruce_pair, 803.0, 0.1) and bruce_pair < 1000.0, "Bruce with Cannon and Drive XXIV is short, got %s" % bruce_pair)
+	check(near(_pace_range(Kickers.WILLOW, 24, false), 932.0, 0.1), "Willow with all three range items at XXIV is 932")
+	check(near(_pace_range(Kickers.COLE, 24, false), 952.0, 0.1), "Cole with all three range items at XXIV is 952")
+	check(near(_pace_range(Kickers.WILLOW, 24, true), 1006.0, 0.1), "Willow's strong build makes 1000")
+	check(near(_pace_range(Kickers.BIG_BRUCE, 24, true), 1021.0, 0.1), "Bruce's strong build makes 1000")
+	check(Loadout.effect_line(Loadout.ICED, 1).find("+0.75 Mult") >= 0, "Iced shows +0.75 Mult")
+	check(Loadout.effect_line(Loadout.NARROW, 1).find("+0.75 Mult") >= 0, "Narrow Posts shows +0.75 Mult")
+	check(Loadout.effect_line(Loadout.TIGHT, 1).find("+1.0 Mult") >= 0, "Tight Window shows +1.0 Mult")
+	check(Loadout.effect_line(Loadout.SHAKY, 1).find("+10 yd") >= 0, "Shaky Arrow shows +10 yd")
+	check(Loadout.effect_line(Loadout.HOWLING, 1).find("×1.10") >= 0, "Howling Wind shows items ×1.10")
+	check(near(Loadout.pinpoint_perfect(24), 36.0) and near(Loadout.pinpoint_good(24), 54.0), "Pinpoint XXIV is +36 / +54")
+	check(Loadout.doink_charges(24) == 18 and Loadout.replay_swings(24) == 18, "Doink and Replay reach 18 at XXIV")
+	check(near(Loadout.wraps_bonus_yards(24), 30.0), "Weather Wraps XXIV is +30 yards")
 
 
 func _equip(run: RunLogic, id: String, rank: int) -> void:

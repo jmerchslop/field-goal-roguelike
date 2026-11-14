@@ -2,6 +2,7 @@
 
 Generated: 2026-11-14
 BAL1: needle slow floor 0.35, gentler Anchor / Patient / Sticker / Shelter tables, and multiplier cards use the printed hundredths.
+BAL2: Endless ranks XIII–XXIV do something for every equipment style except Wind Visor and Iron Grip. Range late tables are shorter. Curse upsides are higher, and Howling's item boost is ×1.10.
 
 **Loadout items:** 32 (18 equipment, 6 perks, 8 curses)
 **Vitamins:** 11 (10 belt vitamins and B12 Shot)
@@ -15,7 +16,7 @@ Numbers below were taken from `Loadout.effect_line`, `Loadout.apply` / `_apply_p
 
 - Five equipment styles are in the game: True Lid, Shelter Lid, Guide Gloves, Patient Gloves, Hush Gloves. Drive Lid was already in the 2026-11-12 file.
 - Equipment ranks run I–XXIV in Endless and I–VI in Standard. Perks stay I–III Standard and I–VI Endless. Curses stay rank 1.
-- `effect_rank` freezes most equipment effects at rank XII. Cannon Cleats, Drive Lid, and High-Air Gloves do not. They use a late yard table from XIII through XXIV.
+- BAL2: Cannon, Drive Lid, and High-Air use a shorter XIII–XXIV yard table. Count items keep growing at half their old step. Anchor, Sticker, True Lid, Shelter, Guide, Patient, and Hush keep the XII multiplier and add +1 yd per rank past XII. Wind Visor and Iron Grip still stop at VI.
 - The wording pass updated perk cards for ranks IV–VI, the Wind Visor mph line, the Ice Cage cumulative line, and the Scout / Doink / Replay / Weather Wraps lines so they follow `effect_rank`. Those old mismatches are gone.
 - BAL1 replaces the Anchor and Patient `0.85^rank` curve, and the Sticker and Shelter `0.80^rank` curve, with the rank I–XII tables below. XIII–XXIV still copy XII. True Lid's hook now uses the same hundredths the card prints. Item, perk, and vitamin slows are multiplied, floored at 0.35, and only then multiplied by Stone Toe, UNDER THE LIGHTS, rain, and ball speed.
 - The Bonus Ring can put a second, different style in a filled equipment type. At most two styles per type. Each ranks on its own. Normal offers and the shop do not open that second slot.
@@ -27,7 +28,7 @@ Numbers below were taken from `Loadout.effect_line`, `Loadout.apply` / `_apply_p
 
 Style lock, as coded: a type holds one style until a Bonus Ring card puts a different style in the second slot. A third style of that type is rejected. A second different perk is allowed. A third perk id is rejected. A second curse is allowed and then `curses_locked` blocks more curses. Glass Leg cannot be taken the first time if the attempt cap is already 2 or less. Ice Cage, in either helmet slot, rejects the Iced curse.
 
-Howling Wind multiplies the summed equipment and perk yard, band, hero, storm, and drill numbers by 1.15, and it widens each multiplier gap with `boost_factor` before the pieces multiply together. Both pieces of a doubled type go through that same pass. Curse upside yards and curse Mult are not in the equipment 1.15. Phil's Compounding (item scale 1.15) and Gary's Lucky Ball then pass through `scale_amount` / `scale_gap`, again on both pieces. The tables below are with neither of those scales and without Howling Wind, unless a row says otherwise.
+Howling Wind multiplies the summed equipment and perk yard, band, hero, storm, and drill numbers by 1.10, and it widens each multiplier gap with `boost_factor` before the pieces multiply together. Both pieces of a doubled type go through that same pass. Curse upside yards and curse Mult are not in the equipment 1.10. Phil's Compounding (item scale 1.15) and Gary's Lucky Ball then pass through `scale_amount` / `scale_gap`, again on both pieces. The tables below are with neither of those scales and without Howling Wind, unless a row says otherwise.
 
 Big Game copies the kicker's base needle speeds, bands, and red-tip values back over the loadout, then still applies vitamins. Range bonuses from gear are not stripped. UNDER THE LIGHTS does not do that. It only multiplies needle speed.
 
@@ -39,7 +40,7 @@ Second-slot rule, from `_apply_piece`: each owned style is applied in full. Addi
 
 Howling and Phil apply to both pieces. The additives are summed first, then Howling's 1.15 and Phil's `scale_amount` hit the sum. Each multiplier is widened on its own, then the factors multiply.
 
-Soft cap: `effect_rank` is `min(rank, 12)`. Ranks XIII–XXIV of every item below except Cannon, Drive Lid, and High-Air keep the rank XII card line and the rank XII effect. That is rank redundancy, not a card/code disagreement, because the card uses `effect_rank` too.
+Soft cap: Wind Visor and Iron Grip still stop growing at VI. The other equipment styles change at every rank from XIII through XXIV. Count items use a half step. The shield styles keep the XII multiplier and add flat yards.
 
 ### Cannon Cleats
 
@@ -54,7 +55,7 @@ Soft cap: `effect_rank` is `min(rank, 12)`. Ranks XIII–XXIV of every item belo
 | Rank | Yards |
 | --- | --- |
 | I–XII | 6, 12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72 |
-| XIII–XXIV | 97, 125, 156, 190, 227, 267, 310, 356, 405, 457, 512, 570 |
+| XIII–XXIV | 90, 111, 134, 159, 187, 216, 248, 282, 318, 357, 398, 441 |
 
 ### Pinpoint Cleats
 
@@ -66,7 +67,7 @@ Soft cap: `effect_rank` is `min(rank, 12)`. Ranks XIII–XXIV of every item belo
 - **actual effect:** those amounts are added to the perfect band and the good band. Totals, not leftovers. Big Game removes the band adds. Howling multiplies the adds by 1.15. No other cleat adds bands, so a second cleat does not stack this.
 - **match:** yes, ranks I–XXIV
 
-Rank I is +2 / +3. Rank VI is +12 / +18. Rank XII through XXIV is +24 / +36.
+Rank I is +2 / +3. Rank VI is +12 / +18. Rank XII is +24 / +36. Each rank past XII adds +1 PERFECT and +1.5 good. XXIV is +36 / +54.
 
 ### Anchor Cleats
 
@@ -81,7 +82,7 @@ Rank I is +2 / +3. Rank VI is +12 / +18. Rank XII through XXIV is +24 / +36.
 | Rank | Card and factor |
 | --- | --- |
 | I–XII | 0.85, 0.78, 0.72, 0.67, 0.62, 0.58, 0.54, 0.51, 0.48, 0.45, 0.42, 0.40 |
-| XIII–XXIV | 0.40, same as XII |
+| XIII–XXIV | multiplier stays 0.40. Each rank adds +1 yd, so XXIV is ×0.40 and +12 yd. |
 
 ### Sticker Cleats
 
@@ -96,7 +97,7 @@ Rank I is +2 / +3. Rank VI is +12 / +18. Rank XII through XXIV is +24 / +36.
 | Rank | Card and factor |
 | --- | --- |
 | I–XII | 0.90, 0.81, 0.73, 0.66, 0.59, 0.53, 0.48, 0.43, 0.39, 0.35, 0.31, 0.28 |
-| XIII–XXIV | 0.28, same as XII |
+| XIII–XXIV | multiplier stays 0.28. Each rank adds +1 yd, so XXIV is ×0.28 and +12 yd. |
 
 ### Wind Visor
 
@@ -155,7 +156,7 @@ Rank XII and XIII–XXIV: +11 rerolls and five practice swings a quarter.
 | Rank | Yards |
 | --- | --- |
 | I–XII | 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48 |
-| XIII–XXIV | 65, 84, 105, 128, 153, 180, 209, 240, 273, 308, 345, 384 |
+| XIII–XXIV | 61, 75, 90, 107, 126, 146, 167, 190, 214, 240, 268, 297 |
 
 ### True Lid
 
@@ -210,7 +211,7 @@ Rank XII and XIII–XXIV: +11 rerolls and five practice swings a quarter.
 | Rank | Yards |
 | --- | --- |
 | I–XII | 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24 |
-| XIII–XXIV | 32, 41, 51, 62, 74, 87, 101, 116, 132, 149, 167, 186 |
+| XIII–XXIV | 30, 37, 44, 52, 61, 71, 81, 92, 104, 116, 130, 144 |
 
 ### Guide Gloves
 
@@ -311,16 +312,16 @@ Rank XII and XIII–XXIV: +11 rerolls and five practice swings a quarter.
 - **id:** `iced`
 - **slot:** curse
 - **rank cap:** 1
-- **card text:** `"Down: meter hides 0.4s after Space. Up: +0.5 Mult"`
-- **actual effect:** +0.5 Mult. The meter hides 0.4 seconds after it starts. Ice Cage in either helmet slot blocks the hide and blocks taking this curse. The +0.5 Mult is not multiplied by Howling's equipment 1.15. Phil's scale does scale curse Mult.
+- **card text:** `"Down: meter hides 0.4s after Space. Up: +0.75 Mult"`
+- **actual effect:** +0.75 Mult. The meter hides 0.4 seconds after it starts. Ice Cage in either helmet slot blocks the hide and blocks taking this curse. The Mult is not multiplied by Howling's equipment ×1.10. Phil's scale does scale curse Mult.
 - **match:** yes
 
 ### Shanky Cleats
 
 - **id:** `shanky_cleats`
 - **slot:** curse
-- **card text:** `"Down: accuracy error ×1.5. Up: +0.5 Mult"`
-- **actual effect:** `angle_scale` is multiplied by 1.5, and Mult gains 0.5. True Lid's hook reduction multiplies `angle_scale` as well, so the two factors multiply.
+- **card text:** `"Down: accuracy error ×1.5. Up: +1.0 Mult"`
+- **actual effect:** `angle_scale` is multiplied by 1.5, and Mult gains 1.0. True Lid's hook reduction multiplies `angle_scale` as well, so the two factors multiply.
 - **match:** yes
 
 ### Heavy Ball
@@ -335,40 +336,40 @@ Rank XII and XIII–XXIV: +11 rerolls and five practice swings a quarter.
 
 - **id:** `howling_wind`
 - **slot:** curse
-- **card text:** `"Down: wind ×1.5. Up: equipment and perks ×1.15"`
-- **actual effect:** the wind vector is multiplied by 1.5 before Hush Gloves subtract. Equipment and perk additives listed above are multiplied by 1.15 after they are summed. Multiplier gaps are widened by 1.15. Both pieces of a doubled type are inside that sum. Curse upside yards are not in the 1.15. The Weather Wraps non-CLEAR yard bonus is multiplied by 1.15 on its own, before it is added.
+- **card text:** `"Down: wind ×1.5. Up: equipment and perks ×1.10"`
+- **actual effect:** the wind vector is multiplied by 1.5 before Hush Gloves subtract. Equipment and perk additives listed above are multiplied by 1.10 after they are summed. Multiplier gaps are widened by 1.10. Both pieces of a doubled type are inside that sum. Curse upside yards are not in the 1.10. The Weather Wraps non-CLEAR yard bonus is multiplied by 1.10 on its own, before it is added.
 - **match:** yes
 
 ### Shaky Arrow
 
 - **id:** `shaky_arrow`
 - **slot:** curse
-- **card text:** `"Down: aim sways ±3°. Up: +6 yd"`
-- **actual effect:** the aim mark sways, and `range_bonus` gains 6. That +6 is a curse upside, so Howling's equipment 1.15 does not multiply it. Phil's scale does.
+- **card text:** `"Down: aim sways ±3°. Up: +10 yd"`
+- **actual effect:** the aim mark sways, and `range_bonus` gains 10. That +10 is a curse upside, so Howling's equipment ×1.10 does not multiply it. Phil's scale does.
 - **match:** yes
 
 ### Narrow Posts
 
 - **id:** `narrow_posts`
 - **slot:** curse
-- **card text:** `"Down: posts 5.17 yd. Up: +0.5 Mult"`
-- **actual effect:** `post_width` is 5.17 when this curse is owned or the weather is The Squeeze. UNDER THE LIGHTS does not narrow the posts. The +0.5 Mult is a curse upside.
+- **card text:** `"Down: posts 5.17 yd. Up: +0.75 Mult"`
+- **actual effect:** `post_width` is 5.17 when this curse is owned or the weather is The Squeeze. UNDER THE LIGHTS does not narrow the posts. The +0.75 Mult is a curse upside.
 - **match:** yes
 
 ### Stone Toe
 
 - **id:** `stone_toe`
 - **slot:** curse
-- **card text:** `"Down: power needle ×1.20. Up: +6 yd"`
-- **actual effect:** power speed is multiplied by 1.20. That is a faster needle, a downside. Big Game keeps this 1.20 and strips meter-help slows. UNDER THE LIGHTS multiplies after it, so the power needle is ×1.20 × 1.35. The +6 yards is a curse upside.
+- **card text:** `"Down: power needle ×1.20. Up: +10 yd"`
+- **actual effect:** power speed is multiplied by 1.20. That is a faster needle, a downside. Big Game keeps this 1.20 and strips meter-help slows. UNDER THE LIGHTS multiplies after it, so the power needle is ×1.20 × 1.35. The +10 yards is a curse upside.
 - **match:** yes
 
 ### Tight Window
 
 - **id:** `tight_window`
 - **slot:** curse
-- **card text:** `"Down: PERFECT and good −2. Up: +0.5 Mult"`
-- **actual effect:** both bands lose 2, floored at 1, and perfect is not allowed to exceed good. Big Game reapplies this shrink after it restores the kicker's base bands. The +0.5 Mult is a curse upside.
+- **card text:** `"Down: PERFECT and good −2. Up: +1.0 Mult"`
+- **actual effect:** both bands lose 2, floored at 1, and perfect is not allowed to exceed good. Big Game reapplies this shrink after it restores the kicker's base bands. The +1.0 Mult is a curse upside.
 - **match:** yes
 
 ## 2. Vitamins and shop services
@@ -506,15 +507,18 @@ Worked examples, 100% power, 0 wind, no vitamin, no Howling, no Phil:
 | Big Bruce, no items | 65 yd |
 | Big Bruce, Cannon VI | 101 yd |
 | Big Bruce, Cannon XII | 137 yd |
-| Big Bruce, Cannon XXIV | 635 yd |
+| Big Bruce, Cannon XXIV | 506 yd |
 | Big Bruce, Drive Lid VI | 89 yd |
 | Big Bruce, Drive Lid XII | 113 yd |
-| Big Bruce, Drive Lid XXIV | 449 yd |
-| Big Bruce, Cannon XXIV + Drive Lid XXIV | 1019 yd |
-| Willow, Cannon XXIV + Drive Lid XXIV | 1004 yd |
-| Cole, Cannon XXIV + Drive Lid XXIV | 1024 yd |
+| Big Bruce, Drive Lid XXIV | 362 yd |
+| Big Bruce, Cannon XXIV + Drive Lid XXIV | 803 yd |
+| Willow, Cannon XXIV + Drive Lid XXIV | 788 yd |
+| Cole, Cannon XXIV + Drive Lid XXIV | 808 yd |
+| Cole, Cannon + Drive + High-Air, all XXIV | 952 yd |
+| Cole, those three plus Glass Leg VI, Shaky Arrow, Stone Toe, and Protein | 1026 yd |
+| Cole, same helpers with High-Air XVIII | 953 yd |
 
-No two styles in one equipment type both add range. Cannon, Drive Lid, and High-Air are three different types, and their yards add. Bruce with all three at XXIV would be 65 + 570 + 384 + 186 = 1205 yards. That pair is not a doubled type.
+No two styles in one equipment type both add range. Cannon, Drive Lid, and High-Air are three different types, and their yards add. Bruce with all three at XXIV is 65 + 441 + 297 + 144 = 947 yards. That is still short of 1000. The make needs Glass Leg VI, Shaky Arrow, Stone Toe, and a Protein Shake on top.
 
 Vex, no items, 100% power, kick distance 35: 55 yd (35 + 20). The same kick at distance 50: 70 yd.
 
@@ -569,7 +573,7 @@ Blank cells are ranks that item cannot reach. "Next rank adds nothing" is the fi
 
 | Item | Boosts | I | VI | XII | XXIV | Shape | First flat or tiny step |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Cannon Cleats | range yards | +6 | +36 | +72 | +570 | flat +6 through XII, then a rising late table | none through XXIV |
+| Cannon Cleats | range yards | +6 | +36 | +72 | +441 | flat +6 through XII, then the BAL2 late table | none through XXIV |
 | Pinpoint Cleats | perfect / good bands | +2 / +3 | +12 / +18 | +24 / +36 | same as XII | flat +2 / +3 per rank, then capped | XIII |
 | Anchor Cleats | both needle speeds | ×0.85 | ×0.58 | ×0.40 | same as XII | BAL1 table, then capped. Slow floor 0.35 can raise a stack | XIII |
 | Sticker Cleats | drift | ×0.90 | ×0.53 | ×0.28 | same as XII | BAL1 table, then capped | XIII |
@@ -577,12 +581,12 @@ Blank cells are ranks that item cannot reach. "Next rank adds nothing" is the fi
 | Ice Cage | red-tip off, Iced block, accuracy ×0.90, bands | immunity | ×0.90, +2 / +4 | ×0.90, +5 / +10 | same as XII | bands rise through XII, then capped | XIII |
 | Scout Lid | rerolls, practice | +1 reroll | +5 rerolls, 2 practice | +11 rerolls, 5 practice | same as XII | rises through XII, then capped | XIII |
 | Doink Cap | doink-to-good charges | 1 | 5, carry 5 | 12, carry 12 | same as XII | rises through XII, then capped | XIII |
-| Drive Lid | range yards | +4 | +24 | +48 | +384 | flat +4 through XII, then a rising late table | none through XXIV |
+| Drive Lid | range yards | +4 | +24 | +48 | +297 | flat +4 through XII, then the BAL2 late table | none through XXIV |
 | True Lid | hook factor | ×0.90 | ×0.53 | ×0.28 | same as XII | hundredths of 0.90^rank, then capped | XIII |
 | Shelter Lid | headwind loss | ×0.90 | ×0.53 | ×0.28 | same as XII | BAL1 table, then capped | XIII |
 | Iron Grip | red-tip noise and start, then off | noise −2 | red tip off | red tip off | red tip off | noise caps at II, off switch at VI | VII |
 | Replay Gloves | practice swings | 1 | 5, carry 5 | 12, carry 12 | same as XII | rises through XII, then capped | XIII |
-| High-Air Gloves | range yards, tailwind ×1.5 | +2 | +12 | +24 | +186 | flat +2 through XII, then a rising late table | none through XXIV |
+| High-Air Gloves | range yards, tailwind ×1.5 | +2 | +12 | +24 | +144 | flat +2 through XII, then the BAL2 late table. Tailwind stays ×1.5 | none through XXIV |
 | Guide Gloves | good-lock hook | ×0.50 | ×0.40 | ×0.28 | same as XII | flat −0.02 per rank, then capped | XIII |
 | Patient Gloves | power needle | ×0.85 | ×0.58 | ×0.40 | same as XII | BAL1 table, then capped. Slow floor 0.35 can raise a stack | XIII |
 | Hush Gloves | wind mph ignored | 1 | 6 | 12 | same as XII | flat +1 mph, then capped | XIII |
@@ -603,14 +607,14 @@ Blank cells are ranks that item cannot reach. "Next rank adds nothing" is the fi
 
 | Item | Downside | Upside |
 | --- | --- | --- |
-| Iced | meter hides 0.4 s after Space, unless Ice Cage | +0.5 Mult |
-| Shanky Cleats | accuracy error ×1.5 | +0.5 Mult |
+| Iced | meter hides 0.4 s after Space, unless Ice Cage | +0.75 Mult |
+| Shanky Cleats | accuracy error ×1.5 | +1.0 Mult |
 | Heavy Ball | −4 yd | accuracy error ×0.85 |
-| Howling Wind | wind ×1.5 | equipment and perks ×1.15 |
-| Shaky Arrow | aim sways ±3° | +6 yd |
-| Narrow Posts | posts 5.17 yd | +0.5 Mult |
-| Stone Toe | power needle ×1.20 | +6 yd |
-| Tight Window | perfect and good −2 | +0.5 Mult |
+| Howling Wind | wind ×1.5 | equipment and perks ×1.10 |
+| Shaky Arrow | aim sways ±3° | +10 yd |
+| Narrow Posts | posts 5.17 yd | +0.75 Mult |
+| Stone Toe | power needle ×1.20 | +10 yd |
+| Tight Window | perfect and good −2 | +1.0 Mult |
 
 ### Vitamins
 
@@ -630,9 +634,9 @@ Blank cells are ranks that item cannot reach. "Next rank adds nothing" is the fi
 
 ### Rank redundancy
 
-- Pinpoint, Anchor, Sticker, Ice Cage, Scout Lid, Doink Cap, True Lid, Shelter Lid, Replay Gloves, Guide Gloves, Patient Gloves, Hush Gloves, and Weather Wraps: ranks XIII–XXIV copy rank XII. The card text copies it too.
-- Wind Visor: the path is already the full flight at VI. Ranks VII–XXIV add no path and no readout.
-- Iron Grip: the red tip is already off at VI. Ranks VII–XXIV add nothing.
+- Wind Visor: the path is already the full flight at VI. Ranks VII–XXIV add no path and no readout. BAL2 leaves this.
+- Iron Grip: the red tip is already off at VI. Ranks VII–XXIV add nothing. BAL2 leaves this.
+- Every other equipment style changes from XIII through XXIV. Count items take a half step. Shield styles keep the XII multiplier and add +1 yd per rank.
 - Glass Leg: the attempt-cap loss happens once. Ranks II–VI add yards only.
 - Hero Ball: the ×0.80 needle slow does not change after rank I. Later ranks add Mult only.
 
@@ -640,12 +644,12 @@ Blank cells are ranks that item cannot reach. "Next rank adds nothing" is the fi
 
 Coded size at the top rank that item can reach, next to others in the same slot. No recommendation.
 
-- Cannon XXIV is +570 yards. The other cleats at XXIV are a band add that froze at XII, a ×0.40 needle factor, or a ×0.28 drift factor.
-- Drive Lid XXIV is +384 yards. The other helmets at XXIV are a frozen XII utility (path, charges, rerolls, a hook factor, a headwind factor).
-- High-Air XXIV is +186 yards plus tailwind ×1.5. The other gloves at XXIV are a frozen XII utility.
+- Cannon XXIV is +441 yards. Drive Lid XXIV is +297. High-Air XXIV is +144 plus tailwind ×1.5.
+- Anchor XXIV is still ×0.40 and also +12 yd. Sticker, True Lid, Shelter, Guide, Patient, and Hush follow the same +1 yd pattern on top of their XII effect.
+- Scout Lid XXIV is 17 rerolls and 5 practice swings. Doink Cap and Replay Gloves reach 18. Weather Wraps reaches +30 yd. Pinpoint XXIV is +36 PERFECT and +54 good. Ice Cage XXIV is +11 PERFECT and +22 good.
 - Glass Leg VI is +48 yards. Two-Minute Drill VI is +3.0 boss Mult. Hot Streak VI is a 1.75 streak step. Those are the perk yard and mult extremes.
 - Anchor XII (and XXIV) multiplies both needles by 0.40. Hero Ball multiplies both by 0.80 at every rank. Patient Gloves reach 0.40 on the power needle only. A stack of those slows cannot go below 0.35 before the speed-ups.
-- Stone Toe speeds the power needle up (×1.20) and pays +6 yards. The other curse upsides are +0.5 Mult or +6 yards with a different downside.
+- Stone Toe still speeds the power needle (×1.20) and now pays +10 yards. Shaky Arrow also pays +10 yards. Iced and Narrow Posts pay +0.75 Mult. Shanky Cleats and Tight Window pay +1.0 Mult. Howling Wind boosts items by ×1.10. Heavy Ball's accuracy-error upside is still ×0.85.
 
 ## 8. Mismatch index
 
