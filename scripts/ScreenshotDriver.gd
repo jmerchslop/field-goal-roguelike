@@ -96,6 +96,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "b5c":
+		if not await _capture_b5c():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "c4":
 		if not await _capture_c4():
 			get_tree().quit(1)
@@ -1517,6 +1523,84 @@ func _capture_b5b() -> bool:
 		print("normal kick still lit ", board.lights_look)
 		return false
 	if not await _capture("b5b_normal.png"):
+		return false
+	return true
+
+
+func _capture_b5c() -> bool:
+	board.highlight = 1
+	board.confirm_kicker()
+	board.run.spot_yards = 0.0
+	board.logic.start_lateral_yards = 0.0
+	board.logic.sync_tee()
+	board.force_weather(RunLogic.LIGHTS)
+	board.glare_time = 0.5
+	board.refresh_view()
+	if not _beams_on_tee("35 center"):
+		return false
+	if not await _capture("b5c_35_center.png"):
+		return false
+	board.run.spot_yards = -3.0
+	board.cycle_debug_distance()
+	board.glare_time = 0.5
+	board.refresh_view()
+	if absf(board.logic.kick_distance - 75.0) > 0.1 or absf(board.run.spot_yards - (-3.0)) > 0.05:
+		print("75 left ", board.logic.kick_distance, " spot ", board.run.spot_yards)
+		return false
+	if not _beams_on_tee("75 left"):
+		return false
+	if not await _capture("b5c_75_left.png"):
+		return false
+	board.run.spot_yards = 0.0
+	board.cycle_debug_distance()
+	board.glare_time = 0.5
+	board.refresh_view()
+	if absf(board.logic.kick_distance - 200.0) > 0.1:
+		print("200 yards ", board.logic.kick_distance)
+		return false
+	if not _beams_on_tee("200"):
+		return false
+	if not await _capture("b5c_200.png"):
+		return false
+	board.cycle_debug_distance()
+	board.glare_time = 0.5
+	board.refresh_view()
+	if absf(board.logic.kick_distance - 500.0) > 0.1:
+		print("500 yards ", board.logic.kick_distance)
+		return false
+	if not _beams_on_tee("500"):
+		return false
+	if not await _capture("b5c_500.png"):
+		return false
+	board.cycle_debug_distance()
+	board.glare_time = 0.5
+	board.refresh_view()
+	if absf(board.logic.kick_distance - 1000.0) > 0.1:
+		print("1000 yards ", board.logic.kick_distance)
+		return false
+	if not _beams_on_tee("1000"):
+		return false
+	if not await _capture("b5c_1000.png"):
+		return false
+	return true
+
+
+func _beams_on_tee(label: String) -> bool:
+	if not board.lights_show() or int(board.lights_look["beams"]) < 2:
+		print(label, " lights ", board.lights_look)
+		return false
+	var tee: Vector3 = board._tee_position()
+	var pools := 0
+	for child in board._beams.get_children():
+		if not str(child.name).begins_with("Pool"):
+			continue
+		pools += 1
+		var at: Vector3 = (child as Node3D).position
+		if Vector2(at.x - tee.x, at.z - tee.z).length() > 4.0:
+			print(label, " pool ", at, " tee ", tee)
+			return false
+	if pools < 4:
+		print(label, " pools ", pools)
 		return false
 	return true
 

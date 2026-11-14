@@ -65,6 +65,8 @@ var _beams: Node3D
 var _beam_mat: ShaderMaterial
 var _pool_mat: ShaderMaterial
 var _beam_span := -1.0
+var _beam_tee_x := 0.0
+var _beam_tee_z := -1.0
 var _stand_mats: Array[StandardMaterial3D] = []
 var lights_look := {
 	"on": false,
@@ -2179,11 +2181,11 @@ func _pulse_beams() -> void:
 	_pool_mat.set_shader_parameter("breath", scale)
 
 
-func light_beam_plan(span: float) -> Array:
-	var chosen := _choose_beam_towers(_beam_tower_list(span))
+func light_beam_plan(span: float, tee: Vector3) -> Array:
+	var chosen := _choose_beam_towers(_beam_tower_list(span), tee.z)
 	var beams: Array = []
-	for tower in chosen:
-		beams.append(_beam_from_tower(tower, span))
+	for index in chosen.size():
+		beams.append(_beam_from_tower(chosen[index], span, tee, index))
 	return beams
 
 
@@ -2201,7 +2203,10 @@ func _beam_tower_list(span: float) -> Array:
 	return towers
 
 
-func _choose_beam_towers(towers: Array) -> Array:
+func _choose_beam_towers(towers: Array, tee_z: float) -> Array:
+	# Closest banks to the kicker first. The end-zone bank always stays, so a
+	# long kick still gets a shaft from behind the posts even when that lamp
+	# is a speck at the far end of the frame.
 	var sides: Array = []
 	var ends: Array = []
 	for tower in towers:
@@ -2209,31 +2214,27 @@ func _choose_beam_towers(towers: Array) -> Array:
 			ends.append(tower)
 		else:
 			sides.append(tower)
-	var ordered: Array = []
+	var ranked: Array = []
 	for tower in sides:
 		var placed := false
-		for index in ordered.size():
-			if float(tower["z"]) < float(ordered[index]["z"]):
-				ordered.insert(index, tower)
+		var gap := absf(float(tower["z"]) - tee_z)
+		for index in ranked.size():
+			var other := absf(float(ranked[index]["z"]) - tee_z)
+			var closer := gap < other - 0.001
+			var tied_nearer := absf(gap - other) <= 0.001 and float(tower["z"]) > float(ranked[index]["z"])
+			if closer or tied_nearer:
+				ranked.insert(index, tower)
 				placed = true
 				break
 		if not placed:
-			ordered.append(tower)
-	var budget := BEAM_MAX - ends.size()
+			ranked.append(tower)
+	# Four nearest banks plus the end-zone bank. More than that stacks into a white disc.
+	var budget := mini(4, BEAM_MAX - ends.size())
 	if budget < 1:
 		budget = 1
-	if ordered.size() <= budget:
-		return ordered + ends
-	if budget == 1:
-		return [ordered[0]] + ends
 	var picked: Array = []
-	var last := -1
-	for i in budget:
-		var idx := int(round(float(i) * float(ordered.size() - 1) / float(budget - 1)))
-		if idx <= last:
-			idx = mini(last + 1, ordered.size() - 1)
-		last = idx
-		picked.append(ordered[idx])
+	for i in mini(budget, ranked.size()):
+		picked.append(ranked[i])
 	return picked + ends
 
 
@@ -2249,35 +2250,60 @@ func _lamp_position(x: float, z: float, end_zone: bool) -> Vector3:
 	return Vector3(x, lamp_y, z)
 
 
-func _beam_from_tower(tower: Dictionary, span: float) -> Dictionary:
+func _aim_landing(tower: Dictionary, tee: Vector3, slot: int) -> Vector3:
+	# Every landing stays inside a few yards of the tee. The offsets keep the
+	# pools from stacking on one pixel, and they follow the hash.
+	if bool(tower["end"]):
+		return Vector3(tee.x, 0.0, tee.z - 2.2)
+	var side := signf(float(tower["x"]))
+	if side == 0.0:
+		side = 1.0
+	var dx := side * (1.15 + float(slot % 2) * 0.9)
+	var dz := -2.0 + float(slot) * 0.7
+	var offset := Vector2(dx, dz)
+	if offset.length() > 2.9:
+		offset = offset.normalized() * 2.9
+	return Vector3(tee.x + offset.x, 0.0, tee.z + offset.y)
+
+
+func _shaft_hold(origin: Vector3, landing: Vector3, cam: Vector3) -> Vector3:
+	# Just in front of the tee, but not so high that the close camera
+	# throws the bright end out the top of the frame.
+	var z := landing.z - 5.0
+	if z < 1.0:
+		z = landing.z
+	var ahead := maxf(cam.z - z, 2.0)
+	var max_y := cam.y + ahead * 0.30
+	var y := clampf(minf(origin.y * 0.55, max_y), 4.8, 9.0)
+	return Vector3(landing.x, y, z)
+
+
+func _beam_from_tower(tower: Dictionary, span: float, tee: Vector3, slot: int) -> Dictionary:
 	var x := float(tower["x"])
 	var z := float(tower["z"])
 	var end := bool(tower["end"])
 	var origin := _lamp_position(x, z, end)
+	var landing := _aim_landing(tower, tee, slot)
+	landing.z = clampf(landing.z, 0.5, maxf(span + 3.0, 4.0))
+	var grass := Vector3(landing.x, 0.15, landing.z)
 	var lip := Vector3.ZERO
-	var landing := Vector3.ZERO
 	var widths := PackedFloat32Array()
-	var thread_y := 6.5
 	if end:
-		landing = Vector3(0.0, 0.0, 18.0)
-		lip = Vector3(0.0, STAND_HEIGHT + 0.55, -0.55)
-		# Wide in the sky, narrow through the uprights, wide again as the pool.
-		widths = PackedFloat32Array([10.0, 14.0, 5.2, 15.0])
-		thread_y = 12.2
+		lip = Vector3(lerpf(origin.x, landing.x, 0.12), STAND_HEIGHT + 0.55, lerpf(origin.z, landing.z, 0.08))
+		widths = PackedFloat32Array([8.0, 10.0, 7.0, 4.5, 3.2])
 	else:
 		var side := signf(x)
 		if side == 0.0:
 			side = 1.0
-		var along := clampf(z / maxf(span, 1.0), 0.0, 1.0)
-		var far_z := clampf(span * 0.62, 14.0, maxf(span - 6.0, 14.0))
-		var land_z := clampf(lerpf(8.0, far_z, along), 6.0, maxf(span - 4.0, 8.0))
-		landing = Vector3(side * 9.5, 0.0, land_z)
-		lip = Vector3(x - side * (LIGHT_SIDE_OUT + 0.75), STAND_HEIGHT + 0.5, lerpf(z, land_z, 0.2))
-		widths = PackedFloat32Array([8.0, 12.0, 14.0, 16.0])
-	var drop := maxf(lip.y - 0.15, 0.001)
-	var thread := lip.lerp(Vector3(landing.x, 0.15, landing.z), clampf((lip.y - thread_y) / drop, 0.0, 1.0))
-	thread.y = thread_y
-	var points := PackedVector3Array([origin, lip, thread, Vector3(landing.x, 0.15, landing.z)])
+		# Clear the roof, then run the shaft across the field to the tee.
+		lip = Vector3(x - side * (LIGHT_SIDE_OUT + 0.75), maxf(origin.y - 0.35, STAND_HEIGHT + 0.45), lerpf(z, landing.z, 0.12))
+		widths = PackedFloat32Array([8.0, 10.0, 7.0, 4.5, 3.2])
+	# The bright end sits just in front of the tee, low enough to stay in the
+	# close camera. A point straight overhead leaves the frame and reads as sky.
+	var cam: Vector3 = camera_rig(span, tee.x)["position"]
+	var hold := _shaft_hold(origin, landing, cam)
+	var over := Vector3(landing.x, 5.4, landing.z)
+	var points := PackedVector3Array([origin, lip, hold, over, grass])
 	return {
 		"end": end,
 		"origin": origin,
@@ -2291,9 +2317,13 @@ func _beam_from_tower(tower: Dictionary, span: float) -> Dictionary:
 func _layout_light_beams(span: float) -> void:
 	if span <= 0.0:
 		return
-	if _beams != null and is_equal_approx(_beam_span, span) and _beams.get_child_count() > 0:
+	var tee := _tee_position()
+	# Same distance with a new hash, or a retry, still has to re-aim.
+	if _beams != null and is_equal_approx(_beam_span, span) and is_equal_approx(_beam_tee_x, tee.x) and is_equal_approx(_beam_tee_z, tee.z) and _beams.get_child_count() > 0:
 		return
 	_beam_span = span
+	_beam_tee_x = tee.x
+	_beam_tee_z = tee.z
 	if _beams == null:
 		_beams = Node3D.new()
 		_beams.name = "LightBeams"
@@ -2302,9 +2332,9 @@ func _layout_light_beams(span: float) -> void:
 		_beams.remove_child(child)
 		child.free()
 	_ensure_beam_materials()
-	var cam: Vector3 = camera_rig(span, 0.0)["position"]
+	var cam: Vector3 = camera_rig(span, tee.x)["position"]
 	var index := 0
-	for item in light_beam_plan(span):
+	for item in light_beam_plan(span, tee):
 		var beam := MeshInstance3D.new()
 		beam.name = "BeamEnd%d" % index if bool(item["end"]) else "BeamSide%d" % index
 		var points: PackedVector3Array = item["points"]
@@ -2318,8 +2348,9 @@ func _layout_light_beams(span: float) -> void:
 		var pool := MeshInstance3D.new()
 		pool.name = "Pool%d" % index
 		index += 1
-		var reach := float(widths[widths.size() - 1])
-		pool.mesh = _pool_mesh(reach * 0.5, reach * 0.72)
+		# Shafts stay wide in the air. Each grass pool is only the spotlight
+		# under its landing, so the cones do not add into one white disk.
+		pool.mesh = _pool_mesh(3.4, 2.8)
 		pool.material_override = _pool_mat
 		pool.position = Vector3(landing.x, 0.04, landing.z)
 		pool.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF

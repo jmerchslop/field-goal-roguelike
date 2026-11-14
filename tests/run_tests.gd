@@ -5537,23 +5537,16 @@ func _check_light_beams() -> void:
 	var game = packed.instantiate()
 	get_root().add_child(game)
 	game._taking_pictures = true
-	var distances: Array[float] = [35.0, 75.0, 200.0, 500.0, 1000.0]
-	for dist in distances:
-		var plan: Array = game.light_beam_plan(dist)
-		check(plan.size() >= 4 and plan.size() <= 8, "under the lights shows 4 to 8 beams at %s yards, got %s" % [dist, plan.size()])
-		var ends := 0
-		for item in plan:
-			var origin: Vector3 = item["origin"]
-			var landing: Vector3 = item["landing"]
-			check(origin.y > game.STAND_HEIGHT, "a beam starts on the lamp above the roof at %s yards" % dist)
-			if bool(item["end"]):
-				ends += 1
-				check(landing.z > 0.5 and absf(landing.x) < 1.0, "the end-zone beam lands in front of the posts")
-			else:
-				check(signf(origin.x) == signf(landing.x), "a sideline beam stays on its own side")
-				check(absf(landing.x) + 8.0 < absf(origin.x), "a sideline beam aims inward onto the field")
-				check(landing.z > 1.0 and landing.z < dist - 0.5, "a sideline beam lands between the posts and the kicker at %s yards" % dist)
-		check(ends == 1, "one end-zone beam at %s yards" % dist)
+	_assert_beam_aims(game, 35.0, 0.0, "35 center")
+	_assert_beam_aims(game, 75.0, -3.0, "75 left hash")
+	_assert_beam_aims(game, 200.0, 0.0, "200")
+	_assert_beam_aims(game, 500.0, 0.0, "500")
+	_assert_beam_aims(game, 1000.0, 0.0, "1000")
+	_assert_beam_aims(game, 35.0, 3.0, "35 right hash")
+	var mid_x := _plan_mean_x(game.light_beam_plan(75.0, Vector3(0.0, 0.0, 75.0)))
+	var left_x := _plan_mean_x(game.light_beam_plan(75.0, Vector3(-3.0, 0.0, 75.0)))
+	var right_x := _plan_mean_x(game.light_beam_plan(75.0, Vector3(3.0, 0.0, 75.0)))
+	check(left_x < mid_x - 1.5 and right_x > mid_x + 1.5, "a new hash moves the aim points, left %s center %s right %s" % [left_x, mid_x, right_x])
 	check(near(game.beam_breath(0.0), 1.0) and near(game.beam_breath(2.0), 1.0), "the beam breath returns every 2 seconds")
 	check(near(game.beam_breath(0.5), 1.15) and near(game.beam_breath(1.5), 0.85), "beam intensity breathes plus or minus 15 percent")
 	check(game.BEAM_BREATH_SEC >= 1.5, "the beam breath is not a flicker")
@@ -5574,6 +5567,36 @@ func _check_light_beams() -> void:
 	game.glare_time = 0.5
 	game.refresh_view()
 	check(game.lights_show() and int(game.lights_look["beams"]) >= 4 and int(game.lights_look["beams"]) <= 8, "the boss kick shows the beams")
+	var held_dist := float(game.logic.kick_distance)
+	var held_spot := float(game.logic.start_lateral_yards)
+	_aim_live_kick(game, 35.0, 0.0)
+	check(_pools_near_tee(game, Vector3(0.0, 0.0, 35.0)), "35 center pools sit on the tee")
+	_aim_live_kick(game, 75.0, 0.0)
+	var live_mid := _pool_mean_x(game)
+	_aim_live_kick(game, 75.0, -3.0)
+	check(_pool_mean_x(game) < live_mid - 1.5, "changing only the hash moves the beams on the field")
+	check(_pools_near_tee(game, Vector3(-3.0, 0.0, 75.0)), "75 left-hash pools follow the kicker")
+	_aim_live_kick(game, 75.0, 3.0)
+	check(_pool_mean_x(game) > live_mid + 1.5, "a right hash moves the beams the other way")
+	check(_pools_near_tee(game, Vector3(3.0, 0.0, 75.0)), "75 right-hash pools follow the kicker")
+	_aim_live_kick(game, 200.0, 0.0)
+	check(_pools_near_tee(game, Vector3(0.0, 0.0, 200.0)), "200 yard pools sit on the tee")
+	_aim_live_kick(game, 500.0, 0.0)
+	check(_pools_near_tee(game, Vector3(0.0, 0.0, 500.0)), "500 yard pools sit on the tee")
+	_aim_live_kick(game, 1000.0, 6.0)
+	check(_pools_near_tee(game, Vector3(6.0, 0.0, 1000.0)), "1000 yard pools sit on the tee")
+	var retry_tee := Vector3(6.0, 0.0, 1000.0)
+	var retry_x := _pool_mean_x(game)
+	game.run.awaiting_offer = true
+	game.refresh_view()
+	check(not game.lights_show(), "leaving the 1000 yard boss kick turns the beams off")
+	game.run.awaiting_offer = false
+	game.run.phase = RunLogic.Phase.PLAYING
+	game.logic.phase = KickLogic.Phase.AIMING
+	game.refresh_view()
+	check(game.lights_show() and _pools_near_tee(game, retry_tee) and absf(_pool_mean_x(game) - retry_x) < 0.05, "a retry keeps the beams aimed at that tee")
+	_aim_live_kick(game, held_dist, held_spot)
+	check(_pools_near_tee(game, Vector3(held_spot, 0.0, held_dist)), "the live aim check put the beams back on the original tee")
 	check(_dusk_channel(game, 2) > _dusk_channel(game, 0) and _dusk_channel(game, 0) < 0.7, "the sky picks up a darker navy tint")
 	check(near(game._stand_mats[0].albedo_color.r, game.DUSK_STAND.r), "the stands darken on the boss kick")
 	check(game._beams != null and game._beams.visible, "beam meshes are in the world")
@@ -5602,12 +5625,99 @@ func _check_light_beams() -> void:
 	game.run.phase = RunLogic.Phase.PLAYING
 	game.logic.phase = KickLogic.Phase.AIMING
 	game.refresh_view()
-	check(game.lights_show() and game._beams.visible, "a retry of the same kick brings the beams back")
+	check(game.lights_show() and game._beams.visible and _pools_near_tee(game, Vector3(held_spot, 0.0, held_dist)), "a retry of the same kick brings the beams back on that tee")
 	game.force_weather(RunLogic.CLEAR)
 	check(not game.lights_show() and int(game.lights_look["beams"]) == 0, "the next kick without the boss has no beams")
 	var shell := FileAccess.get_file_as_string("res://scripts/hud.gd")
 	check(shell.find("_draw_lights_glare") < 0, "the flat sky haze is gone")
 	game.free()
+
+
+func _assert_beam_aims(game, dist: float, spot: float, label: String) -> void:
+	var tee := Vector3(spot, 0.0, dist)
+	var plan: Array = game.light_beam_plan(dist, tee)
+	var count := plan.size()
+	check(count >= 4 and count <= 8, "under the lights shows 4 to 8 beams at %s, got %s" % [label, count])
+	check(count == 5, "%s shows the end-zone bank and the sideline banks nearest the kicker" % label)
+	var ends := 0
+	var spread := 0.0
+	var anchor := Vector3.ZERO
+	var seen := false
+	for item in plan:
+		var origin: Vector3 = item["origin"]
+		var landing: Vector3 = item["landing"]
+		check(origin.y > game.STAND_HEIGHT, "a beam starts on the lamp above the roof at %s" % label)
+		var gap := Vector2(landing.x - tee.x, landing.z - tee.z).length()
+		check(gap <= 4.0, "%s beam lands %.2f yards from the tee" % [label, gap])
+		var points: PackedVector3Array = item["points"]
+		check(points.size() >= 4, "%s beam has a shaft" % label)
+		var head: Vector3 = points[0]
+		var hold: Vector3 = points[2]
+		var tail: Vector3 = points[points.size() - 1]
+		check(head.distance_to(origin) < 0.05, "%s shaft starts at the lamp" % label)
+		check(hold.y > 6.0 and Vector2(hold.x - landing.x, hold.z - landing.z).length() < 8.0, "%s shaft reaches the air just in front of the kicker" % label)
+		check(Vector2(tail.x - tee.x, tail.z - tee.z).length() <= 4.0, "%s shaft ends on the kicker" % label)
+		if bool(item["end"]):
+			ends += 1
+			check(origin.z < 1.0, "%s end-zone lamp stays behind the posts" % label)
+		elif dist >= 500.0:
+			check(origin.z > dist * 0.3, "%s prefers a bank near the kicker, lamp z %s" % [label, origin.z])
+		if not seen:
+			anchor = landing
+			seen = true
+		else:
+			spread = maxf(spread, Vector2(landing.x - anchor.x, landing.z - anchor.z).length())
+	check(ends == 1, "one end-zone beam at %s" % label)
+	check(spread > 0.5 and spread < 6.0, "%s landings spread around the kicker (%.2f)" % [label, spread])
+
+
+func _plan_mean_x(plan: Array) -> float:
+	var sum := 0.0
+	if plan.is_empty():
+		return 0.0
+	for item in plan:
+		var landing: Vector3 = item["landing"]
+		sum += landing.x
+	return sum / float(plan.size())
+
+
+func _aim_live_kick(game, dist: float, spot: float) -> void:
+	game.logic.kick_distance = dist
+	game.logic.start_lateral_yards = spot
+	game.run.spot_yards = spot
+	game.run.practicing = false
+	game.run.awaiting_offer = false
+	game.run.awaiting_shop = false
+	game.run.phase = RunLogic.Phase.PLAYING
+	game.logic.phase = KickLogic.Phase.AIMING
+	game.run.weather = RunLogic.LIGHTS
+	game.refresh_view()
+
+
+func _pool_mean_x(game) -> float:
+	var sum := 0.0
+	var count := 0
+	for child in game._beams.get_children():
+		if str(child.name).begins_with("Pool"):
+			sum += (child as Node3D).position.x
+			count += 1
+	if count == 0:
+		return 0.0
+	return sum / float(count)
+
+
+func _pools_near_tee(game, tee: Vector3) -> bool:
+	var count := 0
+	if game._beams == null:
+		return false
+	for child in game._beams.get_children():
+		if not str(child.name).begins_with("Pool"):
+			continue
+		count += 1
+		var at: Vector3 = (child as Node3D).position
+		if Vector2(at.x - tee.x, at.z - tee.z).length() > 4.0:
+			return false
+	return count >= 4 and count <= 8
 
 
 func _dusk_channel(game, index: int) -> float:
