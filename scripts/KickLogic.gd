@@ -605,14 +605,14 @@ func _advance_accuracy(delta: float) -> float:
 
 
 func _power_omega() -> float:
-	return MeterGauge.omega_power(stats.power_speed, stats.ball_speed_mult)
+	# power_speed already has the slow floor, Stone Toe, and UNDER THE LIGHTS.
+	# Ball speed is last and is not floored.
+	return MeterGauge.needle_speed(MeterGauge.omega_base(), stats.power_speed / 100.0, 1.0, 1.0, 1.0, stats.ball_speed_mult)
 
 
 func _accuracy_omega() -> float:
-	var omega := MeterGauge.omega_accuracy(stats.accuracy_speed, stats.ball_speed_mult)
-	if rain_faster:
-		omega *= rain_scale
-	return omega
+	var rain := rain_scale if rain_faster else 1.0
+	return MeterGauge.needle_speed(MeterGauge.omega_base(), stats.accuracy_speed / 120.0, 1.0, 1.0, rain, stats.ball_speed_mult)
 
 
 # Seconds of power-phase sweep from the current needle to this power.

@@ -503,35 +503,33 @@ func force_weather(name: String) -> void:
 
 
 func prepare_kick_stats() -> void:
-	rebuild_stats()
+	_rebuild_raw_stats()
 	if stats.wraps_yards > 0.0 and weather != CLEAR:
 		var bonus := stats.wraps_yards
 		if has_curse(Loadout.HOWLING):
 			bonus *= 1.15
 		stats.range_bonus += bonus
-	if weather != BIG_GAME:
-		_apply_ball_vitamins()
-		_apply_lights_needles()
-		return
-	var base := KickerStats.new()
-	if kicker_id != "":
-		Kickers.apply_to(base, kicker_id)
-	# Stone Toe still hurries the power needle. That is a curse downside, not meter help.
-	stats.power_speed = base.power_speed * (1.2 if has_curse(Loadout.STONE) else 1.0)
-	stats.accuracy_speed = base.accuracy_speed
-	stats.accuracy = base.accuracy
-	stats.perfect_band = base.perfect_band
-	stats.good_band = base.good_band
-	if has_curse(Loadout.TIGHT):
-		stats.perfect_band = maxf(stats.perfect_band - 2.0, 1.0)
-		stats.good_band = maxf(stats.good_band - 2.0, 1.0)
-	if stats.perfect_band > stats.good_band:
-		stats.perfect_band = stats.good_band
-	stats.red_tip_start = base.red_tip_start
-	stats.red_tip_noise = base.red_tip_noise
-	stats.red_tip_off = false
-	stats.ice_veins = false
+	if weather == BIG_GAME:
+		var base := KickerStats.new()
+		if kicker_id != "":
+			Kickers.apply_to(base, kicker_id)
+		# Meter help is off. Stone Toe is applied after the slow floor, with the vitamins.
+		stats.power_speed = base.power_speed
+		stats.accuracy_speed = base.accuracy_speed
+		stats.accuracy = base.accuracy
+		stats.perfect_band = base.perfect_band
+		stats.good_band = base.good_band
+		if has_curse(Loadout.TIGHT):
+			stats.perfect_band = maxf(stats.perfect_band - 2.0, 1.0)
+			stats.good_band = maxf(stats.good_band - 2.0, 1.0)
+		if stats.perfect_band > stats.good_band:
+			stats.perfect_band = stats.good_band
+		stats.red_tip_start = base.red_tip_start
+		stats.red_tip_noise = base.red_tip_noise
+		stats.red_tip_off = false
+		stats.ice_veins = false
 	_apply_ball_vitamins()
+	_finish_needles()
 
 
 var _fixture_saved := false
@@ -1463,11 +1461,26 @@ func _perk_rank(id: String) -> int:
 
 
 func rebuild_stats() -> void:
+	_rebuild_raw_stats()
+	_finish_needles()
+
+
+func _rebuild_raw_stats() -> void:
 	stats.reset()
 	if kicker_id != "":
 		Kickers.apply_to(stats, kicker_id)
 	Loadout.apply(stats, loadout_state(), has_curse(Loadout.HOWLING), item_effect_scale())
 	attempt_cap = mini(stats.attempt_cap, KickConstants.ATTEMPT_CAP_MAX) + bench_extra_cap
+
+
+func _finish_needles() -> void:
+	# Slows are already multiplied into the speeds. Speed-ups are not.
+	var base_power := KickConstants.POWER_RISE_PER_SEC
+	var base_acc := KickConstants.ACCURACY_FALL_PER_SEC
+	var stone := 1.20 if has_curse(Loadout.STONE) else 1.0
+	var lights := LIGHTS_NEEDLE if lights_active() else 1.0
+	stats.power_speed = MeterGauge.needle_speed(base_power, stats.power_speed / base_power, stone, lights, 1.0, 1.0)
+	stats.accuracy_speed = MeterGauge.needle_speed(base_acc, stats.accuracy_speed / base_acc, 1.0, lights, 1.0, 1.0)
 
 
 func owned_labels() -> Array:
@@ -2064,14 +2077,6 @@ func _ensure_kick10() -> String:
 
 func _roll_kick10() -> void:
 	kick10_boss = LIGHTS if _kick10_rng.randf() < 0.5 else SQUEEZE
-
-
-func _apply_lights_needles() -> void:
-	# On top of the kicker, the gear, and the vitamins. Rain still multiplies accuracy later.
-	if not lights_active():
-		return
-	stats.power_speed *= LIGHTS_NEEDLE
-	stats.accuracy_speed *= LIGHTS_NEEDLE
 
 
 func _roll_weather() -> void:

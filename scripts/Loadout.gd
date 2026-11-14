@@ -59,6 +59,9 @@ const _ROMAN: Array = [
 const _CANNON_LATE: Array = [97, 125, 156, 190, 227, 267, 310, 356, 405, 457, 512, 570]
 const _DRIVE_LATE: Array = [65, 84, 105, 128, 153, 180, 209, 240, 273, 308, 345, 384]
 const _AIR_LATE: Array = [32, 41, 51, 62, 74, 87, 101, 116, 132, 149, 167, 186]
+# BAL1 tables. Ranks I–XII. XIII–XXIV keep the XII value through effect_rank.
+const _ANCHOR_PATIENT: Array[float] = [0.85, 0.78, 0.72, 0.67, 0.62, 0.58, 0.54, 0.51, 0.48, 0.45, 0.42, 0.40]
+const _STICKER_SHELTER: Array[float] = [0.90, 0.81, 0.73, 0.66, 0.59, 0.53, 0.48, 0.43, 0.39, 0.35, 0.31, 0.28]
 
 
 static func rank_label(rank: int) -> String:
@@ -92,6 +95,39 @@ static func high_air_yards(rank: int) -> int:
 
 static func guide_factor(rank: int) -> float:
 	return 0.50 - 0.02 * float(effect_rank(rank) - 1)
+
+
+static func anchor_factor(rank: int) -> float:
+	return _table_factor(rank, _ANCHOR_PATIENT)
+
+
+static func patient_factor(rank: int) -> float:
+	return anchor_factor(rank)
+
+
+static func sticker_factor(rank: int) -> float:
+	return _table_factor(rank, _STICKER_SHELTER)
+
+
+static func shelter_factor_for(rank: int) -> float:
+	return sticker_factor(rank)
+
+
+static func true_lid_factor(rank: int) -> float:
+	if rank <= 0:
+		return 1.0
+	return _hundredths(pow(0.90, float(effect_rank(rank))))
+
+
+static func _table_factor(rank: int, table: Array[float]) -> float:
+	var index := effect_rank(rank) - 1
+	if index < 0 or index >= table.size():
+		return 1.0
+	return table[index]
+
+
+static func _hundredths(value: float) -> float:
+	return float(int(round(absf(value) * 100.0))) / 100.0
 
 
 static func _scale_factor(factor: float, howling: bool, item_scale: float) -> float:
@@ -284,15 +320,15 @@ static func effect_line(id: String, rank: int) -> String:
 		PINPOINT:
 			return "PERFECT +%d, good +%d" % [2 * effect_rank(rank), 3 * effect_rank(rank)]
 		ANCHOR:
-			return "Needles ×%s" % _two_decimals(pow(0.85, float(effect_rank(rank))))
+			return "Needles ×%s" % _two_decimals(anchor_factor(rank))
 		STICKER:
-			return "Drift ×%s" % _two_decimals(pow(0.80, float(effect_rank(rank))))
+			return "Drift ×%s" % _two_decimals(sticker_factor(rank))
 		DRIVE_LID:
 			return "+%d yd" % drive_yards(rank)
 		TRUE_LID:
-			return "Hook ×%s" % _two_decimals(pow(0.90, float(effect_rank(rank))))
+			return "Hook ×%s" % _two_decimals(true_lid_factor(rank))
 		SHELTER_LID:
-			return "Headwind loss ×%s" % _two_decimals(pow(0.80, float(effect_rank(rank))))
+			return "Headwind loss ×%s" % _two_decimals(shelter_factor_for(rank))
 		WIND_VISOR:
 			if rank <= 1:
 				return "Shows wind mph and an arrow"
@@ -342,7 +378,7 @@ static func effect_line(id: String, rank: int) -> String:
 		GUIDE_GLOVES:
 			return "GOOD locks: hook ×%s" % _two_decimals(guide_factor(rank))
 		PATIENT_GLOVES:
-			return "Power needle ×%s" % _two_decimals(pow(0.85, float(effect_rank(rank))))
+			return "Power needle ×%s" % _two_decimals(patient_factor(rank))
 		HUSH_GLOVES:
 			return "First %d mph of wind ignored" % effect_rank(rank)
 		WEATHER_WRAPS:
@@ -833,11 +869,11 @@ static func _apply_piece(stats: KickerStats, item_id: String, item_rank: int, it
 		acc["perfect"] = float(acc["perfect"]) + 2.0 * float(item_fx)
 		acc["good"] = float(acc["good"]) + 3.0 * float(item_fx)
 	elif item_id == ANCHOR:
-		var factor := _scale_factor(pow(0.85, float(item_fx)), howling, item_scale)
+		var factor := _scale_factor(anchor_factor(item_rank), howling, item_scale)
 		acc["power"] = float(acc["power"]) * factor
 		acc["accuracy"] = float(acc["accuracy"]) * factor
 	elif item_id == STICKER:
-		acc["drift"] = float(acc["drift"]) * _scale_factor(pow(0.80, float(item_fx)), howling, item_scale)
+		acc["drift"] = float(acc["drift"]) * _scale_factor(sticker_factor(item_rank), howling, item_scale)
 	elif item_id == WIND_VISOR:
 		stats.flag_reader = item_rank >= 1
 		stats.path_percent = KickLogic.path_percent_for_rank(item_rank)
@@ -862,9 +898,9 @@ static func _apply_piece(stats: KickerStats, item_id: String, item_rank: int, it
 	elif item_id == DRIVE_LID:
 		acc["range"] = float(acc["range"]) + float(drive_yards(item_rank))
 	elif item_id == TRUE_LID:
-		stats.angle_scale *= _scale_factor(pow(0.90, float(item_fx)), howling, item_scale)
+		stats.angle_scale *= _scale_factor(true_lid_factor(item_rank), howling, item_scale)
 	elif item_id == SHELTER_LID:
-		var shelter := _scale_factor(pow(0.80, float(item_fx)), howling, item_scale)
+		var shelter := _scale_factor(shelter_factor_for(item_rank), howling, item_scale)
 		if stats.shelter_factor <= 0.0 or is_equal_approx(stats.shelter_factor, 1.0):
 			stats.shelter_factor = shelter
 		else:
@@ -903,7 +939,7 @@ static func _apply_piece(stats: KickerStats, item_id: String, item_rank: int, it
 		else:
 			stats.guide_factor *= guide
 	elif item_id == PATIENT_GLOVES:
-		acc["power"] = float(acc["power"]) * _scale_factor(pow(0.85, float(item_fx)), howling, item_scale)
+		acc["power"] = float(acc["power"]) * _scale_factor(patient_factor(item_rank), howling, item_scale)
 	elif item_id == HUSH_GLOVES:
 		stats.hush_mph += float(item_fx)
 	elif item_id == WEATHER_WRAPS:
@@ -1029,7 +1065,6 @@ static func apply(stats: KickerStats, state: Dictionary, howling: bool, item_sca
 		stats.narrow_posts = true
 	if curses.has(STONE):
 		curse_range += 6.0
-		power_mul *= 1.20
 	if curses.has(TIGHT):
 		curse_mult += 0.5
 		stats.tight_window = true

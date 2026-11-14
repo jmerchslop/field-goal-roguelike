@@ -10,6 +10,9 @@ extends RefCounted
 # Every kicker shares a faster baseline. Accuracy sizes the wedges, not the needle.
 const OMEGA0 := 90.0
 const SWEEP_SEC := 0.700
+# Item, perk, and vitamin slows multiply together, then stop at this floor.
+# Stone Toe, UNDER THE LIGHTS, rain, and ball speed are applied after it.
+const NEEDLE_SLOW_FLOOR := 0.35
 const WINDUP_SEC := 0.08
 const POWER_ANGLE := 180.0
 const MAX_ANGLE := 90.0
@@ -28,6 +31,18 @@ const NEEDLE_HALF := 9.0
 
 static func omega_base() -> float:
 	return OMEGA0 * (1.0 / SWEEP_SEC)
+
+
+static func floored_slow(product: float) -> float:
+	if product < NEEDLE_SLOW_FLOOR:
+		return NEEDLE_SLOW_FLOOR
+	return product
+
+
+# slow_product is only multipliers below 1 from items, perks, and vitamins.
+# stone, lights, rain, and ball are speed-ups (or a kicker ball rate) and are never floored.
+static func needle_speed(base: float, slow_product: float, stone: float, lights: float, rain: float, ball: float) -> float:
+	return base * floored_slow(slow_product) * stone * lights * rain * ball
 
 
 static func omega_power(power_speed: float, ball_speed_mult: float = 1.0) -> float:

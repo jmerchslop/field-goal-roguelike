@@ -1,12 +1,13 @@
 # Item, kit, range, and cash audit
 
 Generated: 2026-11-14
+BAL1: needle slow floor 0.35, gentler Anchor / Patient / Sticker / Shelter tables, and multiplier cards use the printed hundredths.
 
 **Loadout items:** 32 (18 equipment, 6 perks, 8 curses)
 **Vitamins:** 11 (10 belt vitamins and B12 Shot)
 **Kickers:** 8
 **Kits:** 8
-**Mismatches:** 11 (the five multiplier cards, split into the ranks that still move and the ranks that copy XII, plus Vex's clearance line)
+**Mismatches:** 1 (Vex's clearance line). BAL1 closed the ten rounding groups on Anchor, Patient, Sticker, Shelter, and True Lid.
 
 Numbers below were taken from `Loadout.effect_line`, `Loadout.apply` / `_apply_piece`, `Loadout.cannon_yards`, `Loadout.drive_yards`, `Loadout.high_air_yards`, `Loadout.effect_rank`, `Kickers.apply_to`, `KickLogic.carry_plan`, and `RunLogic.prepare_kick_stats`. A headless run on 2026-11-14 confirmed the range totals and the needle speeds.
 
@@ -16,7 +17,7 @@ Numbers below were taken from `Loadout.effect_line`, `Loadout.apply` / `_apply_p
 - Equipment ranks run I–XXIV in Endless and I–VI in Standard. Perks stay I–III Standard and I–VI Endless. Curses stay rank 1.
 - `effect_rank` freezes most equipment effects at rank XII. Cannon Cleats, Drive Lid, and High-Air Gloves do not. They use a late yard table from XIII through XXIV.
 - The wording pass updated perk cards for ranks IV–VI, the Wind Visor mph line, the Ice Cage cumulative line, and the Scout / Doink / Replay / Weather Wraps lines so they follow `effect_rank`. Those old mismatches are gone.
-- Anchor and Sticker cards now print two decimals of the factor (`_two_decimals`) instead of a tenth. The needles still use the unrounded power, so a smaller mismatch remains. True Lid, Patient Gloves, and Shelter Lid have the same kind of rounding.
+- BAL1 replaces the Anchor and Patient `0.85^rank` curve, and the Sticker and Shelter `0.80^rank` curve, with the rank I–XII tables below. XIII–XXIV still copy XII. True Lid's hook now uses the same hundredths the card prints. Item, perk, and vitamin slows are multiplied, floored at 0.35, and only then multiplied by Stone Toe, UNDER THE LIGHTS, rain, and ball speed.
 - The Bonus Ring can put a second, different style in a filled equipment type. At most two styles per type. Each ranks on its own. Normal offers and the shop do not open that second slot.
 - UNDER THE LIGHTS is a boss. Standard kick 10 is a 50/50 roll with The Squeeze. Endless draws it with the other four bosses. Both needles are ×1.35 on top of the kicker and the items. Posts stay 6.17 yards wide.
 - Endless opens the Vitamin Shop on every kick number divisible by 5, not only 5, 10, and 15. Standard is still only 5, 10, and 15.
@@ -72,45 +73,30 @@ Rank I is +2 / +3. Rank VI is +12 / +18. Rank XII through XXIV is +24 / +36.
 - **id:** `anchor_cleats`
 - **slot:** cleats
 - **rank cap:** Standard VI, Endless XXIV
-- **soft cap:** from XIII. The factor stays `0.85^12`.
-- **card text:** `"Needles ×{hundredths of 0.85^effect_rank}"`.
-- **actual effect:** both needle speeds are multiplied by the unrounded `0.85^effect_rank`. A higher rank replaces the previous factor. It does not stack a second 0.85. Big Game restores the kicker's base needle speeds, so this mul is off during Big Game. Patient Gloves multiply only the power needle, after this, if both are owned. Hero Ball's ×0.80 also multiplies after.
-- **match:** yes at rank I (×0.85). Mismatch at II–XXIV. The card rounds to hundredths. The needles use the full power. XIII–XXIV print and use the same values as XII.
+- **soft cap:** from XIII. The factor stays the rank XII table value, 0.40.
+- **card text:** `"Needles ×{anchor_factor}"`. The card and the needles use the same table.
+- **actual effect:** both needle speeds are multiplied by `anchor_factor(rank)`. A higher rank replaces the previous factor. Big Game restores the kicker's base needle speeds, so this mul is off during Big Game. Patient Gloves multiply only the power needle, after this, if both are owned. Hero Ball's ×0.80 and Magnesium also multiply into the slow product. That product is floored at 0.35 before Stone Toe and UNDER THE LIGHTS.
+- **match:** yes, ranks I–XXIV. Card and code are the same hundredths.
 
-| Rank | Card | Factor used |
-| --- | --- | --- |
-| I | ×0.85 | 0.85 |
-| II | ×0.72 | 0.7225 |
-| III | ×0.61 | 0.614125 |
-| IV | ×0.52 | 0.52200625 |
-| V | ×0.44 | 0.4437053125 |
-| VI | ×0.38 | 0.377149515625 |
-| VII | ×0.32 | 0.32057708828125 |
-| VIII | ×0.27 | 0.27249052503906 |
-| IX | ×0.23 | 0.2316169462832 |
-| X | ×0.20 | 0.19687440434072 |
-| XI | ×0.17 | 0.16734324368961 |
-| XII–XXIV | ×0.14 | 0.14224175713617 |
+| Rank | Card and factor |
+| --- | --- |
+| I–XII | 0.85, 0.78, 0.72, 0.67, 0.62, 0.58, 0.54, 0.51, 0.48, 0.45, 0.42, 0.40 |
+| XIII–XXIV | 0.40, same as XII |
 
 ### Sticker Cleats
 
 - **id:** `sticker_cleats`
 - **slot:** cleats
 - **rank cap:** Standard VI, Endless XXIV
-- **soft cap:** from XIII. The factor stays `0.80^12`.
-- **card text:** `"Drift ×{hundredths of 0.80^effect_rank}"`.
-- **actual effect:** `drift_factor` is the unrounded `0.80^effect_rank`. Big Game does not clear drift. No other cleat writes `drift_factor`.
-- **match:** yes at I (×0.80) and II (×0.64). Mismatch at III–XXIV.
+- **soft cap:** from XIII. The factor stays the rank XII table value, 0.28.
+- **card text:** `"Drift ×{sticker_factor}"`. The card and the drift code use the same table. Sticker does not change needle speed.
+- **actual effect:** `drift_factor` is `sticker_factor(rank)`. Big Game does not clear drift. No other cleat writes `drift_factor`.
+- **match:** yes, ranks I–XXIV.
 
-| Rank | Card | Factor used |
-| --- | --- | --- |
-| I | ×0.80 | 0.8 |
-| II | ×0.64 | 0.64 |
-| III | ×0.51 | 0.512 |
-| VI | ×0.26 | 0.262144 |
-| XII–XXIV | ×0.07 | 0.068719476736 |
-
-Ranks IV, V, VII, VIII, IX, X, and XI round the same way. The card is the hundredths of `0.80^effect_rank`. The drift code uses the full power.
+| Rank | Card and factor |
+| --- | --- |
+| I–XII | 0.90, 0.81, 0.73, 0.66, 0.59, 0.53, 0.48, 0.43, 0.39, 0.35, 0.31, 0.28 |
+| XIII–XXIV | 0.28, same as XII |
 
 ### Wind Visor
 
@@ -176,20 +162,20 @@ Rank XII and XIII–XXIV: +11 rerolls and five practice swings a quarter.
 - **id:** `true_lid`
 - **slot:** helmet
 - **rank cap:** Standard VI, Endless XXIV
-- **soft cap:** from XIII. The factor stays `0.90^12`.
-- **card text:** `"Hook ×{hundredths of 0.90^effect_rank}"`. Rank I is ×0.90. Rank VI is ×0.53. Rank XII–XXIV is ×0.28.
-- **actual effect:** `angle_scale` is multiplied by the unrounded `0.90^effect_rank`. A second helmet does not write `angle_scale`. Big Game does not reset `angle_scale` in the big-game overwrite block.
-- **match:** yes at I (0.90) and II (0.81). Mismatch at III–XXIV. Rank VI's card says ×0.53. The hook uses 0.531441. Rank XII's card says ×0.28. The hook uses 0.282429536481.
+- **soft cap:** from XIII. The factor stays the rank XII hundredths, 0.28.
+- **card text:** `"Hook ×{true_lid_factor}"`. Rank I is ×0.90. Rank VI is ×0.53. Rank XII–XXIV is ×0.28.
+- **actual effect:** `angle_scale` is multiplied by `true_lid_factor`, the hundredths of `0.90^effect_rank`. A second helmet does not write `angle_scale`. Big Game does not reset `angle_scale`.
+- **match:** yes, ranks I–XXIV. The hook uses the printed hundredths.
 
 ### Shelter Lid
 
 - **id:** `shelter_lid`
 - **slot:** helmet
 - **rank cap:** Standard VI, Endless XXIV
-- **soft cap:** from XIII. The factor stays `0.80^12`.
-- **card text:** `"Headwind loss ×{hundredths of 0.80^effect_rank}"`. Rank I is ×0.80. Rank VI is ×0.26. Rank XII–XXIV is ×0.07.
-- **actual effect:** a negative wind-range term is multiplied by the unrounded `0.80^effect_rank` (`shelter_factor`). Tailwind is not reduced. Rank I matches. Rank II is 0.64 and the card says ×0.64. Later ranks round.
-- **match:** yes at I and II. Mismatch at III–XXIV. Rank XII's card says ×0.07. The factor used is 0.068719476736.
+- **soft cap:** from XIII. The factor stays the rank XII table value, 0.28.
+- **card text:** `"Headwind loss ×{shelter_factor_for}"`. Rank I is ×0.90. Rank VI is ×0.53. Rank XII–XXIV is ×0.28. Shelter does not change needle speed.
+- **actual effect:** a negative wind-range term is multiplied by `shelter_factor_for(rank)` (`shelter_factor`). Tailwind is not reduced.
+- **match:** yes, ranks I–XXIV. Card and code use the same table.
 
 ### Iron Grip
 
@@ -241,10 +227,10 @@ Rank XII and XIII–XXIV: +11 rerolls and five practice swings a quarter.
 - **id:** `patient_gloves`
 - **slot:** gloves
 - **rank cap:** Standard VI, Endless XXIV
-- **soft cap:** from XIII. The factor stays `0.85^12`.
-- **card text:** `"Power needle ×{hundredths of 0.85^effect_rank}"`. Same printed hundredths as Anchor. Rank I is ×0.85. Rank VI is ×0.38. Rank XII–XXIV is ×0.14.
-- **actual effect:** only `power_speed` is multiplied by the unrounded `0.85^effect_rank`. The accuracy needle is not. Anchor, if also owned, multiplies both needles, so the power needle is hit twice. Big Game restores base power speed, so this mul is off during Big Game.
-- **match:** yes at rank I. Mismatch at II–XXIV, same hundredths gap as Anchor.
+- **soft cap:** from XIII. The factor stays the rank XII table value, 0.40.
+- **card text:** `"Power needle ×{patient_factor}"`. Same table as Anchor. Rank I is ×0.85. Rank VI is ×0.58. Rank XII–XXIV is ×0.40.
+- **actual effect:** only the power slow product is multiplied by `patient_factor(rank)`. The accuracy needle is not. Anchor, if also owned, multiplies both needles, so the power needle is hit twice. The combined item, perk, and vitamin slow is floored at 0.35. Big Game restores base power speed, so this mul is off during Big Game.
+- **match:** yes, ranks I–XXIV. Card and code use the same table.
 
 ### Hush Gloves
 
@@ -551,27 +537,29 @@ Boss weather is the condition name. Wind still comes from the kick table. Retrie
 | Iced | Standard kick 5. Endless pool. | Meter hides the way the Iced curse does, unless Ice Cage or Ice Veins is on. | Ice Cage blocks the hide. No needle multiplier. |
 | The Squeeze | Standard kick 10, 50/50 with UNDER THE LIGHTS. Endless pool. | Posts are 5.17 yards wide. | Narrow Posts does not stack a second shrink. No needle multiplier. |
 | Monsoon | Standard kick 15. Endless pool. | Rain and mud together. Weather Wraps rank III ignores both. | Vitamin D clears plain rain, snow, and mud, not the Monsoon extras. |
-| Big Game | Standard kick 20. Endless pool. | Meter-help is stripped. Needle speeds, bands, and red-tip flags are copied from the bare kicker. Stone Toe's ×1.20 power needle stays. Tight Window's −2 bands are applied again. Vitamins still apply after that copy. Range gear is kept. | Anchor, Patient Gloves, Hero Ball's needle slow, and Ice Cage's band adds are off. UNDER THE LIGHTS is not this boss, so it does not strip meter help. |
-| UNDER THE LIGHTS | Standard kick 10, the other half of the roll, stored at `new_run` so the kick 5 shop matches. Endless pool. | Both `power_speed` and `accuracy_speed` ×1.35 after kicker, gear, and vitamins. Rain still multiplies accuracy omega after that. Posts stay 6.17. Wind is the kick 10 table (10–15 mph in Standard). No rain, snow, or mud from the boss itself. Glare is visual only. Practice Swing does not get the ×1.35. | Meter-help items stay on. Two-Minute Drill still adds its boss Mult. |
+| Big Game | Standard kick 20. Endless pool. | Meter-help is stripped. Needle speeds, bands, and red-tip flags are copied from the bare kicker. Vitamins then join the slow product and the 0.35 floor. Stone Toe's ×1.20 power needle applies after that floor. Tight Window's −2 bands are applied again. Range gear is kept. | Anchor, Patient Gloves, Hero Ball's needle slow, and Ice Cage's band adds are off. Magnesium still slows. UNDER THE LIGHTS is not this boss, so it does not strip meter help. |
+| UNDER THE LIGHTS | Standard kick 10, the other half of the roll, stored at `new_run` so the kick 5 shop matches. Endless pool. | Both needles ×1.35 after the 0.35 slow floor, and after Stone Toe. Rain still multiplies accuracy omega after that. Posts stay 6.17. Wind is the kick 10 table (10–15 mph in Standard). No rain, snow, or mud from the boss itself. The beams are visual only. Practice Swing does not get the ×1.35. | Meter-help items stay on. Two-Minute Drill still adds its boss Mult. The ×1.35 is not floored. |
 
 The kick 10 roll uses its own generator, so it does not shift the weather sequence. Debug Shift+9 forces UNDER THE LIGHTS until the kick is left. Shift+6 is still The Squeeze.
 
-Needle rate is `omega_base × (speed / base) × ball_speed_mult`. Stored speeds below are after `prepare_kick_stats`. The live rate also multiplies `ball_speed_mult` (Walk-On 1, Cole 1, Carlos 1.15).
+Needle rate is built in `MeterGauge.needle_speed`. Item, perk, and vitamin slows multiply first and floor at 0.35. Then Stone Toe ×1.20, UNDER THE LIGHTS ×1.35, rain, and ball speed. Stored speeds below are after `prepare_kick_stats`, so they include the floor, Stone Toe, and the lights, and not rain or ball speed. The live rate also multiplies `ball_speed_mult` (Walk-On 1, Cole 1, Carlos 1.15).
 
 | Build | Power speed | Accuracy speed | Live rate vs a bare Walk-On |
 | --- | --- | --- | --- |
 | Walk-On, no items | 100 | 120 | 1.00 |
 | Walk-On, UNDER THE LIGHTS | 135 | 162 | 1.35 |
-| Walk-On, lights + Anchor VI | 50.915 | 61.098 | 0.509 |
-| Walk-On, lights + Anchor XXIV | 19.203 | 23.043 | 0.192 |
+| Walk-On, lights + Anchor VI | 78.3 | 93.96 | 0.783 |
+| Walk-On, lights + Anchor XII or XXIV | 54 | 64.8 | 0.54 |
+| Walk-On, Anchor XII + Patient XII | 35 | 48 | 0.35 |
+| Walk-On, that pair under the lights | 47.25 | 64.8 | 0.4725 |
 | Carlos, no items | 100 | 120 | 1.15 |
 | Carlos, UNDER THE LIGHTS | 135 | 162 | 1.5525 |
-| Carlos, lights + Anchor XXIV | 19.203 | 23.043 | 0.221 |
+| Carlos, lights + Anchor XXIV | 54 | 64.8 | 0.621 |
 | Cole, no items | 100 | 120 | 1.00 |
 | Cole, UNDER THE LIGHTS | 135 | 162 | 1.35 |
-| Cole, lights + Anchor XXIV | 19.203 | 23.043 | 0.192 |
+| Cole, lights + Anchor XXIV | 54 | 64.8 | 0.54 |
 
-Anchor XXIV is the strongest needle slow. It is the same factor as Anchor XII. Hero Ball's ×0.80 is weaker. Patient Gloves slow only the power needle, and at XII they use the same 0.14224 factor on power alone.
+Anchor XII is ×0.40 on both needles, and XXIV copies it. Patient XII is ×0.40 on power only. Together the power slow is 0.16, which the floor raises to 0.35. UNDER THE LIGHTS then multiplies that 0.35 by 1.35. Hero Ball's ×0.80 is a slow and goes through the same floor.
 
 ## 7. Balance sheet
 
@@ -583,20 +571,20 @@ Blank cells are ranks that item cannot reach. "Next rank adds nothing" is the fi
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Cannon Cleats | range yards | +6 | +36 | +72 | +570 | flat +6 through XII, then a rising late table | none through XXIV |
 | Pinpoint Cleats | perfect / good bands | +2 / +3 | +12 / +18 | +24 / +36 | same as XII | flat +2 / +3 per rank, then capped | XIII |
-| Anchor Cleats | both needle speeds | ×0.85 | ×0.377 | ×0.142 | same as XII | shrinking factor, then capped | XIII |
-| Sticker Cleats | drift | ×0.80 | ×0.262 | ×0.069 | same as XII | shrinking factor, then capped | XIII |
+| Anchor Cleats | both needle speeds | ×0.85 | ×0.58 | ×0.40 | same as XII | BAL1 table, then capped. Slow floor 0.35 can raise a stack | XIII |
+| Sticker Cleats | drift | ×0.90 | ×0.53 | ×0.28 | same as XII | BAL1 table, then capped | XIII |
 | Wind Visor | wind readout, path percent | readout, 0% path | 100% path | 100% path | 100% path | path rises through VI, then flat | VII |
 | Ice Cage | red-tip off, Iced block, accuracy ×0.90, bands | immunity | ×0.90, +2 / +4 | ×0.90, +5 / +10 | same as XII | bands rise through XII, then capped | XIII |
 | Scout Lid | rerolls, practice | +1 reroll | +5 rerolls, 2 practice | +11 rerolls, 5 practice | same as XII | rises through XII, then capped | XIII |
 | Doink Cap | doink-to-good charges | 1 | 5, carry 5 | 12, carry 12 | same as XII | rises through XII, then capped | XIII |
 | Drive Lid | range yards | +4 | +24 | +48 | +384 | flat +4 through XII, then a rising late table | none through XXIV |
-| True Lid | hook factor | ×0.90 | ×0.531 | ×0.282 | same as XII | shrinking factor, then capped | XIII |
-| Shelter Lid | headwind loss | ×0.80 | ×0.262 | ×0.069 | same as XII | shrinking factor, then capped | XIII |
+| True Lid | hook factor | ×0.90 | ×0.53 | ×0.28 | same as XII | hundredths of 0.90^rank, then capped | XIII |
+| Shelter Lid | headwind loss | ×0.90 | ×0.53 | ×0.28 | same as XII | BAL1 table, then capped | XIII |
 | Iron Grip | red-tip noise and start, then off | noise −2 | red tip off | red tip off | red tip off | noise caps at II, off switch at VI | VII |
 | Replay Gloves | practice swings | 1 | 5, carry 5 | 12, carry 12 | same as XII | rises through XII, then capped | XIII |
 | High-Air Gloves | range yards, tailwind ×1.5 | +2 | +12 | +24 | +186 | flat +2 through XII, then a rising late table | none through XXIV |
 | Guide Gloves | good-lock hook | ×0.50 | ×0.40 | ×0.28 | same as XII | flat −0.02 per rank, then capped | XIII |
-| Patient Gloves | power needle | ×0.85 | ×0.377 | ×0.142 | same as XII | shrinking factor, then capped | XIII |
+| Patient Gloves | power needle | ×0.85 | ×0.58 | ×0.40 | same as XII | BAL1 table, then capped. Slow floor 0.35 can raise a stack | XIII |
 | Hush Gloves | wind mph ignored | 1 | 6 | 12 | same as XII | flat +1 mph, then capped | XIII |
 | Weather Wraps | weather cut, then yards | half penalties | ignore + 6 yd | ignore + 18 yd | same as XII | +2 yd per rank from IV, then capped | XIII |
 
@@ -652,25 +640,17 @@ Blank cells are ranks that item cannot reach. "Next rank adds nothing" is the fi
 
 Coded size at the top rank that item can reach, next to others in the same slot. No recommendation.
 
-- Cannon XXIV is +570 yards. The other cleats at XXIV are a band add that froze at XII, a ×0.142 needle factor, or a ×0.069 drift factor.
+- Cannon XXIV is +570 yards. The other cleats at XXIV are a band add that froze at XII, a ×0.40 needle factor, or a ×0.28 drift factor.
 - Drive Lid XXIV is +384 yards. The other helmets at XXIV are a frozen XII utility (path, charges, rerolls, a hook factor, a headwind factor).
 - High-Air XXIV is +186 yards plus tailwind ×1.5. The other gloves at XXIV are a frozen XII utility.
 - Glass Leg VI is +48 yards. Two-Minute Drill VI is +3.0 boss Mult. Hot Streak VI is a 1.75 streak step. Those are the perk yard and mult extremes.
-- Anchor XII (and XXIV) multiplies both needles by 0.142. Hero Ball multiplies both by 0.80 at every rank. Patient Gloves reach 0.142 on the power needle only.
+- Anchor XII (and XXIV) multiplies both needles by 0.40. Hero Ball multiplies both by 0.80 at every rank. Patient Gloves reach 0.40 on the power needle only. A stack of those slows cannot go below 0.35 before the speed-ups.
 - Stone Toe speeds the power needle up (×1.20) and pays +6 yards. The other curse upsides are +0.5 Mult or +6 yards with a different downside.
 
 ## 8. Mismatch index
 
 Fixed since 2026-11-12, and not repeated below: perk cards IV–VI, Wind Visor mph line, Ice Cage cumulative line, Scout Lid, Doink Cap, Replay Gloves, and Weather Wraps ranks past VI, Willow's shop-vitamin sentence, and Phil's "shop items only" sentence.
 
-- `anchor_cleats` ranks II–XII: the card prints hundredths of `0.85^rank`. The needles use the full power. Rank II prints ×0.72 and uses 0.7225. Rank XII prints ×0.14 and uses 0.14224175713617.
-- `anchor_cleats` ranks XIII–XXIV: same card and same factor as XII.
-- `sticker_cleats` ranks III–XII: the card prints hundredths of `0.80^rank`. Drift uses the full power. Rank III prints ×0.51 and uses 0.512. Rank XII prints ×0.07 and uses 0.068719476736. Ranks I and II match.
-- `sticker_cleats` ranks XIII–XXIV: same as XII.
-- `true_lid` ranks III–XII: the card prints hundredths of `0.90^rank`. The hook uses the full power. Rank VI prints ×0.53 and uses 0.531441. Rank XII prints ×0.28 and uses 0.282429536481. Ranks I and II match.
-- `true_lid` ranks XIII–XXIV: same as XII.
-- `patient_gloves` ranks II–XII: same hundredths gap as Anchor, on the power needle only. Rank I matches.
-- `patient_gloves` ranks XIII–XXIV: same as XII.
-- `shelter_lid` ranks III–XII: the card prints hundredths of `0.80^rank`. Headwind loss uses the full power. Rank XII prints ×0.07 and uses 0.068719476736. Ranks I and II match.
-- `shelter_lid` ranks XIII–XXIV: same as XII.
-- `vex` kit line: `"88% power clears by 5 yards."` That is the no-wind number. A headwind, snow, or Heavy Ball can shrink the clearance, down to just reaching the posts.
+BAL1 closed the rounding gaps. Anchor, Patient, Sticker, and Shelter use lookup tables, and the card prints that table. True Lid's hook uses the hundredths already printed on the card. XIII–XXIV of each of those five still copy XII, on the card and in the code.
+
+- `vex` kit line: `"88% power clears by 5 yards."` That is the no-wind number. A headwind, snow, or Heavy Ball can shrink the clearance, down to just reaching the posts. BAL1 does not change kit text.

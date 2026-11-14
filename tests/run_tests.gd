@@ -36,6 +36,7 @@ func _run() -> void:
 	_check_power_flight()
 	_check_wind_and_pool()
 	_check_weather_and_bosses()
+	_check_needle_floor()
 	_check_curses_and_rarity()
 	_check_loadout_sprites()
 	_check_rank_caps_and_range()
@@ -973,7 +974,7 @@ func _check_upgrade_effects() -> void:
 	slow.give(Loadout.ANCHOR, 1)
 	check(near(slow.stats.power_speed, 85.0) and near(slow.stats.accuracy_speed, 120.0 * 0.85), "Anchor Cleats I is 85% on both needles")
 	slow.give(Loadout.ANCHOR, 2)
-	check(near(slow.stats.power_speed, 100.0 * pow(0.85, 2.0)), "Anchor Cleats II is 0.85 squared")
+	check(near(slow.stats.power_speed, 78.0), "Anchor Cleats II is the rank II table value 0.78")
 	var pinpoint := RunLogic.new()
 	pinpoint.new_run()
 	pinpoint.give(Loadout.PINPOINT, 1)
@@ -1261,7 +1262,7 @@ func _check_wind_and_pool() -> void:
 	plant.give(Loadout.ANCHOR, 1)
 	check(near(plant.stats.power_speed, 100.0 * 0.85) and near(plant.stats.accuracy_speed, 120.0 * 0.85), "Anchor Cleats I is 85% on both needles")
 	plant.give(Loadout.ANCHOR, 2)
-	check(near(plant.stats.power_speed, 100.0 * pow(0.85, 2.0)), "Anchor Cleats II slows both needles again")
+	check(near(plant.stats.power_speed, 78.0) and near(plant.stats.accuracy_speed, 120.0 * 0.78), "Anchor Cleats II slows both needles to 0.78")
 	var calm := RunLogic.new()
 	calm.set_seed(3)
 	calm.new_run()
@@ -1330,7 +1331,7 @@ func _check_wind_and_pool() -> void:
 	var low := RunLogic.new()
 	low.new_run()
 	low.give(Loadout.STICKER, 1)
-	check(near(low.stats.drift_factor, 0.8), "Sticker Cleats I multiplies drift by 0.8")
+	check(near(low.stats.drift_factor, 0.90), "Sticker Cleats I multiplies drift by 0.90")
 	var broken := KickLogic.drift_at_uprights(10.0, 90.0, 35.0, 2, 1, "standard")
 	check(near(broken, walk_drift * pow(0.65, 2.0) * 0.8), "the old drift formula still multiplies when called directly")
 	var ice := RunLogic.new()
@@ -1924,9 +1925,9 @@ func _check_rank_caps_and_range() -> void:
 	var anchor := RunLogic.new()
 	anchor.new_run()
 	anchor.give(Loadout.ANCHOR, 4)
-	check(near(anchor.stats.power_speed, 100.0 * pow(0.85, 4.0)), "Anchor IV is still 0.85 to the fourth")
+	check(near(anchor.stats.power_speed, 67.0), "Anchor IV is the rank IV table value 0.67")
 	anchor.give(Loadout.ANCHOR, 6)
-	check(near(anchor.stats.power_speed, 100.0 * pow(0.85, 6.0)), "Anchor VI is 0.85 to the sixth")
+	check(near(anchor.stats.power_speed, 58.0), "Anchor VI is the rank VI table value 0.58")
 	var hot := RunLogic.new()
 	hot.new_run()
 	hot.give(Loadout.HOT_STREAK, 2)
@@ -3834,9 +3835,104 @@ func _check_m2_kickers() -> void:
 	records.load_file()
 
 
+func _check_needle_floor() -> void:
+	var anchor_table: Array[float] = [0.85, 0.78, 0.72, 0.67, 0.62, 0.58, 0.54, 0.51, 0.48, 0.45, 0.42, 0.40]
+	var drift_table: Array[float] = [0.90, 0.81, 0.73, 0.66, 0.59, 0.53, 0.48, 0.43, 0.39, 0.35, 0.31, 0.28]
+	for rank in range(1, 13):
+		var shown_anchor: float = anchor_table[rank - 1]
+		var shown_drift: float = drift_table[rank - 1]
+		check(near(Loadout.anchor_factor(rank), shown_anchor) and near(Loadout.patient_factor(rank), shown_anchor), "Anchor and Patient rank %s use the needle table" % rank)
+		check(near(Loadout.sticker_factor(rank), shown_drift) and near(Loadout.shelter_factor_for(rank), shown_drift), "Sticker and Shelter rank %s use the drift table" % rank)
+		check(Loadout.effect_line(Loadout.ANCHOR, rank) == "Needles ×%.2f" % shown_anchor, "Anchor card rank %s shows the table" % rank)
+		check(Loadout.effect_line(Loadout.PATIENT_GLOVES, rank) == "Power needle ×%.2f" % shown_anchor, "Patient card rank %s shows the table" % rank)
+		check(Loadout.effect_line(Loadout.STICKER, rank) == "Drift ×%.2f" % shown_drift, "Sticker card rank %s shows the table" % rank)
+		check(Loadout.effect_line(Loadout.SHELTER_LID, rank) == "Headwind loss ×%.2f" % shown_drift, "Shelter card rank %s shows the table" % rank)
+	check(near(Loadout.anchor_factor(24), Loadout.anchor_factor(12)) and near(Loadout.patient_factor(24), 0.40), "Anchor and Patient above XII stay at 0.40")
+	check(near(Loadout.sticker_factor(24), 0.28) and near(Loadout.shelter_factor_for(18), 0.28), "Sticker and Shelter above XII stay at 0.28")
+	for rank in range(1, 13):
+		var printed := Loadout.true_lid_factor(rank)
+		check(Loadout.effect_line(Loadout.TRUE_LID, rank) == "Hook ×%.2f" % printed, "True Lid rank %s prints the hundredths the hook uses" % rank)
+		var hook := RunLogic.new()
+		hook.new_run()
+		hook.run_mode = "endless"
+		hook.give(Loadout.TRUE_LID, rank)
+		check(near(hook.stats.angle_scale, printed), "True Lid rank %s hook uses the printed hundredths, got %s" % [rank, hook.stats.angle_scale])
+	var deep := _endless_walk()
+	deep.give(Loadout.ANCHOR, 12)
+	deep.give(Loadout.PATIENT_GLOVES, 12)
+	deep.prepare_kick_stats()
+	check(near(deep.stats.power_speed, 35.0, 0.01) and near(deep.stats.accuracy_speed, 48.0, 0.01), "Anchor XII + Patient XII is 35 / 48, got %s / %s" % [deep.stats.power_speed, deep.stats.accuracy_speed])
+	check(near(_fill_seconds(deep.stats.power_speed), 2.0, 0.01), "that build fills power in about 2 seconds")
+	deep.force_weather(RunLogic.LIGHTS)
+	deep.prepare_kick_stats()
+	check(near(deep.stats.power_speed, 47.25, 0.01) and near(deep.stats.accuracy_speed, 64.80, 0.01), "the same build under the lights is 47.25 / 64.80, got %s / %s" % [deep.stats.power_speed, deep.stats.accuracy_speed])
+	check(near(_fill_seconds(deep.stats.power_speed), 1.481481, 0.01), "under the lights that build fills power in about 1.48 seconds")
+	var stickered := _endless_walk()
+	stickered.give(Loadout.ANCHOR, 12)
+	stickered.give(Loadout.STICKER, 12)
+	stickered.prepare_kick_stats()
+	check(near(stickered.stats.power_speed, 40.0, 0.01) and near(stickered.stats.accuracy_speed, 48.0, 0.01), "Anchor XII + Sticker XII is 40 / 48")
+	check(near(stickered.stats.drift_factor, 0.28), "Sticker XII drift is 0.28")
+	check(near(_fill_seconds(stickered.stats.power_speed), 1.75, 0.01), "Anchor XII fills power in about 1.75 seconds")
+	var stacked := _endless_walk()
+	stacked.give(Loadout.ANCHOR, 12)
+	stacked.give(Loadout.PATIENT_GLOVES, 12)
+	stacked.give(Loadout.HERO_BALL, 1)
+	stacked.belt[0] = Vitamins.MAGNESIUM
+	stacked.use_belt(0)
+	stacked.prepare_kick_stats()
+	check(near(stacked.stats.power_speed, 35.0, 0.01) and near(stacked.stats.accuracy_speed, 42.0, 0.01), "Anchor + Patient + Hero Ball + Magnesium floors at 35 / 42, got %s / %s" % [stacked.stats.power_speed, stacked.stats.accuracy_speed])
+	check(near(_fill_seconds(stacked.stats.power_speed), 2.0, 0.01), "the floored stack still fills power in about 2 seconds")
+	var hurried := _endless_walk()
+	hurried.give(Loadout.ANCHOR, 12)
+	hurried.give(Loadout.PATIENT_GLOVES, 12)
+	hurried.give(Loadout.STONE)
+	hurried.prepare_kick_stats()
+	check(near(hurried.stats.power_speed, 42.0, 0.01) and near(hurried.stats.accuracy_speed, 48.0, 0.01), "Stone Toe applies after the floor")
+	var rainy := _endless_walk()
+	rainy.give(Loadout.ANCHOR, 12)
+	rainy.give(Loadout.HERO_BALL, 1)
+	rainy.force_weather(RunLogic.RAIN)
+	var kick := KickLogic.new()
+	kick.stats = rainy.stats
+	kick.rain_faster = true
+	kick.rain_scale = 1.20
+	var rained := kick._accuracy_omega()
+	check(near(rainy.stats.accuracy_speed, 42.0, 0.01), "Anchor XII plus Hero Ball floors the accuracy needle at 0.35")
+	check(near(rained, MeterGauge.omega_base() * 0.35 * 1.20, 0.05), "rain multiplies the floored accuracy rate and is not itself floored")
+	var willow := RunLogic.new()
+	willow.start_with_kicker(Kickers.WILLOW)
+	willow.run_mode = "endless"
+	willow.give(Loadout.ANCHOR, 12)
+	willow.give(Loadout.PATIENT_GLOVES, 12)
+	willow.prepare_kick_stats()
+	check(near(willow.stats.power_speed, 35.0, 0.01), "Willow's ball speed is not baked into the floored power speed")
+	check(near(MeterGauge.omega_power(willow.stats.power_speed, willow.stats.ball_speed_mult), MeterGauge.omega_base() * 0.35 * 0.50, 0.01), "ball speed applies after the floor")
+	var carlos := RunLogic.new()
+	carlos.start_with_kicker(Kickers.CARLOS)
+	carlos.force_weather(RunLogic.LIGHTS)
+	carlos.prepare_kick_stats()
+	var carlos_time := MeterGauge.SWEEP_SEC / (1.35 * 1.15)
+	check(near(carlos.stats.power_speed, 135.0, 0.01), "Carlos under the lights keeps a 135 power speed")
+	check(near(MeterGauge.omega_power(carlos.stats.power_speed, carlos.stats.ball_speed_mult), MeterGauge.omega_base() * 1.35 * 1.15, 0.01), "Carlos under the lights is 1.35 times his own ball speed")
+	check(near(carlos_time, 0.4509, 0.01), "Carlos under the lights fills power in about 0.45 seconds")
+	check(MeterGauge.floored_slow(0.16) == 0.35 and MeterGauge.floored_slow(0.40) == 0.40 and MeterGauge.floored_slow(1.20) == 1.20, "the floor stops slows under 0.35 and leaves speed-ups alone")
+
+
+func _endless_walk() -> RunLogic:
+	var run := RunLogic.new()
+	run.start_with_kicker(Kickers.WALK_ON)
+	run.run_mode = "endless"
+	return run
+
+
+func _fill_seconds(power_speed: float) -> float:
+	return MeterGauge.SWEEP_SEC * (100.0 / power_speed)
+
+
 func _check_honest_cards_and_bench() -> void:
-	var anchor_show := ["0.85", "0.72", "0.61", "0.52", "0.44", "0.38", "0.32", "0.27", "0.23", "0.20", "0.17", "0.14"]
-	var sticker_show := ["0.80", "0.64", "0.51", "0.41", "0.33", "0.26", "0.21", "0.17", "0.13", "0.11", "0.09", "0.07"]
+	var anchor_show := ["0.85", "0.78", "0.72", "0.67", "0.62", "0.58", "0.54", "0.51", "0.48", "0.45", "0.42", "0.40"]
+	var sticker_show := ["0.90", "0.81", "0.73", "0.66", "0.59", "0.53", "0.48", "0.43", "0.39", "0.35", "0.31", "0.28"]
 	for rank in range(1, 13):
 		check(Loadout.effect_line(Loadout.ANCHOR, rank) == "Needles ×%s" % anchor_show[rank - 1], "Anchor rank %s prints two decimals, got %s" % [rank, Loadout.effect_line(Loadout.ANCHOR, rank)])
 		check(Loadout.effect_line(Loadout.STICKER, rank) == "Drift ×%s" % sticker_show[rank - 1], "Sticker rank %s prints two decimals, got %s" % [rank, Loadout.effect_line(Loadout.STICKER, rank)])
@@ -3844,7 +3940,7 @@ func _check_honest_cards_and_bench() -> void:
 	var anchor_run := RunLogic.new()
 	anchor_run.new_run()
 	anchor_run.give(Loadout.ANCHOR, 6)
-	check(near(anchor_run.stats.power_speed, 100.0 * pow(0.85, 6.0)), "Anchor VI needles still use the unrounded factor")
+	check(near(anchor_run.stats.power_speed, 58.0), "Anchor VI needles use the table value 0.58")
 	check(Loadout.effect_line(Loadout.WIND_VISOR, 1) == "Shows wind mph and an arrow", "Wind Visor I still names the mph and arrow")
 	check(Loadout.effect_line(Loadout.WIND_VISOR, 2) == "Wind mph and arrow. Dotted path for 40% of this kick", "Wind Visor II names the mph and the 40 percent path")
 	check(Loadout.effect_line(Loadout.WIND_VISOR, 6).begins_with("Wind mph and arrow.") and Loadout.effect_line(Loadout.WIND_VISOR, 12).find("full flight") >= 0, "Wind Visor VI through XII keep the mph line and the full path")
@@ -4557,7 +4653,7 @@ func _check_six_icons() -> void:
 	check(not ResourceLoader.exists("res://art/loadout/empty_perk.png"), "empty_perk.png was not invented")
 	check(Loadout.effect_line(Loadout.DRIVE_LID, 1) == "+4 yd", "Drive Lid card text is unchanged")
 	check(Loadout.effect_line(Loadout.TRUE_LID, 1) == "Hook ×0.90", "True Lid card text is unchanged")
-	check(Loadout.effect_line(Loadout.SHELTER_LID, 1) == "Headwind loss ×0.80", "Shelter Lid card text is unchanged")
+	check(Loadout.effect_line(Loadout.SHELTER_LID, 1) == "Headwind loss ×0.90", "Shelter Lid I reads x0.90")
 	check(Loadout.effect_line(Loadout.GUIDE_GLOVES, 1).begins_with("GOOD locks: hook"), "Guide Gloves card text is unchanged")
 	check(Loadout.effect_line(Loadout.PATIENT_GLOVES, 1).begins_with("Power needle"), "Patient Gloves card text is unchanged")
 	check(Loadout.effect_line(Loadout.HUSH_GLOVES, 1) == "First 1 mph of wind ignored", "Hush Gloves card text is unchanged")
