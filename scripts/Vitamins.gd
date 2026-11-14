@@ -76,9 +76,9 @@ static func effect_line(id: String) -> String:
 		PROTEIN:
 			return "+6 yd this kick"
 		MAGNESIUM:
-			return "Needles ×0.7 this kick"
+			return "Needles ×0.70 this kick"
 		OMEGA:
-			return "Good band wipes the angle error. The +5 perfect score bonus turns off. The perfect cash dollar can still pay."
+			return "GOOD wipes the aim error. No +5 PERFECT bonus. PERFECT cash still pays."
 		ELECTROLYTE:
 			return "A miss keeps the attempt"
 		VITAMIN_D:

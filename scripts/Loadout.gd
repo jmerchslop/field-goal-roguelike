@@ -270,11 +270,11 @@ static func _ice_cage_line(rank: int) -> String:
 		good += 2
 		even += 2
 	if perfect > 0 and good > 0:
-		line += ". PERFECT +%d, good +%d" % [perfect, good]
+		line += ". PERFECT +%d, GOOD +%d" % [perfect, good]
 	elif perfect > 0:
 		line += ". PERFECT +%d" % perfect
 	elif good > 0:
-		line += ". good +%d" % good
+		line += ". GOOD +%d" % good
 	return line
 
 
@@ -308,15 +308,15 @@ static func max_rank(id: String, mode: String = "standard") -> int:
 
 static func type_label(slot: String) -> String:
 	if slot == CLEATS:
-		return "CLEATS"
+		return "Cleats"
 	if slot == HELMET:
-		return "HELMET"
+		return "Helmet"
 	if slot == GLOVES:
-		return "GLOVES"
+		return "Gloves"
 	if slot == PERK:
-		return "PERK"
+		return "Perk"
 	if slot == CURSE:
-		return "CURSE"
+		return "Curse"
 	return ""
 
 
@@ -394,7 +394,7 @@ static func effect_line(id: String, rank: int) -> String:
 		CANNON:
 			return "+%d yd" % cannon_yards(rank)
 		PINPOINT:
-			return "PERFECT +%s, good +%s" % [_count_text(pinpoint_perfect(rank)), _count_text(pinpoint_good(rank))]
+			return "PERFECT +%s, GOOD +%s" % [_count_text(pinpoint_perfect(rank)), _count_text(pinpoint_good(rank))]
 		ANCHOR:
 			return _with_late_yards("Needles ×%s" % _two_decimals(anchor_factor(rank)), rank)
 		STICKER:
@@ -417,39 +417,45 @@ static func effect_line(id: String, rank: int) -> String:
 		SCOUT_LID:
 			var scout := _scout_rerolls(rank)
 			var swings := scout_practice_count(rank)
+			if rank <= 1:
+				return "+1 reroll"
 			if rank <= 3:
-				return "+%d reroll" % scout
+				return "+%d rerolls" % scout
 			if rank == 4:
-				return "+3 rerolls, and one Practice Swing a quarter"
+				return "+3 rerolls, and one Practice Swing each quarter"
 			if rank == 5:
-				return "+4 rerolls, and one Practice Swing a quarter"
+				return "+4 rerolls, and one Practice Swing each quarter"
 			if rank == 6:
-				return "+5 rerolls, and two Practice Swings a quarter"
-			return "+%d rerolls, and %s Practice Swings a quarter" % [scout, _swing_word(swings)]
+				return "+5 rerolls, and two Practice Swings each quarter"
+			return "+%d rerolls, and %s Practice Swings each quarter" % [scout, _swing_word(swings)]
 		DOINK_CAP:
 			var charges := doink_charges(rank)
+			if rank == 1:
+				return "1 doink becomes GOOD each quarter"
+			if rank < 6:
+				return "%d doinks become GOOD each quarter" % charges
 			if rank == 6:
-				return "5 doink-to-good a quarter, unused carry (max 5)"
-			if rank >= 7:
-				return "%d doink-to-good a quarter, unused carry (max %d)" % [charges, charges]
-			return "%d doink-to-good a quarter" % charges
+				return "5 doinks become GOOD each quarter, unused carry (max 5)"
+			return "%d doinks become GOOD each quarter, unused carry (max %d)" % [charges, charges]
 		IRON_GRIP:
 			if rank <= 2:
-				return "Red-tip noise −%d" % (2 * rank)
+				return "Red-tip noise -%d" % (2 * rank)
 			if rank == 3:
-				return "Noise −4 (min ±1), red tip 3 later"
+				return "Noise -4 (min ±1). The red tip starts 3 later on the power meter."
 			if rank == 4:
-				return "Noise −4 (min ±1), red tip 6 later"
+				return "Noise -4 (min ±1). The red tip starts 6 later on the power meter."
 			if rank == 5:
-				return "Noise −4 (min ±1), red tip 9 later"
+				return "Noise -4 (min ±1). The red tip starts 9 later on the power meter."
 			return "Red tip never triggers"
 		REPLAY_GLOVES:
 			var swings := replay_swings(rank)
+			if rank == 1:
+				return "1 practice swing each quarter"
+			if rank < 6:
+				return "%d practice swings each quarter" % swings
 			if rank == 6:
 				return "5 practice swings, unused carry (max 5)"
-			if rank >= 7:
-				return "%d practice swings, unused carry (max %d)" % [swings, swings]
-			return "%d practice swing a quarter" % swings
+			return "%d practice swings, unused carry (max %d)" % [swings, swings]
 		HIGH_AIR:
 			return "+%d yd, tailwind range ×1.5" % high_air_yards(rank)
 		GUIDE_GLOVES:
@@ -466,7 +472,7 @@ static func effect_line(id: String, rank: int) -> String:
 			if rank == 3:
 				return "Also ignores Monsoon's rain and mud"
 			if rank >= 4:
-				return "Penalties ignored, +%s yd unless CLEAR" % _count_text(wraps_bonus_yards(rank))
+				return "Penalties ignored, +%s yd unless Clear" % _count_text(wraps_bonus_yards(rank))
 			return ""
 		DEEP_BENCH:
 			if rank <= 2:
@@ -474,10 +480,10 @@ static func effect_line(id: String, rank: int) -> String:
 			if rank == 3:
 				return "Cap stays. +1 attempt now and each quarter if below cap"
 			if rank == 4:
-				return "Cap stays. Halfway to +1 extra attempt. Spare stays."
+				return "Cap stays. Halfway to +1 extra attempt. Unused refill carries over."
 			if rank == 5:
-				return "+1 attempt cap and +1 attempt now. Spare stays."
-			return "+1 more attempt cap and +1 attempt now. Spare stays."
+				return "+1 attempt cap and +1 attempt now. Unused refill carries over."
+			return "+1 more attempt cap and +1 attempt now. Unused refill carries over."
 		HOT_STREAK:
 			if rank <= 1:
 				return "Streak step +0.5"
@@ -516,7 +522,7 @@ static func effect_line(id: String, rank: int) -> String:
 			return "+3.5 Mult, both needles ×0.80"
 		GLASS_LEG:
 			if rank <= 1:
-				return "+8 yd, attempt cap −1"
+				return "+8 yd, attempt cap -1"
 			if rank == 2:
 				return "+16 yd total, no extra cap loss"
 			if rank == 3:
@@ -539,11 +545,11 @@ static func effect_line(id: String, rank: int) -> String:
 				return "Boss kicks +2.5 Mult, on top of ×1.5"
 			return "Boss kicks +3.0 Mult, on top of ×1.5"
 		ICED:
-			return "Down: meter hides 0.4s after Space. Up: +0.75 Mult"
+			return "Down: The meter hides for 0.4s after you start it. Up: +0.75 Mult"
 		SHANKY:
 			return "Down: accuracy error ×1.5. Up: +1.0 Mult"
 		HEAVY:
-			return "Down: −4 yd. Up: accuracy error ×0.85"
+			return "Down: -4 yd. Up: accuracy error ×0.85"
 		HOWLING:
 			return "Down: wind ×1.5. Up: equipment and perks ×1.10"
 		SHAKY:
@@ -553,7 +559,7 @@ static func effect_line(id: String, rank: int) -> String:
 		STONE:
 			return "Down: power needle ×1.20. Up: +10 yd"
 		TIGHT:
-			return "Down: PERFECT and good −2. Up: +1.0 Mult"
+			return "Down: PERFECT and GOOD -2. Up: +1.0 Mult"
 	return ""
 
 

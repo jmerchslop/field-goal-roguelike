@@ -4,14 +4,8 @@ extends RefCounted
 # Glyph-safe copy for the in-kick broadcast bugs. Pixel Gothic has no
 # dollar sign, degree mark, hash, hyphen, colon, or times sign.
 
-const FORBIDDEN := "$°#-:&!?×%,"
-
-
 static func is_safe(text: String) -> bool:
-	for i in text.length():
-		if FORBIDDEN.contains(text.substr(i, 1)):
-			return false
-	return true
+	return BitmapFonts.ui_allows(text)
 
 
 static func kick_title(number: int, endless: bool) -> String:

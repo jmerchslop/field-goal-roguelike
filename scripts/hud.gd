@@ -840,14 +840,14 @@ func _draw_mulligan() -> void:
 	var box := Rect2(180, 250, 740, 220)
 	draw_rect(box, KickConstants.COLOR_RESULT_SCRIM)
 	_text_centered("Use Mulligan? (M)", box.position.y + 80.0, 42, KickConstants.COLOR_ATTEMPT)
-	_text_centered("M retakes this kick.  Space accepts the miss.", box.position.y + 140.0, 22, KickConstants.COLOR_TEXT)
+	_text_centered("M retakes this kick. %s accepts the miss." % Settings.key_label("confirm"), box.position.y + 140.0, 22, KickConstants.COLOR_TEXT)
 
 
 func _draw_offer(run: RunLogic) -> void:
 	card_rects = []
 	var count := run.offer.size()
 	if count == 0:
-		_text_centered("Nothing left to pick — press S to continue.", 430.0, 28, KickConstants.COLOR_TEXT)
+		_text_centered("Nothing left to pick. Press %s to continue." % Settings.key_label("skip"), 430.0, 28, KickConstants.COLOR_TEXT)
 	var width := 220.0
 	var gap := 12.0
 	var total := float(count) * width + float(maxi(count - 1, 0)) * gap
@@ -868,7 +868,7 @@ func _draw_offer(run: RunLogic) -> void:
 		_draw_slot_icon(id, rank, slot, Rect2(rect.position + Vector2(14, 28), Vector2(72, 72)), true)
 		_text(rect.position + Vector2(96, 62), Loadout.card_title(id, rank), 18, KickConstants.COLOR_ATTEMPT)
 		_draw_wrapped(Loadout.effect_line(id, rank), Rect2(rect.position + Vector2(12, 112), Vector2(width - 24, 90)), 15)
-	_text_centered("Reroll: %d left    %s rerolls    %s skips" % [run.rerolls_left, Settings.key_label("offer_reroll"), Settings.key_label("skip")], 640.0, 18, KickConstants.COLOR_TEXT)
+	_text_centered("Rerolls left: %d. %s rerolls. %s skips." % [run.rerolls_left, Settings.key_label("offer_reroll"), Settings.key_label("skip")], 640.0, 18, KickConstants.COLOR_TEXT)
 	_text_centered("Skip takes nothing.", 666.0, 16, KickConstants.COLOR_TEXT)
 
 
@@ -1265,7 +1265,7 @@ func _draw_trophy(run: RunLogic) -> void:
 	var box := Rect2(280, 78, 520, 54)
 	draw_rect(box, Color(0.45, 0.32, 0.05, 0.94))
 	draw_rect(box, Color(0.95, 0.78, 0.2), false, 3.0)
-	_text_centered("TROPHY: %s" % run.trophy_name, 112.0, 26, Color(1.0, 0.9, 0.45))
+	_text_centered("Trophy: %s" % run.trophy_name, 112.0, 26, Color(1.0, 0.9, 0.45))
 
 
 func _draw_save_note() -> void:
@@ -1278,7 +1278,7 @@ func _draw_save_note() -> void:
 
 func _draw_records() -> void:
 	draw_rect(Rect2(0, 0, KickConstants.WINDOW_WIDTH, KickConstants.WINDOW_HEIGHT), Color(0.04, 0.07, 0.1, 0.96))
-	_text(Vector2(48, 42), "TROPHY ROOM", 32, KickConstants.COLOR_ATTEMPT)
+	_text(Vector2(48, 42), "Trophy Room", 32, KickConstants.COLOR_ATTEMPT)
 	_text(Vector2(48, 78), "Esc: back", 16, KickConstants.COLOR_TEXT)
 	var y := 120.0
 	_text(Vector2(48, y), "Lifetime", 22, KickConstants.COLOR_TEXT)
@@ -1385,7 +1385,7 @@ func _draw_shop(run: RunLogic) -> void:
 		draw_texture_rect(backdrop, Rect2(0, 0, KickConstants.WINDOW_WIDTH, KickConstants.WINDOW_HEIGHT), false)
 	else:
 		draw_rect(Rect2(0, 0, KickConstants.WINDOW_WIDTH, KickConstants.WINDOW_HEIGHT), Color(0.12, 0.08, 0.05))
-	_text(Vector2(36, 32), "VITAMIN SHOP", 28, Color(1.0, 0.95, 0.8))
+	_text(Vector2(36, 32), "Vitamin Shop", 28, Color(1.0, 0.95, 0.8))
 	var info := Rect2(132, 250, 190, 210)
 	draw_rect(info, Color(0.05, 0.04, 0.03, 0.82))
 	_text(info.position + Vector2(12, 28), "$%d" % run.cash, 22, KickConstants.COLOR_ATTEMPT)

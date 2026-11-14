@@ -13,6 +13,30 @@ static var _glyphs := {}
 static var _space := {}
 
 
+static func ui_allows(text: String) -> bool:
+	return _allows(text, true)
+
+
+static func callout_allows(text: String) -> bool:
+	return _allows(text, false)
+
+
+static func _allows(text: String, pixel_gothic: bool) -> bool:
+	for i in text.length():
+		var ch := text.substr(i, 1)
+		if ch == " ":
+			continue
+		var code := ch.unicode_at(0)
+		var digit := code >= 48 and code <= 57
+		var letter := code >= 65 and code <= 90
+		if digit or letter:
+			continue
+		if pixel_gothic and (ch == "+" or ch == "."):
+			continue
+		return false
+	return true
+
+
 static func callout_font() -> FontFile:
 	if _callout == null:
 		_callout = _load_font("res://fonts/stadium_block.png", "callout")

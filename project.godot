@@ -5,7 +5,7 @@ config_version=5
 
 [application]
 
-config/name="Field Goal"
+config/name="Overtime 2000"
 config/description="One playable field goal kick."
 run/main_scene="res://scenes/main.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")

@@ -37,6 +37,7 @@ func _run() -> void:
 	_check_wind_and_pool()
 	_check_weather_and_bosses()
 	_check_needle_floor()
+	_check_ui_copy()
 	_check_curses_and_rarity()
 	_check_loadout_sprites()
 	_check_rank_caps_and_range()
@@ -1586,6 +1587,66 @@ func _check_weather_and_bosses() -> void:
 	off_boss.weather_forced = false
 	off_boss._roll_weather()
 	check(not off_boss.is_boss() and off_boss.weather != RunLogic.LIGHTS, "Endless kick 11 is not an Under the Lights boss")
+
+
+func _check_ui_copy() -> void:
+	check(str(ProjectSettings.get_setting("application/config/name")) == "Overtime 2000", "the window title is Overtime 2000")
+	check(Loadout.type_label(Loadout.CLEATS) == "Cleats" and Loadout.type_label(Loadout.HELMET) == "Helmet" and Loadout.type_label(Loadout.GLOVES) == "Gloves" and Loadout.type_label(Loadout.PERK) == "Perk" and Loadout.type_label(Loadout.CURSE) == "Curse", "slot labels are title case")
+	check(str(Kickers.get_def(Kickers.PHIL)["name"]) == "Phil the Pharmacist", "Phil's display name uses a lowercase the")
+	check(BroadcastHud.plate_name(Kickers.PHIL) == "PHIL THE PHARMACIST", "the kicker plate still spells Phil in caps")
+	var hud := FileAccess.get_file_as_string("res://scripts/hud.gd")
+	check(hud.find("\"TROPHY ROOM\"") < 0 and hud.find("\"VITAMIN SHOP\"") < 0 and hud.find("\"TROPHY: ") < 0, "trophy and shop chrome is title case")
+	check(hud.find("Nothing left to pick —") < 0 and hud.find("Space accepts the miss") < 0 and hud.find("Reroll: %d left") < 0, "the old offer and mulligan lines are gone")
+	check(Loadout.effect_line(Loadout.PINPOINT, 1) == "PERFECT +2, GOOD +3", "Pinpoint I says GOOD")
+	check(Loadout.effect_line(Loadout.PINPOINT, 1).find("good") < 0, "Pinpoint does not use lowercase good")
+	check(Loadout.effect_line(Loadout.SCOUT_LID, 1) == "+1 reroll" and Loadout.effect_line(Loadout.SCOUT_LID, 2) == "+2 rerolls", "Scout Lid 1 is singular and 2 is plural")
+	check(Loadout.effect_line(Loadout.REPLAY_GLOVES, 1) == "1 practice swing each quarter" and Loadout.effect_line(Loadout.REPLAY_GLOVES, 2) == "2 practice swings each quarter", "Replay Gloves says each quarter")
+	check(Loadout.effect_line(Loadout.DOINK_CAP, 1) == "1 doink becomes GOOD each quarter", "Doink Cap I says a doink becomes GOOD")
+	check(Loadout.effect_line(Loadout.IRON_GRIP, 1) == "Red-tip noise -2", "Iron Grip I uses an ASCII hyphen")
+	check(Loadout.effect_line(Loadout.IRON_GRIP, 3) == "Noise -4 (min ±1). The red tip starts 3 later on the power meter.", "Iron Grip III is a full sentence")
+	check(Loadout.effect_line(Loadout.TIGHT, 1) == "Down: PERFECT and GOOD -2. Up: +1.0 Mult", "Tight Window keeps +1.0 Mult and says GOOD")
+	check(Loadout.effect_line(Loadout.ICED, 1) == "Down: The meter hides for 0.4s after you start it. Up: +0.75 Mult", "Iced keeps the BAL2 +0.75 Mult")
+	check(Vitamins.effect_line(Vitamins.MAGNESIUM) == "Needles ×0.70 this kick", "Magnesium prints 0.70")
+	check(is_equal_approx(0.70, 0.7), "Magnesium's printed 0.70 is the same 0.7 the needles use")
+	var minus := String.chr(0x2212)
+	var ids: Array[String] = []
+	ids.append_array(Loadout.CLEAT_IDS)
+	ids.append_array(Loadout.HELMET_IDS)
+	ids.append_array(Loadout.GLOVE_IDS)
+	ids.append_array(Loadout.PERK_IDS)
+	ids.append_array(Loadout.CURSE_IDS)
+	for id in ids:
+		for rank in range(1, 25):
+			var line := Loadout.effect_line(id, rank)
+			check(line.find(minus) < 0, "%s rank %s has no unicode minus" % [id, rank])
+			check(line.find(", good ") < 0 and line.find("and good ") < 0, "%s rank %s does not say lowercase good" % [id, rank])
+	for vitamin in Vitamins.ALL:
+		var bottle := Vitamins.effect_line(str(vitamin))
+		check(bottle.find(minus) < 0, "%s has no unicode minus" % vitamin)
+	for line in SelectCard.every_line():
+		check(BitmapFonts.ui_allows(line), "select copy stays in Pixel Gothic, got %s" % line)
+	var broadcast: PackedStringArray = PackedStringArray([
+		BroadcastHud.kick_title(1, false), BroadcastHud.kick_title(12, true), BroadcastHud.yards_text(35.0),
+		BroadcastHud.aim_text(0.0), BroadcastHud.aim_text(-2.5), BroadcastHud.wind_band(12, true), BroadcastHud.wind_band(0, false),
+		BroadcastHud.wind_detail(16.0, 180.0), BroadcastHud.plate_name(Kickers.WALK_ON), BroadcastHud.plate_number(Kickers.WALK_ON),
+		BroadcastHud.kit_text(Kickers.VEX), BroadcastHud.ball_text(Kickers.CARLOS),
+		BroadcastHud.hint_text(KickLogic.Phase.AIMING, false, true, false, "LEFT", "RIGHT", "SPACE"),
+		BroadcastHud.payout_text("+$4"), BroadcastHud.belt_note("Omega-3"), "BOSS", "METER UPGRADES OFF", "CAP 3", "+1 ATTEMPT", "AT CAP",
+	])
+	for sample in broadcast:
+		check(BitmapFonts.ui_allows(str(sample)), "broadcast copy stays in Pixel Gothic, got %s" % sample)
+	var stamps: PackedStringArray = PackedStringArray(["GOOD", "DOINK", "SHORT", "WIDE LEFT", "WIDE RIGHT", "BANK SHOT", "INSURED", "DOWN THE MIDDLE", "PERFECT", "SHANK", "BONUS RING", "PAUSE", "POWER 100", "ACCURACY PERFECT", "ACCURACY GOOD", "ACCURACY BAD"])
+	for stamp in stamps:
+		var callout := stamp == "POWER 100" or stamp.begins_with("ACCURACY")
+		if callout:
+			check(BitmapFonts.ui_allows(stamp), "substamp stays in Pixel Gothic, got %s" % stamp)
+		else:
+			check(BitmapFonts.callout_allows(stamp), "stamp stays in Stadium Block, got %s" % stamp)
+	for word in [FrontEnd.PAUSE_WORD, FrontEnd.RESUME_WORD, FrontEnd.SAVE_QUIT_WORD, FrontEnd.GATE_CONTINUE, FrontEnd.GATE_NEW, FrontEnd.GATE_START, FrontEnd.GATE_KEEP, FrontEnd.GATE_REPLACE_STANDARD, FrontEnd.GATE_REPLACE_ENDLESS]:
+		if word == FrontEnd.PAUSE_WORD:
+			check(BitmapFonts.callout_allows(word), "PAUSE stays in Stadium Block")
+		else:
+			check(BitmapFonts.ui_allows(word), "menu copy stays in Pixel Gothic, got %s" % word)
 
 
 func _check_curses_and_rarity() -> void:
@@ -3944,14 +4005,14 @@ func _check_honest_cards_and_bench() -> void:
 	check(Loadout.effect_line(Loadout.WIND_VISOR, 1) == "Shows wind mph and an arrow", "Wind Visor I still names the mph and arrow")
 	check(Loadout.effect_line(Loadout.WIND_VISOR, 2) == "Wind mph and arrow. Dotted path for 40% of this kick", "Wind Visor II names the mph and the 40 percent path")
 	check(Loadout.effect_line(Loadout.WIND_VISOR, 6).begins_with("Wind mph and arrow.") and Loadout.effect_line(Loadout.WIND_VISOR, 12).find("full flight") >= 0, "Wind Visor VI through XII keep the mph line and the full path")
-	check(Loadout.effect_line(Loadout.ICE_CAGE, 6) == "No red-tip penalty. Immune to Iced. Accuracy needle ×0.90. PERFECT +2, good +4", "Ice Cage VI lists the full package")
-	check(Loadout.effect_line(Loadout.ICE_CAGE, 12) == "No red-tip penalty. Immune to Iced. Accuracy needle ×0.90. PERFECT +5, good +10", "Ice Cage XII lists the grown bands")
-	check(Loadout.effect_line(Loadout.SCOUT_LID, 7) == "+6 rerolls, and two Practice Swings a quarter", "Scout Lid VII says +6 rerolls and two swings")
-	check(Loadout.effect_line(Loadout.DOINK_CAP, 7) == "7 doink-to-good a quarter, unused carry (max 7)", "Doink Cap VII carries 7")
-	check(Loadout.effect_line(Loadout.DOINK_CAP, 12) == "12 doink-to-good a quarter, unused carry (max 12)", "Doink Cap XII carries 12")
+	check(Loadout.effect_line(Loadout.ICE_CAGE, 6) == "No red-tip penalty. Immune to Iced. Accuracy needle ×0.90. PERFECT +2, GOOD +4", "Ice Cage VI lists the full package")
+	check(Loadout.effect_line(Loadout.ICE_CAGE, 12) == "No red-tip penalty. Immune to Iced. Accuracy needle ×0.90. PERFECT +5, GOOD +10", "Ice Cage XII lists the grown bands")
+	check(Loadout.effect_line(Loadout.SCOUT_LID, 7) == "+6 rerolls, and two Practice Swings each quarter", "Scout Lid VII says +6 rerolls and two swings")
+	check(Loadout.effect_line(Loadout.DOINK_CAP, 7) == "7 doinks become GOOD each quarter, unused carry (max 7)", "Doink Cap VII carries 7")
+	check(Loadout.effect_line(Loadout.DOINK_CAP, 12) == "12 doinks become GOOD each quarter, unused carry (max 12)", "Doink Cap XII carries 12")
 	check(Loadout.effect_line(Loadout.REPLAY_GLOVES, 7) == "7 practice swings, unused carry (max 7)", "Replay Gloves VII carries 7")
-	check(Loadout.effect_line(Loadout.WEATHER_WRAPS, 7) == "Penalties ignored, +8 yd unless CLEAR", "Weather Wraps VII says +8")
-	check(Loadout.effect_line(Loadout.WEATHER_WRAPS, 12) == "Penalties ignored, +18 yd unless CLEAR", "Weather Wraps XII says +18")
+	check(Loadout.effect_line(Loadout.WEATHER_WRAPS, 7) == "Penalties ignored, +8 yd unless Clear", "Weather Wraps VII says +8")
+	check(Loadout.effect_line(Loadout.WEATHER_WRAPS, 12) == "Penalties ignored, +18 yd unless Clear", "Weather Wraps XII says +18")
 	check(Loadout.effect_line(Loadout.HOT_STREAK, 4) == "Streak step +1.25" and Loadout.effect_line(Loadout.HOT_STREAK, 6) == "Streak step +1.75", "Hot Streak IV and VI name the real steps")
 	check(Loadout.effect_line(Loadout.STORM_CHASER, 4) == "+0.8 Mult per mph of crosswind" and Loadout.effect_line(Loadout.STORM_CHASER, 6) == "+1.2 Mult per mph of crosswind", "Storm Chaser IV and VI name the real rates")
 	check(Loadout.effect_line(Loadout.HERO_BALL, 4) == "+2.5 Mult, both needles ×0.80" and Loadout.effect_line(Loadout.HERO_BALL, 6) == "+3.5 Mult, both needles ×0.80", "Hero Ball IV and VI name the real Mult")
@@ -3961,7 +4022,7 @@ func _check_honest_cards_and_bench() -> void:
 	var phil := str(Kickers.get_def(Kickers.PHIL)["excels"])
 	check(phil.find("including B12") >= 0 and phil.find("Shelf rerolls still cost cash") >= 0 and phil.find("not only shop bottles") >= 0, "Phil's select line names free shop goods and the wider 15 percent")
 	check(str(Kickers.get_def(Kickers.PHIL)["downside"]) == "55 yards with nothing on. Rerolls still cost cash.", "Phil's downside stays 55 yards and paid rerolls")
-	check(Vitamins.effect_line(Vitamins.OMEGA).find("+5 perfect score bonus") >= 0 and Vitamins.effect_line(Vitamins.OMEGA).find("perfect cash dollar") >= 0, "Omega-3 names the missing score bonus and the cash that still pays")
+	check(Vitamins.effect_line(Vitamins.OMEGA) == "GOOD wipes the aim error. No +5 PERFECT bonus. PERFECT cash still pays.", "Omega-3 names the missing score bonus and the cash that still pays")
 	var bench := RunLogic.new()
 	bench.new_run()
 	bench.run_mode = "endless"
@@ -3976,7 +4037,7 @@ func _check_honest_cards_and_bench() -> void:
 	var held_cap := bench.attempt_cap
 	bench.give(Loadout.DEEP_BENCH, 4)
 	check(bench.attempt_cap == held_cap and bench.attempts == held_attempts and near(bench.bench_bank, 0.5), "Deep Bench IV banks a half and does not add an attempt")
-	check(Loadout.effect_line(Loadout.DEEP_BENCH, 4) == "Cap stays. Halfway to +1 extra attempt. Spare stays.", "Deep Bench IV card says halfway")
+	check(Loadout.effect_line(Loadout.DEEP_BENCH, 4) == "Cap stays. Halfway to +1 extra attempt. Unused refill carries over.", "Deep Bench IV card says the refill carries over")
 	bench.give(Loadout.DEEP_BENCH, 5)
 	check(bench.attempt_cap == 6 and bench.attempts == held_attempts + 1 and near(bench.bench_bank, 0.0), "Deep Bench V pays one cap and one attempt past the old max of 5")
 	bench.give(Loadout.DEEP_BENCH, 6)

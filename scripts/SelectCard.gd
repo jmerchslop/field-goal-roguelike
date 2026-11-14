@@ -82,10 +82,7 @@ static func corner_text(id: String, unlocked: bool) -> String:
 
 
 static func glyph_safe(text: String) -> bool:
-	for mark in ["-", "'", "&", "(", ")", "’"]:
-		if text.contains(mark):
-			return false
-	return true
+	return BitmapFonts.ui_allows(text)
 
 
 static func every_line() -> PackedStringArray:
