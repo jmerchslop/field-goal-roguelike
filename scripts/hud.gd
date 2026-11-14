@@ -840,14 +840,14 @@ func _draw_mulligan() -> void:
 	var box := Rect2(180, 250, 740, 220)
 	draw_rect(box, KickConstants.COLOR_RESULT_SCRIM)
 	_text_centered("Use Mulligan? (M)", box.position.y + 80.0, 42, KickConstants.COLOR_ATTEMPT)
-	_text_centered("M retakes this kick. %s accepts the miss." % Settings.key_label("confirm"), box.position.y + 140.0, 22, KickConstants.COLOR_TEXT)
+	_text_centered("M retakes this kick. %s accepts the miss." % Settings.key_sentence("confirm"), box.position.y + 140.0, 22, KickConstants.COLOR_TEXT)
 
 
 func _draw_offer(run: RunLogic) -> void:
 	card_rects = []
 	var count := run.offer.size()
 	if count == 0:
-		_text_centered("Nothing left to pick. Press %s to continue." % Settings.key_label("skip"), 430.0, 28, KickConstants.COLOR_TEXT)
+		_text_centered("Nothing left to pick. Press %s to continue." % Settings.key_sentence("skip"), 430.0, 28, KickConstants.COLOR_TEXT)
 	var width := 220.0
 	var gap := 12.0
 	var total := float(count) * width + float(maxi(count - 1, 0)) * gap
@@ -868,7 +868,7 @@ func _draw_offer(run: RunLogic) -> void:
 		_draw_slot_icon(id, rank, slot, Rect2(rect.position + Vector2(14, 28), Vector2(72, 72)), true)
 		_text(rect.position + Vector2(96, 62), Loadout.card_title(id, rank), 18, KickConstants.COLOR_ATTEMPT)
 		_draw_wrapped(Loadout.effect_line(id, rank), Rect2(rect.position + Vector2(12, 112), Vector2(width - 24, 90)), 15)
-	_text_centered("Rerolls left: %d. %s rerolls. %s skips." % [run.rerolls_left, Settings.key_label("offer_reroll"), Settings.key_label("skip")], 640.0, 18, KickConstants.COLOR_TEXT)
+	_text_centered("Rerolls left: %d. %s rerolls. %s skips." % [run.rerolls_left, Settings.key_sentence("offer_reroll"), Settings.key_sentence("skip")], 640.0, 18, KickConstants.COLOR_TEXT)
 	_text_centered("Skip takes nothing.", 666.0, 16, KickConstants.COLOR_TEXT)
 
 
@@ -1045,7 +1045,7 @@ func _draw_end_screen(run: RunLogic) -> void:
 		_text_centered("NEW RECORD!", box.position.y + 150.0, 22, KickConstants.COLOR_ATTEMPT)
 	if run.new_record_long:
 		_text_centered("NEW RECORD!", box.position.y + 230.0, 22, KickConstants.COLOR_ATTEMPT)
-	var back_line := "%s: trophy room    %s: main menu    R: choose a kicker" % [Settings.key_label("trophy"), Settings.key_label("back")]
+	var back_line := "%s: trophy room    %s: main menu    R: choose a kicker" % [Settings.key_sentence("trophy"), Settings.key_sentence("back")]
 	var back_font := ThemeDB.fallback_font
 	if back_font != null:
 		var back_width := back_font.get_string_size(back_line, HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x
@@ -1418,7 +1418,7 @@ func _draw_shop(run: RunLogic) -> void:
 	draw_rect(b12, Color(0.08, 0.08, 0.08, 0.9) if grey else Color(0.16, 0.12, 0.05, 0.92))
 	draw_rect(b12, Color(0.45, 0.45, 0.45) if grey else Color(0.95, 0.82, 0.28), false, 3.0)
 	var b12_price := Color(1.0, 0.3, 0.25) if run.shop_flash == "b12" else (Color(0.7, 0.7, 0.7) if grey else KickConstants.COLOR_ATTEMPT)
-	_text(b12.position + Vector2(16, 32), "%s  B12 Shot" % Settings.key_label("buy_b12"), 20, Color(0.75, 0.75, 0.75) if grey else KickConstants.COLOR_TEXT)
+	_text(b12.position + Vector2(16, 32), "%s  B12 Shot" % Settings.key_sentence("buy_b12"), 20, Color(0.75, 0.75, 0.75) if grey else KickConstants.COLOR_TEXT)
 	_text(b12.position + Vector2(16, 64), "$%d" % run.item_price(Vitamins.B12), 20, b12_price)
 	_text(b12.position + Vector2(16, 96), Vitamins.effect_line(Vitamins.B12), 16, KickConstants.COLOR_TEXT)
 	_draw_bottle(Vitamins.B12, Rect2(b12.position + Vector2(158, 16), Vector2(78, 118)), false)
@@ -1427,13 +1427,13 @@ func _draw_shop(run: RunLogic) -> void:
 	elif run.attempts >= run.attempt_cap:
 		_text(b12.position + Vector2(16, 126), "At cap", 16, Color(0.8, 0.8, 0.8))
 	var reroll_color := Color(1.0, 0.3, 0.25) if run.shop_flash == "reroll" else KickConstants.COLOR_TEXT
-	_text(Vector2(36, 64), "Reroll (%s): $%d" % [Settings.key_label("shop_reroll"), run.shop_reroll_price], 16, reroll_color)
+	_text(Vector2(36, 64), "Reroll (%s): $%d" % [Settings.key_sentence("shop_reroll"), run.shop_reroll_price], 16, reroll_color)
 	if run.shop_note != "":
 		_text(Vector2(36, 92), run.shop_note, 18, Color(1.0, 0.45, 0.35))
 	_text_centered("%s/%s/%s buy  %s B12  %s/%s sell  %s reroll  %s leave" % [
-		Settings.key_label("choose_1"), Settings.key_label("choose_2"), Settings.key_label("choose_3"),
-		Settings.key_label("buy_b12"), Settings.key_label("belt_z"), Settings.key_label("belt_x"),
-		Settings.key_label("shop_reroll"), Settings.key_label("confirm"),
+		Settings.key_sentence("choose_1"), Settings.key_sentence("choose_2"), Settings.key_sentence("choose_3"),
+		Settings.key_sentence("buy_b12"), Settings.key_sentence("belt_z"), Settings.key_sentence("belt_x"),
+		Settings.key_sentence("shop_reroll"), Settings.key_sentence("confirm"),
 	], 704.0, 18, KickConstants.COLOR_TEXT)
 
 

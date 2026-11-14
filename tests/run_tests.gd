@@ -781,7 +781,7 @@ func _check_run_spots_and_attempts() -> void:
 
 func _check_run_score_and_endings() -> void:
 	var line := RunLogic.format_score_line(56.0, 1.5, true, false, true)
-	check(line == "56 yd × 1.50 × 2 = 168 (+5 PERFECT)", "score line reads '%s'" % line)
+	check(line == "56 yd × 1.50 × 2 = 168 (+5 Perfect)", "score line reads '%s'" % line)
 	check(RunLogic.points_for(56.0, 1.5, true, false, true) == 173, "that line is worth 168 + 5 = 173")
 	check(RunLogic.points_for(35.0, 1.25, false, false, false) == 44, "35 × 1.25 = 43.75 rounds to 44")
 	check(RunLogic.points_for(38.0, 1.25, false, false, false) == 48, "38 × 1.25 = 47.5 rounds to 48")
@@ -791,7 +791,7 @@ func _check_run_score_and_endings() -> void:
 	middle.new_run()
 	middle.resolve_kick("GOOD", 0.0, true)
 	check(middle.down_the_middle, "check 7 a dead-center make is down the middle")
-	check(middle.score_line == "35 yd × 1.00 × 2 = 70 (+5 PERFECT)", "check 7 math reads '%s'" % middle.score_line)
+	check(middle.score_line == "35 yd × 1.00 × 2 = 70 (+5 Perfect)", "check 7 math reads '%s'" % middle.score_line)
 	check(middle.score == 75, "check 7 score is 75, got %d" % middle.score)
 	check(middle.attempt_note == "+1 ATTEMPT", "check 7 also earns an attempt")
 	var edge := RunLogic.new()
@@ -1597,14 +1597,13 @@ func _check_ui_copy() -> void:
 	var hud := FileAccess.get_file_as_string("res://scripts/hud.gd")
 	check(hud.find("\"TROPHY ROOM\"") < 0 and hud.find("\"VITAMIN SHOP\"") < 0 and hud.find("\"TROPHY: ") < 0, "trophy and shop chrome is title case")
 	check(hud.find("Nothing left to pick —") < 0 and hud.find("Space accepts the miss") < 0 and hud.find("Reroll: %d left") < 0, "the old offer and mulligan lines are gone")
-	check(Loadout.effect_line(Loadout.PINPOINT, 1) == "PERFECT +2, GOOD +3", "Pinpoint I says GOOD")
-	check(Loadout.effect_line(Loadout.PINPOINT, 1).find("good") < 0, "Pinpoint does not use lowercase good")
+	check(Loadout.effect_line(Loadout.PINPOINT, 1) == "Perfect +2, Good +3", "Pinpoint I says Perfect and Good")
 	check(Loadout.effect_line(Loadout.SCOUT_LID, 1) == "+1 reroll" and Loadout.effect_line(Loadout.SCOUT_LID, 2) == "+2 rerolls", "Scout Lid 1 is singular and 2 is plural")
 	check(Loadout.effect_line(Loadout.REPLAY_GLOVES, 1) == "1 practice swing each quarter" and Loadout.effect_line(Loadout.REPLAY_GLOVES, 2) == "2 practice swings each quarter", "Replay Gloves says each quarter")
-	check(Loadout.effect_line(Loadout.DOINK_CAP, 1) == "1 doink becomes GOOD each quarter", "Doink Cap I says a doink becomes GOOD")
+	check(Loadout.effect_line(Loadout.DOINK_CAP, 1) == "1 doink becomes Good each quarter", "Doink Cap I says a doink becomes Good")
 	check(Loadout.effect_line(Loadout.IRON_GRIP, 1) == "Red-tip noise -2", "Iron Grip I uses an ASCII hyphen")
 	check(Loadout.effect_line(Loadout.IRON_GRIP, 3) == "Noise -4 (min ±1). The red tip starts 3 later on the power meter.", "Iron Grip III is a full sentence")
-	check(Loadout.effect_line(Loadout.TIGHT, 1) == "Down: PERFECT and GOOD -2. Up: +1.0 Mult", "Tight Window keeps +1.0 Mult and says GOOD")
+	check(Loadout.effect_line(Loadout.TIGHT, 1) == "Down: Perfect and Good -2. Up: +1.0 Mult", "Tight Window keeps +1.0 Mult and says Good")
 	check(Loadout.effect_line(Loadout.ICED, 1) == "Down: The meter hides for 0.4s after you start it. Up: +0.75 Mult", "Iced keeps the BAL2 +0.75 Mult")
 	check(Vitamins.effect_line(Vitamins.MAGNESIUM) == "Needles ×0.70 this kick", "Magnesium prints 0.70")
 	check(is_equal_approx(0.70, 0.7), "Magnesium's printed 0.70 is the same 0.7 the needles use")
@@ -1619,10 +1618,22 @@ func _check_ui_copy() -> void:
 		for rank in range(1, 25):
 			var line := Loadout.effect_line(id, rank)
 			check(line.find(minus) < 0, "%s rank %s has no unicode minus" % [id, rank])
-			check(line.find(", good ") < 0 and line.find("and good ") < 0, "%s rank %s does not say lowercase good" % [id, rank])
+			check(not _default_font_shouting(line), "%s rank %s is shouting in the default font: %s" % [id, rank, line])
 	for vitamin in Vitamins.ALL:
 		var bottle := Vitamins.effect_line(str(vitamin))
 		check(bottle.find(minus) < 0, "%s has no unicode minus" % vitamin)
+		check(not _default_font_shouting(bottle), "%s is shouting in the default font: %s" % [vitamin, bottle])
+	check(GameSettings.sentence_key("SPACE") == "Space" and GameSettings.sentence_key("ESC") == "Esc" and GameSettings.sentence_key("LEFT") == "Left" and GameSettings.sentence_key("F") == "F", "sentence keys are title case and key-cap labels stay caps")
+	check(hud.find("key_sentence(\"confirm\")") >= 0 and hud.find("SPACE accepts the miss") < 0, "the mulligan sentence does not use the all-caps key cap")
+	var uppercase_flag := false
+	var sources: Array[String] = ["res://scripts/hud.gd", "res://scripts/main.gd", "res://scenes/main.tscn", "res://project.godot"]
+	for path in sources:
+		var body := FileAccess.get_file_as_string(path)
+		if body.find("uppercase") >= 0:
+			uppercase_flag = true
+	check(not uppercase_flag, "no default-font Label or theme forces uppercase")
+	var scored := RunLogic.format_score_line(35.0, 1.0, false, false, true)
+	check(scored.ends_with("(+5 Perfect)") and scored.find("(+5 PERFECT)") < 0, "the score line says Perfect, got %s" % scored)
 	for line in SelectCard.every_line():
 		check(BitmapFonts.ui_allows(line), "select copy stays in Pixel Gothic, got %s" % line)
 	var broadcast: PackedStringArray = PackedStringArray([
@@ -1647,6 +1658,29 @@ func _check_ui_copy() -> void:
 			check(BitmapFonts.callout_allows(word), "PAUSE stays in Stadium Block")
 		else:
 			check(BitmapFonts.ui_allows(word), "menu copy stays in Pixel Gothic, got %s" % word)
+
+
+func _default_font_shouting(text: String) -> bool:
+	var allow := {
+		"GAME OVER": true,
+		"WIN": true,
+		"NEW RECORD!": true,
+		"THAT'S FAR ENOUGH": true,
+		"SOLD": true,
+		"UNDER THE LIGHTS": true,
+		"GOOD": true,
+		"PERFECT": true,
+	}
+	if allow.has(text.strip_edges()):
+		return false
+	var letters := 0
+	for i in text.length():
+		var code := text.unicode_at(i)
+		if code >= 97 and code <= 122:
+			return false
+		if code >= 65 and code <= 90:
+			letters += 1
+	return letters > 0
 
 
 func _check_curses_and_rarity() -> void:
@@ -4005,11 +4039,11 @@ func _check_honest_cards_and_bench() -> void:
 	check(Loadout.effect_line(Loadout.WIND_VISOR, 1) == "Shows wind mph and an arrow", "Wind Visor I still names the mph and arrow")
 	check(Loadout.effect_line(Loadout.WIND_VISOR, 2) == "Wind mph and arrow. Dotted path for 40% of this kick", "Wind Visor II names the mph and the 40 percent path")
 	check(Loadout.effect_line(Loadout.WIND_VISOR, 6).begins_with("Wind mph and arrow.") and Loadout.effect_line(Loadout.WIND_VISOR, 12).find("full flight") >= 0, "Wind Visor VI through XII keep the mph line and the full path")
-	check(Loadout.effect_line(Loadout.ICE_CAGE, 6) == "No red-tip penalty. Immune to Iced. Accuracy needle ×0.90. PERFECT +2, GOOD +4", "Ice Cage VI lists the full package")
-	check(Loadout.effect_line(Loadout.ICE_CAGE, 12) == "No red-tip penalty. Immune to Iced. Accuracy needle ×0.90. PERFECT +5, GOOD +10", "Ice Cage XII lists the grown bands")
+	check(Loadout.effect_line(Loadout.ICE_CAGE, 6) == "No red-tip penalty. Immune to Iced. Accuracy needle ×0.90. Perfect +2, Good +4", "Ice Cage VI lists the full package")
+	check(Loadout.effect_line(Loadout.ICE_CAGE, 12) == "No red-tip penalty. Immune to Iced. Accuracy needle ×0.90. Perfect +5, Good +10", "Ice Cage XII lists the grown bands")
 	check(Loadout.effect_line(Loadout.SCOUT_LID, 7) == "+6 rerolls, and two Practice Swings each quarter", "Scout Lid VII says +6 rerolls and two swings")
-	check(Loadout.effect_line(Loadout.DOINK_CAP, 7) == "7 doinks become GOOD each quarter, unused carry (max 7)", "Doink Cap VII carries 7")
-	check(Loadout.effect_line(Loadout.DOINK_CAP, 12) == "12 doinks become GOOD each quarter, unused carry (max 12)", "Doink Cap XII carries 12")
+	check(Loadout.effect_line(Loadout.DOINK_CAP, 7) == "7 doinks become Good each quarter, unused carry (max 7)", "Doink Cap VII carries 7")
+	check(Loadout.effect_line(Loadout.DOINK_CAP, 12) == "12 doinks become Good each quarter, unused carry (max 12)", "Doink Cap XII carries 12")
 	check(Loadout.effect_line(Loadout.REPLAY_GLOVES, 7) == "7 practice swings, unused carry (max 7)", "Replay Gloves VII carries 7")
 	check(Loadout.effect_line(Loadout.WEATHER_WRAPS, 7) == "Penalties ignored, +8 yd unless Clear", "Weather Wraps VII says +8")
 	check(Loadout.effect_line(Loadout.WEATHER_WRAPS, 12) == "Penalties ignored, +18 yd unless Clear", "Weather Wraps XII says +18")
@@ -4022,7 +4056,7 @@ func _check_honest_cards_and_bench() -> void:
 	var phil := str(Kickers.get_def(Kickers.PHIL)["excels"])
 	check(phil.find("including B12") >= 0 and phil.find("Shelf rerolls still cost cash") >= 0 and phil.find("not only shop bottles") >= 0, "Phil's select line names free shop goods and the wider 15 percent")
 	check(str(Kickers.get_def(Kickers.PHIL)["downside"]) == "55 yards with nothing on. Rerolls still cost cash.", "Phil's downside stays 55 yards and paid rerolls")
-	check(Vitamins.effect_line(Vitamins.OMEGA) == "GOOD wipes the aim error. No +5 PERFECT bonus. PERFECT cash still pays.", "Omega-3 names the missing score bonus and the cash that still pays")
+	check(Vitamins.effect_line(Vitamins.OMEGA) == "Good wipes the aim error. No +5 Perfect bonus. Perfect cash still pays.", "Omega-3 names the missing score bonus and the cash that still pays")
 	var bench := RunLogic.new()
 	bench.new_run()
 	bench.run_mode = "endless"
@@ -4771,7 +4805,7 @@ func _check_six_icons() -> void:
 	check(Loadout.effect_line(Loadout.DRIVE_LID, 1) == "+4 yd", "Drive Lid card text is unchanged")
 	check(Loadout.effect_line(Loadout.TRUE_LID, 1) == "Hook ×0.90", "True Lid card text is unchanged")
 	check(Loadout.effect_line(Loadout.SHELTER_LID, 1) == "Headwind loss ×0.90", "Shelter Lid I reads x0.90")
-	check(Loadout.effect_line(Loadout.GUIDE_GLOVES, 1).begins_with("GOOD locks: hook"), "Guide Gloves card text is unchanged")
+	check(Loadout.effect_line(Loadout.GUIDE_GLOVES, 1).begins_with("Good locks: hook"), "Guide Gloves says Good locks")
 	check(Loadout.effect_line(Loadout.PATIENT_GLOVES, 1).begins_with("Power needle"), "Patient Gloves card text is unchanged")
 	check(Loadout.effect_line(Loadout.HUSH_GLOVES, 1) == "First 1 mph of wind ignored", "Hush Gloves card text is unchanged")
 	check(Loadout.is_power_item(Loadout.DRIVE_LID) and not Loadout.is_power_item(Loadout.TRUE_LID), "Drive Lid stays a power item and True Lid does not")

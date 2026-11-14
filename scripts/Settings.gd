@@ -195,6 +195,16 @@ func key_label(action_id: String) -> String:
 	return key_name(int(binds.get(action_id, 0)))
 
 
+func key_sentence(action_id: String) -> String:
+	return sentence_key(key_label(action_id))
+
+
+static func sentence_key(label: String) -> String:
+	if label.length() <= 1:
+		return label
+	return label.substr(0, 1) + label.substr(1).to_lower()
+
+
 static func key_name(code: int) -> String:
 	match code:
 		KEY_SPACE:

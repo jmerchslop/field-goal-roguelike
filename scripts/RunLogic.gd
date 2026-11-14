@@ -1865,7 +1865,7 @@ static func format_score_line(distance: float, mult: float, middle: bool, boss: 
 		text += " × 1.5"
 	text += " = %s" % _number(product)
 	if perfect:
-		text += " (+5 PERFECT)"
+		text += " (+5 Perfect)"
 	return text
 
 

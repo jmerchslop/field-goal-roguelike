@@ -156,6 +156,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "t1b":
+		if not await _capture_t1b():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "t1":
 		if not await _capture_t1():
 			get_tree().quit(1)
@@ -3412,6 +3418,64 @@ func _capture_wind_visor() -> bool:
 	if board.logic.stats.path_percent < 100.0:
 		return false
 	if not await _capture("visor_lutein_one_line.png"):
+		return false
+	return true
+
+
+func _capture_t1b() -> bool:
+	var tag := OS.get_environment("FG_T1_TAG")
+	if tag == "":
+		tag = "after"
+	board.showing_records = false
+	board.selecting = false
+	board.highlight = 1
+	board.confirm_kicker()
+	board.force_weather(RunLogic.CLEAR)
+	board.run.set_wind(0.0, 0.0)
+	board.refresh_view()
+	if not await _capture("t1b_%s_hud.png" % tag):
+		return false
+	board.run.force_offer([{"id": Loadout.PINPOINT, "rank": 1, "kind": Loadout.EQUIPMENT, "slot": Loadout.CLEATS}])
+	board.run.roll_offer()
+	board.run.awaiting_offer = true
+	board.refresh_view()
+	if not await _capture("t1b_%s_card.png" % tag):
+		return false
+	board.run.awaiting_offer = false
+	board.run.offer = []
+	board.run.kick_number = 5
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.kick_resolved = true
+	board.run.last_result_made = true
+	board.run.cash = 20
+	board.run.kick10_boss = RunLogic.SQUEEZE
+	board.run.open_shop()
+	board.run.shop_stock = [Vitamins.OMEGA, Vitamins.MAGNESIUM, Vitamins.PROTEIN]
+	board.refresh_view()
+	if not await _capture("t1b_%s_shop.png" % tag):
+		return false
+	board.run.leave_shop()
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.load_current_kick()
+	board.run.awaiting_mulligan = true
+	board.refresh_view()
+	if not await _capture("t1b_%s_mulligan.png" % tag):
+		return false
+	board.run.awaiting_mulligan = false
+	board.showing_records = true
+	board.front.screen = FrontEnd.Screen.RECORDS
+	board.refresh_view()
+	if not await _capture("t1b_%s_trophy.png" % tag):
+		return false
+	board.showing_records = false
+	board.front.screen = FrontEnd.Screen.PLAY
+	board.logic.result_text = "GOOD"
+	board.logic.phase = KickLogic.Phase.RESULT
+	board.logic.perfect = true
+	board.logic.shanked = false
+	board.result_age = 0.5
+	board.refresh_view()
+	if not await _capture("t1b_%s_stamp.png" % tag):
 		return false
 	return true
 

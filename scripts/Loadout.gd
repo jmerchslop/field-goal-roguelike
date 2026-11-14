@@ -270,11 +270,11 @@ static func _ice_cage_line(rank: int) -> String:
 		good += 2
 		even += 2
 	if perfect > 0 and good > 0:
-		line += ". PERFECT +%d, GOOD +%d" % [perfect, good]
+		line += ". Perfect +%d, Good +%d" % [perfect, good]
 	elif perfect > 0:
-		line += ". PERFECT +%d" % perfect
+		line += ". Perfect +%d" % perfect
 	elif good > 0:
-		line += ". GOOD +%d" % good
+		line += ". Good +%d" % good
 	return line
 
 
@@ -394,7 +394,7 @@ static func effect_line(id: String, rank: int) -> String:
 		CANNON:
 			return "+%d yd" % cannon_yards(rank)
 		PINPOINT:
-			return "PERFECT +%s, GOOD +%s" % [_count_text(pinpoint_perfect(rank)), _count_text(pinpoint_good(rank))]
+			return "Perfect +%s, Good +%s" % [_count_text(pinpoint_perfect(rank)), _count_text(pinpoint_good(rank))]
 		ANCHOR:
 			return _with_late_yards("Needles ×%s" % _two_decimals(anchor_factor(rank)), rank)
 		STICKER:
@@ -431,12 +431,12 @@ static func effect_line(id: String, rank: int) -> String:
 		DOINK_CAP:
 			var charges := doink_charges(rank)
 			if rank == 1:
-				return "1 doink becomes GOOD each quarter"
+				return "1 doink becomes Good each quarter"
 			if rank < 6:
-				return "%d doinks become GOOD each quarter" % charges
+				return "%d doinks become Good each quarter" % charges
 			if rank == 6:
-				return "5 doinks become GOOD each quarter, unused carry (max 5)"
-			return "%d doinks become GOOD each quarter, unused carry (max %d)" % [charges, charges]
+				return "5 doinks become Good each quarter, unused carry (max 5)"
+			return "%d doinks become Good each quarter, unused carry (max %d)" % [charges, charges]
 		IRON_GRIP:
 			if rank <= 2:
 				return "Red-tip noise -%d" % (2 * rank)
@@ -459,7 +459,7 @@ static func effect_line(id: String, rank: int) -> String:
 		HIGH_AIR:
 			return "+%d yd, tailwind range ×1.5" % high_air_yards(rank)
 		GUIDE_GLOVES:
-			return _with_late_yards("GOOD locks: hook ×%s" % _two_decimals(guide_factor(rank)), rank)
+			return _with_late_yards("Good locks: hook ×%s" % _two_decimals(guide_factor(rank)), rank)
 		PATIENT_GLOVES:
 			return _with_late_yards("Power needle ×%s" % _two_decimals(patient_factor(rank)), rank)
 		HUSH_GLOVES:
@@ -559,7 +559,7 @@ static func effect_line(id: String, rank: int) -> String:
 		STONE:
 			return "Down: power needle ×1.20. Up: +10 yd"
 		TIGHT:
-			return "Down: PERFECT and GOOD -2. Up: +1.0 Mult"
+			return "Down: Perfect and Good -2. Up: +1.0 Mult"
 	return ""
 
 
