@@ -829,7 +829,7 @@ func preview_plan() -> Dictionary:
 
 
 func carry_plan(ranged_power: float, angle_degrees: float) -> Dictionary:
-	# The saucer adds 8 mph west, then Howling Wind scales the combined vector.
+	# The saucer adds 11 mph west, then Howling Wind scales the combined vector.
 	var cross := crosswind_mph(float(wind_speed), wind_direction) - stats.saucer_mph
 	var head := head_tail_mph(float(wind_speed), wind_direction)
 	var blown := sqrt(cross * cross + head * head)

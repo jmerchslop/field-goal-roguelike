@@ -52,6 +52,7 @@ func _run() -> void:
 	_check_full_rerolls()
 	_check_wind_visor_path()
 	_check_rw1()
+	_check_rw2()
 	_check_drive_lid_and_power_safety()
 	_check_m2_kickers()
 	_check_honest_cards_and_bench()
@@ -2968,7 +2969,7 @@ func _check_new_kickers() -> void:
 	late.kick_number = 13
 	late.attempts = 1
 	late.resolve_kick("SHORT", 0.0, false)
-	check(late.phase == RunLogic.Phase.GAME_OVER and late.distance_yards() > 75.0 and records.has_unlock(Kickers.VEX), "GAME OVER past 75 yards unlocks Vex")
+	check(late.phase == RunLogic.Phase.GAME_OVER and late.distance_yards() > 75.0 and not records.has_unlock(Kickers.VEX), "failing Endless past 75 yards does not unlock Vex")
 	var same := RunLogic.new()
 	same.start_with_kicker(Kickers.WALK_ON)
 	var who := same.kicker_id
@@ -3489,6 +3490,138 @@ func _check_full_rerolls() -> void:
 		if second_before.has(str(id)):
 			skipped_again += 1
 	check(skipped_again == 0 and shop.belt == belt_now and not shop.shop_b12_bought, "the second F also replaces every shelf and still ignores the belt and B12")
+
+
+func _check_rw2() -> void:
+	var records = get_root().get_node("SaveData")
+	check(not KickConstants.debug_unlock_all_kickers, "debug_unlock_all_kickers stays false")
+	var lucky := RunLogic.new()
+	lucky.start_with_kicker(Kickers.GARY)
+	lucky.give(Loadout.CANNON, 1)
+	lucky.stats.compounding = true
+	lucky.lucky_stacks = 9
+	check(near(lucky.item_effect_scale(), 1.15 * 1.25), "Compounding multiplies on top of the +25% Lucky Ball cap")
+	lucky.stats.compounding = false
+	check(near(lucky.item_effect_scale(), 1.25), "nine Lucky Ball stacks pay +25%, not +27%")
+	lucky.lucky_stacks = 8
+	check(near(lucky.item_effect_scale(), 1.24), "eight Lucky Ball stacks pay +24%")
+	lucky.lucky_stacks = 3
+	check(near(lucky.item_effect_scale(), 1.09), "three Lucky Ball stacks pay +9%")
+	lucky.lucky_stacks = 0
+	lucky.prepare_kick_stats()
+	for _i in 8:
+		lucky.is_first_ball = true
+		lucky.phase = RunLogic.Phase.PLAYING
+		lucky.kick_resolved = false
+		lucky.resolve_kick("GOOD", 0.0, false)
+	lucky.prepare_kick_stats()
+	check(lucky.lucky_stacks == 8 and near(lucky.stats.range_bonus, 7.4), "eight first-try makes scale Cannon to 7.4, got %s" % lucky.stats.range_bonus)
+	lucky.is_first_ball = true
+	lucky.phase = RunLogic.Phase.PLAYING
+	lucky.kick_resolved = false
+	lucky.resolve_kick("GOOD", 0.0, false)
+	lucky.prepare_kick_stats()
+	check(lucky.lucky_stacks == 9 and near(lucky.stats.range_bonus, 7.5), "a ninth stack caps Cannon at 7.5, got %s" % lucky.stats.range_bonus)
+	lucky.phase = RunLogic.Phase.PLAYING
+	lucky.kick_resolved = false
+	lucky.attempts = 2
+	lucky.resolve_kick("SHORT", 0.0, false)
+	lucky.prepare_kick_stats()
+	check(lucky.lucky_stacks == 0 and near(lucky.stats.range_bonus, 6.0), "a later miss resets Lucky Ball stacks")
+	var first_miss := RunLogic.new()
+	first_miss.start_with_kicker(Kickers.GARY)
+	first_miss.lucky_stacks = 4
+	first_miss.attempts = 2
+	first_miss.resolve_kick("WIDE LEFT", -3.0, false)
+	check(first_miss.lucky_stacks == 0, "a first-try miss also resets Lucky Ball")
+	var walk := RunLogic.new()
+	walk.start_with_kicker(Kickers.WALK_ON)
+	for attempts in [1, 2, 3]:
+		walk.attempts = attempts
+		walk.is_first_ball = true
+		walk.practicing = false
+		walk.prepare_kick_stats()
+		check(near(walk.stats.power_speed, 100.0) and near(walk.stats.accuracy_speed, 120.0) and near(walk.stats.range_bonus, 0.0), "Walk-On's first ball has no clutch at %s attempts" % attempts)
+	walk.is_first_ball = false
+	walk.prepare_kick_stats()
+	check(near(walk.stats.power_speed, 90.0) and near(walk.stats.accuracy_speed, 108.0) and near(walk.stats.range_bonus, 6.0), "Walk-On's retry is ×0.90 and +6 yd")
+	walk.practicing = true
+	walk.prepare_kick_stats()
+	check(near(walk.stats.power_speed, 100.0) and near(walk.stats.range_bonus, 0.0), "Practice Swing does not get Walk-On clutch")
+	walk.practicing = false
+	walk.mulligans_left = 1
+	walk.awaiting_mulligan = true
+	walk.is_first_ball = true
+	check(walk.use_mulligan() and not walk.is_first_ball, "a mulligan keeps the retry on this kick")
+	walk.prepare_kick_stats()
+	check(near(walk.stats.range_bonus, 6.0), "a mulligan retry is clutch because is_first_ball stays false")
+	var other := RunLogic.new()
+	other.start_with_kicker(Kickers.BIG_BRUCE)
+	other.is_first_ball = false
+	other.prepare_kick_stats()
+	check(near(other.stats.power_speed, 100.0) and near(other.stats.range_bonus, 0.0), "Bruce does not get Walk-On clutch")
+	var clutched := RunLogic.new()
+	clutched.start_with_kicker(Kickers.WALK_ON)
+	clutched.run_mode = "endless"
+	clutched.give(Loadout.ANCHOR, 7)
+	clutched.belt[0] = Vitamins.MAGNESIUM
+	check(clutched.use_belt(0), "Magnesium is on for the clutch floor check")
+	clutched.is_first_ball = false
+	clutched.prepare_kick_stats()
+	check(near(clutched.stats.power_speed, 35.0, 0.05) and near(clutched.stats.accuracy_speed, 42.0, 0.05), "clutch ×0.90 is inside the slow product, before the 0.35 floor, got %s / %s" % [clutched.stats.power_speed, clutched.stats.accuracy_speed])
+	var made := RunLogic.new()
+	made.start_with_kicker(Kickers.WALK_ON)
+	made.is_first_ball = false
+	made.resolve_kick("GOOD", 0.0, false)
+	check(made.go_to_next_kick() and made.is_first_ball, "the kick after a made retry starts on a first ball")
+	made.prepare_kick_stats()
+	check(near(made.stats.power_speed, 100.0) and near(made.stats.range_bonus, 0.0), "clutch does not carry into the next kick")
+	var vex_stats := KickerStats.new()
+	Kickers.apply_to(vex_stats, Kickers.VEX)
+	check(near(vex_stats.saucer_mph, 11.0), "Vex's saucer is 11 mph")
+	var saucer := KickLogic.new()
+	saucer.stats = vex_stats
+	saucer.kick_distance = 35.0
+	saucer.wind_speed = 0
+	var curved: Dictionary = saucer.carry_plan(100.0, 0.0)
+	var west := KickLogic.new()
+	west.kick_distance = 35.0
+	west.wind_speed = 11
+	west.wind_direction = 270.0
+	var blown: Dictionary = west.carry_plan(100.0, 0.0)
+	check(near(float(curved["drift"]), float(blown["drift"])), "no-wind Vex matches 11 mph of west wind, got %s vs %s" % [curved["drift"], blown["drift"]])
+	saucer.howling_wind = true
+	var howled: Dictionary = saucer.carry_plan(100.0, 0.0)
+	check(near(float(howled["drift"]), float(curved["drift"]) * 1.5), "Howling still scales the wind minus the saucer")
+	var had_vex := bool(records.has_unlock(Kickers.VEX))
+	records.unlocks[Kickers.VEX] = true
+	var kept := RunLogic.new()
+	kept.start_with_kicker(Kickers.WALK_ON)
+	kept.run_mode = "endless"
+	kept.attempts = 2
+	kept.resolve_kick("SHORT", 0.0, false)
+	check(records.has_unlock(Kickers.VEX), "a save that already unlocked Vex keeps it")
+	records.unlocks[Kickers.VEX] = had_vex
+	records.unlocks[Kickers.VEX] = false
+	var short_make := RunLogic.new()
+	short_make.start_with_kicker(Kickers.BIG_BRUCE)
+	short_make.run_mode = "endless"
+	short_make.kick_number = 96
+	short_make.resolve_kick("GOOD", 0.0, false)
+	check(near(short_make.distance_yards(), 495.0) and not records.has_unlock(Kickers.VEX), "a 495-yard Endless make does not unlock Vex")
+	var standard_make := RunLogic.new()
+	standard_make.start_with_kicker(Kickers.WALK_ON)
+	standard_make.run_mode = "standard"
+	standard_make.kick_number = 20
+	standard_make.resolve_kick("GOOD", 0.0, false)
+	check(not records.has_unlock(Kickers.VEX), "a Standard make does not unlock Vex")
+	var long_make := RunLogic.new()
+	long_make.start_with_kicker(Kickers.COLE)
+	long_make.run_mode = "endless"
+	long_make.kick_number = 97
+	long_make.resolve_kick("GOOD", 0.0, false)
+	check(near(long_make.distance_yards(), 500.0) and records.has_unlock(Kickers.VEX), "an Endless 500-yard make unlocks Vex through resolve_kick")
+	records.unlocks[Kickers.VEX] = had_vex
 
 
 func _check_rw1() -> void:

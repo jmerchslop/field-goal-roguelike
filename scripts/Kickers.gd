@@ -38,7 +38,7 @@ const ALL: Array = [
 		"id": WALK_ON,
 		"name": "The Walk-On",
 		"lore": "Nobody recruited him. He showed up to tryouts in borrowed cleats and never left.",
-		"excels": "Earns His Spot. 2 rerolls a run.",
+		"excels": "Earns His Spot. 2 rerolls a run. A retry after a miss slows both needles by 10% and adds 6 yards.",
 		"downside": "No standout strength.",
 		"ball_name": "Team-Issue",
 		"ball_description": "A normal ball. No special trick.",
@@ -75,7 +75,7 @@ const ALL: Array = [
 		"excels": "Good As Gold. The good band counts as PERFECT.",
 		"downside": "No Farm Strength. A miss still misses.",
 		"ball_name": "Lucky Ball",
-		"ball_description": "Each first-try make boosts item numbers by 3% for the rest of the run.",
+		"ball_description": "Each first-try make adds 3%. The bonus caps at +25%. A miss resets it.",
 		"ball_type": "standard",
 		"accuracy": 98,
 		"range_line": "65 yd",
@@ -92,12 +92,12 @@ const ALL: Array = [
 		"excels": "Infinite Range & Beyond. 88% power clears by 5 yards.",
 		"downside": "The Flying Saucer always curves left.",
 		"ball_name": "The Flying Saucer",
-		"ball_description": "Curves left like 8 mph of west wind, on top of the real wind.",
+		"ball_description": "Curves left like 11 mph of west wind, on top of the real wind.",
 		"ball_type": "standard",
 		"accuracy": 94,
 		"range_line": "Infinite Range & Beyond",
 		"kit_line": "Infinite Range & Beyond",
-		"unlock": "Fail an Endless run past 75 yards",
+		"unlock": "Make a 500-yard field goal in Endless",
 		"color": Color(0.75, 0.8, 0.88),
 		"shape": "circle",
 		"portrait_path": "res://art/kickers/vex_portrait.png",
@@ -233,7 +233,7 @@ static func apply_to(stats: KickerStats, id: String) -> void:
 		stats.lucky_ball = true
 	elif id == VEX:
 		stats.clearance = true
-		stats.saucer_mph = 8.0
+		stats.saucer_mph = 11.0
 		stats.range_base = 0.0
 		stats.range_per_power = 0.0
 	elif id == COLE:

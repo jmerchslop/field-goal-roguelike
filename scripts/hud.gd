@@ -570,10 +570,22 @@ func _draw_playing_card(rect: Rect2, id: String, unlocked: bool, picked: bool) -
 		lines.append(ball)
 		_pg_stack(lines, well, body, cream, lines.size() - 1, Color(0.42, 0.82, 0.4))
 	else:
+		var unlock := SelectCard.unlock_line(id)
+		var fit := body
+		var wrapped := _pg_wrap(unlock, int(well.size.x) - 6, fit)
+		while fit > 6:
+			var too_wide := false
+			for line in wrapped:
+				if BitmapFonts.measure_px("ui", line, fit) > int(well.size.x) - 4:
+					too_wide = true
+			if (1 + wrapped.size()) * (fit + 2) <= int(well.size.y) and not too_wide:
+				break
+			fit -= 1
+			wrapped = _pg_wrap(unlock, int(well.size.x) - 6, fit)
 		var locked := PackedStringArray(["LOCKED"])
-		for line in _pg_wrap(SelectCard.unlock_line(id), int(well.size.x), body):
+		for line in wrapped:
 			locked.append(line)
-		_pg_stack(locked, well, body, orange, -1, orange)
+		_pg_stack(locked, well, fit, orange, -1, orange)
 	if picked:
 		_stroke_round(rect.grow(3.0), rect.size.y * (10.0 / 134.0), Color(0.96, 0.78, 0.28), 3.0)
 

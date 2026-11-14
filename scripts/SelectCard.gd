@@ -52,7 +52,7 @@ static func unlock_line(id: String) -> String:
 		Kickers.GARY:
 			return "BEAT STANDARD WITHOUT A MISS"
 		Kickers.VEX:
-			return "FAIL AN ENDLESS RUN PAST 75 YARDS"
+			return "MAKE A 500 YARD FIELD GOAL IN ENDLESS"
 		Kickers.COLE:
 			return "BEAT STANDARD"
 		Kickers.WILLOW:

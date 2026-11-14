@@ -370,6 +370,7 @@ func resolve_kick(result_text: String, offset: float, perfect: bool) -> void:
 		streak = 0
 		showtime_mult = 1.0
 		is_first_ball = false
+		lucky_stacks = 0
 		if _vitamin_count(Vitamins.ELECTROLYTE) == 0:
 			attempts -= 1
 			if attempts <= 0:
@@ -388,7 +389,7 @@ func resolve_kick(result_text: String, offset: float, perfect: bool) -> void:
 		_try_unlock(Kickers.COLE)
 	if phase == Phase.WIN and run_mode != "endless" and _standard_was_clean():
 		_try_unlock(Kickers.GARY)
-	if phase == Phase.GAME_OVER and run_mode == "endless" and distance > 75.0:
+	if made and run_mode == "endless" and distance >= 500.0:
 		_try_unlock(Kickers.VEX)
 	ring_offer_pending = result_text == "BONUS RING" and phase == Phase.PLAYING
 	if phase != Phase.PLAYING:
@@ -1476,17 +1477,27 @@ func _rebuild_raw_stats() -> void:
 	if kicker_id != "":
 		Kickers.apply_to(stats, kicker_id)
 	Loadout.apply(stats, loadout_state(), has_curse(Loadout.HOWLING), item_effect_scale())
+	if _walk_on_clutch():
+		stats.range_bonus += 6.0
 	attempt_cap = mini(stats.attempt_cap, KickConstants.ATTEMPT_CAP_MAX) + bench_extra_cap
+
+
+func _walk_on_clutch() -> bool:
+	# A mulligan sets is_first_ball false, so that retry is clutch too.
+	# Practice Swing never is.
+	return kicker_id == Kickers.WALK_ON and not is_first_ball and not practicing
 
 
 func _finish_needles() -> void:
 	# Slows are already multiplied into the speeds. Speed-ups are not.
+	# Walk-On clutch is one of those slows, before the 0.35 floor.
 	var base_power := KickConstants.POWER_RISE_PER_SEC
 	var base_acc := KickConstants.ACCURACY_FALL_PER_SEC
+	var clutch := 0.90 if _walk_on_clutch() else 1.0
 	var stone := 1.20 if has_curse(Loadout.STONE) else 1.0
 	var lights := LIGHTS_NEEDLE if lights_active() else 1.0
-	stats.power_speed = MeterGauge.needle_speed(base_power, stats.power_speed / base_power, stone, lights, 1.0, 1.0)
-	stats.accuracy_speed = MeterGauge.needle_speed(base_acc, stats.accuracy_speed / base_acc, 1.0, lights, 1.0, 1.0)
+	stats.power_speed = MeterGauge.needle_speed(base_power, stats.power_speed / base_power * clutch, stone, lights, 1.0, 1.0)
+	stats.accuracy_speed = MeterGauge.needle_speed(base_acc, stats.accuracy_speed / base_acc * clutch, 1.0, lights, 1.0, 1.0)
 
 
 func owned_labels() -> Array:
@@ -1957,7 +1968,8 @@ func item_effect_scale() -> float:
 	if stats.compounding:
 		scale *= 1.15
 	if stats.lucky_ball:
-		scale *= 1.0 + 0.03 * float(lucky_stacks)
+		var lucky_bonus := minf(0.03 * float(lucky_stacks), 0.25)
+		scale *= 1.0 + lucky_bonus
 	return scale
 
 

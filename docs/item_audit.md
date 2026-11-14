@@ -4,6 +4,7 @@ Generated: 2026-11-14
 BAL1: needle slow floor 0.35, gentler Anchor / Patient / Sticker / Shelter tables, and multiplier cards use the printed hundredths.
 BAL2: Endless ranks XIII–XXIV do something for every equipment style except Wind Visor and Iron Grip. Range late tables are shorter. Curse upsides are higher, and Howling's item boost is ×1.10.
 RW1: Iron Grip VI+ keeps the red tip and pays +5 yd at VI, plus 1 yd per rank, for a power lock in the tip (+23 at XXIV). Heavy Ball's downside is max(2, 2% of the kick distance). Wind Visor resists 10/15/20% at I/II/III and stays at 20%, and the dotted path starts at IV (40%) and is full at VIII.
+RW2: Lucky Ball is still 3% per first-try make, capped at +25%, and any miss resets the stacks. Walk-On clutch, on a retry after a miss, slows both needles ×0.90 before the 0.35 floor and adds +6 yd. Vex unlocks by making 500 yards in Endless, and the saucer is 11 mph of west wind.
 
 **Loadout items:** 32 (18 equipment, 6 perks, 8 curses)
 **Vitamins:** 11 (10 belt vitamins and B12 Shot)
@@ -432,7 +433,7 @@ Cole's ball multiplier is 1.00 in `Kickers.apply_to`. It is not 0.90. Carlos is 
 
 - **Select range:** `"60 yd"`
 - **Kit text:** `"Earns His Spot. 2 rerolls a run."`
-- **actual effect:** `rerolls_per_run` is 2. Full power is `16 + 0.44 × 100` = 60 yards. `ball_speed_mult` is 1.
+- **actual effect:** `rerolls_per_run` is 2. Full power is `16 + 0.44 × 100` = 60 yards. `ball_speed_mult` is 1. On a retry of a kick he missed (`is_first_ball` false, including a mulligan), both needles ×0.90 before the 0.35 floor and max range gains +6 yd. The first ball of a kick never has clutch. Practice Swing does not. The next kick starts on a first ball, so clutch ends.
 - **match:** yes
 - **Ball:** `"Team-Issue"`. No trick.
 - **match:** yes
@@ -452,7 +453,7 @@ Cole's ball multiplier is 1.00 in `Kickers.apply_to`. It is not 0.90. Carlos is 
 - **Kit text:** `"Good As Gold. The good band counts as PERFECT."`
 - **actual effect:** a good-band lock is a true perfect, including the perfect cash dollar. Full power is 65 yards. No power floor.
 - **match:** yes
-- **Ball:** `"Lucky Ball"`. Each first-try make adds 3% item scale for the rest of the run. A miss does not. A Bonus Ring miss clears the first-ball flag, so the later make of that kick does not add a stack.
+- **Ball:** `"Lucky Ball"`. Each first-try make adds 3% item scale, capped at +25% (`min(0.03 * stacks, 0.25)`). Phil's ×1.15 multiplies after that cap. Any miss sets `lucky_stacks` back to 0. A retry make is not a first ball, so it does not add a stack.
 - **match:** yes
 
 ### Vex
@@ -461,7 +462,7 @@ Cole's ball multiplier is 1.00 in `Kickers.apply_to`. It is not 0.90. Carlos is 
 - **Kit text:** `"Infinite Range & Beyond. 88% power clears by 5 yards."`
 - **actual effect:** travel is `kick distance + 5 + (power − 88) × 1.25`, plus items and wind. At 88% with no wind the clearance is 5 yards. At 100% it is 20 yards. If power is at least 88 and a headwind or a penalty would leave the ball short, travel is raised only back to the kick distance, not back up to a 5-yard clearance.
 - **match:** mismatch. A headwind, snow, or Heavy Ball can shrink the 5-yard clearance down to just reaching the posts.
-- **Ball:** `"The Flying Saucer"`. 8 mph is subtracted from the crosswind before drift and wind range. Howling then scales the combined vector.
+- **Ball:** `"The Flying Saucer"`. 11 mph is subtracted from the crosswind before drift and wind range. Howling then scales the combined vector. Unlock is an Endless make of at least 500 yards, through `resolve_kick`. Failing past 75 yards does not unlock Vex.
 - **match:** yes
 
 ### Cole Lang
@@ -495,7 +496,7 @@ Cole's ball multiplier is 1.00 in `Kickers.apply_to`. It is not 0.90. Carlos is 
 
 `carry_plan` at 0 wind, confirmed headless on 2026-11-14. Order:
 
-1. Wind vector. Vex subtracts 8 mph from the crosswind. Howling multiplies the combined speed by 1.5. Hush Gloves then subtract mph, floored at 0.
+1. Wind vector. Vex subtracts 11 mph from the crosswind. Howling multiplies the combined speed by 1.5. Wind Visor then multiplies by `(1 - resistance)`. Hush Gloves then subtract mph, floored at 0.
 2. Wind range is `head_or_tail mph × 0.4`. High-Air multiplies a positive change by 1.5. Shelter Lid multiplies a negative change by `shelter_factor`.
 3. Vex: `travel = kick distance + 5 + (power − 88) × 1.25 + range_bonus + wind range`.
 4. Everyone else: `travel = 16 + range_per_power × power + range_bonus + wind range`.

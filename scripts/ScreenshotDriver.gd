@@ -114,6 +114,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "rw2":
+		if not await _capture_rw2():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "c4":
 		if not await _capture_c4():
 			get_tree().quit(1)
@@ -1593,6 +1599,56 @@ func _capture_b5c() -> bool:
 	if not _beams_on_tee("1000"):
 		return false
 	if not await _capture("b5c_1000.png"):
+		return false
+	return true
+
+
+func _capture_rw2() -> bool:
+	board.open_select()
+	board.highlight = 3
+	board.save_note = str(Kickers.get_def(Kickers.GARY).get("ball_description", ""))
+	board.refresh_view()
+	if board.save_note.find("3%") < 0 or board.save_note.find("+25%") < 0 or board.save_note.find("miss") < 0:
+		print("lucky text ", board.save_note)
+		return false
+	if not await _capture("rw2_lucky_ball_text.png"):
+		return false
+	board.save_note = ""
+	board.open_select()
+	board.highlight = 4
+	var had_vex: bool = SaveData.has_unlock(Kickers.VEX)
+	SaveData.unlocks[Kickers.VEX] = false
+	board.save_note = ""
+	board.refresh_view()
+	if SelectCard.unlock_line(Kickers.VEX) != "MAKE A 500 YARD FIELD GOAL IN ENDLESS":
+		print("vex unlock ", SelectCard.unlock_line(Kickers.VEX))
+		SaveData.unlocks[Kickers.VEX] = had_vex
+		return false
+	if str(Kickers.get_def(Kickers.VEX).get("ball_description", "")).find("11 mph") < 0:
+		print("vex ball ", Kickers.get_def(Kickers.VEX).get("ball_description", ""))
+		SaveData.unlocks[Kickers.VEX] = had_vex
+		return false
+	if not await _capture("rw2_vex_card.png"):
+		SaveData.unlocks[Kickers.VEX] = had_vex
+		return false
+	SaveData.unlocks[Kickers.VEX] = had_vex
+	board.save_note = ""
+	board.selecting = false
+	board.highlight = 1
+	board.confirm_kicker()
+	board.force_weather(RunLogic.CLEAR)
+	board.run.set_wind(0.0, 0.0)
+	board.run.attempts = 2
+	board.run.resolve_kick("SHORT", 0.0, false)
+	if not board.run.begin_retry():
+		print("walk-on retry did not start")
+		return false
+	board.load_current_kick()
+	board.refresh_view()
+	if board.run.is_first_ball or absf(board.logic.max_range_at_full_power() - 66.0) > 0.05:
+		print("clutch range ", board.logic.max_range_at_full_power(), " first ", board.run.is_first_ball)
+		return false
+	if not await _capture("rw2_walkon_clutch.png"):
 		return false
 	return true
 
