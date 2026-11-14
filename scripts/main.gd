@@ -60,6 +60,7 @@ var _stands: Node3D
 var _floods: Node3D
 var _ring: Sprite3D
 var _ring_pop := -1.0
+var glare_time := 0.0
 var _sky_mat: ShaderMaterial
 var sky_texture_path := ""
 var _weather_anchor: Node3D
@@ -712,6 +713,9 @@ func _process(delta: float) -> void:
 	_ribbon_time += delta
 	logic.sway(_sway_time)
 	_place_ribbons()
+	if run.lights_active() and logic.phase != KickLogic.Phase.RESULT:
+		glare_time += delta
+	_pulse_floodlights()
 	_tick_ring(delta)
 	_step_kick_pose(delta)
 	if _pose == "run":
@@ -1359,6 +1363,8 @@ func _shift_weather(code: Key) -> String:
 		return RunLogic.MONSOON
 	if code == KEY_8 or code == KEY_KP_8:
 		return RunLogic.BIG_GAME
+	if code == KEY_9 or code == KEY_KP_9:
+		return RunLogic.LIGHTS
 	return ""
 
 
@@ -1900,6 +1906,7 @@ func _layout_stands(span: float) -> void:
 	_paint_stand(_stands.get_node("Right"), STAND_X, far_z, near_z, _STAND_RIGHT, true)
 	_paint_stand(_stands.get_node("Bowl"), 0.0, -STAND_X, STAND_X, _STAND_BOWL, false)
 	_layout_floodlights(span)
+	_pulse_floodlights()
 
 
 func _paint_stand(wall: MeshInstance3D, fixed: float, start: float, finish: float, pattern: Array[int], along_z: bool) -> void:
@@ -2028,6 +2035,31 @@ func _place_ring() -> void:
 	if logic.result_text == "BONUS RING" and arrived and _ring_pop < 0.0:
 		_ring_pop = 0.0
 	_ring.visible = true
+
+
+func lights_roof_y() -> float:
+	if _camera == null:
+		return 150.0
+	var roof := Vector3(0.0, STAND_HEIGHT, STAND_BOWL_Z)
+	if _camera.is_position_behind(roof):
+		return 150.0
+	return _camera.unproject_position(roof).y
+
+
+func _pulse_floodlights() -> void:
+	if _floods == null:
+		return
+	var hot := run.lights_active() and logic.phase != KickLogic.Phase.RESULT
+	var wave := 0.5 + 0.5 * sin(glare_time * TAU / 2.0)
+	for child in _floods.get_children():
+		var sprite := child as Sprite3D
+		if sprite == null:
+			continue
+		if not hot:
+			sprite.modulate = Color.WHITE
+			continue
+		var glow := lerpf(1.05, 1.75, wave)
+		sprite.modulate = Color(1.0, 0.94, 0.78) * glow
 
 
 func _tick_ring(delta: float) -> void:

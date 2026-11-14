@@ -18,6 +18,8 @@ const ICED := "ICED"
 const SQUEEZE := "THE SQUEEZE"
 const MONSOON := "MONSOON"
 const BIG_GAME := "BIG GAME"
+const LIGHTS := "UNDER THE LIGHTS"
+const LIGHTS_NEEDLE := 1.35
 const SQUEEZE_WIDTH := 5.17
 const SQUEEZE_HALF := 2.585
 const DEBUG_SPOTS: Array = [-6.0, -3.0, 0.0, 3.0, 6.0]
@@ -96,6 +98,7 @@ var weather := CLEAR
 var weather_forced := false
 # Endless boss name kept for that kick number, including a shop preview.
 var endless_bosses := {}
+var kick10_boss := ""
 var _forced_cards: Array = []
 var insurance_left := 0
 var practice_left := 0
@@ -127,6 +130,7 @@ var _next_side := 0
 var _rng := RandomNumberGenerator.new()
 var _wind_rng := RandomNumberGenerator.new()
 var _weather_rng := RandomNumberGenerator.new()
+var _kick10_rng := RandomNumberGenerator.new()
 var _offer_rng := RandomNumberGenerator.new()
 var _shop_rng := RandomNumberGenerator.new()
 var _previous_weather := ""
@@ -138,6 +142,7 @@ func _init() -> void:
 	_rng.randomize()
 	_wind_rng.randomize()
 	_weather_rng.randomize()
+	_kick10_rng.randomize()
 	_offer_rng.randomize()
 	_shop_rng.randomize()
 	new_run()
@@ -148,6 +153,7 @@ func set_seed(seed_value: int) -> void:
 	# Wind and weather have their own generators so a spot seed still lands on the same hash.
 	_wind_rng.seed = seed_value + 7919
 	_weather_rng.seed = seed_value + 1543
+	_kick10_rng.seed = seed_value + 9001
 	_shop_rng.seed = seed_value + 4409
 
 
@@ -240,6 +246,7 @@ func new_run() -> void:
 	_refill_quarter()
 	_place_spot()
 	_roll_wind()
+	_roll_kick10()
 	_roll_weather()
 
 
@@ -504,6 +511,7 @@ func prepare_kick_stats() -> void:
 		stats.range_bonus += bonus
 	if weather != BIG_GAME:
 		_apply_ball_vitamins()
+		_apply_lights_needles()
 		return
 	var base := KickerStats.new()
 	if kicker_id != "":
@@ -948,7 +956,7 @@ func next_boss_line() -> String:
 			return ""
 		return "Next boss: %s" % _boss_label(_endless_boss(target))
 	if kick_number == 5:
-		return "Next boss: The Squeeze"
+		return "Next boss: %s" % _boss_label(_ensure_kick10())
 	if kick_number == 10:
 		return "Next boss: Monsoon"
 	if kick_number == 15:
@@ -965,13 +973,15 @@ func _boss_label(name: String) -> String:
 		return "Monsoon"
 	if name == BIG_GAME:
 		return "Big Game"
+	if name == LIGHTS:
+		return "UNDER THE LIGHTS"
 	return name
 
 
 func _endless_boss(kick: int) -> String:
 	if endless_bosses.has(kick):
 		return str(endless_bosses[kick])
-	var names: Array[String] = [ICED, SQUEEZE, MONSOON, BIG_GAME]
+	var names: Array[String] = [ICED, SQUEEZE, MONSOON, BIG_GAME, LIGHTS]
 	var pick := names[_weather_rng.randi() % names.size()]
 	endless_bosses[kick] = pick
 	return pick
@@ -1633,6 +1643,7 @@ func export_resume() -> Dictionary:
 		"ring_sides": _side_rows(),
 		"ring_debug": _kick_keys(ring_debug),
 		"ring_offer": ring_offer_pending,
+		"kick10_boss": kick10_boss,
 	}
 
 
@@ -1710,6 +1721,7 @@ func import_resume(data: Dictionary) -> void:
 	for pair in _dict_list(data.get("ring_sides", [])):
 		ring_sides[int(pair.get("kick", 0))] = int(pair.get("side", 1))
 	ring_offer_pending = bool(data.get("ring_offer", false))
+	kick10_boss = str(data.get("kick10_boss", ""))
 	var place := str(data.get("place", "tee"))
 	if place == "offer":
 		awaiting_offer = true
@@ -2040,11 +2052,36 @@ func _place_spot() -> void:
 	spot_yards = RunTable.spot_yards(spot, side_pick)
 
 
+func lights_active() -> bool:
+	return not practicing and weather == LIGHTS
+
+
+func _ensure_kick10() -> String:
+	if kick10_boss != SQUEEZE and kick10_boss != LIGHTS:
+		_roll_kick10()
+	return kick10_boss
+
+
+func _roll_kick10() -> void:
+	kick10_boss = LIGHTS if _kick10_rng.randf() < 0.5 else SQUEEZE
+
+
+func _apply_lights_needles() -> void:
+	# On top of the kicker, the gear, and the vitamins. Rain still multiplies accuracy later.
+	if not lights_active():
+		return
+	stats.power_speed *= LIGHTS_NEEDLE
+	stats.accuracy_speed *= LIGHTS_NEEDLE
+
+
 func _roll_weather() -> void:
 	if weather_forced:
 		return
 	if run_mode == "endless" and is_boss():
 		weather = _endless_boss(kick_number)
+		return
+	if run_mode != "endless" and kick_number == 10:
+		weather = _ensure_kick10()
 		return
 	var template := RunTable.table_kick(run_mode, kick_number)
 	weather = roll_weather_name(template, _previous_weather, _older_weather, _weather_rng, run_mode == "endless")

@@ -84,6 +84,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "b5":
+		if not await _capture_b5():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "c4":
 		if not await _capture_c4():
 			get_tree().quit(1)
@@ -887,6 +893,7 @@ func _capture_vitamin_shop() -> bool:
 	board.run.last_result_made = true
 	board.run.cash = 18
 	board.run.set_seed(3)
+	board.run.kick10_boss = RunLogic.SQUEEZE
 	board.run.open_shop()
 	board.run.shop_stock = [Vitamins.PROTEIN, Vitamins.LUTEIN, Vitamins.TART]
 	if board.run.next_boss_line() != "Next boss: The Squeeze":
@@ -1364,6 +1371,69 @@ func _capture_c3() -> bool:
 	print("C3 back kick ", board.run.kick_number, " attempts ", board.run.attempts, " preview ", board.preview_step(), " yards ", board.logic.kick_distance)
 	if board.run.attempts != attempts or board.run.kick_number != kick_number or board.preview_step() != 0 or not is_equal_approx(board.logic.kick_distance, 35.0):
 		print("distance preview did not restore the kick")
+		return false
+	return true
+
+
+func _capture_b5() -> bool:
+	board.highlight = 1
+	board.confirm_kicker()
+	if board._shift_weather(KEY_9) != RunLogic.LIGHTS:
+		print("Shift+9 did not map to Under the Lights")
+		return false
+	board.force_weather(RunLogic.LIGHTS)
+	board.glare_time = 0.5
+	board.refresh_view()
+	if not await _capture("b5_aim.png"):
+		return false
+	board.logic.press_space()
+	board.logic.advance(board.logic.windup_left + 0.22)
+	board.refresh_view()
+	if board.logic.phase != KickLogic.Phase.POWER:
+		print("meter did not start")
+		return false
+	if not await _capture("b5_meter.png"):
+		return false
+	board.load_current_kick()
+	board.force_weather(RunLogic.LIGHTS)
+	board.glare_time = 0.5
+	_swing_meter(70.0, 0.0)
+	if board.logic.phase == KickLogic.Phase.FLIGHT:
+		board.logic.advance(board.logic.flight_duration * 0.45)
+	board.refresh_view()
+	if board.logic.phase == KickLogic.Phase.RESULT:
+		print("flight already finished")
+		return false
+	if not await _capture("b5_flight.png"):
+		return false
+	board.run.kick10_boss = RunLogic.LIGHTS
+	board.run.kick_number = 5
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.kick_resolved = true
+	board.run.last_result_made = true
+	board.run.cash = 20
+	board.run.open_shop()
+	if board.run.next_boss_line() != "Next boss: UNDER THE LIGHTS":
+		print("shop preview ", board.run.next_boss_line())
+		return false
+	if not await _capture("b5_shop_preview.png"):
+		return false
+	board.run.leave_shop()
+	board.run.run_mode = "endless"
+	board.run.kick_number = 10
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.kick_resolved = false
+	board.run.last_result_made = false
+	board.run.weather_forced = false
+	board.run.endless_bosses = {10: RunLogic.LIGHTS}
+	board.run._roll_weather()
+	board.load_current_kick()
+	if board.run.weather != RunLogic.LIGHTS or not board.run.is_boss():
+		print("endless lights ", board.run.weather, board.run.is_boss())
+		return false
+	board.glare_time = 0.5
+	board.refresh_view()
+	if not await _capture("b5_endless.png"):
 		return false
 	return true
 

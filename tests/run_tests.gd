@@ -1395,7 +1395,7 @@ func _check_wind_and_pool() -> void:
 
 func _check_weather_and_bosses() -> void:
 	check(RunLogic.boss_weather(5) == RunLogic.ICED, "kick 5 is ICED")
-	check(RunLogic.boss_weather(10) == RunLogic.SQUEEZE, "kick 10 is THE SQUEEZE")
+	check(RunLogic.boss_weather(5) == RunLogic.ICED and RunLogic.boss_weather(15) == RunLogic.MONSOON and RunLogic.boss_weather(20) == RunLogic.BIG_GAME, "kicks 5, 15, and 20 stay the same bosses")
 	check(RunLogic.boss_weather(15) == RunLogic.MONSOON, "kick 15 is MONSOON")
 	check(RunLogic.boss_weather(20) == RunLogic.BIG_GAME, "kick 20 is BIG GAME")
 	check(RunLogic.weather_pool(1) == [RunLogic.CLEAR] and RunLogic.weather_pool(4) == [RunLogic.CLEAR], "kicks 1 through 4 are always clear")
@@ -1522,6 +1522,68 @@ func _check_weather_and_bosses() -> void:
 	check(launched.phase == KickLogic.Phase.FLIGHT and launched.ball_forward_yards >= 0.0, "accuracy lock starts the flight immediately")
 	launched.advance(0.05)
 	check(launched.ball_forward_yards > 0.2, "the ball has left the tee just after the lock")
+	var squeeze_n := 0
+	var lights_n := 0
+	for seed_value in 80:
+		var rolled := RunLogic.new()
+		rolled.set_seed(seed_value)
+		rolled.new_run()
+		var boss := rolled.kick10_boss
+		check(boss == RunLogic.SQUEEZE or boss == RunLogic.LIGHTS, "kick 10 rolled something else")
+		if boss == RunLogic.SQUEEZE:
+			squeeze_n += 1
+		else:
+			lights_n += 1
+		rolled.kick_number = 5
+		check(rolled.next_boss_line() == "Next boss: " + rolled._boss_label(boss), "the kick 5 preview drifted from kick 10")
+		rolled.kick_number = 10
+		rolled.weather_forced = false
+		rolled._roll_weather()
+		var first := rolled.weather
+		rolled._roll_weather()
+		check(first == boss and rolled.weather == first, "kick 10 changed between retries")
+		if boss == RunLogic.LIGHTS:
+			check(near(rolled.post_width(), KickConstants.POST_SEPARATION_YARDS), "Under the Lights keeps full uprights")
+		else:
+			check(near(rolled.post_width(), RunLogic.SQUEEZE_WIDTH), "The Squeeze still narrows the posts")
+	check(squeeze_n >= 24 and lights_n >= 24, "kick 10 splits between The Squeeze and Under the Lights, got %s / %s" % [squeeze_n, lights_n])
+	var walk := RunLogic.new()
+	walk.new_run()
+	walk.start_with_kicker(Kickers.WALK_ON)
+	walk.weather = RunLogic.CLEAR
+	walk.prepare_kick_stats()
+	var walk_power := walk.stats.power_speed
+	var walk_acc := walk.stats.accuracy_speed
+	walk.weather = RunLogic.LIGHTS
+	walk.prepare_kick_stats()
+	check(near(walk.stats.power_speed, walk_power * 1.35) and near(walk.stats.accuracy_speed, walk_acc * 1.35), "Walk-On needles are 1.35x under the lights")
+	check(near(walk.post_width(), KickConstants.POST_SEPARATION_YARDS), "Under the Lights does not narrow the posts")
+	walk.practicing = true
+	walk.prepare_kick_stats()
+	check(near(walk.stats.power_speed, walk_power) and near(walk.stats.accuracy_speed, walk_acc), "Practice Swing does not speed the needles")
+	var carlos := RunLogic.new()
+	carlos.new_run()
+	carlos.start_with_kicker(Kickers.CARLOS)
+	carlos.weather = RunLogic.CLEAR
+	carlos.prepare_kick_stats()
+	var carlos_power := carlos.stats.power_speed
+	var carlos_omega := MeterGauge.omega_power(carlos.stats.power_speed, carlos.stats.ball_speed_mult)
+	carlos.weather = RunLogic.LIGHTS
+	carlos.prepare_kick_stats()
+	var lit_omega := MeterGauge.omega_power(carlos.stats.power_speed, carlos.stats.ball_speed_mult)
+	check(near(carlos.stats.power_speed, carlos_power * 1.35) and near(lit_omega, carlos_omega * 1.35), "Carlos stacks 1.35x on his own needle speed")
+	var normal_kick := RunLogic.new()
+	normal_kick.new_run()
+	normal_kick.kick_number = 1
+	normal_kick.weather = RunLogic.CLEAR
+	normal_kick.prepare_kick_stats()
+	check(not is_equal_approx(normal_kick.stats.power_speed, walk_power * 1.35), "a normal kick is not under the lights")
+	var off_boss := RunLogic.new()
+	off_boss.run_mode = "endless"
+	off_boss.kick_number = 11
+	off_boss.weather_forced = false
+	off_boss._roll_weather()
+	check(not off_boss.is_boss() and off_boss.weather != RunLogic.LIGHTS, "Endless kick 11 is not an Under the Lights boss")
 
 
 func _check_curses_and_rarity() -> void:
@@ -2104,7 +2166,9 @@ func _check_vitamin_shop() -> void:
 	shop.roll_offer()
 	var held_rerolls := shop.rerolls_left
 	check(shop.skip_offer() and shop.follow_offer() == "shop" and shop.awaiting_shop, "the shop opens after the kick 5 offer closes")
-	check(shop.next_boss_line() == "Next boss: The Squeeze", "the kick 5 shop names The Squeeze")
+	var kick5_preview := shop.next_boss_line()
+	check(kick5_preview == "Next boss: " + shop._boss_label(shop.kick10_boss), "the kick 5 shop matches the rolled kick 10 boss, got %s" % kick5_preview)
+	check(shop.kick10_boss == RunLogic.SQUEEZE or shop.kick10_boss == RunLogic.LIGHTS, "kick 10 is The Squeeze or Under the Lights")
 	check(shop.shop_stock.size() == 3 and shop.shop_stock[0] != shop.shop_stock[1] and shop.shop_stock[1] != shop.shop_stock[2] and shop.shop_stock[0] != shop.shop_stock[2], "the three shelves are different vitamins")
 	check(not shop.shop_b12_bought and shop.shop_reroll_price == 2, "B12 is for sale and the first reroll costs $2")
 	check(shop.rerolls_left == held_rerolls and not shop.reroll_offer(), "shop F does not spend a loadout reroll")
@@ -2533,7 +2597,7 @@ func _check_endless_and_farm() -> void:
 		if not rolled.is_boss():
 			check(false, "Endless kick 10 rolled as a boss")
 		seen[kept] = true
-	check(seen.has(RunLogic.ICED) and seen.has(RunLogic.SQUEEZE) and seen.has(RunLogic.MONSOON) and seen.has(RunLogic.BIG_GAME), "Endless bosses are drawn from all four")
+	check(seen.has(RunLogic.ICED) and seen.has(RunLogic.SQUEEZE) and seen.has(RunLogic.MONSOON) and seen.has(RunLogic.BIG_GAME) and seen.has(RunLogic.LIGHTS), "Endless bosses are drawn from all five")
 	var shop := RunLogic.new()
 	shop.run_mode = "endless"
 	shop.kick_number = 5

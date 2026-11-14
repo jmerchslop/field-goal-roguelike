@@ -38,6 +38,7 @@ func _draw() -> void:
 	var logic: KickLogic = game.logic
 	var run: RunLogic = game.run
 	_draw_weather_tint(run)
+	_draw_lights_glare(logic, run)
 	var on_meter := logic.phase == KickLogic.Phase.POWER or logic.phase == KickLogic.Phase.ACCURACY or logic.phase == KickLogic.Phase.FLIGHT or logic.phase == KickLogic.Phase.RESULT
 	if not run.meter_hidden(on_meter, game.meter_time):
 		_draw_meter(logic, run)
@@ -245,6 +246,22 @@ func _draw_weather_tint(run: RunLogic) -> void:
 		draw_rect(Rect2(0, 0, KickConstants.WINDOW_WIDTH, KickConstants.WINDOW_HEIGHT), tint)
 
 
+func _draw_lights_glare(logic: KickLogic, run: RunLogic) -> void:
+	# Sky and the top of the stands only. The field, posts, and HUD are below this band.
+	if not run.lights_active() or logic.phase == KickLogic.Phase.RESULT:
+		return
+	var roof: float = game.lights_roof_y()
+	var band := clampf(roof - 8.0, 36.0, 220.0)
+	var wave := 0.5 + 0.5 * sin(game.glare_time * TAU / 2.0)
+	var peak := lerpf(0.08, 0.35, wave)
+	var strips := 10
+	for i in strips:
+		var y0 := band * float(i) / float(strips)
+		var y1 := band * float(i + 1) / float(strips)
+		var fade := 1.0 - float(i) / float(strips)
+		draw_rect(Rect2(0.0, y0, KickConstants.WINDOW_WIDTH, y1 - y0 + 1.0), Color(1.0, 0.93, 0.75, peak * fade))
+
+
 func _draw_condition(run: RunLogic) -> void:
 	var name := run.weather
 	var color := KickConstants.COLOR_TEXT
@@ -253,7 +270,7 @@ func _draw_condition(run: RunLogic) -> void:
 		draw_rect(badge, Color(0.92, 0.78, 0.12, 0.92))
 		_text_centered(name, 158.0, 22, Color(0.15, 0.1, 0.02))
 		return
-	if run.weather == RunLogic.BIG_GAME or run.weather == RunLogic.ICED or run.weather == RunLogic.SQUEEZE or run.weather == RunLogic.MONSOON:
+	if run.weather == RunLogic.BIG_GAME or run.weather == RunLogic.ICED or run.weather == RunLogic.SQUEEZE or run.weather == RunLogic.MONSOON or run.weather == RunLogic.LIGHTS:
 		color = KickConstants.COLOR_BOSS
 	_text_centered(name, 158.0, 22, color)
 	if run.weather == RunLogic.BIG_GAME:
@@ -306,14 +323,18 @@ func _draw_kick_bug(logic: KickLogic, run: RunLogic) -> void:
 	_pg(aim, Vector2(right_x + 12, bug.position.y + 24), 12, cream)
 	var row_y := bug.position.y + 48
 	var weather := run.weather
+	var name_x := bug.position.x + 8.0
 	if run.is_boss():
 		_pg("BOSS", Vector2(bug.position.x + 8, row_y), 12, Color(0.95, 0.55, 0.2))
-		_pg(weather, Vector2(bug.position.x + 52, row_y), 13, cream)
-	else:
-		_pg(weather, Vector2(bug.position.x + 8, row_y), 13, cream)
+		name_x = bug.position.x + 52.0
+	var name_size := 13
+	if BitmapFonts.measure_px("ui", weather, name_size) > 150:
+		name_size = 11
+	_pg(weather, Vector2(name_x, row_y), name_size, cream)
 	var wind := BroadcastHud.wind_band(speed, show_mph)
-	_pg(wind, Vector2(bug.position.x + 168, row_y), 13, cream)
-	_wind_pip(Vector2(bug.position.x + 156, row_y + 8), speed, run.wind_direction)
+	var wind_x := maxf(bug.position.x + 168.0, name_x + float(BitmapFonts.measure_px("ui", weather, name_size)) + 18.0)
+	_pg(wind, Vector2(wind_x, row_y), 13, cream)
+	_wind_pip(Vector2(wind_x - 12.0, row_y + 8), speed, run.wind_direction)
 	row_y += 16
 	if show_mph:
 		_pg(BroadcastHud.wind_detail(speed, run.wind_direction), Vector2(bug.position.x + 8, row_y), 12, Color(0.55, 0.9, 0.95))
