@@ -1,0 +1,31 @@
+; Engine configuration file.
+; Open this file in Godot 4.
+
+config_version=5
+
+[application]
+
+config/name="Overtime 2000"
+config/description="One playable field goal kick."
+run/main_scene="res://scenes/main.tscn"
+config/features=PackedStringArray("4.7", "GL Compatibility")
+run/flush_stdout_on_print=true
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="keep"
+
+[autoload]
+
+SaveData="*res://scripts/SaveData.gd"
+Settings="*res://scripts/Settings.gd"
+Sfx="*res://scripts/Sfx.gd"
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+environment/defaults/default_clear_color=Color(0.18, 0.55, 0.24, 1)
