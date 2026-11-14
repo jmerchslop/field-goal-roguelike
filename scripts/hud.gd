@@ -38,7 +38,6 @@ func _draw() -> void:
 	var logic: KickLogic = game.logic
 	var run: RunLogic = game.run
 	_draw_weather_tint(run)
-	_draw_lights_glare(logic, run)
 	var on_meter := logic.phase == KickLogic.Phase.POWER or logic.phase == KickLogic.Phase.ACCURACY or logic.phase == KickLogic.Phase.FLIGHT or logic.phase == KickLogic.Phase.RESULT
 	if not run.meter_hidden(on_meter, game.meter_time):
 		_draw_meter(logic, run)
@@ -244,22 +243,6 @@ func _draw_weather_tint(run: RunLogic) -> void:
 		tint = Color(0.93, 0.95, 1.0, 0.12)
 	if tint.a > 0.0:
 		draw_rect(Rect2(0, 0, KickConstants.WINDOW_WIDTH, KickConstants.WINDOW_HEIGHT), tint)
-
-
-func _draw_lights_glare(logic: KickLogic, run: RunLogic) -> void:
-	# Sky and the top of the stands only. The field, posts, and HUD are below this band.
-	if not run.lights_active() or logic.phase == KickLogic.Phase.RESULT:
-		return
-	var roof: float = game.lights_roof_y()
-	var band := clampf(roof - 8.0, 36.0, 220.0)
-	var wave := 0.5 + 0.5 * sin(game.glare_time * TAU / 2.0)
-	var peak := lerpf(0.08, 0.35, wave)
-	var strips := 10
-	for i in strips:
-		var y0 := band * float(i) / float(strips)
-		var y1 := band * float(i + 1) / float(strips)
-		var fade := 1.0 - float(i) / float(strips)
-		draw_rect(Rect2(0.0, y0, KickConstants.WINDOW_WIDTH, y1 - y0 + 1.0), Color(1.0, 0.93, 0.75, peak * fade))
 
 
 func _draw_condition(run: RunLogic) -> void:

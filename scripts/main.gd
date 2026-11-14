@@ -61,6 +61,20 @@ var _floods: Node3D
 var _ring: Sprite3D
 var _ring_pop := -1.0
 var glare_time := 0.0
+var _beams: Node3D
+var _beam_mat: ShaderMaterial
+var _pool_mat: ShaderMaterial
+var _beam_span := -1.0
+var _stand_mats: Array[StandardMaterial3D] = []
+var lights_look := {
+	"on": false,
+	"beams": 0,
+	"sky": Color.WHITE,
+	"stands": Color.WHITE,
+	"breath_sec": BEAM_BREATH_SEC,
+	"peak": BEAM_PEAK,
+	"pool": BEAM_POOL,
+}
 var _sky_mat: ShaderMaterial
 var sky_texture_path := ""
 var _weather_anchor: Node3D
@@ -92,6 +106,22 @@ const LIGHT_SIDE_LIFT := 0.95
 const LIGHT_SIDE_OUT := 3.2
 const LIGHT_END_BACK := 2.6
 const LIGHT_SPACING := 90.0
+# Lamp rows measured from the gantry art. The beam starts on the yellow faces.
+const LAMP_SIDE_ROW := 429.0
+const LAMP_END_ROW := 211.0
+const LAMP_SIDE_CANVAS := 1024.0
+const LAMP_END_CANVAS := 640.0
+const LAMP_SIDE_FOOT := 1008.0
+const LAMP_END_FOOT := 624.0
+const BEAM_MAX := 8
+const BEAM_BREATH_SEC := 2.0
+const BEAM_BREATH := 0.15
+const BEAM_PEAK := 0.30
+const BEAM_POOL := 0.15
+const BEAM_FADE_POW := 1.35
+# About 35% darker than white, pulled toward cool navy. Stands are about 20% darker.
+const DUSK_SKY := Color(0.58, 0.66, 0.82)
+const DUSK_STAND := Color(0.78, 0.80, 0.84)
 const LIGHT_SIDE_PATH := "res://art/field/floodlight-sideline.png"
 const LIGHT_SIDE_B_PATH := "res://art/field/floodlight-sideline-b.png"
 const LIGHT_END_PATH := "res://art/field/floodlight-endzone.png"
@@ -713,7 +743,7 @@ func _process(delta: float) -> void:
 	_ribbon_time += delta
 	logic.sway(_sway_time)
 	_place_ribbons()
-	if run.lights_active() and logic.phase != KickLogic.Phase.RESULT:
+	if lights_show():
 		glare_time += delta
 	_pulse_floodlights()
 	_tick_ring(delta)
@@ -1390,6 +1420,7 @@ func _build_field() -> void:
 	_build_sky()
 	_build_weather()
 	_ensure_field(35.0)
+	_apply_lights_look()
 
 
 func field_span_yards() -> float:
@@ -1570,7 +1601,7 @@ func _build_sky() -> void:
 	# The paintings wrap the horizon. A sky shader samples them by direction,
 	# so the view stays inside the painting at 35 yards and at 1000.
 	var shader := Shader.new()
-	shader.code = "shader_type sky;\nuniform sampler2D sky_tex : source_color, filter_nearest, repeat_enable;\nuniform float horizon_elev = 0.05;\nuniform float zenith_elev = 0.45;\nvoid sky() {\n\tvec3 dir = EYEDIR;\n\tfloat u = atan(dir.x, dir.z) / 6.28318530718 + 0.5;\n\tfloat elev = asin(clamp(dir.y, -1.0, 1.0));\n\tfloat t = clamp((elev - horizon_elev) / max(zenith_elev - horizon_elev, 0.001), 0.0, 1.0);\n\tCOLOR = texture(sky_tex, vec2(u, 1.0 - t)).rgb;\n}\n"
+	shader.code = "shader_type sky;\nuniform sampler2D sky_tex : source_color, filter_nearest, repeat_enable;\nuniform vec3 dusk_tint = vec3(1.0);\nuniform float horizon_elev = 0.05;\nuniform float zenith_elev = 0.45;\nvoid sky() {\n\tvec3 dir = EYEDIR;\n\tfloat u = atan(dir.x, dir.z) / 6.28318530718 + 0.5;\n\tfloat elev = asin(clamp(dir.y, -1.0, 1.0));\n\tfloat t = clamp((elev - horizon_elev) / max(zenith_elev - horizon_elev, 0.001), 0.0, 1.0);\n\tCOLOR = texture(sky_tex, vec2(u, 1.0 - t)).rgb * dusk_tint;\n}\n"
 	_sky_mat = ShaderMaterial.new()
 	_sky_mat.shader = shader
 	var sky := Sky.new()
@@ -1891,6 +1922,7 @@ func _build_stadium() -> void:
 func _layout_stands(span: float) -> void:
 	if _stands == null:
 		return
+	_stand_mats.clear()
 	var rig := camera_rig(span, 0.0)
 	var near_z: float = float(rig["position"].z) + 18.0
 	var far_z := STAND_BOWL_Z
@@ -1968,6 +2000,7 @@ func _stand_material(variant: int) -> StandardMaterial3D:
 	var texture := load(path) as Texture2D
 	if texture != null:
 		paint.albedo_texture = texture
+	_stand_mats.append(paint)
 	return paint
 
 
@@ -2046,11 +2079,32 @@ func lights_roof_y() -> float:
 	return _camera.unproject_position(roof).y
 
 
+func lights_show() -> bool:
+	# On for the whole Under the Lights kick, including the result stamp.
+	# Off on the offer, the shop, practice, and every other kick.
+	if not run.lights_active():
+		return false
+	if run.awaiting_offer or run.awaiting_shop:
+		return false
+	if run.phase != RunLogic.Phase.PLAYING:
+		return false
+	return true
+
+
+func beam_breath(time: float) -> float:
+	return 1.0 + BEAM_BREATH * sin(time * TAU / BEAM_BREATH_SEC)
+
+
+func beam_alpha_at(height_ratio: float, breath: float = 1.0) -> float:
+	var along := clampf(height_ratio, 0.0, 1.0)
+	return BEAM_PEAK * breath * pow(along, BEAM_FADE_POW)
+
+
 func _pulse_floodlights() -> void:
 	if _floods == null:
 		return
-	var hot := run.lights_active() and logic.phase != KickLogic.Phase.RESULT
-	var wave := 0.5 + 0.5 * sin(glare_time * TAU / 2.0)
+	var hot := lights_show()
+	var wave := 0.5 + 0.5 * sin(glare_time * TAU / BEAM_BREATH_SEC)
 	for child in _floods.get_children():
 		var sprite := child as Sprite3D
 		if sprite == null:
@@ -2060,6 +2114,285 @@ func _pulse_floodlights() -> void:
 			continue
 		var glow := lerpf(1.05, 1.75, wave)
 		sprite.modulate = Color(1.0, 0.94, 0.78) * glow
+	_pulse_beams()
+
+
+func _apply_lights_look() -> void:
+	var on := lights_show()
+	var span := _field_distance if _field_distance > 0.0 else logic.kick_distance
+	_layout_light_beams(span)
+	if _beams != null:
+		_beams.visible = on
+	var sky := Color.WHITE
+	var stands := Color.WHITE
+	if on:
+		sky = DUSK_SKY
+		stands = DUSK_STAND
+	if _sky_mat != null:
+		_sky_mat.set_shader_parameter("dusk_tint", Vector3(sky.r, sky.g, sky.b))
+	for paint in _stand_mats:
+		paint.albedo_color = stands
+	var shown := 0
+	if on and _beams != null:
+		for child in _beams.get_children():
+			if str(child.name).begins_with("Beam"):
+				shown += 1
+	lights_look = {
+		"on": on,
+		"beams": shown,
+		"sky": sky,
+		"stands": stands,
+		"breath_sec": BEAM_BREATH_SEC,
+		"peak": BEAM_PEAK,
+		"pool": BEAM_POOL,
+	}
+	_pulse_floodlights()
+
+
+func _ensure_beam_materials() -> void:
+	if _beam_mat != null and _pool_mat != null:
+		return
+	var beam_shader := Shader.new()
+	beam_shader.code = "shader_type spatial;\nrender_mode unshaded, blend_add, cull_disabled, depth_draw_never, shadows_disabled, fog_disabled;\nuniform float peak = 0.30;\nuniform float breath = 1.0;\nuniform float fade_pow = 1.35;\nuniform vec3 warm = vec3(1.0, 0.95, 0.82);\nvoid fragment() {\n\tfloat along = pow(clamp(UV.y, 0.0, 1.0), fade_pow);\n\tfloat span = abs(UV.x * 2.0 - 1.0);\n\tfloat edge = 1.0 - smoothstep(0.08, 1.0, span);\n\tALBEDO = warm;\n\tALPHA = peak * breath * along * edge;\n}\n"
+	_beam_mat = ShaderMaterial.new()
+	_beam_mat.shader = beam_shader
+	_beam_mat.render_priority = -8
+	_beam_mat.set_shader_parameter("peak", BEAM_PEAK)
+	_beam_mat.set_shader_parameter("fade_pow", BEAM_FADE_POW)
+	_beam_mat.set_shader_parameter("breath", 1.0)
+	var pool_shader := Shader.new()
+	pool_shader.code = "shader_type spatial;\nrender_mode unshaded, blend_add, cull_disabled, depth_draw_never, shadows_disabled, fog_disabled;\nuniform float peak = 0.15;\nuniform float breath = 1.0;\nuniform vec3 warm = vec3(1.0, 0.95, 0.82);\nvoid fragment() {\n\tvec2 p = UV * 2.0 - 1.0;\n\tfloat soft = smoothstep(1.0, 0.15, dot(p, p));\n\tALBEDO = warm;\n\tALPHA = peak * breath * soft;\n}\n"
+	_pool_mat = ShaderMaterial.new()
+	_pool_mat.shader = pool_shader
+	_pool_mat.render_priority = -6
+	_pool_mat.set_shader_parameter("peak", BEAM_POOL)
+	_pool_mat.set_shader_parameter("breath", 1.0)
+
+
+func _pulse_beams() -> void:
+	if _beam_mat == null or _pool_mat == null:
+		return
+	var scale := 1.0
+	if lights_show():
+		scale = beam_breath(glare_time)
+	_beam_mat.set_shader_parameter("breath", scale)
+	_pool_mat.set_shader_parameter("breath", scale)
+
+
+func light_beam_plan(span: float) -> Array:
+	var chosen := _choose_beam_towers(_beam_tower_list(span))
+	var beams: Array = []
+	for tower in chosen:
+		beams.append(_beam_from_tower(tower, span))
+	return beams
+
+
+func _beam_tower_list(span: float) -> Array:
+	var plan := floodlight_plan(span)
+	var towers: Array = []
+	var side_x := float(plan["side_x"])
+	var left_z: PackedFloat32Array = plan["left_z"]
+	var right_z: PackedFloat32Array = plan["right_z"]
+	for z in left_z:
+		towers.append({"x": -side_x, "z": float(z), "end": false})
+	for z in right_z:
+		towers.append({"x": side_x, "z": float(z), "end": false})
+	towers.append({"x": 0.0, "z": float(plan["end_z"]), "end": true})
+	return towers
+
+
+func _choose_beam_towers(towers: Array) -> Array:
+	var sides: Array = []
+	var ends: Array = []
+	for tower in towers:
+		if bool(tower["end"]):
+			ends.append(tower)
+		else:
+			sides.append(tower)
+	var ordered: Array = []
+	for tower in sides:
+		var placed := false
+		for index in ordered.size():
+			if float(tower["z"]) < float(ordered[index]["z"]):
+				ordered.insert(index, tower)
+				placed = true
+				break
+		if not placed:
+			ordered.append(tower)
+	var budget := BEAM_MAX - ends.size()
+	if budget < 1:
+		budget = 1
+	if ordered.size() <= budget:
+		return ordered + ends
+	if budget == 1:
+		return [ordered[0]] + ends
+	var picked: Array = []
+	var last := -1
+	for i in budget:
+		var idx := int(round(float(i) * float(ordered.size() - 1) / float(budget - 1)))
+		if idx <= last:
+			idx = mini(last + 1, ordered.size() - 1)
+		last = idx
+		picked.append(ordered[idx])
+	return picked + ends
+
+
+func _lamp_position(x: float, z: float, end_zone: bool) -> Vector3:
+	if end_zone:
+		var pixel := LIGHT_END_PIXEL
+		var center_y := (LAMP_END_FOOT - LAMP_END_CANVAS * 0.5) * pixel
+		var lamp_y := center_y + (LAMP_END_CANVAS * 0.5 - LAMP_END_ROW) * pixel
+		return Vector3(x, lamp_y, z)
+	var pixel := LIGHT_SIDE_PIXEL
+	var center_y := (LAMP_SIDE_FOOT - LAMP_SIDE_CANVAS * 0.5) * pixel + LIGHT_SIDE_LIFT
+	var lamp_y := center_y + (LAMP_SIDE_CANVAS * 0.5 - LAMP_SIDE_ROW) * pixel
+	return Vector3(x, lamp_y, z)
+
+
+func _beam_from_tower(tower: Dictionary, span: float) -> Dictionary:
+	var x := float(tower["x"])
+	var z := float(tower["z"])
+	var end := bool(tower["end"])
+	var origin := _lamp_position(x, z, end)
+	var lip := Vector3.ZERO
+	var landing := Vector3.ZERO
+	var widths := PackedFloat32Array()
+	var thread_y := 6.5
+	if end:
+		landing = Vector3(0.0, 0.0, 18.0)
+		lip = Vector3(0.0, STAND_HEIGHT + 0.55, -0.55)
+		# Wide in the sky, narrow through the uprights, wide again as the pool.
+		widths = PackedFloat32Array([10.0, 14.0, 5.2, 15.0])
+		thread_y = 12.2
+	else:
+		var side := signf(x)
+		if side == 0.0:
+			side = 1.0
+		var along := clampf(z / maxf(span, 1.0), 0.0, 1.0)
+		var far_z := clampf(span * 0.62, 14.0, maxf(span - 6.0, 14.0))
+		var land_z := clampf(lerpf(8.0, far_z, along), 6.0, maxf(span - 4.0, 8.0))
+		landing = Vector3(side * 9.5, 0.0, land_z)
+		lip = Vector3(x - side * (LIGHT_SIDE_OUT + 0.75), STAND_HEIGHT + 0.5, lerpf(z, land_z, 0.2))
+		widths = PackedFloat32Array([8.0, 12.0, 14.0, 16.0])
+	var drop := maxf(lip.y - 0.15, 0.001)
+	var thread := lip.lerp(Vector3(landing.x, 0.15, landing.z), clampf((lip.y - thread_y) / drop, 0.0, 1.0))
+	thread.y = thread_y
+	var points := PackedVector3Array([origin, lip, thread, Vector3(landing.x, 0.15, landing.z)])
+	return {
+		"end": end,
+		"origin": origin,
+		"lip": lip,
+		"landing": landing,
+		"points": points,
+		"widths": widths,
+	}
+
+
+func _layout_light_beams(span: float) -> void:
+	if span <= 0.0:
+		return
+	if _beams != null and is_equal_approx(_beam_span, span) and _beams.get_child_count() > 0:
+		return
+	_beam_span = span
+	if _beams == null:
+		_beams = Node3D.new()
+		_beams.name = "LightBeams"
+		_world.add_child(_beams)
+	for child in _beams.get_children():
+		_beams.remove_child(child)
+		child.free()
+	_ensure_beam_materials()
+	var cam: Vector3 = camera_rig(span, 0.0)["position"]
+	var index := 0
+	for item in light_beam_plan(span):
+		var beam := MeshInstance3D.new()
+		beam.name = "BeamEnd%d" % index if bool(item["end"]) else "BeamSide%d" % index
+		var points: PackedVector3Array = item["points"]
+		var widths: PackedFloat32Array = item["widths"]
+		beam.mesh = _beam_mesh(points, widths, cam)
+		beam.material_override = _beam_mat
+		beam.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		beam.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
+		_beams.add_child(beam)
+		var landing: Vector3 = item["landing"]
+		var pool := MeshInstance3D.new()
+		pool.name = "Pool%d" % index
+		index += 1
+		var reach := float(widths[widths.size() - 1])
+		pool.mesh = _pool_mesh(reach * 0.5, reach * 0.72)
+		pool.material_override = _pool_mat
+		pool.position = Vector3(landing.x, 0.04, landing.z)
+		pool.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		pool.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
+		_beams.add_child(pool)
+
+
+func _beam_mesh(points: PackedVector3Array, widths: PackedFloat32Array, cam: Vector3) -> ArrayMesh:
+	var tool := SurfaceTool.new()
+	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	# One ribbon faces the camera so the cone has area. The other crosses it for thickness.
+	_beam_ribbon(tool, points, widths, cam, false)
+	_beam_ribbon(tool, points, widths, cam, true)
+	return tool.commit()
+
+
+func _beam_ribbon(tool: SurfaceTool, points: PackedVector3Array, widths: PackedFloat32Array, cam: Vector3, crossed: bool) -> void:
+	var rings: Array = []
+	var top_y := maxf(points[0].y, 0.001)
+	for i in points.size():
+		var forward := Vector3.DOWN
+		if i < points.size() - 1:
+			forward = points[i + 1] - points[i]
+		else:
+			forward = points[i] - points[i - 1]
+		if forward.length_squared() < 0.0001:
+			forward = Vector3.DOWN
+		forward = forward.normalized()
+		var to_cam := cam - points[i]
+		var axis := forward.cross(to_cam)
+		if axis.length_squared() < 0.0004:
+			axis = forward.cross(Vector3.UP)
+		if axis.length_squared() < 0.0004:
+			axis = Vector3.RIGHT
+		axis = axis.normalized()
+		if crossed:
+			axis = forward.cross(axis).normalized()
+		var along := clampf(points[i].y / top_y, 0.0, 1.0)
+		var half := float(widths[mini(i, widths.size() - 1)]) * 0.5
+		var row: Array = []
+		for column in 5:
+			var u := float(column) / 4.0
+			row.append({"at": points[i] + axis * lerpf(-half, half, u), "uv": Vector2(u, along)})
+		rings.append(row)
+	for i in rings.size() - 1:
+		var above: Array = rings[i]
+		var below: Array = rings[i + 1]
+		for column in 4:
+			_beam_vertex(tool, above[column])
+			_beam_vertex(tool, above[column + 1])
+			_beam_vertex(tool, below[column + 1])
+			_beam_vertex(tool, above[column])
+			_beam_vertex(tool, below[column + 1])
+			_beam_vertex(tool, below[column])
+
+
+func _beam_vertex(tool: SurfaceTool, corner: Dictionary) -> void:
+	tool.set_uv(corner["uv"])
+	tool.add_vertex(corner["at"])
+
+
+func _pool_mesh(half_x: float, half_z: float) -> ArrayMesh:
+	var tool := SurfaceTool.new()
+	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var corners := [
+		{"at": Vector3(-half_x, 0.0, -half_z), "uv": Vector2(0, 0)},
+		{"at": Vector3(half_x, 0.0, -half_z), "uv": Vector2(1, 0)},
+		{"at": Vector3(half_x, 0.0, half_z), "uv": Vector2(1, 1)},
+		{"at": Vector3(-half_x, 0.0, half_z), "uv": Vector2(0, 1)},
+	]
+	for index in [0, 1, 2, 0, 2, 3]:
+		_beam_vertex(tool, corners[index])
+	return tool.commit()
 
 
 func _tick_ring(delta: float) -> void:
@@ -2299,6 +2632,7 @@ func _place_world() -> void:
 	_place_kicker(tee)
 	_place_arrow(tee)
 	_sample_trail()
+	_apply_lights_look()
 	_place_camera()
 
 

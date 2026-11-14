@@ -69,6 +69,7 @@ func _finish_live() -> void:
 	_check_pause_saves()
 	_check_playing_card_live()
 	_check_floodlights_live()
+	_check_light_beams()
 	_check_ring_flight_live()
 	_check_aim_cone()
 	_check_ball_trail()
@@ -5281,6 +5282,96 @@ func _check_floodlights_live() -> void:
 	var left_rig: Dictionary = game.camera_rig(200.0, -3.0)
 	check(not is_equal_approx(float(left_rig["look"].x), 0.0), "a hash preview still does not re-center the posts")
 	game.free()
+
+
+func _check_light_beams() -> void:
+	OS.set_environment("FG_SHOTS", "")
+	var packed: PackedScene = load("res://scenes/main.tscn")
+	var game = packed.instantiate()
+	get_root().add_child(game)
+	game._taking_pictures = true
+	var distances: Array[float] = [35.0, 75.0, 200.0, 500.0, 1000.0]
+	for dist in distances:
+		var plan: Array = game.light_beam_plan(dist)
+		check(plan.size() >= 4 and plan.size() <= 8, "under the lights shows 4 to 8 beams at %s yards, got %s" % [dist, plan.size()])
+		var ends := 0
+		for item in plan:
+			var origin: Vector3 = item["origin"]
+			var landing: Vector3 = item["landing"]
+			check(origin.y > game.STAND_HEIGHT, "a beam starts on the lamp above the roof at %s yards" % dist)
+			if bool(item["end"]):
+				ends += 1
+				check(landing.z > 0.5 and absf(landing.x) < 1.0, "the end-zone beam lands in front of the posts")
+			else:
+				check(signf(origin.x) == signf(landing.x), "a sideline beam stays on its own side")
+				check(absf(landing.x) + 8.0 < absf(origin.x), "a sideline beam aims inward onto the field")
+				check(landing.z > 1.0 and landing.z < dist - 0.5, "a sideline beam lands between the posts and the kicker at %s yards" % dist)
+		check(ends == 1, "one end-zone beam at %s yards" % dist)
+	check(near(game.beam_breath(0.0), 1.0) and near(game.beam_breath(2.0), 1.0), "the beam breath returns every 2 seconds")
+	check(near(game.beam_breath(0.5), 1.15) and near(game.beam_breath(1.5), 0.85), "beam intensity breathes plus or minus 15 percent")
+	check(game.BEAM_BREATH_SEC >= 1.5, "the beam breath is not a flicker")
+	check(game.beam_alpha_at(1.0) >= 0.29 and game.beam_alpha_at(1.0) <= 0.31, "beam peak opacity is about 30 percent")
+	check(game.beam_alpha_at(0.0) < 0.001, "beam opacity reaches 0 at the grass")
+	check(game.beam_alpha_at(6.4 / 15.2, 1.15) <= 0.12, "beam opacity over the ball stays within 12 percent")
+	check(near(game.BEAM_POOL, 0.15), "ground pools are about 15 percent")
+	game.force_weather(RunLogic.CLEAR)
+	check(not game.lights_show() and int(game.lights_look["beams"]) == 0, "a normal kick has no light beams")
+	check(_dusk_channel(game, 0) > 0.99 and _dusk_channel(game, 2) > 0.99, "a normal sky is not dusk tinted")
+	check(game._stand_mats.size() > 0 and near(game._stand_mats[0].albedo_color.r, 1.0), "stands stay full strength on a normal kick")
+	game.run.practicing = true
+	game.run.weather = RunLogic.LIGHTS
+	game.refresh_view()
+	check(not game.lights_show() and int(game.lights_look["beams"]) == 0, "practice swing does not turn the beams on")
+	game.run.practicing = false
+	game.force_weather(RunLogic.LIGHTS)
+	game.glare_time = 0.5
+	game.refresh_view()
+	check(game.lights_show() and int(game.lights_look["beams"]) >= 4 and int(game.lights_look["beams"]) <= 8, "the boss kick shows the beams")
+	check(_dusk_channel(game, 2) > _dusk_channel(game, 0) and _dusk_channel(game, 0) < 0.7, "the sky picks up a darker navy tint")
+	check(near(game._stand_mats[0].albedo_color.r, game.DUSK_STAND.r), "the stands darken on the boss kick")
+	check(game._beams != null and game._beams.visible, "beam meshes are in the world")
+	var pools := 0
+	for child in game._beams.get_children():
+		if str(child.name).begins_with("Pool"):
+			pools += 1
+			check((child as Node3D).position.y < 0.05 and (child as Node3D).position.y > 0.03, "light pools sit under the yard lines")
+	check(pools == int(game.lights_look["beams"]), "each beam has a ground pool")
+	var breath := float(game._beam_mat.get_shader_parameter("breath"))
+	check(near(breath, 1.15), "beams are at the bright part of the breath")
+	game.logic.phase = KickLogic.Phase.RESULT
+	game.refresh_view()
+	check(game.lights_show() and int(game.lights_look["beams"]) >= 4, "beams stay on through the result stamp")
+	game._pulse_floodlights()
+	var lamp_hot := false
+	for child in game._floods.get_children():
+		var sprite := child as Sprite3D
+		if sprite != null and sprite.modulate.r > 1.2:
+			lamp_hot = true
+	check(lamp_hot, "lamp banks keep their warm glow through the result")
+	game.run.awaiting_offer = true
+	game.refresh_view()
+	check(not game.lights_show() and not game._beams.visible, "leaving the kick turns the beams off")
+	game.run.awaiting_offer = false
+	game.run.phase = RunLogic.Phase.PLAYING
+	game.logic.phase = KickLogic.Phase.AIMING
+	game.refresh_view()
+	check(game.lights_show() and game._beams.visible, "a retry of the same kick brings the beams back")
+	game.force_weather(RunLogic.CLEAR)
+	check(not game.lights_show() and int(game.lights_look["beams"]) == 0, "the next kick without the boss has no beams")
+	var shell := FileAccess.get_file_as_string("res://scripts/hud.gd")
+	check(shell.find("_draw_lights_glare") < 0, "the flat sky haze is gone")
+	game.free()
+
+
+func _dusk_channel(game, index: int) -> float:
+	var raw: Variant = game._sky_mat.get_shader_parameter("dusk_tint")
+	if raw is Vector3:
+		var vec: Vector3 = raw
+		return vec[index]
+	if raw is Color:
+		var col: Color = raw
+		return col[index]
+	return -1.0
 
 
 func _check_bonus_ring() -> void:

@@ -90,6 +90,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "b5b":
+		if not await _capture_b5b():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "c4":
 		if not await _capture_c4():
 			get_tree().quit(1)
@@ -1434,6 +1440,71 @@ func _capture_b5() -> bool:
 	board.glare_time = 0.5
 	board.refresh_view()
 	if not await _capture("b5_endless.png"):
+		return false
+	return true
+
+
+func _capture_b5b() -> bool:
+	board.highlight = 1
+	board.confirm_kicker()
+	board.force_weather(RunLogic.LIGHTS)
+	board.glare_time = 0.5
+	board.refresh_view()
+	if not board.lights_show() or int(board.lights_look["beams"]) < 4:
+		print("35 yard beams ", board.lights_look)
+		return false
+	if not await _capture("b5b_35_aim.png"):
+		return false
+	board.load_current_kick()
+	board.force_weather(RunLogic.LIGHTS)
+	board.glare_time = 0.5
+	_swing_meter(72.0, 0.0)
+	if board.logic.phase == KickLogic.Phase.FLIGHT:
+		board.logic.advance(board.logic.flight_duration * 0.42)
+	board.refresh_view()
+	if board.logic.phase != KickLogic.Phase.FLIGHT:
+		print("b5b flight phase ", board.logic.phase)
+		return false
+	if not await _capture("b5b_flight.png"):
+		return false
+	board.run.spot_yards = -3.0
+	board.cycle_debug_distance()
+	board.glare_time = 0.5
+	board.refresh_view()
+	if absf(board.logic.kick_distance - 75.0) > 0.1 or absf(board.run.spot_yards - (-3.0)) > 0.05:
+		print("75 hash ", board.logic.kick_distance, " spot ", board.run.spot_yards)
+		return false
+	if not await _capture("b5b_75_hash.png"):
+		return false
+	board.cycle_debug_distance()
+	board.glare_time = 0.5
+	board.refresh_view()
+	if absf(board.logic.kick_distance - 200.0) > 0.1:
+		print("200 yards ", board.logic.kick_distance)
+		return false
+	if not await _capture("b5b_200.png"):
+		return false
+	board.cycle_debug_distance()
+	board.cycle_debug_distance()
+	board.glare_time = 0.5
+	board.refresh_view()
+	if absf(board.logic.kick_distance - 1000.0) > 0.1:
+		print("1000 yards ", board.logic.kick_distance)
+		return false
+	if int(board.lights_look["beams"]) < 4 or int(board.lights_look["beams"]) > 8:
+		print("1000 beams ", board.lights_look)
+		return false
+	if not await _capture("b5b_1000.png"):
+		return false
+	board.run.spot_yards = 0.0
+	board.cycle_debug_distance()
+	board.force_weather(RunLogic.CLEAR)
+	board.glare_time = 0.0
+	board.refresh_view()
+	if board.lights_show() or int(board.lights_look["beams"]) != 0:
+		print("normal kick still lit ", board.lights_look)
+		return false
+	if not await _capture("b5b_normal.png"):
 		return false
 	return true
 
