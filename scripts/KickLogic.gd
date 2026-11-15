@@ -67,6 +67,9 @@ var thin_air_weather := false
 var post_half_gap := KickConstants.POST_HALF_GAP_YARDS
 # Moving Posts fills the make or miss when the ball reaches the goal line.
 var hold_result := false
+# A paid OVERPOWER lock. Carlos's band lock stays false.
+var overpower_paid := false
+var overpower_hold := 0.0
 # The smooth power needle. Mud draws a jitter on top and does not add it back in.
 var power_true := 0.0
 var heavy_ball := false
@@ -125,12 +128,12 @@ func press_space() -> void:
 		windup_left = MeterGauge.WINDUP_SEC
 	elif phase == Phase.POWER:
 		# The flick down to POWER is not a lockable power value.
-		# A press with the needle already on MAX is P=100, not a shank.
+		# A press on MAX is P=100. A press in the band is OVERPOWER. The end is still a lock.
+		if overpower_hold > 0.0000001:
+			return
 		if windup_left <= 0.0000001:
-			if needle_angle <= MeterGauge.MAX_ANGLE + 0.0001:
-				power_true = KickConstants.METER_MAX
-				needle = _shown_power(power_true)
-			_lock_power(needle)
+			var locked := needle if mud_power else MeterGauge.power_from_angle_raw(needle_angle)
+			_lock_power(locked)
 	elif phase == Phase.ACCURACY:
 		# Leftover travel on the left arc is not an accuracy reading.
 		if needle_angle <= MeterGauge.MAX_ANGLE + 0.0001:
@@ -203,6 +206,8 @@ func reset_kick() -> void:
 	var keep_snow_pen := snow_penalty
 	var keep_mud_span := mud_span
 	phase = Phase.AIMING
+	overpower_paid = false
+	overpower_hold = 0.0
 	aim_degrees = 0.0
 	needle = 0.0
 	needle_angle = MeterGauge.MAX_ANGLE
@@ -268,12 +273,9 @@ func detail_line() -> String:
 
 # --- Pure math. The meter and the tests both call these. ----------------------
 
-static func accuracy_with_red_tip(power_value: float, needle_value: float, rng: RandomNumberGenerator, tip_start: float = KickConstants.RED_TIP_START, noise: float = 5.0) -> float:
-	var error := needle_value
-	# The wobble is added before the perfect check, so a press on 0 can miss PERFECT.
-	if power_value >= tip_start:
-		error += rng.randf_range(-noise, noise)
-	return error
+static func accuracy_with_red_tip(power_value: float, needle_value: float, _rng: RandomNumberGenerator, _tip_start: float = KickConstants.RED_TIP_START, _noise: float = 5.0) -> float:
+	# The hidden wobble is gone. A 95–100 lock keeps the pressed error.
+	return needle_value
 
 
 static func is_perfect(accuracy_error_value: float) -> bool:
@@ -584,20 +586,29 @@ func _advance_power(delta: float) -> float:
 			return 0.0
 		needle_angle = MeterGauge.POWER_ANGLE
 		return delta - step
+	if overpower_hold > 0.0:
+		var beat := minf(delta, overpower_hold)
+		overpower_hold -= beat
+		if overpower_hold > 0.0000001:
+			return 0.0
+		overpower_hold = 0.0
+		_begin_accuracy()
+		return delta - beat
 	var omega := _power_omega()
 	if omega <= 0.001:
 		return 0.0
-	var room := needle_angle - MeterGauge.MAX_ANGLE
+	var end_angle := _band_end_angle()
+	var room := needle_angle - end_angle
 	var need := room / omega
 	if delta < need - 0.0000001:
 		needle_angle -= omega * delta
-		power_true = MeterGauge.power_from_angle(needle_angle)
+		power_true = MeterGauge.power_from_angle_raw(needle_angle)
 		needle = _shown_power(power_true)
 		fill_power = power_true
 		return 0.0
-	# Reaching MAX with no Space #2 shanks. Leftover time does not start accuracy.
-	needle_angle = MeterGauge.MAX_ANGLE
-	power_true = KickConstants.METER_MAX
+	# Passing the end of the band with no Space #2 is the auto-shank.
+	needle_angle = end_angle
+	power_true = _band_end_power()
 	needle = _shown_power(power_true)
 	fill_power = power_true
 	_shank()
@@ -610,7 +621,7 @@ func _shown_power(true_value: float) -> float:
 	var shown := true_value
 	if mud_power:
 		shown += _rng.randf_range(-mud_span, mud_span)
-	return clampf(shown, 0.0, KickConstants.METER_MAX)
+	return clampf(shown, 0.0, _band_end_power())
 
 
 func _advance_accuracy(delta: float) -> float:
@@ -647,16 +658,33 @@ func _power_omega() -> float:
 
 
 func _accuracy_omega() -> float:
+	# accuracy_speed already has the slow floor, Ice Cage, and UNDER THE LIGHTS.
+	# OVERPOWER is only the accuracy needle, after that floor, and before rain and ball speed.
 	var rain := rain_scale if rain_faster else 1.0
-	return MeterGauge.needle_speed(MeterGauge.omega_base(), stats.accuracy_speed / 120.0, 1.0, 1.0, rain, stats.ball_speed_mult)
+	var boost := 1.0
+	if overpower_paid:
+		boost = 1.125 if stats.overpower_half else 1.25
+	var slow := stats.accuracy_speed / 120.0
+	return MeterGauge.omega_base() * slow * boost * rain * stats.ball_speed_mult
 
 
 # Seconds of power-phase sweep from the current needle to this power.
 # Includes a wind-up that has not finished yet. Linear, no easing.
+func _band_end_power() -> float:
+	return KickConstants.METER_MAX + maxf(stats.overpower_width, 0.0)
+
+
+func _band_end_angle() -> float:
+	return MeterGauge.power_angle_raw(_band_end_power())
+
+
+func _in_overpower(power_value: float) -> bool:
+	# 100 itself is clean full power. The end of the band is still inside it.
+	return power_value > KickConstants.METER_MAX + 0.0001 and power_value <= _band_end_power() + 0.0001
+
+
 func seconds_to_power(power_value: float) -> float:
-	var target := MeterGauge.power_angle(power_value)
-	if target < MeterGauge.MAX_ANGLE:
-		target = MeterGauge.MAX_ANGLE
+	var target := MeterGauge.power_angle_raw(power_value)
 	var omega := _power_omega()
 	if omega <= 0.001:
 		return 0.0
@@ -714,10 +742,9 @@ func _shank() -> void:
 		judged = judge(max_range, kick_distance, offset_yards, stats.ball_type, gap)
 	result_text = "" if hold_result else str(judged["text"])
 	accuracy_error = side * MeterGauge.ERROR_AT_MAX
-	needle_angle = MeterGauge.MAX_ANGLE
-	needle = KickConstants.METER_MAX
-	fill_power = KickConstants.METER_MAX
-	power_true = KickConstants.METER_MAX
+	needle = 0.0
+	fill_power = 0.0
+	power_true = 0.0
 	flight_elapsed = 0.0
 	phase = Phase.FLIGHT
 
@@ -733,49 +760,67 @@ func _advance_flight(delta: float) -> void:
 # A press earlier on the arc locks the power the needle is on right now.
 # The live frame calls this with that frame's delta so the two events agree.
 func take_power_press(delta: float) -> void:
-	if phase != Phase.POWER or windup_left > 0.0000001:
+	if phase != Phase.POWER or windup_left > 0.0000001 or overpower_hold > 0.0000001:
 		return
 	var omega := _power_omega()
 	if omega <= 0.001:
-		_lock_power(needle)
+		_lock_power(MeterGauge.power_from_angle_raw(needle_angle))
 		return
-	var need := maxf(needle_angle - MeterGauge.MAX_ANGLE, 0.0) / omega
-	if need <= delta + 0.0000001:
-		needle_angle = MeterGauge.MAX_ANGLE
-		power_true = KickConstants.METER_MAX
+	var time_to_end := maxf(needle_angle - _band_end_angle(), 0.0) / omega
+	if time_to_end <= delta + 0.0000001:
+		# The press catches the end of the band. That lock is still OVERPOWER.
+		needle_angle = _band_end_angle()
+		power_true = _band_end_power()
 		needle = _shown_power(power_true)
-		_lock_power(needle)
-		var left := delta - need
+		_lock_power(power_true)
+		var left := delta - time_to_end
 		if left > 0.0000001:
 			advance(left)
 		return
-	_lock_power(needle)
+	var time_to_max := maxf(needle_angle - MeterGauge.MAX_ANGLE, 0.0) / omega
+	if needle_angle > MeterGauge.MAX_ANGLE - 0.0001 and time_to_max <= delta + 0.0000001:
+		# This frame reaches MAX and may enter the band. Lock where the needle arrives.
+		var arrive := needle_angle - omega * delta
+		power_true = MeterGauge.power_from_angle_raw(arrive)
+		needle_angle = arrive
+		needle = _shown_power(power_true)
+		_lock_power(power_true)
+		return
+	power_true = MeterGauge.power_from_angle_raw(needle_angle)
+	_lock_power(power_true)
 	if delta > 0.0000001:
 		advance(delta)
 
 
 func _lock_power(value: float) -> void:
-	power = clampf(value, 0.0, KickConstants.METER_MAX)
-	fill_power = power
-	power_true = power
+	var raw := clampf(value, 0.0, _band_end_power())
+	var band := _in_overpower(raw)
+	# Carlos's band lock is a clean P=100 with no OVERPOWER payoff.
+	overpower_paid = band and not stats.numero_dos
+	power = minf(raw, KickConstants.METER_MAX)
+	power_true = raw if band else power
+	fill_power = power_true
+	if overpower_paid:
+		overpower_hold = KickConstants.OVERPOWER_HOLD
+		return
+	_begin_accuracy()
+
+
+func _begin_accuracy() -> void:
+	overpower_hold = 0.0
 	phase = Phase.ACCURACY
-	# The needle stays where it is. Crossing onto the right arc is what starts e.
+	# A lock still on the power arc keeps its angle and coasts to MAX.
+	# A lock inside the band starts the accuracy arc back at MAX after the label.
 	if needle_angle <= MeterGauge.MAX_ANGLE + 0.0001:
 		needle_angle = MeterGauge.MAX_ANGLE
 		needle = MeterGauge.ERROR_AT_MAX
-	else:
-		needle = power
+	fill_power = power
 
 
 func _lock_accuracy(value: float) -> void:
-	# Numero Dos is a real power lock at 95–100. An auto-shank never reaches here.
-	var numero := stats.numero_dos and power >= 95.0 and power <= 100.0
-	if numero:
-		accuracy_error = 0.0
-	elif stats.ice_veins or stats.red_tip_off:
-		accuracy_error = value
-	else:
-		accuracy_error = accuracy_with_red_tip(power, value, _rng, stats.red_tip_start, stats.red_tip_noise)
+	# Numero Dos covers a 95–100 lock and an OVERPOWER band lock. A shank never gets here.
+	var numero := stats.numero_dos and (power + 0.0001 >= 95.0 or power_true > KickConstants.METER_MAX)
+	accuracy_error = 0.0 if numero else value
 	# Omega-3 reads the press, including red-tip noise, then can wipe the angle.
 	# perfect stays the original press so cash can still pay. The score bonus is suppressed later.
 	perfect = absf(accuracy_error) <= stats.perfect_band
@@ -794,7 +839,7 @@ func _lock_accuracy(value: float) -> void:
 		flight_error *= stats.guide_factor
 	var hook := 0.0 if perfect else -flight_error * per_unit
 	final_angle_degrees = aim_degrees + hook
-	var ranged := power_for_range(power, stats.power_floor)
+	var ranged := power_for_range(minf(power, KickConstants.METER_MAX), stats.power_floor)
 	var plan := carry_plan(ranged, final_angle_degrees)
 	drift_yards = float(plan["drift"])
 	max_range = float(plan["travel"])
@@ -863,19 +908,23 @@ func carry_plan(ranged_power: float, angle_degrees: float) -> Dictionary:
 	var wind_range := wind_range_delta(blown, blown_dir, 0, stats.thin_air)
 	if wind_range < 0.0:
 		wind_range *= stats.shelter_factor
+	var used_power := minf(ranged_power, KickConstants.METER_MAX)
 	var travel := 0.0
 	if stats.clearance:
-		var clearance := 5.0 + (ranged_power - 88.0) * 1.25
+		var clearance := 5.0 + (used_power - 88.0) * 1.25
 		travel = kick_distance + clearance + stats.range_bonus + wind_range
 	else:
-		travel = stats.range_base + stats.range_per_power * ranged_power + stats.range_bonus + wind_range
+		travel = stats.range_base + stats.range_per_power * used_power + stats.range_bonus + wind_range
 	if snow_range:
 		travel -= snow_penalty
 	if thin_air_weather:
 		travel += 4.0
 	if heavy_ball:
 		travel -= heavy_penalty(kick_distance)
-	travel += _tip_lock_bonus(ranged_power)
+	if overpower_paid:
+		# P above 100 never enters the formula. +4 is not an item scale.
+		# Iron Grip yards keep the unscaled tip-lock table.
+		travel += KickConstants.OVERPOWER_YARDS + maxf(stats.tip_lock_yards, 0.0)
 	if travel < 0.0:
 		travel = 0.0
 	# 88% and above clears the posts even if a headwind or a penalty would otherwise leave it short.
@@ -889,14 +938,8 @@ func carry_plan(ranged_power: float, angle_degrees: float) -> Dictionary:
 	}
 
 
-func _tip_lock_bonus(ranged_power: float) -> float:
-	if stats.tip_lock_yards <= 0.0:
-		return 0.0
-	if stats.ice_veins or stats.red_tip_off:
-		return 0.0
-	if ranged_power + 0.0001 < stats.red_tip_start:
-		return 0.0
-	return stats.tip_lock_yards
+func _tip_lock_bonus(_ranged_power: float) -> float:
+	return 0.0
 
 
 # Yard samples of the preview, cropped to path_percent of this flight. Step is 0.5 yards.

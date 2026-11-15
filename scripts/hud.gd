@@ -167,18 +167,18 @@ func _draw_meter(logic: KickLogic, run: RunLogic) -> void:
 	_draw_annulus(hub, inner, outer, float(layout["perfect_top"]), float(layout["perfect_bottom"]), Color(0.2, 0.78, 0.28, 1.0))
 	_draw_annulus(hub, inner, outer, float(layout["perfect_bottom"]), float(layout["band_bottom"]), Color(0.93, 0.74, 0.12, 1.0))
 	_draw_annulus(hub, inner, outer, float(layout["band_bottom"]), 0.0, Color(0.78, 0.1, 0.08, 1.0))
+	var band_end := MeterGauge.power_angle_raw(KickConstants.METER_MAX + maxf(stats.overpower_width, 0.0))
+	_draw_annulus(hub, inner, outer, MeterGauge.MAX_ANGLE, band_end, Color(0.72, 0.08, 0.06, 0.95))
 	var shown := logic.fill_power
 	if shown > 0.5:
-		var tip := stats.red_tip_start
-		var orange_to := minf(shown, tip)
+		var orange_to := minf(shown, KickConstants.METER_MAX)
 		_draw_annulus(hub, inner, outer, 180.0, MeterGauge.power_angle(orange_to), Color(1.0, 0.48, 0.05, 1.0))
-		if shown > tip:
-			var pulse := 0.72 + 0.28 * sin(float(Time.get_ticks_msec()) * 0.012)
-			var danger_from := MeterGauge.power_angle(tip)
-			var danger_to := MeterGauge.power_angle(shown)
-			if danger_from - danger_to < 10.0:
-				danger_from = danger_to + 10.0
-			_draw_annulus(hub, inner, outer, danger_from, danger_to, Color(0.95, 0.05, 0.04, pulse))
+		if shown > KickConstants.METER_MAX + 0.05:
+			_draw_annulus(hub, inner, outer, MeterGauge.MAX_ANGLE, MeterGauge.power_angle_raw(shown), Color(0.95, 0.08, 0.05, 1.0))
+	if logic.overpower_paid and logic.overpower_hold > 0.0:
+		var flash := 0.35 + 0.25 * sin(float(Time.get_ticks_msec()) * 0.02)
+		_draw_annulus(hub, inner, outer, MeterGauge.MAX_ANGLE, band_end, Color(1.0, 0.05, 0.04, flash))
+		_pg_center("OVERPOWER", hub.y - outer - 28.0, 22, Color(1.0, 0.9, 0.82), "callout")
 	var label_r := (inner + outer) * 0.5
 	var good_high := (float(layout["band_top"]) + float(layout["perfect_top"])) * 0.5
 	var good_low := (float(layout["perfect_bottom"]) + float(layout["band_bottom"])) * 0.5

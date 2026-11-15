@@ -140,7 +140,7 @@ const ALL: Array = [
 		"id": CARLOS,
 		"name": "Carlos Hernandez",
 		"lore": "Smash the power and the accuracy takes care of itself. The ball does not wait around.",
-		"excels": "Numero Dos. A 95–100 lock is a true PERFECT.",
+		"excels": "Numero Dos. A lock of 95 or higher, including the OVERPOWER band, is a true PERFECT. OVERPOWER range does not apply.",
 		"downside": "94 and below is a normal accuracy swing.",
 		"ball_name": "The Not So Secret Weapon",
 		"ball_description": "Both needles run 15% faster. Items and weather still stack on top.",

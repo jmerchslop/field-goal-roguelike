@@ -5,6 +5,7 @@ BAL1: needle slow floor 0.35, gentler Anchor / Patient / Sticker / Shelter table
 BAL2: Endless ranks XIII–XXIV do something for every equipment style except Wind Visor and Iron Grip. Range late tables are shorter. Curse upsides are higher, and Howling's item boost is ×1.10.
 RW1: Iron Grip VI+ keeps the red tip and pays +5 yd at VI, plus 1 yd per rank, for a power lock in the tip (+23 at XXIV). Heavy Ball's downside is max(2, 2% of the kick distance). Wind Visor resists 10/15/20% at I/II/III and stays at 20%, and the dotted path starts at IV (40%) and is full at VIII.
 RW2: Lucky Ball is still 3% per first-try make, capped at +25%, and any miss resets the stacks. Walk-On clutch, on a retry after a miss, slows both needles ×0.90 before the 0.35 floor and adds +6 yd. Vex unlocks by making 500 yards in Endless, and the saucer is 11 mph of west wind.
+RT1: The hidden ±5 red-tip noise is gone. A 95–100 lock is clean, and P=100 is clean full power. The needle continues into a red OVERPOWER band of about 14.3 power units (0.10 s at the 0.70 s sweep). A lock inside the band pays +4 yd and speeds the accuracy needle ×1.25 after the floor, Stone Toe, and UNDER THE LIGHTS, and before rain and ball speed. Iron Grip widens that band by 10% per rank through V (+50%, about 121.4) and from VI also pays 5+(rank−6) yd on an OVERPOWER lock. Ice Cage no longer hides the band. It halves the speed-up to ×1.125 and still blocks Iced. Big Game keeps the base band, the +4, and ×1.25, and strips Iron Grip's width, Iron Grip's yards, and the ×1.125. Carlos's Numero Dos covers 95–100 and the band as a true PERFECT at P=100, with no +4, no extra yards, and no OVERPOWER label.
 
 **Loadout items:** 32 (18 equipment, 6 perks, 8 curses)
 **Vitamins:** 11 (10 belt vitamins and B12 Shot)
@@ -117,12 +118,12 @@ Rank I is +2 / +3. Rank VI is +12 / +18. Rank XII is +24 / +36. Each rank past X
 - **id:** `ice_cage`
 - **slot:** helmet
 - **rank cap:** Standard VI, Endless XXIV
-- **soft cap:** from XIII. `effect_rank` stays 12, so perfect stays +5 and good stays +10.
-- **card text:** `_ice_cage_line(effect_rank)`. Rank I is immunity only. Rank II adds accuracy ×0.90. Later ranks append the running perfect and good totals.
-- **actual effect:** every rank sets `ice_veins` and blocks the Iced curse, in either helmet slot. Rank II and up multiply accuracy speed by 0.90. Perfect +1 at each odd rank from III. Good +2 at each even rank from IV. At XII that is perfect +5 and good +10. Big Game clears `ice_veins` and the band adds. The Iced-curse block still keys off either helmet id.
+- **soft cap:** from XIII. Perfect stays +5 and good stays +10. RT1 caps those band adds at XII.
+- **card text:** Rank I `"Immune to Iced. OVERPOWER speed-up halved."` Rank II adds accuracy ×0.90. Rank VI adds Perfect +2, good +4. Rank XII–XXIV stay Perfect +5, good +10.
+- **actual effect:** every rank sets `ice_veins` for Iced immunity, in either helmet slot, and sets `overpower_half`. It does not hide the OVERPOWER band or change its width. Rank II and up multiply accuracy speed by 0.90 before the 0.35 floor. A paid OVERPOWER lock then uses ×1.125 instead of ×1.25. Perfect +1 at each odd rank from III through XI. Good +2 at each even rank from IV through XII. Big Game clears the ×0.90, the band adds, and the ×1.125. The Iced block still keys off either helmet id.
 - **match:** yes, ranks I–XXIV
 
-Rank VI card, confirmed live: `"No red-tip penalty. Immune to Iced. Accuracy needle ×0.90. PERFECT +2, good +4"`. Rank XII and XIII–XXIV: perfect +5, good +10, still ×0.90.
+Rank VI card: `"Immune to Iced. OVERPOWER speed-up halved. Accuracy needle ×0.90. Perfect +2, good +4."` Rank XII and XIII–XXIV: perfect +5, good +10, still ×0.90, speed-up still halved.
 
 ### Scout Lid
 
@@ -186,9 +187,9 @@ Rank XII and XIII–XXIV: +11 rerolls and five practice swings a quarter.
 - **id:** `iron_grip`
 - **slot:** gloves
 - **rank cap:** Standard VI, Endless XXIV
-- **soft cap:** the noise cut and the tip-start delay stop at V. From VI the tip-lock yards keep growing, +1 yd per rank, through XXIV.
-- **card text:** I–II `"Red-tip noise -{2 × rank}"`. III–V name noise -4 and a later red-tip start. VI and above keep that taming and add `"Locking power in the red tip pays +{5 + rank - 6} yd."`
-- **actual effect:** noise starts at 5. The cut is `2 × min(effect_rank, 2)`, floored at 1, so rank I is ±3 and rank II and up are ±1. Red-tip start begins at 95 and gains +3 at III, IV, and V (98, 101, 104). Those tames stay on at VI–XXIV. Iron Grip does not set `red_tip_off`. A power lock at or above `red_tip_start` adds `tip_lock_yards`, which is 0 through V, 5 at VI, and 23 at XXIV. Ice Cage's `ice_veins` still skips the tip, so those yards do not pay while Ice Cage is owned. Big Game restores the base red-tip values and clears `red_tip_off`.
+- **soft cap:** the band width stops growing at V (+50%). From VI the extra OVERPOWER yards keep growing, +1 yd per rank, through XXIV.
+- **card text:** I `"OVERPOWER band +10% wide."` V `"OVERPOWER band +50% wide."` VI adds `"An OVERPOWER lock pays +5 yd, on top of the base +4."` XXIV names +23 yd.
+- **actual effect:** RT1. No noise cut and no delayed tip. `overpower_width` is the base 14.3 units times `1 + 0.10 * min(rank, 5)`. Ends are about 115.7, 117.1, 118.6, 120.0, and 121.4 for I–V, and 121.4 after that. I–V widen only. From VI, `tip_lock_yards` is `5 + (rank - 6)` and pays only on a paid OVERPOWER lock, on top of the base +4 (VI 9 total, XXIV 27 total). A 95–100 lock, a lower lock, and a shank pay nothing. Ice Cage does not block the yards. Big Game clears the width back to 14.3 and clears the yards.
 - **match:** yes, ranks I–XXIV
 
 ### Replay Gloves
@@ -486,8 +487,8 @@ Cole's ball multiplier is 1.00 in `Kickers.apply_to`. It is not 0.90. Carlos is 
 ### Carlos Hernandez
 
 - **Select range:** `"66 yd"`
-- **Kit text:** `"Numero Dos. A 95–100 lock is a true PERFECT."` A power of 94 or below is a normal accuracy swing.
-- **actual effect:** power from 95 through 100 forces accuracy error to 0 and `perfect` true. An auto-shank never reaches this check. Full power is `16 + 0.50 × 100` = 66 yards.
+- **Kit text:** `"Numero Dos. A lock of 95 or higher, including the OVERPOWER band, is a true PERFECT. OVERPOWER range does not apply."` A power of 94 or below is a normal accuracy swing. Flag for Box Score.
+- **actual effect:** a 95–100 lock and an OVERPOWER band lock both force accuracy error to 0 and `perfect` true, at clean P=100. No +4, no Iron Grip yards, no ×1.25, and no OVERPOWER label. Iron Grip can still widen his safe window unless Big Game strips it. An auto-shank never reaches this check. Full power is `16 + 0.50 × 100` = 66 yards.
 - **match:** yes
 - **Ball:** `"The Not So Secret Weapon"`. `ball_speed_mult` is 1.15. Items and weather still multiply on top.
 - **match:** yes
@@ -544,7 +545,7 @@ Boss weather is the condition name. Wind still comes from the kick table. Retrie
 | Iced | Standard kick 5. Endless pool. | Meter hides the way the Iced curse does, unless Ice Cage or Ice Veins is on. | Ice Cage blocks the hide. No needle multiplier. |
 | The Squeeze | Standard kick 10, 50/50 with UNDER THE LIGHTS. Endless pool. | Posts are 5.17 yards wide. | Narrow Posts does not stack a second shrink. No needle multiplier. |
 | Monsoon | Standard kick 15. Endless pool. | Rain and mud together. Weather Wraps rank III ignores both. | Vitamin D clears plain rain, snow, and mud, not the Monsoon extras. |
-| Big Game | Standard kick 20. Endless pool. | Meter-help is stripped. Needle speeds, bands, and red-tip flags are copied from the bare kicker. Vitamins then join the slow product and the 0.35 floor. Stone Toe's ×1.20 power needle applies after that floor. Tight Window's −2 bands are applied again. Range gear is kept. | Anchor, Patient Gloves, Hero Ball's needle slow, and Ice Cage's band adds are off. Magnesium still slows. UNDER THE LIGHTS is not this boss, so it does not strip meter help. |
+| Big Game | Standard kick 20. Endless pool. | Meter-help is stripped. Needle speeds, bands, and the OVERPOWER width are copied back to the bare kicker. The base band, the +4, and ×1.25 stay. Vitamins then join the slow product and the 0.35 floor. Stone Toe's ×1.20 power needle applies after that floor. Tight Window's −2 bands are applied again. Range gear is kept. | Anchor, Patient Gloves, Hero Ball's needle slow, Ice Cage's band adds, Iron Grip widening, Iron Grip yards, and Ice Cage's ×1.125 are off. Magnesium still slows. UNDER THE LIGHTS is not this boss, so it does not strip meter help. |
 | UNDER THE LIGHTS | Standard kick 10, the other half of the roll, stored at `new_run` so the kick 5 shop matches. Endless pool. | Both needles ×1.35 after the 0.35 slow floor, and after Stone Toe. Rain still multiplies accuracy omega after that. Posts stay 6.17. Wind is the kick 10 table (10–15 mph in Standard). No rain, snow, or mud from the boss itself. The beams are visual only. Practice Swing does not get the ×1.35. | Meter-help items stay on. Two-Minute Drill still adds its boss Mult. The ×1.35 is not floored. |
 
 The kick 10 roll uses its own generator, so it does not shift the weather sequence. Debug Shift+9 forces UNDER THE LIGHTS until the kick is left. Shift+6 is still The Squeeze.

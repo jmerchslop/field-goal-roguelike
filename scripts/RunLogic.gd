@@ -534,6 +534,11 @@ func prepare_kick_stats() -> void:
 		stats.red_tip_noise = base.red_tip_noise
 		stats.red_tip_off = false
 		stats.ice_veins = false
+		# Big Game keeps the base band, the +4, and ×1.25.
+		# Iron Grip's wider band and extra yards, and Ice Cage's halved speed-up, are off.
+		stats.overpower_width = KickConstants.OVERPOWER_BASE
+		stats.tip_lock_yards = 0.0
+		stats.overpower_half = false
 	_apply_ball_vitamins()
 	_finish_needles()
 

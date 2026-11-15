@@ -272,27 +272,33 @@ static func _swing_word(count: int) -> String:
 	return str(count)
 
 
+static func overpower_band_width(rank: int) -> float:
+	var steps := mini(maxi(rank, 0), 5)
+	return KickConstants.OVERPOWER_BASE * (1.0 + 0.10 * float(steps))
+
+
 static func _ice_cage_line(rank: int) -> String:
-	var line := "No red-tip penalty. Immune to Iced."
+	var line := "Immune to Iced. OVERPOWER speed-up halved."
 	if rank <= 1:
 		return line
-	line += " Accuracy needle ×0.90"
+	line += " Accuracy needle ×0.90."
+	var capped := mini(rank, 12)
 	var perfect := 0
 	var odd := 3
-	while odd <= rank:
+	while odd <= capped:
 		perfect += 1
 		odd += 2
 	var good := 0
 	var even := 4
-	while even <= rank:
+	while even <= capped:
 		good += 2
 		even += 2
 	if perfect > 0 and good > 0:
-		line += ". Perfect +%d, Good +%d" % [perfect, good]
+		line += " Perfect +%d, good +%d." % [perfect, good]
 	elif perfect > 0:
-		line += ". Perfect +%d" % perfect
+		line += " Perfect +%d." % perfect
 	elif good > 0:
-		line += ". Good +%d" % good
+		line += " Good +%d." % good
 	return line
 
 
@@ -451,15 +457,11 @@ static func effect_line(id: String, rank: int) -> String:
 				return "5 doinks become Good each quarter, unused carry (max 5)"
 			return "%d doinks become Good each quarter, unused carry (max %d)" % [charges, charges]
 		IRON_GRIP:
-			if rank <= 2:
-				return "Red-tip noise -%d" % (2 * rank)
-			if rank == 3:
-				return "Noise -4 (min ±1). The red tip starts 3 later on the power meter."
-			if rank == 4:
-				return "Noise -4 (min ±1). The red tip starts 6 later on the power meter."
-			if rank == 5:
-				return "Noise -4 (min ±1). The red tip starts 9 later on the power meter."
-			return "Noise -4 (min ±1). The red tip starts 9 later on the power meter. Locking power in the red tip pays +%d yd." % int(tip_lock_yards(rank))
+			var wide := 10 * mini(maxi(rank, 0), 5)
+			var line := "OVERPOWER band +%d%% wide." % wide
+			if rank >= 6:
+				line += " An OVERPOWER lock pays +%d yd, on top of the base +4." % int(tip_lock_yards(rank))
+			return line
 		REPLAY_GLOVES:
 			var swings := replay_swings(rank)
 			if rank == 1:
@@ -979,14 +981,16 @@ static func _apply_piece(stats: KickerStats, item_id: String, item_rank: int, it
 	elif item_id == ICE_CAGE:
 		stats.ice_cage = true
 		stats.ice_veins = true
+		stats.overpower_half = true
 		if item_rank >= 2:
 			acc["accuracy"] = float(acc["accuracy"]) * _scale_factor(0.90, howling, item_scale)
+		var band_rank := mini(item_rank, 12)
 		var odd := 3
-		while odd <= item_rank:
+		while odd <= band_rank:
 			acc["perfect"] = float(acc["perfect"]) + 1.0
 			odd += 2
 		var even := 4
-		while even <= item_rank:
+		while even <= band_rank:
 			acc["good"] = float(acc["good"]) + 2.0
 			even += 2
 	elif item_id == SCOUT_LID:
@@ -1008,14 +1012,8 @@ static func _apply_piece(stats: KickerStats, item_id: String, item_rank: int, it
 		stats.doink_per_quarter = doink_charges(item_rank)
 		stats.doink_carry = item_rank >= 6
 	elif item_id == IRON_GRIP:
-		var cut := 2.0 * float(mini(item_fx, 2))
-		stats.red_tip_noise = maxf(stats.red_tip_noise - cut, 1.0)
-		if item_fx >= 3:
-			stats.red_tip_start += 3.0
-		if item_fx >= 4:
-			stats.red_tip_start += 3.0
-		if item_fx >= 5:
-			stats.red_tip_start += 3.0
+		stats.overpower_width = overpower_band_width(item_rank)
+		stats.red_tip_off = false
 		stats.tip_lock_yards = maxf(stats.tip_lock_yards, tip_lock_yards(item_rank))
 	elif item_id == REPLAY_GLOVES:
 		stats.practice_per_quarter += replay_swings(item_rank)

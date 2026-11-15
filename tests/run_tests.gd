@@ -53,6 +53,7 @@ func _run() -> void:
 	_check_wind_visor_path()
 	_check_rw1()
 	_check_rw2()
+	_check_rt1()
 	_check_drive_lid_and_power_safety()
 	_check_m2_kickers()
 	_check_honest_cards_and_bench()
@@ -189,8 +190,10 @@ func _check_pendulum() -> void:
 	check(near(sweep.power_true, 50.0) and near(sweep.needle_angle, 135.0), "halfway through the power sweep, P is 50 (angle %s, P %s)" % [sweep.needle_angle, sweep.power_true])
 	check(near(started - sweep.needle_angle, MeterGauge.omega_base() * half_time), "accuracy 100 sweeps at ω_ref, not the old ω0")
 	sweep.advance(half_time)
-	check(sweep.shanked and sweep.phase == KickLogic.Phase.FLIGHT and sweep.phase != KickLogic.Phase.ACCURACY, "POWER to MAX with no Space #2 shanks instead of locking P=100")
-	check(sweep.needle_angle <= 90.0001 and sweep.power == 0.0, "the shank stops at MAX and does not store a power lock, angle %s" % sweep.needle_angle)
+	check(not sweep.shanked and near(sweep.power_true, 100.0), "reaching MAX with no Space #2 is clean full power, not a shank")
+	sweep.advance(sweep.seconds_to_power(100.0 + sweep.stats.overpower_width) + 0.02)
+	check(sweep.shanked and sweep.phase == KickLogic.Phase.FLIGHT and sweep.phase != KickLogic.Phase.ACCURACY, "passing the OVERPOWER band with no Space #2 shanks")
+	check(sweep.needle_angle < 90.0 and sweep.power == 0.0, "the shank stops past MAX and does not store a power lock, angle %s" % sweep.needle_angle)
 	var mid := KickLogic.new()
 	mid.press_space()
 	mid.advance(mid.windup_left)
@@ -309,7 +312,7 @@ func _measure_power_sweep(id: String) -> float:
 	kick.advance(kick.windup_left)
 	var step := 0.0002
 	var elapsed := 0.0
-	while kick.phase == KickLogic.Phase.POWER and elapsed < 3.0:
+	while kick.phase == KickLogic.Phase.POWER and kick.power_true < 99.95 and elapsed < 3.0:
 		kick.advance(step)
 		elapsed += step
 	return elapsed
@@ -466,70 +469,20 @@ func _check_perfect_band() -> void:
 
 
 func _check_red_tip() -> void:
-	var inside := true
-	var saw_positive := false
-	var saw_negative := false
-	var untouched := true
-	var saw_tip := false
-	for seed_value in range(1, 201):
-		var rng := RandomNumberGenerator.new()
-		rng.seed = seed_value
-		var wobble := KickLogic.accuracy_with_red_tip(100.0, 0.0, rng)
-		if wobble < KickConstants.RED_TIP_ERROR_MIN or wobble > KickConstants.RED_TIP_ERROR_MAX:
-			inside = false
-		if wobble > 0.5:
-			saw_positive = true
-		if wobble < -0.5:
-			saw_negative = true
-		var plain := RandomNumberGenerator.new()
-		plain.seed = seed_value
-		if KickLogic.accuracy_with_red_tip(94.0, 0.0, plain) != 0.0:
-			untouched = false
-		var tipped := RandomNumberGenerator.new()
-		tipped.seed = seed_value
-		if absf(KickLogic.accuracy_with_red_tip(95.0, 0.0, tipped)) > 0.000001:
-			saw_tip = true
-	check(inside, "red-tip random stays inside -5..+5")
-	check(saw_positive and saw_negative, "red-tip random can push e either way")
-	check(untouched, "power under 95 does not change e")
-	check(saw_tip, "power at 95 can change e")
-	var first := RandomNumberGenerator.new()
-	first.seed = 42
-	var second := RandomNumberGenerator.new()
-	second.seed = 42
-	var replay_a := KickLogic.accuracy_with_red_tip(100.0, 0.0, first)
-	var replay_b := KickLogic.accuracy_with_red_tip(100.0, 0.0, second)
-	check(replay_a == replay_b, "the same seed replays the same wobble (%s)" % replay_a)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 42
+	check(KickLogic.accuracy_with_red_tip(100.0, 0.0, rng) == 0.0, "a P=100 lock adds no red-tip noise")
+	check(KickLogic.accuracy_with_red_tip(95.0, 1.5, rng) == 1.5, "a 95 lock keeps the pressed error")
+	check(KickLogic.accuracy_with_red_tip(94.0, 0.0, rng) == 0.0, "power under 95 does not change e")
 
 
 func _check_2_centered_perfect_press() -> void:
-	var perfect_seed := -1
-	var bumped_seed := -1
-	for seed_value in range(1, 501):
-		var rng := RandomNumberGenerator.new()
-		rng.seed = seed_value
-		var error := KickLogic.accuracy_with_red_tip(100.0, 0.0, rng)
-		if perfect_seed < 0 and absf(error) <= KickConstants.PERFECT_BAND:
-			perfect_seed = seed_value
-		elif bumped_seed < 0 and absf(error) > KickConstants.PERFECT_BAND:
-			bumped_seed = seed_value
-		if perfect_seed > 0 and bumped_seed > 0:
-			break
-	check(perfect_seed > 0 and bumped_seed > 0, "found seeds for a kept PERFECT and a lost PERFECT")
-	var made := _drive_check2(perfect_seed)
-	var expected := RandomNumberGenerator.new()
-	expected.seed = perfect_seed
-	var expected_error := KickLogic.accuracy_with_red_tip(100.0, 0.0, expected)
+	var made := _drive_check2(7)
 	check(near(made.power, 100.0), "check 2 a press as the needle reaches MAX locks P=100")
 	check(near(made.needle, 0.0), "check 2 the press is on the green line, needle=%s" % made.needle)
-	check(made.accuracy_error == expected_error, "check 2 the state machine uses the seeded wobble")
-	check(made.perfect and made.result_text == "GOOD", "check 2 seed %s -> PERFECT and GOOD (e=%s)" % [perfect_seed, made.accuracy_error])
-	var bumped := _drive_check2(bumped_seed)
-	check(not bumped.perfect, "check 2 seed %s red tip removes PERFECT (e=%s)" % [bumped_seed, bumped.accuracy_error])
-	check(bumped.result_text == "GOOD", "check 2 a centered red-tip kick is still GOOD at 35 yd, got %s" % bumped.result_text)
-	print("INFO  check 2 kept PERFECT with seed %s, e=%s, result=%s" % [perfect_seed, made.accuracy_error, made.result_text])
-	print("INFO  check 2 lost PERFECT with seed %s, e=%s, result=%s" % [bumped_seed, bumped.accuracy_error, bumped.result_text])
-	print("INFO  check 2: P=100 is in the red tip, so a press on 0 stays PERFECT only when the random add is inside the perfect band. At 35 yd a centered kick is still GOOD.")
+	check(near(made.accuracy_error, 0.0), "check 2 a P=100 lock on the green line has no noise")
+	check(made.perfect and made.result_text == "GOOD", "check 2 P=100 on the green line is PERFECT and GOOD")
+	check(not made.overpower_paid, "check 2 P=100 is not an OVERPOWER lock")
 
 
 func _drive_check2(seed_value: int) -> KickLogic:
@@ -1349,7 +1302,7 @@ func _check_wind_and_pool() -> void:
 	var bare := KickLogic.new()
 	bare.set_seed(2)
 	_lock_power_at(bare, 96.0)
-	check(bare.accuracy_error != 0.0, "without Ice Cage the same seed still wobbles, got %s" % bare.accuracy_error)
+	check(near(bare.accuracy_error, 0.0), "a 96 lock is clean with no red-tip wobble, got %s" % bare.accuracy_error)
 	var insured := RunLogic.new()
 	insured.new_run()
 	insured.give(Loadout.DOINK_CAP, 1)
@@ -1604,8 +1557,8 @@ func _check_ui_copy() -> void:
 	check(Loadout.effect_line(Loadout.SCOUT_LID, 1) == "+1 reroll" and Loadout.effect_line(Loadout.SCOUT_LID, 2) == "+2 rerolls", "Scout Lid 1 is singular and 2 is plural")
 	check(Loadout.effect_line(Loadout.REPLAY_GLOVES, 1) == "1 practice swing each quarter" and Loadout.effect_line(Loadout.REPLAY_GLOVES, 2) == "2 practice swings each quarter", "Replay Gloves says each quarter")
 	check(Loadout.effect_line(Loadout.DOINK_CAP, 1) == "1 doink becomes Good each quarter", "Doink Cap I says a doink becomes Good")
-	check(Loadout.effect_line(Loadout.IRON_GRIP, 1) == "Red-tip noise -2", "Iron Grip I uses an ASCII hyphen")
-	check(Loadout.effect_line(Loadout.IRON_GRIP, 3) == "Noise -4 (min ±1). The red tip starts 3 later on the power meter.", "Iron Grip III is a full sentence")
+	check(Loadout.effect_line(Loadout.IRON_GRIP, 1) == "OVERPOWER band +10% wide.", "Iron Grip I widens the OVERPOWER band")
+	check(Loadout.effect_line(Loadout.IRON_GRIP, 3) == "OVERPOWER band +30% wide.", "Iron Grip III widens the band and does not mention noise")
 	check(Loadout.effect_line(Loadout.TIGHT, 1) == "Down: Perfect and Good -2. Up: +1.0 Mult", "Tight Window keeps +1.0 Mult and says Good")
 	check(Loadout.effect_line(Loadout.ICED, 1) == "Down: The meter hides for 0.4s after you start it. Up: +0.75 Mult", "Iced keeps the BAL2 +0.75 Mult")
 	check(Vitamins.effect_line(Vitamins.MAGNESIUM) == "Needles ×0.70 this kick", "Magnesium prints 0.70")
@@ -2084,16 +2037,16 @@ func _check_rank_caps_and_range() -> void:
 	var grip := RunLogic.new()
 	grip.start_with_kicker(Kickers.BIG_BRUCE)
 	grip.give(Loadout.IRON_GRIP, 5)
-	check(near(grip.stats.red_tip_start, 104.0) and near(grip.stats.red_tip_noise, 1.0), "Iron Grip V pushes Bruce's red tip from 95 to 104")
+	check(not grip.stats.red_tip_off and near(grip.stats.overpower_width, Loadout.overpower_band_width(5)) and near(grip.stats.tip_lock_yards, 0.0), "Iron Grip V widens the band and pays no yards")
 	grip.give(Loadout.IRON_GRIP, 6)
-	check(not grip.stats.red_tip_off and near(grip.stats.red_tip_start, 104.0) and near(grip.stats.red_tip_noise, 1.0) and near(grip.stats.tip_lock_yards, 5.0), "Iron Grip VI keeps the tip and pays +5 yd")
+	check(not grip.stats.red_tip_off and near(grip.stats.tip_lock_yards, 5.0), "Iron Grip VI pays +5 yd on an OVERPOWER lock")
 	grip.force_weather(RunLogic.BIG_GAME)
 	grip.prepare_kick_stats()
-	check(not grip.stats.red_tip_off and near(grip.stats.red_tip_start, 95.0), "Big Game turns Iron Grip's red-tip help off")
+	check(not grip.stats.red_tip_off and near(grip.stats.overpower_width, KickConstants.OVERPOWER_BASE) and near(grip.stats.tip_lock_yards, 0.0), "Big Game strips Iron Grip widening and yards")
 	var walk_grip := RunLogic.new()
 	walk_grip.start_with_kicker(Kickers.WALK_ON)
 	walk_grip.give(Loadout.IRON_GRIP, 4)
-	check(near(walk_grip.stats.red_tip_start, 101.0), "Iron Grip IV already pushes The Walk-On past 100")
+	check(near(walk_grip.stats.overpower_width, Loadout.overpower_band_width(4)), "Iron Grip IV widens the Walk-On band")
 	var scout := RunLogic.new()
 	scout.start_with_kicker(Kickers.WALK_ON)
 	scout.give(Loadout.SCOUT_LID, 4)
@@ -3058,7 +3011,7 @@ func _check_auto_shank() -> void:
 	swing.stats = practice.stats
 	swing.press_space()
 	swing.advance(swing.windup_left)
-	swing.advance(swing.seconds_to_power(100.0) + 0.05)
+	swing.advance(swing.seconds_to_power(100.0 + swing.stats.overpower_width) + 0.02)
 	check(swing.shanked and swing.phase == KickLogic.Phase.FLIGHT, "practice shank does not enter the accuracy phase")
 	check(swing.result_text.begins_with("WIDE"), "practice shank is a wide miss, got %s" % swing.result_text)
 	practice.end_practice()
@@ -3079,7 +3032,7 @@ func _check_auto_shank() -> void:
 	shank.kick_distance = missed.distance_yards()
 	shank.press_space()
 	shank.advance(shank.windup_left)
-	shank.advance(shank.seconds_to_power(100.0) + 0.02)
+	shank.advance(shank.seconds_to_power(100.0 + shank.stats.overpower_width) + 0.02)
 	missed.resolve_kick(shank.result_text, shank.offset_yards, shank.perfect)
 	check(not shank.perfect and missed.streak == 0, "a shank resets the streak and is not perfect")
 	check(missed.attempts == before_attempts - 1, "a shank spends one attempt")
@@ -3626,6 +3579,131 @@ func _check_rw2() -> void:
 	records.unlocks[Kickers.VEX] = had_vex
 
 
+func _check_rt1() -> void:
+	var base_width := KickConstants.OVERPOWER_BASE
+	check(near(base_width, 14.2857, 0.01), "the base OVERPOWER band is about 14.3 power units, got %s" % base_width)
+	var walk := KickLogic.new()
+	Kickers.apply_to(walk.stats, Kickers.WALK_ON)
+	var plain_sec := _band_seconds(walk)
+	check(plain_sec >= 0.099 and near(plain_sec, 0.10, 0.002), "the base band lasts about 0.10 s at the 0.70 s sweep, got %s" % plain_sec)
+	walk.stats.power_speed = 120.0
+	var stone_sec := _band_seconds(walk)
+	check(stone_sec < plain_sec - 0.01, "Stone Toe shrinks time in the band, got %s" % stone_sec)
+	walk.stats.power_speed = 135.0
+	var lights_sec := _band_seconds(walk)
+	check(lights_sec < stone_sec - 0.005, "UNDER THE LIGHTS shrinks time in the band further, got %s" % lights_sec)
+	check(near(walk.stats.overpower_width, base_width), "needle speed does not rescale the band width")
+	var ends := [115.714, 117.143, 118.571, 120.0, 121.429]
+	for rank in range(1, 6):
+		check(near(100.0 + Loadout.overpower_band_width(rank), float(ends[rank - 1]), 0.02), "Iron Grip %s band ends near %s" % [rank, ends[rank - 1]])
+	check(near(Loadout.overpower_band_width(6), Loadout.overpower_band_width(5)) and near(Loadout.overpower_band_width(24), Loadout.overpower_band_width(5)), "Iron Grip width stays at +50% from V through XXIV")
+	var grip := RunLogic.new()
+	grip.start_with_kicker(Kickers.WALK_ON)
+	grip.give(Loadout.IRON_GRIP, 6)
+	check(near(grip.stats.tip_lock_yards, 5.0) and not grip.stats.red_tip_off, "Iron Grip VI stores +5 extra yards and does not disable the band")
+	var deep := RunLogic.new()
+	deep.start_with_kicker(Kickers.WALK_ON)
+	deep.run_mode = "endless"
+	deep.give(Loadout.IRON_GRIP, 24)
+	check(near(deep.stats.tip_lock_yards, 23.0), "Iron Grip XXIV stores +23 extra yards")
+	var clean := _overpower_kick(Kickers.WALK_ON, 100.0, 0.0, false)
+	var band := _overpower_kick(Kickers.WALK_ON, 107.0, 0.0, false)
+	check(not clean.overpower_paid and near(clean.power, 100.0) and not clean.shanked, "P=100 is a clean lock, not OVERPOWER and not a shank")
+	check(band.overpower_paid and near(band.power, 100.0) and near(band.max_range, clean.max_range + 4.0), "a Walk-On band lock pays exactly +4 and uses P=100, got %s vs %s" % [band.max_range, clean.max_range])
+	check(near(band._accuracy_omega(), clean._accuracy_omega() * 1.25, 0.01), "OVERPOWER speeds only the accuracy needle by ×1.25")
+	check(near(band._power_omega(), clean._power_omega()), "OVERPOWER does not speed the power needle")
+	var low := _overpower_kick(Kickers.WALK_ON, 90.0, 0.0, false)
+	check(not low.overpower_paid and near(low.max_range, clean.max_range - clean.stats.range_per_power * 10.0, 0.05), "a lock below 95 is not OVERPOWER")
+	var end_lock := _overpower_kick(Kickers.WALK_ON, 100.0 + base_width, 0.0, false)
+	check(end_lock.overpower_paid and not end_lock.shanked, "a lock exactly at the end of the band is OVERPOWER")
+	var past := KickLogic.new()
+	Kickers.apply_to(past.stats, Kickers.WALK_ON)
+	past.press_space()
+	past.advance(past.windup_left)
+	past.advance(past.seconds_to_power(100.0 + past.stats.overpower_width) + 0.02)
+	check(past.shanked and past.phase == KickLogic.Phase.FLIGHT and past.power == 0.0, "passing the end is a shank, not a lock")
+	var six := _overpower_kick(Kickers.WALK_ON, 107.0, 5.0, false)
+	var twenty := _overpower_kick(Kickers.WALK_ON, 107.0, 23.0, false)
+	check(near(six.max_range, clean.max_range + 9.0), "Iron Grip VI totals +9 on an OVERPOWER lock, got %s" % six.max_range)
+	check(near(twenty.max_range, clean.max_range + 27.0), "Iron Grip XXIV totals +27 on an OVERPOWER lock, got %s" % twenty.max_range)
+	var ninety := _overpower_kick(Kickers.WALK_ON, 100.0, 23.0, false)
+	check(near(ninety.max_range, clean.max_range), "a P=100 lock pays no Iron Grip yards")
+	var cage := RunLogic.new()
+	cage.start_with_kicker(Kickers.WALK_ON)
+	cage.give(Loadout.ICE_CAGE, 6)
+	cage.give(Loadout.IRON_GRIP, 6)
+	check(near(cage.stats.overpower_width, Loadout.overpower_band_width(6)), "Ice Cage does not change the band width")
+	cage.force_weather(RunLogic.ICED)
+	check(cage.stats.overpower_half and cage.stats.ice_veins and not cage.needle_fades(), "Ice Cage keeps Iced immunity and halves the speed-up")
+	var halved := KickLogic.new()
+	halved.stats = cage.stats
+	halved.overpower_paid = true
+	var full_rate := KickLogic.new()
+	Kickers.apply_to(full_rate.stats, Kickers.WALK_ON)
+	full_rate.stats.accuracy_speed = cage.stats.accuracy_speed
+	full_rate.overpower_paid = true
+	check(near(halved._accuracy_omega(), full_rate._accuracy_omega() * 1.125 / 1.25, 0.02), "Ice Cage makes the accuracy speed-up ×1.125")
+	var boss := RunLogic.new()
+	boss.start_with_kicker(Kickers.WALK_ON)
+	boss.give(Loadout.ICE_CAGE, 6)
+	boss.give(Loadout.IRON_GRIP, 6)
+	boss.force_weather(RunLogic.BIG_GAME)
+	boss.prepare_kick_stats()
+	check(near(boss.stats.overpower_width, base_width) and near(boss.stats.tip_lock_yards, 0.0) and not boss.stats.overpower_half, "Big Game keeps the base band and strips Iron Grip and the halved speed-up")
+	check(near(boss.stats.power_floor, 0.0), "Walk-On has no Farm Strength")
+	var bruce := RunLogic.new()
+	bruce.start_with_kicker(Kickers.BIG_BRUCE)
+	bruce.force_weather(RunLogic.BIG_GAME)
+	bruce.prepare_kick_stats()
+	check(near(bruce.stats.power_floor, 80.0), "Big Game leaves Farm Strength at 80")
+	var carlos := _overpower_kick(Kickers.CARLOS, 107.0, 9.0, false)
+	check(not carlos.overpower_paid and carlos.overpower_hold <= 0.0 and near(carlos.power, 100.0), "Carlos's band lock is clean P=100 with no OVERPOWER label")
+	carlos.advance(carlos.seconds_until_error(12.0))
+	if carlos.phase == KickLogic.Phase.ACCURACY:
+		carlos.press_space()
+	check(carlos.perfect and near(carlos.accuracy_error, 0.0), "Carlos's band lock is a true PERFECT")
+	check(near(carlos.max_range, _overpower_kick(Kickers.CARLOS, 100.0, 9.0, false).max_range), "Carlos gets no +4 and no Iron Grip yards")
+	var source := FileAccess.get_file_as_string("res://scripts/Loadout.gd") + FileAccess.get_file_as_string("res://scripts/Kickers.gd")
+	check(source.find("No red-tip penalty") < 0 and source.find("Red tip never") < 0 and source.find("No OVERPOWER bonus") < 0, "card copy no longer describes a red-tip penalty or a disabled tip")
+	check(Loadout.effect_line(Loadout.IRON_GRIP, 5) == "OVERPOWER band +50% wide.", "Iron Grip V is width only")
+	check(Loadout.effect_line(Loadout.IRON_GRIP, 6) == "OVERPOWER band +50% wide. An OVERPOWER lock pays +5 yd, on top of the base +4.", "Iron Grip VI names the extra yards")
+	check(Loadout.effect_line(Loadout.IRON_GRIP, 24).find("+23 yd") >= 0, "Iron Grip XXIV names +23 yd")
+	check(Loadout.effect_line(Loadout.ICE_CAGE, 1) == "Immune to Iced. OVERPOWER speed-up halved.", "Ice Cage I names immunity and the halved speed-up")
+	var practice := RunLogic.new()
+	practice.start_with_kicker(Kickers.WALK_ON)
+	practice.stats.practice_per_quarter = 1
+	practice.practice_left = 1
+	check(practice.start_practice() and near(practice.stats.overpower_width, base_width), "Practice Swing keeps the current OVERPOWER band")
+	practice.end_practice()
+
+
+func _band_seconds(kick: KickLogic) -> float:
+	var degrees := kick.stats.overpower_width / 100.0 * (MeterGauge.POWER_ANGLE - MeterGauge.MAX_ANGLE)
+	return degrees / kick._power_omega()
+
+
+func _overpower_kick(kicker_id: String, power_value: float, extra_yards: float, half: bool) -> KickLogic:
+	var kick := KickLogic.new()
+	Kickers.apply_to(kick.stats, kicker_id)
+	kick.stats.tip_lock_yards = extra_yards
+	kick.stats.overpower_half = half
+	kick.kick_distance = 35.0
+	kick.press_space()
+	kick.advance(kick.windup_left)
+	if power_value >= KickConstants.METER_MAX - 0.001:
+		kick.take_power_press(kick.seconds_to_power(power_value))
+	else:
+		kick.advance(kick.seconds_to_power(power_value))
+		if kick.phase == KickLogic.Phase.POWER:
+			kick.press_space()
+	if kick.overpower_hold > 0.0:
+		kick.advance(kick.overpower_hold)
+	if kick.phase == KickLogic.Phase.ACCURACY:
+		kick.advance(kick.seconds_until_error(0.0))
+		kick.press_space()
+	return kick
+
+
 func _check_rw1() -> void:
 	for rank in range(1, 6):
 		var tame := RunLogic.new()
@@ -3639,16 +3717,14 @@ func _check_rw1() -> void:
 	var open := _tip_kick(95.0, 0.0, false)
 	var top := _tip_kick(100.0, 23.0, false)
 	var top_plain := _tip_kick(100.0, 0.0, false)
-	check(near(below, plain), "a lock below the red tip adds no Iron Grip yards, got %s vs %s" % [below, plain])
-	check(near(locked, open + 5.0), "an Iron Grip VI tip lock adds exactly 5 yards, got %s vs %s" % [locked, open])
-	check(near(top, top_plain + 23.0), "an Iron Grip XXIV tip lock adds exactly 23 yards, got %s vs %s" % [top, top_plain])
-	var caged := _tip_kick(100.0, 5.0, true)
-	check(near(caged, top_plain), "Ice Cage still skips the tip, so Iron Grip yards do not pay, got %s vs %s" % [caged, top_plain])
+	check(near(below, plain), "a lock below 95 adds no OVERPOWER yards, got %s vs %s" % [below, plain])
+	check(near(locked, open), "a 95 lock does not pay Iron Grip yards, got %s vs %s" % [locked, open])
+	check(near(top, top_plain), "a P=100 lock does not pay Iron Grip yards, got %s vs %s" % [top, top_plain])
 	var cage := RunLogic.new()
 	cage.start_with_kicker(Kickers.BIG_BRUCE)
 	cage.give(Loadout.ICE_CAGE, 1)
 	cage.give(Loadout.IRON_GRIP, 6)
-	check(cage.stats.ice_veins and not cage.stats.red_tip_off and near(cage.stats.tip_lock_yards, 5.0), "Ice Cage still owns the tip-off next to Iron Grip VI")
+	check(cage.stats.ice_veins and not cage.stats.red_tip_off and near(cage.stats.tip_lock_yards, 5.0) and cage.stats.overpower_half, "Ice Cage keeps Iced immunity beside Iron Grip VI and halves the speed-up")
 	for dist in [35.0, 75.0, 200.0, 500.0, 1000.0]:
 		var want := 2.0
 		if dist >= 200.0:
@@ -4138,7 +4214,7 @@ func _check_m2_kickers() -> void:
 	Kickers.apply_to(shank.stats, Kickers.CARLOS)
 	shank.press_space()
 	shank.advance(shank.windup_left)
-	shank.advance(shank.seconds_to_power(100.0) + 0.02)
+	shank.advance(shank.seconds_to_power(100.0 + shank.stats.overpower_width) + 0.02)
 	check(shank.shanked and not shank.perfect and not near(shank.accuracy_error, 0.0), "an auto-shank is not a Numero Dos lock")
 	var big := RunLogic.new()
 	big.start_with_kicker(Kickers.CARLOS)
@@ -4258,8 +4334,8 @@ func _check_honest_cards_and_bench() -> void:
 	check(Loadout.effect_line(Loadout.WIND_VISOR, 1) == "Shows wind mph and an arrow. 10% wind resistance.", "Wind Visor I names the mph, the arrow, and 10% resistance")
 	check(Loadout.effect_line(Loadout.WIND_VISOR, 2) == "Wind mph and an arrow. 15% wind resistance.", "Wind Visor II names 15% resistance and no path")
 	check(Loadout.effect_line(Loadout.WIND_VISOR, 6).find("70%") >= 0 and Loadout.effect_line(Loadout.WIND_VISOR, 12).find("full flight") >= 0, "Wind Visor VI is 70% and XII is the full path")
-	check(Loadout.effect_line(Loadout.ICE_CAGE, 6) == "No red-tip penalty. Immune to Iced. Accuracy needle ×0.90. Perfect +2, Good +4", "Ice Cage VI lists the full package")
-	check(Loadout.effect_line(Loadout.ICE_CAGE, 12) == "No red-tip penalty. Immune to Iced. Accuracy needle ×0.90. Perfect +5, Good +10", "Ice Cage XII lists the grown bands")
+	check(Loadout.effect_line(Loadout.ICE_CAGE, 6) == "Immune to Iced. OVERPOWER speed-up halved. Accuracy needle ×0.90. Perfect +2, good +4.", "Ice Cage VI lists the full package")
+	check(Loadout.effect_line(Loadout.ICE_CAGE, 12) == "Immune to Iced. OVERPOWER speed-up halved. Accuracy needle ×0.90. Perfect +5, good +10.", "Ice Cage XII lists the grown bands")
 	check(Loadout.effect_line(Loadout.SCOUT_LID, 7) == "+6 rerolls, and two Practice Swings each quarter", "Scout Lid VII says +6 rerolls and two swings")
 	check(Loadout.effect_line(Loadout.DOINK_CAP, 7) == "7 doinks become Good each quarter, unused carry (max 7)", "Doink Cap VII carries 7")
 	check(Loadout.effect_line(Loadout.DOINK_CAP, 12) == "12 doinks become Good each quarter, unused carry (max 12)", "Doink Cap XII carries 12")
@@ -4806,7 +4882,7 @@ func _one_power_range(kicker_id: String) -> float:
 
 
 func _check_soft_caps() -> void:
-	var growing := [Loadout.PINPOINT, Loadout.ANCHOR, Loadout.STICKER, Loadout.ICE_CAGE, Loadout.SCOUT_LID, Loadout.DOINK_CAP, Loadout.REPLAY_GLOVES, Loadout.WEATHER_WRAPS, Loadout.TRUE_LID, Loadout.SHELTER_LID, Loadout.GUIDE_GLOVES, Loadout.PATIENT_GLOVES, Loadout.HUSH_GLOVES]
+	var growing := [Loadout.PINPOINT, Loadout.ANCHOR, Loadout.STICKER, Loadout.SCOUT_LID, Loadout.DOINK_CAP, Loadout.REPLAY_GLOVES, Loadout.WEATHER_WRAPS, Loadout.TRUE_LID, Loadout.SHELTER_LID, Loadout.GUIDE_GLOVES, Loadout.PATIENT_GLOVES, Loadout.HUSH_GLOVES]
 	for id in growing:
 		var frozen := Loadout.effect_line(str(id), 12)
 		for rank in range(13, 25):

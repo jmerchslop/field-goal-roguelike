@@ -58,9 +58,20 @@ static func power_angle(power_value: float) -> float:
 	return lerpf(POWER_ANGLE, MAX_ANGLE, t)
 
 
+# The OVERPOWER band continues past MAX. Power above 100 is a lower angle.
+static func power_angle_raw(power_value: float) -> float:
+	var t := maxf(power_value, 0.0) / KickConstants.METER_MAX
+	return lerpf(POWER_ANGLE, MAX_ANGLE, t)
+
+
 static func power_from_angle(angle: float) -> float:
 	var t := clampf((POWER_ANGLE - angle) / (POWER_ANGLE - MAX_ANGLE), 0.0, 1.0)
 	return t * KickConstants.METER_MAX
+
+
+static func power_from_angle_raw(angle: float) -> float:
+	var t := (POWER_ANGLE - angle) / (POWER_ANGLE - MAX_ANGLE)
+	return maxf(t, 0.0) * KickConstants.METER_MAX
 
 
 static func angle_from_error(error_value: float) -> float:

@@ -102,6 +102,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "rt1":
+		if not await _capture_rt1():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "boss1":
 		if not await _capture_boss1():
 			get_tree().quit(1)
@@ -1731,6 +1737,58 @@ func _offer_card(id: String, rank: int, slot: String) -> bool:
 	board.refresh_view()
 	if board.run.offer.is_empty() or str(board.run.offer[0].get("id", "")) != id:
 		print("offer missed ", id)
+		return false
+	return true
+
+
+func _capture_rt1() -> bool:
+	board.highlight = 1
+	board.confirm_kicker()
+	board.force_weather(RunLogic.CLEAR)
+	board.load_current_kick()
+	board.logic.press_space()
+	board.logic.advance(board.logic.windup_left)
+	board.logic.advance(board.logic.seconds_to_power(107.0))
+	if board.logic.power_true <= 100.0 or board.logic.phase != KickLogic.Phase.POWER:
+		print("band ", board.logic.power_true, " ", board.logic.phase)
+		return false
+	if not await _capture("rt1_red_band.png"):
+		return false
+	board.load_current_kick()
+	board.run.give(Loadout.IRON_GRIP, 6)
+	board.load_current_kick()
+	board.logic.press_space()
+	board.logic.advance(board.logic.windup_left)
+	board.logic.advance(board.logic.seconds_to_power(110.0))
+	if board.logic.stats.overpower_width < 20.0:
+		print("wide ", board.logic.stats.overpower_width)
+		return false
+	if not await _capture("rt1_iron_grip_wide_band.png"):
+		return false
+	board.load_current_kick()
+	board.run.gloves_id = ""
+	board.run.gloves_rank = 0
+	board.load_current_kick()
+	board.logic.press_space()
+	board.logic.advance(board.logic.windup_left)
+	board.logic.take_power_press(board.logic.seconds_to_power(107.0))
+	if not board.logic.overpower_paid or board.logic.overpower_hold <= 0.0:
+		print("lock ", board.logic.overpower_paid, " ", board.logic.overpower_hold, " ", board.logic.power)
+		return false
+	if not await _capture("rt1_overpower_lock.png"):
+		return false
+	board.load_current_kick()
+	board.logic.press_space()
+	board.logic.advance(board.logic.windup_left)
+	board.logic.advance(board.logic.seconds_to_power(100.0 + board.logic.stats.overpower_width) + 0.03)
+	if not board.logic.shanked:
+		print("shank ", board.logic.phase, " ", board.logic.power_true)
+		return false
+	if board.logic.phase == KickLogic.Phase.FLIGHT:
+		board.logic.advance(board.logic.flight_duration)
+	board.result_age = 0.3
+	board._pose = "follow"
+	if not await _capture("rt1_shank_past_band.png"):
 		return false
 	return true
 

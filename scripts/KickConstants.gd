@@ -39,6 +39,11 @@ const ACCURACY_FALL_PER_SEC := 120.0
 const PERFECT_BAND := 1.5
 const METER_INNER_BAND := 6.0
 const RED_TIP_START := 95.0
+# One calibration at the 0.70 s sweep. Faster needles spend less time here.
+# 100 power units take 0.70 s, so 0.10 s is 100 * 0.10 / 0.70 units.
+const OVERPOWER_BASE := 100.0 * (0.10 / 0.70)
+const OVERPOWER_YARDS := 4.0
+const OVERPOWER_HOLD := 0.40
 
 # If power lands in the red tip, add a random amount in this range to e.
 const RED_TIP_ERROR_MIN := -5.0
