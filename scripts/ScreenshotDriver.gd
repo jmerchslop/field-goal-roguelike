@@ -102,6 +102,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "b5e":
+		if not await _capture_b5e():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "b5d":
 		if not await _capture_b5d():
 			get_tree().quit(1)
@@ -1719,6 +1725,54 @@ func _offer_card(id: String, rank: int, slot: String) -> bool:
 	board.refresh_view()
 	if board.run.offer.is_empty() or str(board.run.offer[0].get("id", "")) != id:
 		print("offer missed ", id)
+		return false
+	return true
+
+
+func _capture_b5e() -> bool:
+	board.highlight = 1
+	board.confirm_kicker()
+	board.run.spot_yards = 0.0
+	board.logic.start_lateral_yards = 0.0
+	board.logic.sync_tee()
+	board.force_weather(RunLogic.LIGHTS)
+	board.glare_time = 0.5
+	board.refresh_view()
+	if not _beams_on_tee("b5e 35"):
+		return false
+	if not await _capture("b5e_35.png"):
+		return false
+	board.run.spot_yards = 0.0
+	board.cycle_debug_distance()
+	board.cycle_debug_distance()
+	board.glare_time = 0.5
+	board.refresh_view()
+	if absf(board.logic.kick_distance - 200.0) > 0.1:
+		print("b5e 200 ", board.logic.kick_distance)
+		return false
+	if not _beams_on_tee("b5e 200"):
+		return false
+	if not await _capture("b5e_200.png"):
+		return false
+	board.cycle_debug_distance()
+	board.glare_time = 0.5
+	board.refresh_view()
+	if absf(board.logic.kick_distance - 500.0) > 0.1:
+		print("b5e 500 ", board.logic.kick_distance)
+		return false
+	if not _beams_on_tee("b5e 500"):
+		return false
+	if not await _capture("b5e_500.png"):
+		return false
+	board.cycle_debug_distance()
+	board.glare_time = 0.5
+	board.refresh_view()
+	if absf(board.logic.kick_distance - 1000.0) > 0.1:
+		print("b5e 1000 ", board.logic.kick_distance)
+		return false
+	if not _beams_on_tee("b5e 1000"):
+		return false
+	if not await _capture("b5e_1000.png"):
 		return false
 	return true
 

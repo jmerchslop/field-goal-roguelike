@@ -5880,20 +5880,27 @@ func _assert_beam_aims(game, dist: float, spot: float, label: String) -> void:
 		var gap := Vector2(landing.x - tee.x, landing.z - tee.z).length()
 		check(gap <= 4.0, "%s beam lands %.2f yards from the tee" % [label, gap])
 		var points: PackedVector3Array = item["points"]
-		check(points.size() >= 4, "%s beam has a shaft" % label)
+		var widths: PackedFloat32Array = item["widths"]
+		check(points.size() >= 4 and widths.size() == points.size(), "%s beam has a shaft" % label)
+		var lamp: Vector3 = game._lamp_position(float(item["tower_x"]), float(item["tower_z"]), bool(item["end"]))
 		var head: Vector3 = points[0]
-		var plunge: Vector3 = points[points.size() - 2]
 		var tail: Vector3 = points[points.size() - 1]
-		check(head.distance_to(origin) < 0.05, "%s shaft starts at the lamp" % label)
-		var horiz := Vector2(plunge.x - tail.x, plunge.z - tail.z).length()
-		var angle := rad_to_deg(atan2(plunge.y - tail.y, maxf(horiz, 0.001)))
-		check(horiz >= 8.0, "%s plunge starts %.2f yards out" % [label, horiz])
-		check(angle >= 55.0, "%s plunge is %.1f degrees, shallower than 55" % [label, angle])
-		check(plunge.z > tail.z, "%s plunge comes toward the camera" % label)
+		check(head.distance_to(origin) < 0.05 and origin.distance_to(lamp) < 0.05, "%s shaft starts at the gantry lamp head" % label)
+		check(widths[0] < 2.2 and widths[0] < widths[widths.size() - 1], "%s is narrow at the lamp and wider at the pool" % label)
+		var prev_y := head.y
+		var prev_w := widths[0]
+		for i in range(1, points.size()):
+			check(points[i].y < prev_y - 0.15, "%s shaft descends onto the pool" % label)
+			check(widths[i] + 0.05 >= prev_w, "%s does not shrink on the way down" % label)
+			prev_y = points[i].y
+			prev_w = widths[i]
+		check(Vector2(tail.x - landing.x, tail.z - landing.z).length() < 0.2, "%s lands in its own pool" % label)
 		check(Vector2(tail.x - tee.x, tail.z - tee.z).length() <= 4.0, "%s shaft ends on the kicker" % label)
+		check(tail.z + 0.05 >= head.z, "%s shines toward the camera" % label)
 		check(game.glare_alpha_at(origin.distance_to(tee), 1.15) <= 0.12, "%s glare stays off the tee" % label)
+		check(game.GLARE_RADIUS < 2.5 and game.glare_alpha_at(4.0, 1.15) < 0.02, "the lamp flare is a small star, not a field-wide quad")
 		if bool(item["end"]):
-			check(bool(item["glare"]), "%s end-zone bank faces the camera but has no glare" % label)
+			check(bool(item["glare"]), "%s end-zone bank faces the camera but has no flare" % label)
 		if bool(item["end"]):
 			ends += 1
 			check(origin.z < 1.0, "%s end-zone lamp stays behind the posts" % label)
@@ -6023,7 +6030,7 @@ func _glare_count(game) -> int:
 		count += 1
 		var flare: MeshInstance3D = child
 		var size := flare.mesh.get_aabb().size
-		check(size.x < 18.0 and size.y < 18.0 and size.z < 18.0, "glare is a lamp flare, not a full-screen quad")
+		check(size.x < 6.0 and size.y < 6.0 and size.z < 6.0, "glare is a small star on the lamp, not a full-screen quad")
 	return count
 
 

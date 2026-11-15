@@ -123,13 +123,11 @@ const BEAM_BREATH := 0.15
 const BEAM_PEAK := 0.30
 const BEAM_POOL := 0.15
 const BEAM_FADE_POW := 1.35
-const GLARE_PEAK := 0.40
-const GLARE_RADIUS := 5.5
+const GLARE_PEAK := 0.32
+const GLARE_RADIUS := 2.0
 const PLAY_HALF := 27.0
 const PLAY_Z := -8.0
 const CLEAR_EDGE := Color(0.64, 0.80, 0.95)
-const PLUNGE_DEGREES := 58.0
-const PLUNGE_RUN := 8.2
 # About 35% darker than white, pulled toward cool navy. Stands are about 20% darker.
 const DUSK_SKY := Color(0.58, 0.66, 0.82)
 const DUSK_STAND := Color(0.78, 0.80, 0.84)
@@ -2266,7 +2264,10 @@ func _ensure_beam_materials() -> void:
 	_beam_mat.shader = beam_shader
 	_beam_mat.render_priority = -8
 	_beam_mat.set_shader_parameter("peak", BEAM_PEAK)
-	_beam_mat.set_shader_parameter("fade_pow", BEAM_FADE_POW)
+	# The mesh fades along the shaft (1 at the lamp, 0 at the grass). A gentler
+	# power keeps the middle of that cone readable. beam_alpha_at still uses
+	# BEAM_FADE_POW for the height cap.
+	_beam_mat.set_shader_parameter("fade_pow", 0.8)
 	_beam_mat.set_shader_parameter("breath", 1.0)
 	var pool_shader := Shader.new()
 	pool_shader.code = "shader_type spatial;\nrender_mode unshaded, blend_add, cull_disabled, depth_draw_never, shadows_disabled, fog_disabled;\nuniform float peak = 0.15;\nuniform float breath = 1.0;\nuniform vec3 warm = vec3(1.0, 0.95, 0.82);\nvoid fragment() {\n\tvec2 p = UV * 2.0 - 1.0;\n\tfloat soft = smoothstep(1.0, 0.15, dot(p, p));\n\tALBEDO = warm;\n\tALPHA = peak * breath * soft;\n}\n"
@@ -2369,32 +2370,16 @@ func _aim_landing(tower: Dictionary, tee: Vector3, slot: int) -> Vector3:
 	# Every landing stays inside a few yards of the tee. The offsets keep the
 	# pools from stacking on one pixel, and they follow the hash.
 	if bool(tower["end"]):
-		return Vector3(tee.x, 0.0, tee.z - 2.2)
+		return Vector3(tee.x, 0.0, tee.z + 1.8)
 	var side := signf(float(tower["x"]))
 	if side == 0.0:
 		side = 1.0
-	var dx := side * (1.15 + float(slot % 2) * 0.9)
-	var dz := -2.0 + float(slot) * 0.7
+	var dx := side * (1.05 + float(slot % 2) * 0.7)
+	var dz := 0.9 + float(slot % 3) * 0.45
 	var offset := Vector2(dx, dz)
 	if offset.length() > 2.9:
 		offset = offset.normalized() * 2.9
 	return Vector3(tee.x + offset.x, 0.0, tee.z + offset.y)
-
-
-func _plunge_point(landing: Vector3, cam: Vector3) -> Vector3:
-	# The last stretch starts at least 8 yards out and drops toward the camera.
-	# A low hold five yards toward the posts is what made the shafts look flat.
-	var z := landing.z + PLUNGE_RUN
-	var x := landing.x
-	var front := cam.z - 1.25
-	if z > front:
-		z = front
-		var dz := maxf(z - landing.z, 0.05)
-		var need := sqrt(maxf(PLUNGE_RUN * PLUNGE_RUN - dz * dz, 0.0))
-		x = landing.x + need
-	var horiz := Vector2(x - landing.x, z - landing.z).length()
-	var y := 0.15 + horiz * tan(deg_to_rad(PLUNGE_DEGREES))
-	return Vector3(x, y, z)
 
 
 func _lamp_faces_camera(origin: Vector3, end_zone: bool, cam: Vector3) -> bool:
@@ -2424,31 +2409,34 @@ func _beam_from_tower(tower: Dictionary, span: float, tee: Vector3, slot: int) -
 	var origin := _lamp_position(x, z, end)
 	var landing := _aim_landing(tower, tee, slot)
 	landing.z = clampf(landing.z, 0.5, maxf(span + 3.0, 4.0))
-	var grass := Vector3(landing.x, 0.15, landing.z)
-	var lip := Vector3.ZERO
+	var grass := Vector3(landing.x, 0.12, landing.z)
+	# Eight short rings. One long ribbon lets the near grass vertex own every
+	# pixel, so the bright lamp end never shows. B5D's wide bright hold sat up
+	# by the camera and read as a searchlight; this cone opens as it drops.
+	var count := 8
+	var points := PackedVector3Array()
 	var widths := PackedFloat32Array()
-	if end:
-		lip = Vector3(lerpf(origin.x, landing.x, 0.12), STAND_HEIGHT + 0.55, lerpf(origin.z, landing.z, 0.08))
-		widths = PackedFloat32Array([8.0, 10.0, 6.0, 3.2])
-	else:
-		var side := signf(x)
-		if side == 0.0:
-			side = 1.0
-		# Clear the roof, then run high and plunge toward the camera.
-		lip = Vector3(x - side * (LIGHT_SIDE_OUT + 0.75), maxf(origin.y - 0.35, STAND_HEIGHT + 0.45), lerpf(z, landing.z, 0.12))
-		widths = PackedFloat32Array([8.0, 10.0, 6.0, 3.2])
+	var fades := PackedFloat32Array()
+	for i in count:
+		var t := float(i) / float(count - 1)
+		var at := origin.lerp(grass, t)
+		at.y = lerpf(origin.y, grass.y, pow(t, 0.55))
+		if i > 0 and at.y > points[i - 1].y - 0.12:
+			at.y = points[i - 1].y - 0.2
+		points.append(at)
+		widths.append(lerpf(1.45, 6.4, t))
+		fades.append(1.0 - t)
 	var cam: Vector3 = camera_rig(span, tee.x)["position"]
-	var plunge := _plunge_point(landing, cam)
-	var points := PackedVector3Array([origin, lip, plunge, grass])
 	return {
 		"end": end,
+		"tower_x": x,
+		"tower_z": z,
 		"origin": origin,
-		"lip": lip,
 		"landing": landing,
-		"plunge": plunge,
 		"glare": _lamp_faces_camera(origin, end, cam),
 		"points": points,
 		"widths": widths,
+		"fades": fades,
 	}
 
 
@@ -2477,7 +2465,8 @@ func _layout_light_beams(span: float) -> void:
 		beam.name = "BeamEnd%d" % index if bool(item["end"]) else "BeamSide%d" % index
 		var points: PackedVector3Array = item["points"]
 		var widths: PackedFloat32Array = item["widths"]
-		beam.mesh = _beam_mesh(points, widths, cam)
+		var fades: PackedFloat32Array = item["fades"]
+		beam.mesh = _beam_mesh(points, widths, fades, cam)
 		beam.material_override = _beam_mat
 		beam.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		beam.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
@@ -2486,9 +2475,9 @@ func _layout_light_beams(span: float) -> void:
 		var pool := MeshInstance3D.new()
 		pool.name = "Pool%d" % index
 		index += 1
-		# Shafts stay wide in the air. Each grass pool is only the spotlight
-		# under its landing, so the cones do not add into one white disk.
-		pool.mesh = _pool_mesh(3.4, 2.8)
+		# The pool is the wide end of this shaft.
+		var foot := float(widths[widths.size() - 1])
+		pool.mesh = _pool_mesh(foot * 0.5, foot * 0.42)
 		pool.material_override = _pool_mat
 		pool.position = Vector3(landing.x, 0.04, landing.z)
 		pool.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -2505,18 +2494,17 @@ func _layout_light_beams(span: float) -> void:
 			_beams.add_child(glare)
 
 
-func _beam_mesh(points: PackedVector3Array, widths: PackedFloat32Array, cam: Vector3) -> ArrayMesh:
+func _beam_mesh(points: PackedVector3Array, widths: PackedFloat32Array, fades: PackedFloat32Array, cam: Vector3) -> ArrayMesh:
 	var tool := SurfaceTool.new()
 	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
 	# One ribbon faces the camera so the cone has area. The other crosses it for thickness.
-	_beam_ribbon(tool, points, widths, cam, false)
-	_beam_ribbon(tool, points, widths, cam, true)
+	_beam_ribbon(tool, points, widths, fades, cam, false)
+	_beam_ribbon(tool, points, widths, fades, cam, true)
 	return tool.commit()
 
 
-func _beam_ribbon(tool: SurfaceTool, points: PackedVector3Array, widths: PackedFloat32Array, cam: Vector3, crossed: bool) -> void:
+func _beam_ribbon(tool: SurfaceTool, points: PackedVector3Array, widths: PackedFloat32Array, fades: PackedFloat32Array, cam: Vector3, crossed: bool) -> void:
 	var rings: Array = []
-	var top_y := maxf(points[0].y, 0.001)
 	for i in points.size():
 		var forward := Vector3.DOWN
 		if i < points.size() - 1:
@@ -2527,15 +2515,19 @@ func _beam_ribbon(tool: SurfaceTool, points: PackedVector3Array, widths: PackedF
 			forward = Vector3.DOWN
 		forward = forward.normalized()
 		var to_cam := cam - points[i]
+		# Spread the shaft sideways. A tilted width dumps the cone into the ground
+		# and the beam vanishes into a line.
 		var axis := forward.cross(to_cam)
+		axis.y = 0.0
 		if axis.length_squared() < 0.0004:
-			axis = forward.cross(Vector3.UP)
-		if axis.length_squared() < 0.0004:
-			axis = Vector3.RIGHT
+			var flat := Vector3(forward.x, 0.0, forward.z)
+			if flat.length_squared() < 0.0004:
+				flat = Vector3.FORWARD
+			axis = Vector3(-flat.z, 0.0, flat.x)
 		axis = axis.normalized()
 		if crossed:
 			axis = forward.cross(axis).normalized()
-		var along := clampf(points[i].y / top_y, 0.0, 1.0)
+		var along := clampf(fades[mini(i, fades.size() - 1)], 0.0, 1.0)
 		var half := float(widths[mini(i, widths.size() - 1)]) * 0.5
 		var row: Array = []
 		for column in 5:
@@ -2560,6 +2552,7 @@ func _beam_vertex(tool: SurfaceTool, corner: Dictionary) -> void:
 
 
 func _glare_mesh(cam: Vector3, origin: Vector3, radius: float) -> ArrayMesh:
+	# A small star on the lamp head. Four thin rays, not a disc the size of the field.
 	var to_cam := cam - origin
 	if to_cam.length_squared() < 0.01:
 		to_cam = Vector3(0.0, 0.0, 1.0)
@@ -2569,17 +2562,22 @@ func _glare_mesh(cam: Vector3, origin: Vector3, radius: float) -> ArrayMesh:
 		up = Vector3.RIGHT
 	var right := up.cross(normal).normalized()
 	var cam_up := normal.cross(right).normalized()
-	var center := origin + normal * 0.35
+	var center := origin + normal * 0.2
 	var tool := SurfaceTool.new()
 	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var corners := [
-		{"at": center - right * radius - cam_up * radius, "uv": Vector2(0, 0)},
-		{"at": center + right * radius - cam_up * radius, "uv": Vector2(1, 0)},
-		{"at": center + right * radius + cam_up * radius, "uv": Vector2(1, 1)},
-		{"at": center - right * radius + cam_up * radius, "uv": Vector2(0, 1)},
-	]
-	for index in [0, 1, 2, 0, 2, 3]:
-		_beam_vertex(tool, corners[index])
+	var thick := radius * 0.16
+	for ray in 8:
+		var ang := float(ray) * TAU / 8.0
+		var tip := right * cos(ang) + cam_up * sin(ang)
+		var side := (right * -sin(ang) + cam_up * cos(ang)) * thick
+		var corners := [
+			{"at": center, "uv": Vector2(0.5, 0.5)},
+			{"at": center + side, "uv": Vector2(0.5, 0.72)},
+			{"at": center + tip * radius, "uv": Vector2(0.5, 1.0)},
+			{"at": center - side, "uv": Vector2(0.5, 0.72)},
+		]
+		for index in [0, 1, 2, 0, 2, 3]:
+			_beam_vertex(tool, corners[index])
 	return tool.commit()
 
 
