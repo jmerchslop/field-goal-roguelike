@@ -65,6 +65,8 @@ var snow_range := false
 var mud_power := false
 var thin_air_weather := false
 var post_half_gap := KickConstants.POST_HALF_GAP_YARDS
+# Moving Posts fills the make or miss when the ball reaches the goal line.
+var hold_result := false
 # The smooth power needle. Mud draws a jitter on top and does not add it back in.
 var power_true := 0.0
 var heavy_ball := false
@@ -475,6 +477,27 @@ static func classify(max_range_yards: float, distance_yards: float, offset: floa
 
 # reached is true only when the ball's path gets to the uprights' plane.
 # A doink stays a doink. Farm Strength does not turn it into a make.
+func score_at_posts(center: float, half: float) -> void:
+	# center and half come from the upright nodes at the goal-line crossing.
+	if not reached_uprights:
+		return
+	var judged := judge(max_range, kick_distance, offset_yards - center, stats.ball_type, half)
+	_apply_arrival(judged, center, half)
+
+
+func _apply_arrival(judged: Dictionary, _center: float, _half: float) -> void:
+	result_text = str(judged["text"])
+	bank_shot = bool(judged["bank"])
+	insured = false
+	if result_text == "DOINK" and insurance_ready:
+		result_text = "GOOD"
+		insured = true
+		insurance_ready = false
+	if ring_active and not shanked and reached_uprights and (result_text == "WIDE LEFT" or result_text == "WIDE RIGHT"):
+		if absf(offset_yards - ring_center) <= 1.5:
+			result_text = "BONUS RING"
+
+
 static func judge(max_range_yards: float, distance_yards: float, offset: float, _ball_type: String, half_gap: float = -1.0) -> Dictionary:
 	if max_range_yards < distance_yards:
 		return {"text": "SHORT", "bank": false, "reached": false}
@@ -689,7 +712,7 @@ func _shank() -> void:
 		offset_yards = side * (gap + KickConstants.DOINK_BAND_YARDS + 2.0)
 		final_angle_degrees = rad_to_deg(atan((offset_yards - start_lateral_yards) / maxf(kick_distance, 0.01)))
 		judged = judge(max_range, kick_distance, offset_yards, stats.ball_type, gap)
-	result_text = str(judged["text"])
+	result_text = "" if hold_result else str(judged["text"])
 	accuracy_error = side * MeterGauge.ERROR_AT_MAX
 	needle_angle = MeterGauge.MAX_ANGLE
 	needle = KickConstants.METER_MAX
@@ -784,17 +807,13 @@ func _lock_accuracy(value: float) -> void:
 		offset_yards = path_lateral(start_lateral_yards, kick_distance, final_angle_degrees, kick_distance, drift_yards)
 	else:
 		offset_yards = path_lateral(start_lateral_yards, travel_yards, final_angle_degrees, kick_distance, drift_yards)
-	var judged := judge(max_range, kick_distance, offset_yards if reached_uprights else 0.0, stats.ball_type, post_half_gap)
-	result_text = str(judged["text"])
-	bank_shot = bool(judged["bank"])
-	insured = false
-	if result_text == "DOINK" and insurance_ready:
-		result_text = "GOOD"
-		insured = true
-		insurance_ready = false
-	if ring_active and not shanked and reached_uprights and (result_text == "WIDE LEFT" or result_text == "WIDE RIGHT"):
-		if absf(offset_yards - ring_center) <= 1.5:
-			result_text = "BONUS RING"
+	if reached_uprights and hold_result:
+		result_text = ""
+		bank_shot = false
+		insured = false
+	else:
+		var judged := judge(max_range, kick_distance, offset_yards if reached_uprights else 0.0, stats.ball_type, post_half_gap)
+		_apply_arrival(judged, 0.0, post_half_gap)
 	phase = Phase.FLIGHT
 	flight_elapsed = 0.0
 

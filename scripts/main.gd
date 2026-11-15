@@ -18,6 +18,10 @@ var selecting := false
 var showing_records := false
 var front := FrontEnd.new()
 var paused := false
+var _twist_time := 0.0
+var _twist_armed := false
+var _clock_done := false
+var _posts_judged := false
 var pause_index := 0
 var _checkpoint: Dictionary = {}
 var save_note := ""
@@ -52,6 +56,7 @@ var aim_corridor := {
 var _shadow: MeshInstance3D
 var _kicker_sprite: Sprite3D
 var _post_l: MeshInstance3D
+var _goal_stem: MeshInstance3D
 var _post_r: MeshInstance3D
 var _crossbar: MeshInstance3D
 var _mud: MeshInstance3D
@@ -229,6 +234,7 @@ func load_current_kick() -> void:
 	logic.sync_tee()
 	_approach_time = 0.0
 	_bank_time = 0.0
+	_arm_boss_twist()
 	refresh_view()
 
 
@@ -243,6 +249,7 @@ func _copy_run_onto_kick() -> void:
 	logic.insured = false
 	_copy_weather_onto_kick()
 	logic.post_half_gap = run.post_half_gap()
+	logic.hold_result = run.weather == RunLogic.MOVING and not run.practicing
 	logic.heavy_ball = run.has_curse(Loadout.HEAVY)
 	logic.howling_wind = run.has_curse(Loadout.HOWLING)
 	logic.shaky = run.has_curse(Loadout.SHAKY)
@@ -538,6 +545,8 @@ func force_spot_side(side: int) -> void:
 func force_weather(name: String) -> void:
 	run.force_weather(name)
 	_apply_conditions()
+	logic.hold_result = run.weather == RunLogic.MOVING and not run.practicing
+	_arm_boss_twist()
 	refresh_view()
 
 
@@ -665,6 +674,7 @@ func _apply_conditions() -> void:
 	logic.stats = run.stats
 	_copy_weather_onto_kick()
 	logic.post_half_gap = run.post_half_gap()
+	logic.hold_result = run.weather == RunLogic.MOVING and not run.practicing
 	logic.heavy_ball = run.has_curse(Loadout.HEAVY)
 	logic.howling_wind = run.has_curse(Loadout.HOWLING)
 	logic.shaky = run.has_curse(Loadout.SHAKY)
@@ -771,12 +781,15 @@ func _process(delta: float) -> void:
 			direction += 1.0
 		if direction != 0.0:
 			logic.aim(direction, delta)
+		tick_kick_clock(delta)
 		if _power_press_queued and logic.phase == KickLogic.Phase.POWER and logic.windup_left <= 0.0000001:
 			_power_press_queued = false
 			logic.take_power_press(delta)
 		else:
 			_power_press_queued = false
+			var forward_at := logic.ball_forward_yards
 			logic.advance(delta)
+			tick_moving_posts(forward_at, logic.ball_forward_yards, delta)
 		_sync_kick_audio(phase_before, forward_before)
 		if logic.insured:
 			run.consume_insurance()
@@ -888,6 +901,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		if forced != "":
 			force_weather(forced)
 			return
+	if not key.shift_pressed and run.phase == RunLogic.Phase.PLAYING and not run.awaiting_offer and not run.awaiting_mulligan and not run.awaiting_shop:
+		var boss := _boss_force_key(key.keycode)
+		if boss != "":
+			force_weather(boss)
+			return
 	if key.keycode == KEY_B and run.phase == RunLogic.Phase.PLAYING and not run.awaiting_offer and not run.awaiting_mulligan and logic.phase == KickLogic.Phase.AIMING and not run.practicing:
 		if run.arm_debug_ring():
 			refresh_view()
@@ -937,6 +955,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 	if not Settings.pressed_event(event, "confirm"):
 		return
+	_confirm_kick()
+
+
+func _confirm_kick() -> void:
 	if run.awaiting_mulligan:
 		run.accept_pending_miss()
 		_cue("mulligan")
@@ -962,11 +984,135 @@ func _unhandled_input(event: InputEvent) -> void:
 	# and airborne cues have to be read from the phase before the press.
 	var phase_before := logic.phase
 	var forward_before := logic.ball_forward_yards
+	if phase_before == KickLogic.Phase.AIMING:
+		_clock_done = true
 	logic.press_space()
 	_sync_kick_audio(phase_before, forward_before)
 	if logic.insured:
 		run.consume_insurance()
 	refresh_view()
+
+
+func _boss_force_key(code: Key) -> String:
+	if code == KEY_N:
+		return RunLogic.CLOCK
+	if code == KEY_G:
+		return RunLogic.MOVING
+	return ""
+
+
+func _twist_blocked() -> bool:
+	if paused or selecting or showing_records:
+		return true
+	if run.awaiting_offer or run.awaiting_shop or run.awaiting_mulligan or run.curse_prompt:
+		return true
+	if front.screen != FrontEnd.Screen.PLAY:
+		return true
+	if run.phase != RunLogic.Phase.PLAYING:
+		return true
+	return false
+
+
+func _arm_boss_twist() -> void:
+	_twist_time = 0.0
+	_clock_done = false
+	_posts_judged = false
+	var clock := run.weather == RunLogic.CLOCK
+	var moving := run.weather == RunLogic.MOVING
+	_twist_armed = (clock or moving) and not run.practicing and logic.phase == KickLogic.Phase.AIMING
+	_apply_post_slide()
+
+
+func clock_digit() -> int:
+	if run.weather != RunLogic.CLOCK or run.practicing or not _twist_armed or _clock_done:
+		return 0
+	if logic.phase != KickLogic.Phase.AIMING:
+		return 0
+	var left := RunLogic.CLOCK_SEC - _twist_time
+	if left <= 0.001:
+		return 0
+	return ceili(left)
+
+
+func tick_kick_clock(delta: float) -> void:
+	if _twist_blocked() or run.practicing or not _twist_armed or _clock_done:
+		return
+	if run.weather != RunLogic.CLOCK or logic.phase != KickLogic.Phase.AIMING:
+		return
+	var remain := RunLogic.CLOCK_SEC - _twist_time
+	if delta + 0.0000001 >= remain:
+		_twist_time = RunLogic.CLOCK_SEC
+		_clock_done = true
+		_confirm_kick()
+		return
+	_twist_time += delta
+
+
+func tick_moving_posts(before: float, after: float, delta: float) -> void:
+	if run.practicing:
+		_apply_post_slide()
+		return
+	if _twist_blocked() or run.weather != RunLogic.MOVING or not _twist_armed:
+		return
+	var live := logic.phase == KickLogic.Phase.AIMING or logic.phase == KickLogic.Phase.POWER or logic.phase == KickLogic.Phase.ACCURACY or logic.phase == KickLogic.Phase.FLIGHT or logic.phase == KickLogic.Phase.RESULT
+	if not live:
+		return
+	# Sample before a result snaps the uprights home. The crossing can land
+	# in the same frame that ends the flight.
+	note_goal_line(before, after, delta)
+	if logic.phase == KickLogic.Phase.RESULT:
+		_twist_armed = false
+		_apply_post_slide()
+		return
+	_twist_time += delta
+	_apply_post_slide()
+
+
+func note_goal_line(before: float, after: float, frame_delta: float) -> void:
+	if _posts_judged or run.weather != RunLogic.MOVING or run.practicing:
+		return
+	if logic.kick_distance <= 0.0 or before >= logic.kick_distance or after < logic.kick_distance:
+		return
+	var frac := 0.0
+	if after > before:
+		frac = clampf((logic.kick_distance - before) / (after - before), 0.0, 1.0)
+	var saved := _twist_time
+	_twist_time = saved + frame_delta * frac
+	_place_posts(RunLogic.post_slide(_twist_time))
+	score_posts_now()
+	_posts_judged = true
+	_twist_time = saved
+
+
+func score_posts_now() -> void:
+	if _post_l == null or _post_r == null:
+		return
+	var center := (_post_l.position.x + _post_r.position.x) * 0.5
+	var half := absf(_post_r.position.x - _post_l.position.x) * 0.5
+	logic.score_at_posts(center, half)
+
+
+func _posts_sliding() -> bool:
+	if run.weather != RunLogic.MOVING or run.practicing or not _twist_armed:
+		return false
+	return logic.phase == KickLogic.Phase.AIMING or logic.phase == KickLogic.Phase.POWER or logic.phase == KickLogic.Phase.ACCURACY or logic.phase == KickLogic.Phase.FLIGHT
+
+
+func _apply_post_slide() -> void:
+	var slide := RunLogic.post_slide(_twist_time) if _posts_sliding() else 0.0
+	_place_posts(slide)
+
+
+func _place_posts(slide: float) -> void:
+	var half := run.post_width() * 0.5
+	if _post_l != null:
+		_post_l.position.x = -half + slide
+	if _post_r != null:
+		_post_r.position.x = half + slide
+	if _crossbar != null:
+		_crossbar.position.x = slide
+	if _goal_stem != null:
+		_goal_stem.position.x = slide
 
 
 func _active_run() -> bool:
@@ -2114,7 +2260,7 @@ func _build_uprights() -> void:
 	_post_l = _pole(Vector3(0.16, upright_h, 0.16), Vector3(0, crossbar_y + upright_h * 0.5, 0), yellow)
 	_post_r = _pole(Vector3(0.16, upright_h, 0.16), Vector3(0, crossbar_y + upright_h * 0.5, 0), yellow)
 	_crossbar = _pole(Vector3(1.0, 0.16, 0.16), Vector3(0, crossbar_y, 0), yellow)
-	_pole(Vector3(0.2, crossbar_y, 0.2), Vector3(0, crossbar_y * 0.5, 0), yellow)
+	_goal_stem = _pole(Vector3(0.2, crossbar_y, 0.2), Vector3(0, crossbar_y * 0.5, 0), yellow)
 	_fit_posts(KickConstants.POST_SEPARATION_YARDS)
 	_build_ribbons()
 	_build_ring()
@@ -2827,6 +2973,7 @@ func _place_world() -> void:
 		_mud.visible = run.has_mud()
 		_mud.position = tee + Vector3(0.0, 0.06, 0.15)
 	_fit_posts(run.post_width())
+	_apply_post_slide()
 	_place_ribbons()
 	_place_ring()
 	_place_kicker(tee)

@@ -102,6 +102,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "boss1":
+		if not await _capture_boss1():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "b5e":
 		if not await _capture_b5e():
 			get_tree().quit(1)
@@ -1725,6 +1731,40 @@ func _offer_card(id: String, rank: int, slot: String) -> bool:
 	board.refresh_view()
 	if board.run.offer.is_empty() or str(board.run.offer[0].get("id", "")) != id:
 		print("offer missed ", id)
+		return false
+	return true
+
+
+func _capture_boss1() -> bool:
+	board.highlight = 1
+	board.confirm_kicker()
+	board.force_weather(RunLogic.CLOCK)
+	board.logic.phase = KickLogic.Phase.AIMING
+	board._arm_boss_twist()
+	board.refresh_view()
+	if board.clock_digit() != 4 or board.run.weather != RunLogic.CLOCK:
+		print("clock ", board.clock_digit(), " ", board.run.weather)
+		return false
+	if not await _capture("boss1_kick_clock.png"):
+		return false
+	board.force_weather(RunLogic.MOVING)
+	board._twist_time = 1.0
+	board._twist_armed = true
+	board.logic.phase = KickLogic.Phase.AIMING
+	board.refresh_view()
+	var center_a := float(board._post_l.position.x + board._post_r.position.x) * 0.5
+	if center_a < 2.5:
+		print("posts a ", center_a)
+		return false
+	if not await _capture("boss1_moving_posts_a.png"):
+		return false
+	board._twist_time = 3.0
+	board.refresh_view()
+	var center_b := float(board._post_l.position.x + board._post_r.position.x) * 0.5
+	if center_b > -2.5:
+		print("posts b ", center_b)
+		return false
+	if not await _capture("boss1_moving_posts_b.png"):
 		return false
 	return true
 

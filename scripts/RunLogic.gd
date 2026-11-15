@@ -19,6 +19,11 @@ const SQUEEZE := "THE SQUEEZE"
 const MONSOON := "MONSOON"
 const BIG_GAME := "BIG GAME"
 const LIGHTS := "UNDER THE LIGHTS"
+const CLOCK := "KICK CLOCK"
+const MOVING := "MOVING POSTS"
+const CLOCK_SEC := 4.0
+const POST_SWING := 3.0
+const POST_PERIOD := 4.0
 const LIGHTS_NEEDLE := 1.35
 const SQUEEZE_WIDTH := 5.17
 const SQUEEZE_HALF := 2.585
@@ -980,13 +985,17 @@ func _boss_label(name: String) -> String:
 		return "Big Game"
 	if name == LIGHTS:
 		return "UNDER THE LIGHTS"
+	if name == CLOCK:
+		return "Kick Clock"
+	if name == MOVING:
+		return "Moving Posts"
 	return name
 
 
 func _endless_boss(kick: int) -> String:
 	if endless_bosses.has(kick):
 		return str(endless_bosses[kick])
-	var names: Array[String] = [ICED, SQUEEZE, MONSOON, BIG_GAME, LIGHTS]
+	var names := endless_boss_names()
 	var pick := names[_weather_rng.randi() % names.size()]
 	endless_bosses[kick] = pick
 	return pick
@@ -2081,6 +2090,15 @@ func _place_spot() -> void:
 	if side_pick == 0:
 		side_pick = -1 if _rng.randi_range(0, 1) == 0 else 1
 	spot_yards = RunTable.spot_yards(spot, side_pick)
+
+
+static func endless_boss_names() -> Array[String]:
+	return [ICED, SQUEEZE, MONSOON, BIG_GAME, LIGHTS, CLOCK, MOVING]
+
+
+static func post_slide(seconds: float) -> float:
+	# Phase is 0 when the kick becomes ready. One full swing takes 4 seconds.
+	return POST_SWING * sin(TAU * seconds / POST_PERIOD)
 
 
 func lights_active() -> bool:

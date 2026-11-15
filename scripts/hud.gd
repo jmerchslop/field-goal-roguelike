@@ -42,6 +42,7 @@ func _draw() -> void:
 	if not run.meter_hidden(on_meter, game.meter_time):
 		_draw_meter(logic, run)
 	_draw_hud(logic, run)
+	_draw_kick_clock()
 	_draw_loadout_rail(run)
 	_draw_laser(logic, run)
 	if logic.phase == KickLogic.Phase.RESULT and run.phase == RunLogic.Phase.PLAYING:
@@ -258,6 +259,17 @@ func _draw_condition(run: RunLogic) -> void:
 	_text_centered(name, 158.0, 22, color)
 	if run.weather == RunLogic.BIG_GAME:
 		_text_centered("Meter upgrades off", 184.0, 16, KickConstants.COLOR_TEXT)
+
+
+func _draw_kick_clock() -> void:
+	if game == null:
+		return
+	var digit := int(game.clock_digit())
+	if digit < 1:
+		return
+	var text := str(digit)
+	_pg("KICK CLOCK", Vector2(28, 148), 16, Color(0.95, 0.86, 0.45))
+	BitmapFonts.paint_px(self, "callout", text, Vector2(36, 174), 72, Color(1.0, 0.96, 0.78))
 
 
 func _draw_well(hub: Vector2, radius: float) -> void:

@@ -74,6 +74,7 @@ func _finish_live() -> void:
 	_check_playing_card_live()
 	_check_floodlights_live()
 	_check_light_beams()
+	_check_boss1()
 	_check_ring_flight_live()
 	_check_aim_cone()
 	_check_ball_trail()
@@ -2684,7 +2685,7 @@ func _check_endless_and_farm() -> void:
 	endless.kick_number = 197
 	check(near(endless.distance_yards(), 1000.0), "Endless distance caps at 1000 yards")
 	var seen := {}
-	for seed_value in 40:
+	for seed_value in 280:
 		var rolled := RunLogic.new()
 		rolled.run_mode = "endless"
 		rolled.kick_number = 10
@@ -2696,7 +2697,8 @@ func _check_endless_and_farm() -> void:
 		if not rolled.is_boss():
 			check(false, "Endless kick 10 rolled as a boss")
 		seen[kept] = true
-	check(seen.has(RunLogic.ICED) and seen.has(RunLogic.SQUEEZE) and seen.has(RunLogic.MONSOON) and seen.has(RunLogic.BIG_GAME) and seen.has(RunLogic.LIGHTS), "Endless bosses are drawn from all five")
+	for boss_name in RunLogic.endless_boss_names():
+		check(seen.has(boss_name), "Endless bosses are drawn from the pool, missing %s" % boss_name)
 	var shop := RunLogic.new()
 	shop.run_mode = "endless"
 	shop.kick_number = 5
@@ -5745,6 +5747,144 @@ func _check_floodlights_live() -> void:
 	check(end_bank, "the end-zone bank is in the kick scene")
 	var left_rig: Dictionary = game.camera_rig(200.0, -3.0)
 	check(not is_equal_approx(float(left_rig["look"].x), 0.0), "a hash preview still does not re-center the posts")
+	game.free()
+
+
+func _check_boss1() -> void:
+	var pool := RunLogic.endless_boss_names()
+	check(pool.size() == 7, "the Endless boss pool has 7 names")
+	for boss_name in [RunLogic.ICED, RunLogic.SQUEEZE, RunLogic.MONSOON, RunLogic.BIG_GAME, RunLogic.LIGHTS, RunLogic.CLOCK, RunLogic.MOVING]:
+		check(pool.has(boss_name), "Endless pool is missing %s" % boss_name)
+	check(RunLogic.boss_weather(5) == RunLogic.ICED and RunLogic.boss_weather(10) == RunLogic.SQUEEZE and RunLogic.boss_weather(15) == RunLogic.MONSOON and RunLogic.boss_weather(20) == RunLogic.BIG_GAME, "Standard boss slots stayed on 5, 10, 15, and 20")
+	check(RunLogic.boss_weather(1) == "" and RunLogic.boss_weather(11) == "", "Standard still has no boss off those slots")
+	var standard := RunLogic.new()
+	standard.new_run()
+	standard.kick_number = 5
+	check(standard.next_boss_line().begins_with("Next boss: ") and (standard.kick10_boss == RunLogic.SQUEEZE or standard.kick10_boss == RunLogic.LIGHTS), "the kick 5 preview is still The Squeeze or Under the Lights")
+	standard.kick_number = 10
+	check(standard.next_boss_line() == "Next boss: Monsoon", "the kick 10 preview is still Monsoon")
+	standard.kick_number = 15
+	check(standard.next_boss_line() == "Next boss: Big Game", "the kick 15 preview is still Big Game")
+	var labeled := RunLogic.new()
+	labeled.run_mode = "endless"
+	labeled.endless_bosses[10] = RunLogic.CLOCK
+	labeled.kick_number = 5
+	check(labeled.next_boss_line() == "Next boss: Kick Clock", "the shop line for Kick Clock is sentence case")
+	labeled.endless_bosses[10] = RunLogic.MOVING
+	check(labeled.next_boss_line() == "Next boss: Moving Posts", "the shop line for Moving Posts is sentence case")
+	check(BitmapFonts.ui_allows(RunLogic.CLOCK) and BitmapFonts.ui_allows(RunLogic.MOVING), "the HUD boss names use Pixel Gothic glyphs")
+	check(RunLogic.CLOCK.find("-") < 0 and RunLogic.MOVING.find("-") < 0 and BitmapFonts.callout_allows("4321"), "the clock digits and boss names have no hyphen")
+	check(near(RunLogic.CLOCK_SEC, 4.0) and near(RunLogic.POST_SWING, 3.0) and near(RunLogic.POST_PERIOD, 4.0), "the clock is 4 seconds and the posts swing 3 yards over 4 seconds")
+	check(near(RunLogic.post_slide(0.0), 0.0) and near(RunLogic.post_slide(1.0), 3.0) and near(RunLogic.post_slide(2.0), 0.0) and near(RunLogic.post_slide(3.0), -3.0) and near(RunLogic.post_slide(4.0), 0.0), "the post offset is a 4 second sine that starts at 0")
+	var drill := RunLogic.new()
+	drill.start_with_kicker(Kickers.WALK_ON)
+	drill.run_mode = "endless"
+	drill.kick_number = 10
+	drill.give(Loadout.TWO_MINUTE, 1)
+	drill.force_weather(RunLogic.ICED)
+	var iced_drill := drill.drill_bonus()
+	drill.force_weather(RunLogic.CLOCK)
+	check(drill.is_boss() and near(drill.drill_bonus(), iced_drill) and iced_drill > 0.4, "Kick Clock keeps Two-Minute Drill")
+	drill.force_weather(RunLogic.MOVING)
+	check(near(drill.drill_bonus(), iced_drill), "Moving Posts keeps Two-Minute Drill")
+	OS.set_environment("FG_SHOTS", "")
+	var packed: PackedScene = load("res://scenes/main.tscn")
+	var game = packed.instantiate()
+	get_root().add_child(game)
+	game._taking_pictures = true
+	game.highlight = 1
+	game.confirm_kicker()
+	check(game._boss_force_key(KEY_N) == RunLogic.CLOCK and game._boss_force_key(KEY_G) == RunLogic.MOVING, "N forces Kick Clock and G forces Moving Posts")
+	check(game._shift_weather(KEY_9) == RunLogic.LIGHTS and game._shift_weather(KEY_6) == RunLogic.SQUEEZE, "Shift+9 and Shift+6 still force the old bosses")
+	var attempts := int(game.run.attempts)
+	game.force_weather(RunLogic.CLOCK)
+	check(game.logic.phase == KickLogic.Phase.AIMING and game.clock_digit() == 4 and near(game._twist_time, 0.0), "Kick Clock starts at 4 when the kick is ready")
+	game._twist_armed = false
+	game.tick_kick_clock(4.0)
+	check(game.logic.phase == KickLogic.Phase.AIMING and near(game._twist_time, 0.0), "the clock does not start before the kick is armed")
+	game._arm_boss_twist()
+	game.run.awaiting_offer = true
+	game.tick_kick_clock(2.0)
+	check(near(game._twist_time, 0.0) and game.logic.phase == KickLogic.Phase.AIMING, "the clock does not run on the offer")
+	game.run.awaiting_offer = false
+	game.tick_kick_clock(0.4)
+	game.paused = true
+	game.tick_kick_clock(2.0)
+	check(near(game._twist_time, 0.4), "the clock pauses")
+	game.paused = false
+	game.front.screen = FrontEnd.Screen.OPTIONS
+	game.tick_kick_clock(2.0)
+	check(near(game._twist_time, 0.4), "the clock does not run in a menu")
+	game.front.screen = FrontEnd.Screen.PLAY
+	var aim_before := float(game.logic.aim_degrees)
+	game.logic.aim(1.0, 0.25)
+	check(game.logic.aim_degrees > aim_before + 0.1, "aiming still works during the clock")
+	game.tick_kick_clock(0.6)
+	check(game.clock_digit() == 3 and game.logic.phase == KickLogic.Phase.AIMING, "the clock shows 3 before it expires")
+	game._confirm_kick()
+	var stopped := float(game._twist_time)
+	check(game._clock_done and game.logic.phase == KickLogic.Phase.POWER and not game.logic.shanked and game.logic.result_text == "" and game.run.attempts == attempts, "Space starts the meter and stops the clock without a shank")
+	game.tick_kick_clock(5.0)
+	check(near(game._twist_time, stopped) and game.logic.phase == KickLogic.Phase.POWER, "the clock stays stopped after Space")
+	game.load_current_kick()
+	check(game.clock_digit() == 4 and near(game._twist_time, 0.0) and not game._clock_done, "a retry starts a fresh 4 second clock")
+	game.tick_kick_clock(4.0)
+	check(game.logic.phase == KickLogic.Phase.POWER and not game.logic.shanked and game.logic.result_text == "" and game.run.attempts == attempts, "the clock auto-starts the meter at 0 and does not miss or shank")
+	game.load_current_kick()
+	game.force_weather(RunLogic.MOVING)
+	check(near((game._post_l.position.x + game._post_r.position.x) * 0.5, 0.0), "Moving Posts starts centered")
+	game.refresh_view()
+	var far_rest: Vector3 = game.aim_corridor["far"]
+	var wind := float(game.logic.wind_direction)
+	var aim := float(game.logic.aim_degrees)
+	game._twist_time = 1.0
+	game.refresh_view()
+	var far_moved: Vector3 = game.aim_corridor["far"]
+	check(far_rest.distance_to(far_moved) < 0.05 and near(game.logic.wind_direction, wind) and near(game.logic.aim_degrees, aim), "the cone, arrow, and wind do not follow the posts")
+	check(near((game._post_l.position.x + game._post_r.position.x) * 0.5, 3.0), "one second of the sine puts the posts 3 yards right")
+	var ribbon_gap := float(game._ribbon_l.position.x - game._post_l.position.x)
+	game._twist_time = 3.0
+	game.refresh_view()
+	check(near((game._post_l.position.x + game._post_r.position.x) * 0.5, -3.0), "three seconds puts the posts 3 yards left")
+	check(near(game._ribbon_l.position.x - game._post_l.position.x, ribbon_gap), "the ribbons move with the uprights")
+	check(near(game.run.post_width(), KickConstants.POST_SEPARATION_YARDS), "Moving Posts does not change the upright width")
+	game.logic.kick_distance = 35.0
+	game.logic.max_range = 50.0
+	game.logic.travel_yards = 50.0
+	game.logic.reached_uprights = true
+	game.logic.hold_result = true
+	game.logic.offset_yards = 4.5
+	game.logic.result_text = ""
+	game.logic.phase = KickLogic.Phase.FLIGHT
+	game._posts_judged = false
+	game._twist_time = 1.0
+	game._twist_armed = true
+	game.tick_moving_posts(34.0, 36.0, 0.0)
+	check(game.logic.result_text == "GOOD", "a ball wide of center is good when the posts have slid under it, got %s" % game.logic.result_text)
+	game.logic.result_text = ""
+	game._posts_judged = false
+	game._twist_time = 0.0
+	game.tick_moving_posts(34.0, 36.0, 0.0)
+	check(game.logic.result_text.begins_with("WIDE"), "the same ball misses when the posts are still centered, got %s" % game.logic.result_text)
+	game._post_l.position.x = -1.0
+	game._post_r.position.x = 1.0
+	game.logic.offset_yards = 2.0
+	game.logic.result_text = ""
+	game.score_posts_now()
+	check(game.logic.result_text.begins_with("WIDE"), "the result uses the upright nodes, not the rest gap")
+	game.run.practice_left = 1
+	game.run.stats.practice_per_quarter = 1
+	game.logic.phase = KickLogic.Phase.AIMING
+	check(game.run.start_practice(), "practice swing is available for the boss check")
+	game._twist_time = 1.5
+	game._twist_armed = true
+	game.tick_kick_clock(2.0)
+	game.tick_moving_posts(0.0, 0.0, 2.0)
+	check(near(game._twist_time, 1.5), "neither twist runs during Practice Swing")
+	check(near((game._post_l.position.x + game._post_r.position.x) * 0.5, 0.0), "Practice Swing leaves the posts centered")
+	game.run.end_practice()
+	game.load_current_kick()
+	check(near(game._twist_time, 0.0) and game.logic.phase == KickLogic.Phase.AIMING, "leaving Practice Swing restarts the twist")
 	game.free()
 
 
