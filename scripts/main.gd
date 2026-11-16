@@ -254,6 +254,7 @@ func _copy_run_onto_kick() -> void:
 	logic.howling_wind = run.has_curse(Loadout.HOWLING)
 	logic.shaky = run.has_curse(Loadout.SHAKY)
 	logic.angle_scale = run.stats.angle_scale
+	logic.practice_swing = run.practicing
 	meter_time = 0.0
 	_reset_kick_pose()
 	Sfx.begin_kick()
@@ -637,6 +638,7 @@ func _sync_debug_loadout() -> void:
 	logic.heavy_ball = run.has_curse(Loadout.HEAVY)
 	logic.shaky = run.has_curse(Loadout.SHAKY)
 	logic.angle_scale = run.stats.angle_scale
+	logic.practice_swing = run.practicing
 	logic.aim_degrees = aim
 	logic.phase = phase
 	_copy_weather_onto_kick()
@@ -679,6 +681,7 @@ func _apply_conditions() -> void:
 	logic.howling_wind = run.has_curse(Loadout.HOWLING)
 	logic.shaky = run.has_curse(Loadout.SHAKY)
 	logic.angle_scale = run.stats.angle_scale
+	logic.practice_swing = run.practicing
 
 
 func set_wind(speed: float, direction: float) -> void:

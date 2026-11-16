@@ -281,10 +281,10 @@ static func overpower_band_width(rank: int) -> float:
 
 
 static func _ice_cage_line(rank: int) -> String:
-	var line := "Immune to Iced. OVERPOWER speed-up halved."
+	var line := "Immune to Iced. The OVERPOWER band shrink is halved."
 	if rank <= 1:
 		return line
-	line += " Accuracy needle ×0.90."
+	line += " The needles ×0.90."
 	var capped := mini(rank, 12)
 	var perfect := 0
 	var odd := 3
@@ -485,7 +485,7 @@ static func effect_line(id: String, rank: int) -> String:
 		GUIDE_GLOVES:
 			return _with_late_yards("Good locks: hook ×%s" % _two_decimals(guide_factor(rank)), rank)
 		PATIENT_GLOVES:
-			return _with_late_yards("Power needle ×%s" % _two_decimals(patient_factor(rank)), rank)
+			return _with_late_yards("Both needles ×%s" % _two_decimals(patient_factor(rank)), rank)
 		HUSH_GLOVES:
 			return _with_late_yards("First %d mph of wind ignored" % effect_rank(rank), rank)
 		WEATHER_WRAPS:
@@ -569,9 +569,9 @@ static func effect_line(id: String, rank: int) -> String:
 				return "Boss kicks +2.5 Mult, on top of ×1.5"
 			return "Boss kicks +3.0 Mult, on top of ×1.5"
 		RAIN_DANCE:
-			return "In rain, snow, mud, or Monsoon: +4 yd and the accuracy needle ×0.90."
+			return "In rain, snow, mud, or Monsoon: +4 yd and the needles ×0.90."
 		SECOND_LOOK:
-			return "One free offer reroll every 5 kicks. Unused free rerolls do not stack."
+			return "One free offer reroll every 5 kicks. Unused free rerolls carry over."
 		CHAIN_GANG:
 			return "Each consecutive make adds +1 yd on the next kick, up to +10 yd. A miss resets the streak."
 		ICED:
@@ -587,7 +587,7 @@ static func effect_line(id: String, rank: int) -> String:
 		NARROW:
 			return "Down: posts 5.17 yd. Up: +0.75 Mult"
 		STONE:
-			return "Down: power needle ×1.20. Up: +10 yd"
+			return "Down: both needles ×1.20. Up: +10 yd"
 		TIGHT:
 			return "Down: Perfect and Good -2. Up: +1.0 Mult"
 	return ""
@@ -982,8 +982,7 @@ static func _apply_piece(stats: KickerStats, item_id: String, item_rank: int, it
 		acc["good"] = float(acc["good"]) + pinpoint_good(item_rank)
 	elif item_id == ANCHOR:
 		var factor := _scale_factor(anchor_factor(item_rank), howling, item_scale)
-		acc["power"] = float(acc["power"]) * factor
-		acc["accuracy"] = float(acc["accuracy"]) * factor
+		acc["needle"] = float(acc["needle"]) * factor
 		acc["range"] = float(acc["range"]) + float(late_flat_yards(item_rank))
 	elif item_id == STICKER:
 		acc["drift"] = float(acc["drift"]) * _scale_factor(sticker_factor(item_rank), howling, item_scale)
@@ -998,7 +997,7 @@ static func _apply_piece(stats: KickerStats, item_id: String, item_rank: int, it
 		stats.ice_veins = true
 		stats.overpower_half = true
 		if item_rank >= 2:
-			acc["accuracy"] = float(acc["accuracy"]) * _scale_factor(0.90, howling, item_scale)
+			acc["needle"] = float(acc["needle"]) * _scale_factor(0.90, howling, item_scale)
 		var band_rank := mini(item_rank, 12)
 		var odd := 3
 		while odd <= band_rank:
@@ -1044,7 +1043,7 @@ static func _apply_piece(stats: KickerStats, item_id: String, item_rank: int, it
 			stats.guide_factor *= guide
 		acc["range"] = float(acc["range"]) + float(late_flat_yards(item_rank))
 	elif item_id == PATIENT_GLOVES:
-		acc["power"] = float(acc["power"]) * _scale_factor(patient_factor(item_rank), howling, item_scale)
+		acc["needle"] = float(acc["needle"]) * _scale_factor(patient_factor(item_rank), howling, item_scale)
 		acc["range"] = float(acc["range"]) + float(late_flat_yards(item_rank))
 	elif item_id == HUSH_GLOVES:
 		stats.hush_mph += float(item_fx)
@@ -1082,6 +1081,7 @@ static func apply(stats: KickerStats, state: Dictionary, howling: bool, item_sca
 		"good": good_add,
 		"power": power_mul,
 		"accuracy": accuracy_mul,
+		"needle": 1.0,
 		"drift": drift_mul,
 	}
 	for piece in pieces:
@@ -1095,6 +1095,7 @@ static func apply(stats: KickerStats, state: Dictionary, howling: bool, item_sca
 	good_add = float(acc["good"])
 	power_mul = float(acc["power"])
 	accuracy_mul = float(acc["accuracy"])
+	var needle_mul := float(acc["needle"])
 	drift_mul = float(acc["drift"])
 	var hero_add := 0.0
 	var storm := 0.0
@@ -1128,6 +1129,7 @@ static func apply(stats: KickerStats, state: Dictionary, howling: bool, item_sca
 			if howling:
 				factor = boost_factor(factor)
 			factor = scale_gap(factor, item_scale)
+			needle_mul *= factor
 			power_mul *= factor
 			accuracy_mul *= factor
 		elif id == GLASS_LEG:
@@ -1190,8 +1192,9 @@ static func apply(stats: KickerStats, state: Dictionary, howling: bool, item_sca
 		stats.good_band = maxf(stats.good_band - 2.0, 1.0)
 	if stats.perfect_band > stats.good_band:
 		stats.perfect_band = stats.good_band
-	stats.power_speed *= power_mul
-	stats.accuracy_speed *= accuracy_mul
+	# One product for both phases. A factor that used to hit only one needle is in it once.
+	stats.power_speed = KickConstants.POWER_RISE_PER_SEC * needle_mul
+	stats.accuracy_speed = stats.power_speed
 	stats.drift_factor = drift_mul
 	stats.hero_mult = hero_add
 	stats.storm_per_mph = storm

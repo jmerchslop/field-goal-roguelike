@@ -56,6 +56,7 @@ func _run() -> void:
 	_check_rt1()
 	_check_boss2()
 	_check_pk1()
+	_check_mf1()
 	_check_drive_lid_and_power_safety()
 	_check_m2_kickers()
 	_check_honest_cards_and_bench()
@@ -249,7 +250,7 @@ func _check_pendulum() -> void:
 	var stone_acc := stone.needle_angle
 	stone.advance(0.3)
 	var stone_acc_rate := (stone_acc - stone.needle_angle) / 0.3
-	check(near(stone_acc_rate, MeterGauge.omega_accuracy(120.0), 0.05), "Stone Toe does not speed the accuracy sweep, got %s" % stone_acc_rate)
+	check(near(stone_acc_rate, MeterGauge.omega_power(120.0), 0.05), "Stone Toe speeds the accuracy sweep with the same combined rate, got %s" % stone_acc_rate)
 	var rainy := KickLogic.new()
 	rainy.rain_faster = true
 	rainy.press_space()
@@ -261,7 +262,7 @@ func _check_pendulum() -> void:
 	rainy.advance(0.3)
 	var clear_rate := MeterGauge.omega_accuracy(120.0)
 	var rain_rate := (rain_at - rainy.needle_angle) / 0.3
-	check(near(rain_rate, clear_rate * rainy.rain_scale, 0.05) and rain_rate > clear_rate + 5.0, "rain speeds only the accuracy sweep, got %s" % rain_rate)
+	check(near(rain_rate, clear_rate * rainy.rain_scale, 0.05) and rain_rate > clear_rate + 5.0, "rain speeds the accuracy sweep, got %s" % rain_rate)
 	var hero := KickLogic.new()
 	hero.stats.power_speed = 80.0
 	hero.stats.accuracy_speed = 96.0
@@ -370,45 +371,45 @@ func _check_clean_meter_and_accuracy_speed() -> void:
 	hero.give(Loadout.HERO_BALL, 1)
 	hero.prepare_kick_stats()
 	check(near(MeterGauge.omega_power(hero.stats.power_speed, hero.stats.ball_speed_mult), MeterGauge.omega_base() * 0.8), "Hero Ball slows power on top of kicker_omega")
-	check(near(MeterGauge.omega_accuracy(hero.stats.accuracy_speed, hero.stats.ball_speed_mult), MeterGauge.omega_base() * 0.8), "Hero Ball slows accuracy on top of kicker_omega")
+	check(near(MeterGauge.omega_power(hero.stats.accuracy_speed, hero.stats.ball_speed_mult), MeterGauge.omega_base() * 0.8), "Hero Ball slows accuracy on top of kicker_omega")
 	var anchor := RunLogic.new()
 	anchor.new_run()
 	anchor.start_with_kicker(Kickers.WALK_ON)
 	anchor.give(Loadout.ANCHOR, 1)
 	anchor.prepare_kick_stats()
 	check(near(MeterGauge.omega_power(anchor.stats.power_speed, anchor.stats.ball_speed_mult), MeterGauge.omega_base() * 0.85), "Anchor Cleats slows power on top of kicker_omega")
-	check(near(MeterGauge.omega_accuracy(anchor.stats.accuracy_speed, anchor.stats.ball_speed_mult), MeterGauge.omega_base() * 0.85), "Anchor Cleats slows accuracy on top of kicker_omega")
+	check(near(MeterGauge.omega_power(anchor.stats.accuracy_speed, anchor.stats.ball_speed_mult), MeterGauge.omega_base() * 0.85), "Anchor Cleats slows accuracy on top of kicker_omega")
 	var mag := RunLogic.new()
 	mag.new_run()
 	mag.start_with_kicker(Kickers.BIG_BRUCE)
 	mag.belt[0] = Vitamins.MAGNESIUM
 	check(mag.use_belt(0), "Magnesium can be used")
 	mag.prepare_kick_stats()
-	check(near(mag.stats.power_speed, 70.0) and near(mag.stats.accuracy_speed, 84.0), "Magnesium is 0.7 on both phase speeds")
+	check(near(mag.stats.power_speed, 70.0) and near(mag.stats.accuracy_speed, 70.0), "Magnesium is 0.7 on the combined needle speed")
 	check(near(MeterGauge.omega_power(mag.stats.power_speed, mag.stats.ball_speed_mult), MeterGauge.omega_base() * 0.7), "Magnesium slows power on top of kicker_omega")
-	check(near(MeterGauge.omega_accuracy(mag.stats.accuracy_speed, mag.stats.ball_speed_mult), MeterGauge.omega_base() * 0.7), "Magnesium slows accuracy on top of kicker_omega")
+	check(near(MeterGauge.omega_power(mag.stats.accuracy_speed, mag.stats.ball_speed_mult), MeterGauge.omega_base() * 0.7), "Magnesium slows accuracy on top of kicker_omega")
 	var stone := RunLogic.new()
 	stone.new_run()
 	stone.start_with_kicker(Kickers.WALK_ON)
 	stone.give(Loadout.STONE)
 	stone.prepare_kick_stats()
-	check(near(stone.stats.power_speed, 120.0) and near(stone.stats.accuracy_speed, 120.0), "Stone Toe hurries only the power speed value")
+	check(near(stone.stats.power_speed, 120.0) and near(stone.stats.accuracy_speed, 120.0), "Stone Toe hurries both needles")
 	check(near(MeterGauge.omega_power(stone.stats.power_speed, stone.stats.ball_speed_mult), MeterGauge.omega_base() * 1.2), "Stone Toe power is kicker_omega times 1.2")
-	check(near(MeterGauge.omega_accuracy(stone.stats.accuracy_speed, stone.stats.ball_speed_mult), MeterGauge.omega_base()), "Stone Toe leaves the accuracy phase at kicker_omega")
+	check(near(MeterGauge.omega_power(stone.stats.accuracy_speed, stone.stats.ball_speed_mult), MeterGauge.omega_base() * 1.2), "Stone Toe accuracy uses the same combined speed")
 	var cage := RunLogic.new()
 	cage.new_run()
 	cage.start_with_kicker(Kickers.BIG_BRUCE)
 	cage.give(Loadout.ICE_CAGE, 2)
 	cage.prepare_kick_stats()
-	check(near(cage.stats.power_speed, 100.0) and near(cage.stats.accuracy_speed, 108.0), "Ice Cage II slows only accuracy speed")
-	check(near(MeterGauge.omega_accuracy(cage.stats.accuracy_speed, cage.stats.ball_speed_mult), MeterGauge.omega_base() * 0.9), "Ice Cage II is 0.9 on top of kicker_omega")
+	check(near(cage.stats.power_speed, 90.0) and near(cage.stats.accuracy_speed, 90.0), "Ice Cage II slows both needles")
+	check(near(MeterGauge.omega_power(cage.stats.accuracy_speed, cage.stats.ball_speed_mult), MeterGauge.omega_base() * 0.9), "Ice Cage II is 0.9 on top of kicker_omega")
 	var rain := KickLogic.new()
 	Kickers.apply_to(rain.stats, Kickers.WALK_ON)
 	var rain_flags: Dictionary = RunLogic.weather_kick_flags(RunLogic.RAIN, 0)
 	rain.rain_faster = bool(rain_flags["rain_faster"])
 	rain.rain_scale = float(rain_flags["rain_scale"])
 	var rain_power := _power_rate(rain)
-	check(near(rain_power, MeterGauge.omega_power(100.0), 0.05), "rain does not speed the power sweep, got %s" % rain_power)
+	check(near(rain_power, MeterGauge.omega_base() * 1.2, 0.05), "rain speeds the power sweep too, got %s" % rain_power)
 	var rain_acc := _accuracy_rate(rain)
 	check(near(rain_acc, MeterGauge.omega_base() * 1.2, 0.05), "rain speeds the accuracy sweep by 1.2 on top of kicker_omega, got %s" % rain_acc)
 	var monsoon := KickLogic.new()
@@ -423,13 +424,13 @@ func _check_clean_meter_and_accuracy_speed() -> void:
 	game.give(Loadout.HERO_BALL, 1)
 	game.force_weather(RunLogic.BIG_GAME)
 	game.prepare_kick_stats()
-	check(near(game.stats.power_speed, 100.0) and near(game.stats.accuracy_speed, 120.0), "Big Game turns off Hero Ball's slower needles")
+	check(near(game.stats.power_speed, 100.0) and near(game.stats.accuracy_speed, 100.0), "Big Game turns off Hero Ball's slower needles")
 	check(near(game.stats.accuracy, 90.0) and near(game.stats.power_floor, 80.0), "Big Game keeps Bruce accuracy 90 and Farm Strength")
 	check(near(MeterGauge.omega_power(game.stats.power_speed, game.stats.ball_speed_mult), MeterGauge.omega_base()), "Big Game power sweep stays at the new baseline")
 	game.belt[0] = Vitamins.MAGNESIUM
 	check(game.use_belt(0), "Magnesium can be used in Big Game")
 	game.prepare_kick_stats()
-	check(near(game.stats.power_speed, 70.0) and near(game.stats.accuracy_speed, 84.0), "Magnesium still slows both needles in Big Game")
+	check(near(game.stats.power_speed, 70.0) and near(game.stats.accuracy_speed, 70.0), "Magnesium still slows both needles in Big Game")
 	check(near(MeterGauge.omega_power(game.stats.power_speed, game.stats.ball_speed_mult), MeterGauge.omega_base() * 0.7), "Big Game Magnesium is 0.7 of kicker_omega")
 	var left := KickLogic.new()
 	Kickers.apply_to(left.stats, Kickers.BIG_BRUCE)
@@ -931,7 +932,7 @@ func _check_upgrade_effects() -> void:
 	var slow := RunLogic.new()
 	slow.new_run()
 	slow.give(Loadout.ANCHOR, 1)
-	check(near(slow.stats.power_speed, 85.0) and near(slow.stats.accuracy_speed, 120.0 * 0.85), "Anchor Cleats I is 85% on both needles")
+	check(near(slow.stats.power_speed, 85.0) and near(slow.stats.accuracy_speed, 85.0), "Anchor Cleats I is 85% on both needles")
 	slow.give(Loadout.ANCHOR, 2)
 	check(near(slow.stats.power_speed, 78.0), "Anchor Cleats II is the rank II table value 0.78")
 	var pinpoint := RunLogic.new()
@@ -1219,9 +1220,9 @@ func _check_wind_and_pool() -> void:
 	var plant := RunLogic.new()
 	plant.new_run()
 	plant.give(Loadout.ANCHOR, 1)
-	check(near(plant.stats.power_speed, 100.0 * 0.85) and near(plant.stats.accuracy_speed, 120.0 * 0.85), "Anchor Cleats I is 85% on both needles")
+	check(near(plant.stats.power_speed, 85.0) and near(plant.stats.accuracy_speed, 85.0), "Anchor Cleats I is 85% on both needles")
 	plant.give(Loadout.ANCHOR, 2)
-	check(near(plant.stats.power_speed, 78.0) and near(plant.stats.accuracy_speed, 120.0 * 0.78), "Anchor Cleats II slows both needles to 0.78")
+	check(near(plant.stats.power_speed, 78.0) and near(plant.stats.accuracy_speed, 78.0), "Anchor Cleats II slows both needles to 0.78")
 	var calm := RunLogic.new()
 	calm.set_seed(3)
 	calm.new_run()
@@ -1449,7 +1450,7 @@ func _check_weather_and_bosses() -> void:
 	game.force_weather(RunLogic.BIG_GAME)
 	game.prepare_kick_stats()
 	check(near(game.stats.power_speed, KickConstants.POWER_RISE_PER_SEC), "check 9 big game restores base power speed, got %s" % game.stats.power_speed)
-	check(near(game.stats.accuracy_speed, KickConstants.ACCURACY_FALL_PER_SEC), "check 9 Big Bruce keeps the default accuracy speed")
+	check(near(game.stats.accuracy_speed, KickConstants.POWER_RISE_PER_SEC), "check 9 Big Bruce keeps the combined needle speed")
 	check(near(game.stats.perfect_band, 1.35) and near(game.stats.good_band, 5.40), "check 9 Big Game keeps Bruce bands at ±1.35 and ±5.40")
 	check(near(game.stats.red_tip_start, 95.0) and near(game.stats.red_tip_noise, 5.0) and near(game.stats.power_floor, 80.0), "check 9 Big Game keeps Farm Strength and the default red tip")
 	check(not game.stats.ice_veins, "Big Game turns off Ice Cage's red-tip help")
@@ -1736,10 +1737,10 @@ func _check_curses_and_rarity() -> void:
 	var hero := RunLogic.new()
 	hero.start_with_kicker(Kickers.WALK_ON)
 	hero.give(Loadout.HERO_BALL, 1)
-	check(near(hero.stats.power_speed, 100.0 * 0.8) and near(hero.stats.accuracy_speed, 120.0 * 0.8) and near(hero.stats.hero_mult, 1.0), "Hero Ball slows both needles and adds 1 Mult")
+	check(near(hero.stats.power_speed, 80.0) and near(hero.stats.accuracy_speed, 80.0) and near(hero.stats.hero_mult, 1.0), "Hero Ball slows both needles and adds 1 Mult")
 	hero.force_weather(RunLogic.BIG_GAME)
 	hero.prepare_kick_stats()
-	check(near(hero.stats.accuracy_speed, 120.0) and near(hero.stats.power_speed, 100.0) and near(hero.hero_bonus(), 1.0), "Big Game strips Hero Ball's slower needles and keeps the Mult")
+	check(near(hero.stats.accuracy_speed, 100.0) and near(hero.stats.power_speed, 100.0) and near(hero.hero_bonus(), 1.0), "Big Game strips Hero Ball's slower needles and keeps the Mult")
 	var shank := KickLogic.new()
 	shank.angle_scale = 1.5
 	shank.aim_degrees = 0.0
@@ -2279,7 +2280,7 @@ func _check_vitamin_shop() -> void:
 	mag.belt[0] = Vitamins.MAGNESIUM
 	check(mag.use_belt(0), "Magnesium is used before the kick")
 	mag.prepare_kick_stats()
-	check(near(mag.stats.power_speed, 70.0) and near(mag.stats.accuracy_speed, KickConstants.ACCURACY_FALL_PER_SEC * 0.7), "Magnesium slows both needles during Big Game after loadout meter help turns off")
+	check(near(mag.stats.power_speed, 70.0) and near(mag.stats.accuracy_speed, 70.0), "Magnesium slows both needles during Big Game after loadout meter help turns off")
 	check(near(mag.stats.hero_mult, 1.0), "Hero Ball's Mult stays on during Big Game")
 	var tabs := RunLogic.new()
 	tabs.new_run()
@@ -3488,10 +3489,10 @@ func _check_rw2() -> void:
 		walk.is_first_ball = true
 		walk.practicing = false
 		walk.prepare_kick_stats()
-		check(near(walk.stats.power_speed, 100.0) and near(walk.stats.accuracy_speed, 120.0) and near(walk.stats.range_bonus, 0.0), "Walk-On's first ball has no clutch at %s attempts" % attempts)
+		check(near(walk.stats.power_speed, 100.0) and near(walk.stats.accuracy_speed, 100.0) and near(walk.stats.range_bonus, 0.0), "Walk-On's first ball has no clutch at %s attempts" % attempts)
 	walk.is_first_ball = false
 	walk.prepare_kick_stats()
-	check(near(walk.stats.power_speed, 90.0) and near(walk.stats.accuracy_speed, 108.0) and near(walk.stats.range_bonus, 6.0), "Walk-On's retry is ×0.90 and +6 yd")
+	check(near(walk.stats.power_speed, 90.0) and near(walk.stats.accuracy_speed, 90.0) and near(walk.stats.range_bonus, 6.0), "Walk-On's retry is ×0.90 and +6 yd")
 	walk.practicing = true
 	walk.prepare_kick_stats()
 	check(near(walk.stats.power_speed, 100.0) and near(walk.stats.range_bonus, 0.0), "Practice Swing does not get Walk-On clutch")
@@ -3515,7 +3516,7 @@ func _check_rw2() -> void:
 	check(clutched.use_belt(0), "Magnesium is on for the clutch floor check")
 	clutched.is_first_ball = false
 	clutched.prepare_kick_stats()
-	check(near(clutched.stats.power_speed, 35.0, 0.05) and near(clutched.stats.accuracy_speed, 42.0, 0.05), "clutch ×0.90 is inside the slow product, before the 0.35 floor, got %s / %s" % [clutched.stats.power_speed, clutched.stats.accuracy_speed])
+	check(near(clutched.stats.power_speed, 35.0, 0.05) and near(clutched.stats.accuracy_speed, 35.0, 0.05), "clutch ×0.90 is inside the slow product, before the 0.35 floor, got %s / %s" % [clutched.stats.power_speed, clutched.stats.accuracy_speed])
 	var made := RunLogic.new()
 	made.start_with_kicker(Kickers.WALK_ON)
 	made.is_first_ball = false
@@ -3571,6 +3572,97 @@ func _check_rw2() -> void:
 	records.unlocks[Kickers.VEX] = had_vex
 
 
+func _check_mf1() -> void:
+	var walk := RunLogic.new()
+	walk.start_with_kicker(Kickers.WALK_ON)
+	walk.prepare_kick_stats()
+	var bare := KickLogic.new()
+	bare.stats = walk.stats
+	check(near(bare._power_omega(), bare._accuracy_omega()) and near(bare._power_omega(), MeterGauge.omega_base()), "bare Walk-On uses one speed from the 0.70s base")
+	var cases := [
+		[Loadout.ICE_CAGE, 2, RunLogic.CLEAR, 0.90],
+		[Loadout.PATIENT_GLOVES, 1, RunLogic.CLEAR, 0.85],
+		[Loadout.STONE, 1, RunLogic.CLEAR, 1.20],
+		[Loadout.RAIN_DANCE, 1, RunLogic.RAIN, 0.90],
+	]
+	for row in cases:
+		var run := RunLogic.new()
+		run.start_with_kicker(Kickers.WALK_ON)
+		run.give(str(row[0]), int(row[1]))
+		run.force_weather(str(row[2]))
+		run.prepare_kick_stats()
+		var kick := KickLogic.new()
+		kick.stats = run.stats
+		if str(row[2]) == RunLogic.RAIN:
+			kick.rain_faster = true
+			kick.rain_scale = 1.20
+		check(near(kick._power_omega(), kick._accuracy_omega()), "%s uses one speed" % str(row[0]))
+		var expect := MeterGauge.omega_base() * float(row[3])
+		if str(row[2]) == RunLogic.RAIN:
+			expect *= 1.20
+		check(near(kick._power_omega(), expect, 0.02), "%s combined speed is %s" % [str(row[0]), expect])
+	var lights := RunLogic.new()
+	lights.start_with_kicker(Kickers.WALK_ON)
+	lights.force_weather(RunLogic.LIGHTS)
+	lights.prepare_kick_stats()
+	var lit := KickLogic.new()
+	lit.stats = lights.stats
+	check(near(lit._power_omega(), lit._accuracy_omega()) and near(lit._power_omega(), MeterGauge.omega_base() * 1.35, 0.02), "UNDER THE LIGHTS speeds both phases")
+	var carlos_run := RunLogic.new()
+	carlos_run.start_with_kicker(Kickers.CARLOS)
+	carlos_run.prepare_kick_stats()
+	var carlos_kick := KickLogic.new()
+	carlos_kick.stats = carlos_run.stats
+	check(near(carlos_kick._power_omega(), carlos_kick._accuracy_omega()) and near(carlos_kick._power_omega(), MeterGauge.omega_base() * 1.15, 0.02), "Carlos ball speed hits both phases")
+	var locked := KickLogic.new()
+	Kickers.apply_to(locked.stats, Kickers.WALK_ON)
+	locked.press_space()
+	locked.advance(locked.windup_left)
+	locked.take_power_press(locked.seconds_to_power(107.0))
+	var caught := locked.needle_angle
+	var rate := locked._accuracy_omega()
+	check(locked.overpower_paid and locked.meter_popup == "OVERPOWER" and locked.phase == KickLogic.Phase.ACCURACY, "OVERPOWER shows a popup and does not wait")
+	locked.advance(0.05)
+	check(locked.needle_angle < caught - rate * 0.04, "the needle keeps moving through the OVERPOWER popup, %s to %s" % [caught, locked.needle_angle])
+	check(near(locked._accuracy_omega(), rate), "the speed does not change after the OVERPOWER lock")
+	check(near(locked.fill_power, locked.power_true), "the OVERPOWER fill stays at the locked power")
+	var perfect := KickLogic.new()
+	Kickers.apply_to(perfect.stats, Kickers.WALK_ON)
+	perfect.press_space()
+	perfect.advance(perfect.windup_left)
+	perfect.take_power_press(perfect.seconds_to_power(80.0))
+	var filled := perfect.fill_power
+	perfect.advance(perfect.seconds_until_error(0.0))
+	perfect.press_space()
+	check(perfect.phase == KickLogic.Phase.FLIGHT and perfect.meter_popup == "PERFECT" and perfect.perfect, "a PERFECT lock pops and resolves without a hold")
+	perfect.advance(0.05)
+	check(near(perfect.flight_elapsed, 0.05, 0.01) and near(perfect.fill_power, filled), "the kick and the frozen fill continue through the PERFECT popup")
+	var clean := KickLogic.new()
+	Kickers.apply_to(clean.stats, Kickers.WALK_ON)
+	clean.press_space()
+	clean.advance(clean.windup_left)
+	clean.take_power_press(clean.seconds_to_power(98.0))
+	check(not clean.overpower_paid and clean.meter_popup != "OVERPOWER" and near(clean.accuracy_band_scale(), 1.0), "a 95-100 lock has no OVERPOWER popup and no narrower bands")
+	var wide := _overpower_kick(Kickers.WALK_ON, 107.0, 0.0, false)
+	check(near(wide.accuracy_band_scale(), 0.75), "OVERPOWER narrows the accuracy bands by 25%")
+	var halved := KickLogic.new()
+	halved.stats.overpower_half = true
+	halved.overpower_paid = true
+	check(near(halved.accuracy_band_scale(), 0.875), "Ice Cage narrows OVERPOWER bands by 12.5%")
+	var boss := RunLogic.new()
+	boss.start_with_kicker(Kickers.WALK_ON)
+	boss.give(Loadout.ICE_CAGE, 2)
+	boss.give(Loadout.IRON_GRIP, 5)
+	boss.force_weather(RunLogic.BIG_GAME)
+	boss.prepare_kick_stats()
+	var boss_kick := KickLogic.new()
+	boss_kick.stats = boss.stats
+	boss_kick.overpower_paid = true
+	check(not boss.stats.overpower_half and near(boss.stats.overpower_width, KickConstants.OVERPOWER_BASE) and near(boss_kick.accuracy_band_scale(), 0.75), "Big Game keeps the base band and the full 25% shrink")
+	var safe := _overpower_kick(Kickers.CARLOS, 107.0, 9.0, false)
+	check(not safe.overpower_paid and safe.meter_popup != "OVERPOWER" and near(safe.accuracy_band_scale(), 1.0), "Carlos's safe-100 lock does not narrow bands or show OVERPOWER")
+
+
 func _check_pk1() -> void:
 	var legal: Array = Loadout.legal_perks(Loadout.empty_state(), 4)
 	var offered := {}
@@ -3609,7 +3701,7 @@ func _check_pk1() -> void:
 		clear.prepare_kick_stats()
 		check(near(clear.stats.range_bonus, bare.stats.range_bonus + 4.0), "Rain Dance pays +4 on %s" % wet)
 		check(clear.stats.accuracy_speed < bare.stats.accuracy_speed * 0.91 and clear.stats.accuracy_speed > bare.stats.accuracy_speed * 0.89, "Rain Dance slows accuracy on %s" % wet)
-		check(near(clear.stats.power_speed, bare.stats.power_speed), "Rain Dance does not slow the power needle")
+		check(near(clear.stats.power_speed, bare.stats.power_speed * 0.90), "Rain Dance slows the power needle too")
 	for dry in [RunLogic.THIN_AIR, RunLogic.ICED, RunLogic.SQUEEZE, RunLogic.BIG_GAME, RunLogic.LIGHTS, RunLogic.CLOCK, RunLogic.MOVING]:
 		bare.weather = dry
 		bare.prepare_kick_stats()
@@ -3644,8 +3736,7 @@ func _check_pk1() -> void:
 	var power_before := slow.stats.power_speed
 	slow.weather = RunLogic.RAIN
 	slow.prepare_kick_stats()
-	check(near(slow.stats.accuracy_speed, 120.0 * 0.35) and slow.stats.accuracy_speed > floored * 0.90, "Rain Dance ×0.90 is inside the slow product before the floor")
-	check(near(slow.stats.power_speed, power_before), "Rain Dance does not slow the power needle when other slows are on")
+	check(near(slow.stats.power_speed, 35.0) and near(slow.stats.accuracy_speed, 35.0) and slow.stats.power_speed > power_before * 0.90, "Rain Dance ×0.90 is inside the slow product before the floor")
 	var gang := RunLogic.new()
 	gang.start_with_kicker(Kickers.WALK_ON)
 	gang.give(Loadout.CHAIN_GANG, 1)
@@ -3702,23 +3793,25 @@ func _check_pk1() -> void:
 	check(charges > 2, "Scout Lid added reroll charges")
 	look.give(Loadout.SECOND_LOOK, 1)
 	check(look.second_look_bank == 1, "picking Second Look banks one free reroll")
-	for block_start in [1, 6, 11, 21]:
-		look.kick_number = block_start
-		look.second_look_bank = 1
-		look._refill_quarter()
-		check(look.second_look_bank == 1, "kick %d sets the free-reroll bank to 1" % block_start)
-	look.kick_number = 5
 	look.second_look_bank = 0
+	for block_start in [1, 6, 11]:
+		look.kick_number = block_start
+		look._refill_quarter()
+	check(look.second_look_bank == 3, "15 unspent kicks bank 3 free rerolls")
+	look.kick_number = 5
+	var stacked := look.second_look_bank
 	look._refill_quarter()
-	check(look.second_look_bank == 0, "the offer after kick 5 is still in the first block")
-	look.kick_number = 6
+	check(look.second_look_bank == stacked, "the offer after kick 5 does not add another free reroll")
+	look.kick_number = 21
 	look._refill_quarter()
-	check(look.second_look_bank == 1, "a spent bank is set back to 1 at kick 6")
+	check(look.second_look_bank == stacked + 1, "kick 21 adds one more free reroll")
+	look.second_look_bank = 1
+	look.kick_number = 11
 	look.awaiting_offer = true
 	look.offer = Loadout.draw_offer(look.loadout_state(), look.attempt_cap, look._offer_rng)
 	check(look.free_reroll_ready(), "a banked free reroll is the next offer reroll")
 	check(look.reroll_offer() and look.rerolls_left == charges and look.second_look_bank == 0, "the free reroll does not spend a Walk-On charge")
-	check(look.reroll_offer() and look.rerolls_left == charges - 1, "the next reroll spends a normal charge")
+	check(look.reroll_offer() and look.rerolls_left == charges - 1 and look.second_look_bank == 0, "the next reroll spends a normal charge")
 	look.second_look_bank = 1
 	look.awaiting_offer = false
 	look.awaiting_shop = true
@@ -3731,12 +3824,12 @@ func _check_pk1() -> void:
 	look.second_look_bank = 1
 	check(look.free_reroll_ready(), "the offer shows a banked free reroll")
 	var hud_source := FileAccess.get_file_as_string("res://scripts/hud.gd")
-	check(hud_source.find("_text_centered(\"Free reroll") >= 0 and hud_source.find("free_reroll_ready") >= 0, "the offer uses a default-font Free reroll label")
+	check(hud_source.find("_text_centered(\"Free rerolls %d") >= 0 and hud_source.find("free_reroll_ready") >= 0, "the offer uses a default-font Free rerolls count")
 	look.streak = 7
 	var saved := look.export_resume()
 	var resumed := RunLogic.new()
 	resumed.import_resume(saved)
-	check(resumed.second_look_bank == 1 and resumed.streak == 7, "the free-reroll bank and the streak survive a save")
+	check(resumed.second_look_bank == 1 and resumed.streak == 7, "the stacked free-reroll bank and the streak survive a save")
 	var phil := RunLogic.new()
 	phil.start_with_kicker(Kickers.PHIL)
 	phil.give(Loadout.GLASS_LEG, 1)
@@ -3756,59 +3849,54 @@ func _check_pk1() -> void:
 
 
 func _check_boss2() -> void:
-	var pool: Array[String] = RunLogic.endless_boss_names()
-	var slot_counts := {5: {}, 10: {}, 15: {}, 20: {}}
-	for name in pool:
-		for slot in [5, 10, 15, 20]:
-			slot_counts[slot][name] = 0
-	var seen_any := {}
+	var early: Array[String] = [RunLogic.ICED, RunLogic.SQUEEZE, RunLogic.MONSOON, RunLogic.LIGHTS, RunLogic.CLOCK]
+	var finals: Array[String] = [RunLogic.BIG_GAME, RunLogic.MOVING]
+	var seen_early := {}
+	var seen_final := {}
 	for sample in 20:
 		var run := RunLogic.new()
 		run.set_seed(1000 + sample)
 		run.new_run()
 		var names: Array[String] = []
 		var unique := {}
-		for slot in [5, 10, 15, 20]:
+		for slot in [5, 10, 15]:
 			var boss := str(run.standard_bosses[slot])
 			names.append(boss)
 			unique[boss] = true
-			check(pool.has(boss), "lineup boss %s is outside the pool" % boss)
-			slot_counts[slot][boss] = int(slot_counts[slot][boss]) + 1
-			seen_any[boss] = true
-		check(unique.size() == 4, "run %s repeated a boss: %s" % [sample, names])
+			check(early.has(boss), "kick %s rolled %s, which is not an early boss" % [slot, boss])
+			check(boss != RunLogic.BIG_GAME and boss != RunLogic.MOVING, "a final boss appeared before kick 20")
+			seen_early[boss] = true
+		var final_boss := str(run.standard_bosses[20])
+		names.append(final_boss)
+		check(finals.has(final_boss), "kick 20 rolled %s" % final_boss)
+		seen_final[final_boss] = true
+		check(unique.size() == 3, "kicks 5, 10, and 15 repeated a boss: %s" % str(names))
 		var again := RunLogic.new()
 		again.set_seed(1000 + sample)
 		again.new_run()
-		check(str(again.standard_bosses[5]) == names[0] and str(again.standard_bosses[20]) == names[3], "the same seed rolls the same lineup")
-		print("BOSS2 lineup %d seed %d: 5=%s 10=%s 15=%s 20=%s" % [sample + 1, 1000 + sample, names[0], names[1], names[2], names[3]])
-	for name in pool:
-		check(seen_any.has(name), "20 Standard runs never rolled %s" % name)
-	var big5 := 0
-	var big20 := 0
-	for sample in 1400:
+		check(str(again.standard_bosses[5]) == names[0] and str(again.standard_bosses[20]) == final_boss, "the same seed rolls the same lineup")
+		print("MF1 lineup %d seed %d: 5=%s 10=%s 15=%s 20=%s" % [sample + 1, 1000 + sample, names[0], names[1], names[2], names[3]])
+	for name in early:
+		check(seen_early.has(name), "20 Standard runs never rolled early boss %s" % name)
+	for name in finals:
+		check(seen_final.has(name), "20 Standard runs never rolled final %s" % name)
+	var final_big := 0
+	for sample in 200:
 		var run := RunLogic.new()
 		run.set_seed(5000 + sample)
 		run.new_run()
-		var picked := {}
-		for slot in [5, 10, 15, 20]:
+		for slot in [5, 10, 15]:
 			var boss := str(run.standard_bosses[slot])
-			picked[boss] = true
-			slot_counts[slot][boss] = int(slot_counts[slot][boss]) + 1
-		check(picked.size() == 4, "a large sample repeated a boss")
-		if str(run.standard_bosses[5]) == RunLogic.BIG_GAME:
-			big5 += 1
+			check(early.has(boss), "a larger sample put %s on kick %s" % [boss, slot])
+		check(finals.has(str(run.standard_bosses[20])), "a larger sample put a non-final on kick 20")
 		if str(run.standard_bosses[20]) == RunLogic.BIG_GAME:
-			big20 += 1
+			final_big += 1
 		run.kick_number = 10
 		var before := str(run.standard_bosses[10])
 		run._roll_weather()
 		run._roll_weather()
 		check(run.weather == before and str(run.standard_bosses[10]) == before, "arriving at the kick does not re-roll the boss")
-	for slot in [5, 10, 15, 20]:
-		for name in pool:
-			var count := int(slot_counts[slot][name])
-			check(count >= 80 and count <= 360, "slot %s rolled %s %s times, not a uniform share" % [slot, name, count])
-	check(abs(big20 - big5) < 80, "kick 20 is not weighted toward Big Game (%s vs kick 5 %s)" % [big20, big5])
+	check(final_big > 60 and final_big < 140, "kick 20 is a 50/50, Big Game showed %s times in 200" % final_big)
 	var saved := RunLogic.new()
 	saved.set_seed(42)
 	saved.new_run()
@@ -3829,7 +3917,7 @@ func _check_boss2() -> void:
 	endless.kick_number = 10
 	endless.endless_bosses = {}
 	endless._roll_weather()
-	check(pool.has(str(endless.weather)) and endless.is_boss(), "Endless kick 10 still rolls from the seven-boss pool")
+	check(RunLogic.endless_boss_names().has(str(endless.weather)) and endless.is_boss(), "Endless kick 10 still rolls from the seven-boss pool")
 
 
 func _check_rt1() -> void:
@@ -3863,8 +3951,8 @@ func _check_rt1() -> void:
 	var band := _overpower_kick(Kickers.WALK_ON, 107.0, 0.0, false)
 	check(not clean.overpower_paid and near(clean.power, 100.0) and not clean.shanked, "P=100 is a clean lock, not OVERPOWER and not a shank")
 	check(band.overpower_paid and near(band.power, 100.0) and near(band.max_range, clean.max_range + 4.0), "a Walk-On band lock pays exactly +4 and uses P=100, got %s vs %s" % [band.max_range, clean.max_range])
-	check(near(band._accuracy_omega(), clean._accuracy_omega() * 1.25, 0.01), "OVERPOWER speeds only the accuracy needle by ×1.25")
-	check(near(band._power_omega(), clean._power_omega()), "OVERPOWER does not speed the power needle")
+	check(near(band._accuracy_omega(), clean._accuracy_omega(), 0.01), "OVERPOWER does not change the accuracy speed")
+	check(near(band._power_omega(), clean._power_omega()), "OVERPOWER does not change the power speed")
 	var low := _overpower_kick(Kickers.WALK_ON, 90.0, 0.0, false)
 	check(not low.overpower_paid and near(low.max_range, clean.max_range - clean.stats.range_per_power * 10.0, 0.05), "a lock below 95 is not OVERPOWER")
 	var end_lock := _overpower_kick(Kickers.WALK_ON, 100.0 + base_width, 0.0, false)
@@ -3895,7 +3983,8 @@ func _check_rt1() -> void:
 	Kickers.apply_to(full_rate.stats, Kickers.WALK_ON)
 	full_rate.stats.accuracy_speed = cage.stats.accuracy_speed
 	full_rate.overpower_paid = true
-	check(near(halved._accuracy_omega(), full_rate._accuracy_omega() * 1.125 / 1.25, 0.02), "Ice Cage makes the accuracy speed-up ×1.125")
+	check(near(halved.shown_perfect_band(), halved.stats.perfect_band * 0.875, 0.01), "Ice Cage halves the OVERPOWER band shrink to 12.5%")
+	check(near(full_rate.shown_perfect_band(), full_rate.stats.perfect_band * 0.75, 0.01), "a real OVERPOWER lock narrows PERFECT by 25%")
 	var boss := RunLogic.new()
 	boss.start_with_kicker(Kickers.WALK_ON)
 	boss.give(Loadout.ICE_CAGE, 6)
@@ -3921,7 +4010,7 @@ func _check_rt1() -> void:
 	check(Loadout.effect_line(Loadout.IRON_GRIP, 5) == "OVERPOWER band +50% wide.", "Iron Grip V is width only")
 	check(Loadout.effect_line(Loadout.IRON_GRIP, 6) == "OVERPOWER band +50% wide. An OVERPOWER lock pays +5 yd, on top of the base +4.", "Iron Grip VI names the extra yards")
 	check(Loadout.effect_line(Loadout.IRON_GRIP, 24).find("+23 yd") >= 0, "Iron Grip XXIV names +23 yd")
-	check(Loadout.effect_line(Loadout.ICE_CAGE, 1) == "Immune to Iced. OVERPOWER speed-up halved.", "Ice Cage I names immunity and the halved speed-up")
+	check(Loadout.effect_line(Loadout.ICE_CAGE, 1) == "Immune to Iced. The OVERPOWER band shrink is halved.", "Ice Cage I names immunity and the halved band shrink")
 	var practice := RunLogic.new()
 	practice.start_with_kicker(Kickers.WALK_ON)
 	practice.stats.practice_per_quarter = 1
@@ -4487,7 +4576,7 @@ func _check_needle_floor() -> void:
 		check(near(Loadout.anchor_factor(rank), shown_anchor) and near(Loadout.patient_factor(rank), shown_anchor), "Anchor and Patient rank %s use the needle table" % rank)
 		check(near(Loadout.sticker_factor(rank), shown_drift) and near(Loadout.shelter_factor_for(rank), shown_drift), "Sticker and Shelter rank %s use the drift table" % rank)
 		check(Loadout.effect_line(Loadout.ANCHOR, rank) == "Needles ×%.2f" % shown_anchor, "Anchor card rank %s shows the table" % rank)
-		check(Loadout.effect_line(Loadout.PATIENT_GLOVES, rank) == "Power needle ×%.2f" % shown_anchor, "Patient card rank %s shows the table" % rank)
+		check(Loadout.effect_line(Loadout.PATIENT_GLOVES, rank) == "Both needles ×%.2f" % shown_anchor, "Patient card rank %s shows the table" % rank)
 		check(Loadout.effect_line(Loadout.STICKER, rank) == "Drift ×%.2f" % shown_drift, "Sticker card rank %s shows the table" % rank)
 		check(Loadout.effect_line(Loadout.SHELTER_LID, rank) == "Headwind loss ×%.2f" % shown_drift, "Shelter card rank %s shows the table" % rank)
 	check(near(Loadout.anchor_factor(24), Loadout.anchor_factor(12)) and near(Loadout.patient_factor(24), 0.40), "Anchor and Patient above XII stay at 0.40")
@@ -4504,17 +4593,17 @@ func _check_needle_floor() -> void:
 	deep.give(Loadout.ANCHOR, 12)
 	deep.give(Loadout.PATIENT_GLOVES, 12)
 	deep.prepare_kick_stats()
-	check(near(deep.stats.power_speed, 35.0, 0.01) and near(deep.stats.accuracy_speed, 48.0, 0.01), "Anchor XII + Patient XII is 35 / 48, got %s / %s" % [deep.stats.power_speed, deep.stats.accuracy_speed])
+	check(near(deep.stats.power_speed, 35.0, 0.01) and near(deep.stats.accuracy_speed, 35.0, 0.01), "Anchor XII + Patient XII is 35 / 35, got %s / %s" % [deep.stats.power_speed, deep.stats.accuracy_speed])
 	check(near(_fill_seconds(deep.stats.power_speed), 2.0, 0.01), "that build fills power in about 2 seconds")
 	deep.force_weather(RunLogic.LIGHTS)
 	deep.prepare_kick_stats()
-	check(near(deep.stats.power_speed, 47.25, 0.01) and near(deep.stats.accuracy_speed, 64.80, 0.01), "the same build under the lights is 47.25 / 64.80, got %s / %s" % [deep.stats.power_speed, deep.stats.accuracy_speed])
+	check(near(deep.stats.power_speed, 47.25, 0.01) and near(deep.stats.accuracy_speed, 47.25, 0.01), "the same build under the lights is 47.25 / 47.25, got %s / %s" % [deep.stats.power_speed, deep.stats.accuracy_speed])
 	check(near(_fill_seconds(deep.stats.power_speed), 1.481481, 0.01), "under the lights that build fills power in about 1.48 seconds")
 	var stickered := _endless_walk()
 	stickered.give(Loadout.ANCHOR, 12)
 	stickered.give(Loadout.STICKER, 12)
 	stickered.prepare_kick_stats()
-	check(near(stickered.stats.power_speed, 40.0, 0.01) and near(stickered.stats.accuracy_speed, 48.0, 0.01), "Anchor XII + Sticker XII is 40 / 48")
+	check(near(stickered.stats.power_speed, 40.0, 0.01) and near(stickered.stats.accuracy_speed, 40.0, 0.01), "Anchor XII + Sticker XII is 40 / 40")
 	check(near(stickered.stats.drift_factor, 0.28), "Sticker XII drift is 0.28")
 	check(near(_fill_seconds(stickered.stats.power_speed), 1.75, 0.01), "Anchor XII fills power in about 1.75 seconds")
 	var stacked := _endless_walk()
@@ -4524,14 +4613,14 @@ func _check_needle_floor() -> void:
 	stacked.belt[0] = Vitamins.MAGNESIUM
 	stacked.use_belt(0)
 	stacked.prepare_kick_stats()
-	check(near(stacked.stats.power_speed, 35.0, 0.01) and near(stacked.stats.accuracy_speed, 42.0, 0.01), "Anchor + Patient + Hero Ball + Magnesium floors at 35 / 42, got %s / %s" % [stacked.stats.power_speed, stacked.stats.accuracy_speed])
+	check(near(stacked.stats.power_speed, 35.0, 0.01) and near(stacked.stats.accuracy_speed, 35.0, 0.01), "Anchor + Patient + Hero Ball + Magnesium floors at 35 / 35, got %s / %s" % [stacked.stats.power_speed, stacked.stats.accuracy_speed])
 	check(near(_fill_seconds(stacked.stats.power_speed), 2.0, 0.01), "the floored stack still fills power in about 2 seconds")
 	var hurried := _endless_walk()
 	hurried.give(Loadout.ANCHOR, 12)
 	hurried.give(Loadout.PATIENT_GLOVES, 12)
 	hurried.give(Loadout.STONE)
 	hurried.prepare_kick_stats()
-	check(near(hurried.stats.power_speed, 42.0, 0.01) and near(hurried.stats.accuracy_speed, 48.0, 0.01), "Stone Toe applies after the floor")
+	check(near(hurried.stats.power_speed, 42.0, 0.01) and near(hurried.stats.accuracy_speed, 42.0, 0.01), "Stone Toe applies after the floor on both needles")
 	var rainy := _endless_walk()
 	rainy.give(Loadout.ANCHOR, 12)
 	rainy.give(Loadout.HERO_BALL, 1)
@@ -4541,7 +4630,7 @@ func _check_needle_floor() -> void:
 	kick.rain_faster = true
 	kick.rain_scale = 1.20
 	var rained := kick._accuracy_omega()
-	check(near(rainy.stats.accuracy_speed, 42.0, 0.01), "Anchor XII plus Hero Ball floors the accuracy needle at 0.35")
+	check(near(rainy.stats.power_speed, 35.0, 0.01) and near(rainy.stats.accuracy_speed, 35.0, 0.01), "Anchor XII plus Hero Ball floors both needles at 0.35")
 	check(near(rained, MeterGauge.omega_base() * 0.35 * 1.20, 0.05), "rain multiplies the floored accuracy rate and is not itself floored")
 	var willow := RunLogic.new()
 	willow.start_with_kicker(Kickers.WILLOW)
@@ -4587,8 +4676,8 @@ func _check_honest_cards_and_bench() -> void:
 	check(Loadout.effect_line(Loadout.WIND_VISOR, 1) == "Shows wind mph and an arrow. 10% wind resistance.", "Wind Visor I names the mph, the arrow, and 10% resistance")
 	check(Loadout.effect_line(Loadout.WIND_VISOR, 2) == "Wind mph and an arrow. 15% wind resistance.", "Wind Visor II names 15% resistance and no path")
 	check(Loadout.effect_line(Loadout.WIND_VISOR, 6).find("70%") >= 0 and Loadout.effect_line(Loadout.WIND_VISOR, 12).find("full flight") >= 0, "Wind Visor VI is 70% and XII is the full path")
-	check(Loadout.effect_line(Loadout.ICE_CAGE, 6) == "Immune to Iced. OVERPOWER speed-up halved. Accuracy needle ×0.90. Perfect +2, good +4.", "Ice Cage VI lists the full package")
-	check(Loadout.effect_line(Loadout.ICE_CAGE, 12) == "Immune to Iced. OVERPOWER speed-up halved. Accuracy needle ×0.90. Perfect +5, good +10.", "Ice Cage XII lists the grown bands")
+	check(Loadout.effect_line(Loadout.ICE_CAGE, 6) == "Immune to Iced. The OVERPOWER band shrink is halved. The needles ×0.90. Perfect +2, good +4.", "Ice Cage VI lists the full package")
+	check(Loadout.effect_line(Loadout.ICE_CAGE, 12) == "Immune to Iced. The OVERPOWER band shrink is halved. The needles ×0.90. Perfect +5, good +10.", "Ice Cage XII lists the grown bands")
 	check(Loadout.effect_line(Loadout.SCOUT_LID, 7) == "+6 rerolls, and two Practice Swings each quarter", "Scout Lid VII says +6 rerolls and two swings")
 	check(Loadout.effect_line(Loadout.DOINK_CAP, 7) == "7 doinks become Good each quarter, unused carry (max 7)", "Doink Cap VII carries 7")
 	check(Loadout.effect_line(Loadout.DOINK_CAP, 12) == "12 doinks become Good each quarter, unused carry (max 12)", "Doink Cap XII carries 12")
@@ -5261,10 +5350,10 @@ func _check_new_styles() -> void:
 	var patient := RunLogic.new()
 	patient.start_with_kicker(Kickers.WALK_ON)
 	patient.give(Loadout.PATIENT_GLOVES, 1)
-	check(near(patient.stats.power_speed, 85.0) and near(patient.stats.accuracy_speed, 120.0), "Patient Gloves I slows only the power needle")
+	check(near(patient.stats.power_speed, 85.0) and near(patient.stats.accuracy_speed, 85.0), "Patient Gloves I slows both needles")
 	patient.force_weather(RunLogic.BIG_GAME)
 	patient.prepare_kick_stats()
-	check(near(patient.stats.power_speed, 100.0) and near(patient.stats.accuracy_speed, 120.0), "Big Game turns Patient Gloves off")
+	check(near(patient.stats.power_speed, 100.0) and near(patient.stats.accuracy_speed, 100.0), "Big Game turns Patient Gloves off")
 	var head_open := _wind_travel(10.0, 180.0, 1.0, 0.0)
 	var head_cut := _wind_travel(10.0, 180.0, 0.80, 0.0)
 	var tail_open := _wind_travel(10.0, 0.0, 1.0, 0.0)
@@ -5354,7 +5443,7 @@ func _check_six_icons() -> void:
 	check(Loadout.effect_line(Loadout.TRUE_LID, 1) == "Hook ×0.90", "True Lid card text is unchanged")
 	check(Loadout.effect_line(Loadout.SHELTER_LID, 1) == "Headwind loss ×0.90", "Shelter Lid I reads x0.90")
 	check(Loadout.effect_line(Loadout.GUIDE_GLOVES, 1).begins_with("Good locks: hook"), "Guide Gloves says Good locks")
-	check(Loadout.effect_line(Loadout.PATIENT_GLOVES, 1).begins_with("Power needle"), "Patient Gloves card text is unchanged")
+	check(Loadout.effect_line(Loadout.PATIENT_GLOVES, 1).begins_with("Both needles"), "Patient Gloves names both needles")
 	check(Loadout.effect_line(Loadout.HUSH_GLOVES, 1) == "First 1 mph of wind ignored", "Hush Gloves card text is unchanged")
 	check(Loadout.is_power_item(Loadout.DRIVE_LID) and not Loadout.is_power_item(Loadout.TRUE_LID), "Drive Lid stays a power item and True Lid does not")
 	var keys := FileAccess.get_file_as_string("res://scripts/main.gd")

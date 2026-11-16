@@ -102,6 +102,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "mf1":
+		if not await _capture_mf1():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "pk1":
 		if not await _capture_pk1():
 			get_tree().quit(1)
@@ -1751,6 +1757,54 @@ func _offer_card(id: String, rank: int, slot: String) -> bool:
 	board.refresh_view()
 	if board.run.offer.is_empty() or str(board.run.offer[0].get("id", "")) != id:
 		print("offer missed ", id)
+		return false
+	return true
+
+
+func _capture_mf1() -> bool:
+	board.highlight = 1
+	board.confirm_kicker()
+	board.logic.press_space()
+	board.logic.advance(board.logic.windup_left)
+	board.logic.take_power_press(board.logic.seconds_to_power(107.0))
+	var before := float(board.logic.needle_angle)
+	board.logic.advance(0.08)
+	var after := float(board.logic.needle_angle)
+	print("MF1 overpower ", board.logic.meter_popup, " ", before, " -> ", after)
+	if str(board.logic.meter_popup) != "OVERPOWER" or after >= before - 1.0:
+		print("overpower popup missed")
+		return false
+	if not await _capture("mf1_overpower_popup.png"):
+		return false
+	board.logic.reset_kick()
+	board._apply_conditions()
+	board.logic.press_space()
+	board.logic.advance(board.logic.windup_left)
+	board.logic.take_power_press(board.logic.seconds_to_power(80.0))
+	board.logic.advance(board.logic.seconds_until_error(0.0))
+	board.logic.press_space()
+	board.logic.advance(0.08)
+	print("MF1 perfect ", board.logic.meter_popup, " flight ", board.logic.flight_elapsed)
+	if str(board.logic.meter_popup) != "PERFECT":
+		print("perfect popup missed")
+		return false
+	if not await _capture("mf1_perfect_popup.png"):
+		return false
+	board.logic.reset_kick()
+	board.run.give(Loadout.SECOND_LOOK, 1)
+	board.run.second_look_bank = 3
+	board.run.force_offer([
+		{"id": Loadout.DEEP_BENCH, "rank": 1, "kind": Loadout.PERK, "slot": Loadout.PERK},
+		{"id": Loadout.HOT_STREAK, "rank": 1, "kind": Loadout.PERK, "slot": Loadout.PERK},
+		{"id": Loadout.GLASS_LEG, "rank": 1, "kind": Loadout.PERK, "slot": Loadout.PERK},
+	])
+	board.run.roll_offer()
+	board.run.awaiting_offer = true
+	board.refresh_view()
+	if not board.run.free_reroll_ready() or board.run.second_look_bank != 3:
+		print("free rerolls not ready")
+		return false
+	if not await _capture("mf1_free_rerolls.png"):
 		return false
 	return true
 

@@ -525,8 +525,9 @@ func prepare_kick_stats() -> void:
 		var dance := rain_dance_pay(weather, weather == BIG_GAME, vitamin_d_active())
 		if bool(dance["yards"]):
 			stats.range_bonus += _scaled_perk_yards(4.0)
-		# Accuracy only, before the 0.35 floor. Big Game strips this slow.
+		# Both needles, before the 0.35 floor. Big Game strips this slow.
 		if bool(dance["slow"]):
+			stats.power_speed *= 0.90
 			stats.accuracy_speed *= 0.90
 	if not practicing and stats.chain_gang:
 		stats.range_bonus += _scaled_perk_yards(chain_gang_raw())
@@ -536,7 +537,7 @@ func prepare_kick_stats() -> void:
 			Kickers.apply_to(base, kicker_id)
 		# Meter help is off. Stone Toe is applied after the slow floor, with the vitamins.
 		stats.power_speed = base.power_speed
-		stats.accuracy_speed = base.accuracy_speed
+		stats.accuracy_speed = base.power_speed
 		stats.accuracy = base.accuracy
 		stats.perfect_band = base.perfect_band
 		stats.good_band = base.good_band
@@ -549,8 +550,8 @@ func prepare_kick_stats() -> void:
 		stats.red_tip_noise = base.red_tip_noise
 		stats.red_tip_off = false
 		stats.ice_veins = false
-		# Big Game keeps the base band, the +4, and ×1.25.
-		# Iron Grip's wider band and extra yards, and Ice Cage's halved speed-up, are off.
+		# Big Game keeps the base band, the +4, and the full 25% band narrowing.
+		# Iron Grip's wider band and extra yards, and Ice Cage's halved shrink, are off.
 		stats.overpower_width = KickConstants.OVERPOWER_BASE
 		stats.tip_lock_yards = 0.0
 		stats.overpower_half = false
@@ -947,7 +948,7 @@ func reroll_offer() -> bool:
 		return false
 	# The banked free reroll is spent before Walk-On or Scout Lid charges.
 	if second_look_bank > 0 and stats.second_look:
-		second_look_bank = 0
+		second_look_bank -= 1
 	elif rerolls_left <= 0:
 		return false
 	else:
@@ -1476,7 +1477,7 @@ func give(id: String, rank: int = 1) -> void:
 	if practice_gain > 0:
 		practice_left += practice_gain
 	if id == Loadout.SECOND_LOOK and previous_bench == 0:
-		second_look_bank = 1
+		second_look_bank += 1
 	if id == Loadout.DEEP_BENCH:
 		if previous_bench < 3 and rank >= 3 and attempts < attempt_cap:
 			attempts += 1
@@ -1553,15 +1554,16 @@ func _walk_on_clutch() -> bool:
 
 
 func _finish_needles() -> void:
-	# Slows are already multiplied into the speeds. Speed-ups are not.
-	# Walk-On clutch is one of those slows, before the 0.35 floor.
-	var base_power := KickConstants.POWER_RISE_PER_SEC
-	var base_acc := KickConstants.ACCURACY_FALL_PER_SEC
+	# One combined speed. Slows are already in power_speed. Walk-On clutch joins them
+	# before the 0.35 floor. Stone Toe and UNDER THE LIGHTS come after the floor.
+	# Rain and ball speed are applied later, in the shared kick omega, and are not floored.
+	var base := KickConstants.POWER_RISE_PER_SEC
 	var clutch := 0.90 if _walk_on_clutch() else 1.0
 	var stone := 1.20 if has_curse(Loadout.STONE) else 1.0
 	var lights := LIGHTS_NEEDLE if lights_active() else 1.0
-	stats.power_speed = MeterGauge.needle_speed(base_power, stats.power_speed / base_power * clutch, stone, lights, 1.0, 1.0)
-	stats.accuracy_speed = MeterGauge.needle_speed(base_acc, stats.accuracy_speed / base_acc * clutch, 1.0, lights, 1.0, 1.0)
+	var combined := MeterGauge.needle_speed(base, stats.power_speed / base * clutch, stone, lights, 1.0, 1.0)
+	stats.power_speed = combined
+	stats.accuracy_speed = combined
 
 
 func owned_labels() -> Array:
@@ -1596,9 +1598,9 @@ func _close_offer() -> void:
 
 
 func _refill_quarter() -> void:
-	# Kicks 1–5, 6–10, 11–15, and so on. The bank is set to 1, not added.
+	# Kicks 1–5, 6–10, 11–15, and so on. Each block adds one. Unused ones carry.
 	if (kick_number - 1) % 5 == 0 and _perk_rank(Loadout.SECOND_LOOK) > 0:
-		second_look_bank = 1
+		second_look_bank += 1
 	if kick_number == 1 or kick_number == 6 or kick_number == 11 or kick_number == 16:
 		mulligans_left = 0
 		if stats.doink_carry:
@@ -2173,14 +2175,15 @@ func lights_active() -> bool:
 
 
 func _roll_standard_bosses() -> void:
-	# Four uniform picks without replacement. _kick10_rng is the boss generator,
-	# so this does not move the weather sequence. Kick 20 is not weighted.
+	# Kicks 5, 10, and 15 take three of the early five, without replacement.
+	# Kick 20 is its own 50/50. _kick10_rng does not move the weather sequence.
 	standard_bosses = {}
-	var pool: Array[String] = endless_boss_names()
-	for slot in [5, 10, 15, 20]:
-		var index := _kick10_rng.randi_range(0, pool.size() - 1)
-		standard_bosses[slot] = pool[index]
-		pool.remove_at(index)
+	var early: Array[String] = [ICED, SQUEEZE, MONSOON, LIGHTS, CLOCK]
+	for slot in [5, 10, 15]:
+		var index := _kick10_rng.randi_range(0, early.size() - 1)
+		standard_bosses[slot] = early[index]
+		early.remove_at(index)
+	standard_bosses[20] = BIG_GAME if _kick10_rng.randf() < 0.5 else MOVING
 	kick10_boss = str(standard_bosses[10])
 
 

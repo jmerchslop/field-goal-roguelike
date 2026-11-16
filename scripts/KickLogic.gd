@@ -70,6 +70,11 @@ var hold_result := false
 # A paid OVERPOWER lock. Carlos's band lock stays false.
 var overpower_paid := false
 var overpower_hold := 0.0
+# Practice Swing shows the band and does not pay or shrink.
+var practice_swing := false
+# Juice only. It does not stall the needle.
+var meter_popup := ""
+var meter_popup_age := 0.0
 # The smooth power needle. Mud draws a jitter on top and does not add it back in.
 var power_true := 0.0
 var heavy_ball := false
@@ -129,8 +134,6 @@ func press_space() -> void:
 	elif phase == Phase.POWER:
 		# The flick down to POWER is not a lockable power value.
 		# A press on MAX is P=100. A press in the band is OVERPOWER. The end is still a lock.
-		if overpower_hold > 0.0000001:
-			return
 		if windup_left <= 0.0000001:
 			var locked := needle if mud_power else MeterGauge.power_from_angle_raw(needle_angle)
 			_lock_power(locked)
@@ -147,6 +150,7 @@ func press_space() -> void:
 func advance(delta: float) -> void:
 	if delta <= 0.0:
 		return
+	_tick_meter_popup(delta)
 	var left := delta
 	var guard := 0
 	while left > 0.0000001 and guard < 6:
@@ -208,6 +212,8 @@ func reset_kick() -> void:
 	phase = Phase.AIMING
 	overpower_paid = false
 	overpower_hold = 0.0
+	meter_popup = ""
+	meter_popup_age = 0.0
 	aim_degrees = 0.0
 	needle = 0.0
 	needle_angle = MeterGauge.MAX_ANGLE
@@ -586,14 +592,6 @@ func _advance_power(delta: float) -> float:
 			return 0.0
 		needle_angle = MeterGauge.POWER_ANGLE
 		return delta - step
-	if overpower_hold > 0.0:
-		var beat := minf(delta, overpower_hold)
-		overpower_hold -= beat
-		if overpower_hold > 0.0000001:
-			return 0.0
-		overpower_hold = 0.0
-		_begin_accuracy()
-		return delta - beat
 	var omega := _power_omega()
 	if omega <= 0.001:
 		return 0.0
@@ -652,20 +650,19 @@ func _advance_accuracy(delta: float) -> float:
 
 
 func _power_omega() -> float:
-	# power_speed already has the slow floor, Stone Toe, and UNDER THE LIGHTS.
-	# Ball speed is last and is not floored.
-	return MeterGauge.needle_speed(MeterGauge.omega_base(), stats.power_speed / 100.0, 1.0, 1.0, 1.0, stats.ball_speed_mult)
+	return _kick_omega()
 
 
 func _accuracy_omega() -> float:
-	# accuracy_speed already has the slow floor, Ice Cage, and UNDER THE LIGHTS.
-	# OVERPOWER is only the accuracy needle, after that floor, and before rain and ball speed.
+	return _kick_omega()
+
+
+# One speed for the power sweep, the red band, and the accuracy sweep.
+# power_speed already has the slow floor, Stone Toe, and UNDER THE LIGHTS.
+# Rain and ball speed are last and are not floored. Nothing here changes after a lock.
+func _kick_omega() -> float:
 	var rain := rain_scale if rain_faster else 1.0
-	var boost := 1.0
-	if overpower_paid:
-		boost = 1.125 if stats.overpower_half else 1.25
-	var slow := stats.accuracy_speed / 120.0
-	return MeterGauge.omega_base() * slow * boost * rain * stats.ball_speed_mult
+	return MeterGauge.omega_base() * (stats.power_speed / 100.0) * rain * stats.ball_speed_mult
 
 
 # Seconds of power-phase sweep from the current needle to this power.
@@ -760,7 +757,7 @@ func _advance_flight(delta: float) -> void:
 # A press earlier on the arc locks the power the needle is on right now.
 # The live frame calls this with that frame's delta so the two events agree.
 func take_power_press(delta: float) -> void:
-	if phase != Phase.POWER or windup_left > 0.0000001 or overpower_hold > 0.0000001:
+	if phase != Phase.POWER or windup_left > 0.0000001:
 		return
 	var omega := _power_omega()
 	if omega <= 0.001:
@@ -796,46 +793,76 @@ func _lock_power(value: float) -> void:
 	var raw := clampf(value, 0.0, _band_end_power())
 	var band := _in_overpower(raw)
 	# Carlos's band lock is a clean P=100 with no OVERPOWER payoff.
-	overpower_paid = band and not stats.numero_dos
+	overpower_paid = band and not stats.numero_dos and not practice_swing
 	power = minf(raw, KickConstants.METER_MAX)
 	power_true = raw if band else power
 	fill_power = power_true
 	if overpower_paid:
-		overpower_hold = KickConstants.OVERPOWER_HOLD
-		return
+		_note_meter_popup("OVERPOWER")
 	_begin_accuracy()
 
 
 func _begin_accuracy() -> void:
 	overpower_hold = 0.0
 	phase = Phase.ACCURACY
-	# A lock still on the power arc keeps its angle and coasts to MAX.
-	# A lock inside the band starts the accuracy arc back at MAX after the label.
-	if needle_angle <= MeterGauge.MAX_ANGLE + 0.0001:
-		needle_angle = MeterGauge.MAX_ANGLE
-		needle = MeterGauge.ERROR_AT_MAX
-	fill_power = power
+	# The needle stays where the lock caught it and keeps sweeping.
+	# The orange fill, and the red fill on an OVERPOWER lock, stay at locked P.
+	fill_power = power_true if overpower_paid else power
+
+
+func accuracy_band_scale() -> float:
+	if practice_swing or not overpower_paid:
+		return 1.0
+	if stats.overpower_half:
+		return 0.875
+	return 0.75
+
+
+func shown_perfect_band() -> float:
+	return stats.perfect_band * accuracy_band_scale()
+
+
+func shown_good_band() -> float:
+	return stats.good_band * accuracy_band_scale()
+
+
+func _note_meter_popup(word: String) -> void:
+	meter_popup = word
+	meter_popup_age = 0.0
+
+
+func _tick_meter_popup(delta: float) -> void:
+	if meter_popup == "":
+		return
+	meter_popup_age += delta
+	if meter_popup_age >= 0.75:
+		meter_popup = ""
+		meter_popup_age = 0.0
 
 
 func _lock_accuracy(value: float) -> void:
 	# Numero Dos covers a 95–100 lock and an OVERPOWER band lock. A shank never gets here.
 	var numero := stats.numero_dos and (power + 0.0001 >= 95.0 or power_true > KickConstants.METER_MAX)
 	accuracy_error = 0.0 if numero else value
+	var perfect_width := shown_perfect_band()
+	var good_width := shown_good_band()
 	# Omega-3 reads the press, including red-tip noise, then can wipe the angle.
 	# perfect stays the original press so cash can still pay. The score bonus is suppressed later.
-	perfect = absf(accuracy_error) <= stats.perfect_band
+	perfect = absf(accuracy_error) <= perfect_width
 	if numero:
 		accuracy_error = 0.0
 		perfect = true
-	if stats.omega and absf(accuracy_error) <= stats.good_band:
+	if stats.omega and absf(accuracy_error) <= good_width:
 		accuracy_error = 0.0
 	# Good As Gold: the whole good band is a true perfect, including the cash.
-	if stats.good_as_gold and absf(accuracy_error) <= stats.good_band:
+	if stats.good_as_gold and absf(accuracy_error) <= good_width:
 		accuracy_error = 0.0
 		perfect = true
 	var per_unit := KickConstants.ACCURACY_DEG_PER_ERROR * angle_scale
 	var flight_error := accuracy_error
-	if not perfect and absf(accuracy_error) <= stats.good_band:
+	if perfect:
+		_note_meter_popup("PERFECT")
+	if not perfect and absf(accuracy_error) <= good_width:
 		flight_error *= stats.guide_factor
 	var hook := 0.0 if perfect else -flight_error * per_unit
 	final_angle_degrees = aim_degrees + hook
@@ -921,7 +948,7 @@ func carry_plan(ranged_power: float, angle_degrees: float) -> Dictionary:
 		travel += 4.0
 	if heavy_ball:
 		travel -= heavy_penalty(kick_distance)
-	if overpower_paid:
+	if overpower_paid and not practice_swing:
 		# P above 100 never enters the formula. +4 is not an item scale.
 		# Iron Grip yards keep the unscaled tip-lock table.
 		travel += KickConstants.OVERPOWER_YARDS + maxf(stats.tip_lock_yards, 0.0)

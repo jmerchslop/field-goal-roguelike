@@ -155,7 +155,7 @@ func _draw_meter(logic: KickLogic, run: RunLogic) -> void:
 	var inner := 308.0 * scale
 	var outer := 386.0 * scale
 	var stats: KickerStats = logic.stats
-	var layout := MeterGauge.accuracy_layout(stats.perfect_band, stats.good_band)
+	var layout := MeterGauge.accuracy_layout(logic.shown_perfect_band(), logic.shown_good_band())
 	var art := _meter_art()
 	if art != null:
 		draw_texture_rect(art, Rect2(origin, Vector2(gauge_w, gauge_h)), false)
@@ -175,10 +175,10 @@ func _draw_meter(logic: KickLogic, run: RunLogic) -> void:
 		_draw_annulus(hub, inner, outer, 180.0, MeterGauge.power_angle(orange_to), Color(1.0, 0.48, 0.05, 1.0))
 		if shown > KickConstants.METER_MAX + 0.05:
 			_draw_annulus(hub, inner, outer, MeterGauge.MAX_ANGLE, MeterGauge.power_angle_raw(shown), Color(0.95, 0.08, 0.05, 1.0))
-	if logic.overpower_paid and logic.overpower_hold > 0.0:
+	if logic.overpower_paid:
 		var flash := 0.35 + 0.25 * sin(float(Time.get_ticks_msec()) * 0.02)
 		_draw_annulus(hub, inner, outer, MeterGauge.MAX_ANGLE, band_end, Color(1.0, 0.05, 0.04, flash))
-		_pg_center("OVERPOWER", hub.y - outer - 28.0, 22, Color(1.0, 0.9, 0.82), "callout")
+	_draw_meter_popup(logic, hub, outer)
 	var label_r := (inner + outer) * 0.5
 	var good_high := (float(layout["band_top"]) + float(layout["perfect_top"])) * 0.5
 	var good_low := (float(layout["perfect_bottom"]) + float(layout["band_bottom"])) * 0.5
@@ -193,6 +193,27 @@ func _draw_meter(logic: KickLogic, run: RunLogic) -> void:
 		_draw_gauge_needle(hub, outer - 8.0 * scale, logic.needle_angle, fade)
 	draw_circle(hub, 16.0 * scale, Color(0.42, 0.4, 0.44, 1.0))
 	draw_circle(hub, 7.0 * scale, Color(0.72, 0.7, 0.68, 1.0))
+
+
+func _draw_meter_popup(logic: KickLogic, hub: Vector2, outer: float) -> void:
+	if logic.meter_popup == "":
+		return
+	var age := logic.meter_popup_age
+	var alpha := 1.0
+	var scale := 1.0
+	var rise := 0.0
+	if age < 0.15:
+		var intro := clampf(age / 0.15, 0.0, 1.0)
+		alpha = intro
+		scale = lerpf(0.72, 1.0, intro)
+	else:
+		var outro := clampf((age - 0.15) / 0.60, 0.0, 1.0)
+		alpha = 1.0 - outro
+		rise = outro * 34.0
+	var size := maxi(int(round(22.0 * scale)), 12)
+	var width := BitmapFonts.measure_px("callout", logic.meter_popup, size)
+	var at := Vector2(hub.x - float(width) * 0.5, hub.y - outer - 42.0 - rise)
+	BitmapFonts.paint_px(self, "callout", logic.meter_popup, at, size, Color(1.0, 0.9, 0.82, alpha))
 
 
 func _gauge_point(hub: Vector2, radius: float, degrees: float) -> Vector2:
@@ -893,7 +914,7 @@ func _draw_offer(run: RunLogic) -> void:
 		_text(rect.position + Vector2(96, 62), Loadout.card_title(id, rank), 18, KickConstants.COLOR_ATTEMPT)
 		_draw_wrapped(Loadout.effect_line(id, rank), Rect2(rect.position + Vector2(12, 112), Vector2(width - 24, 90)), 15)
 	if run.free_reroll_ready():
-		_text_centered("Free reroll. %s rerolls. %s skips." % [Settings.key_sentence("offer_reroll"), Settings.key_sentence("skip")], 640.0, 18, KickConstants.COLOR_TEXT)
+		_text_centered("Free rerolls %d. %s rerolls. %s skips." % [run.second_look_bank, Settings.key_sentence("offer_reroll"), Settings.key_sentence("skip")], 640.0, 18, KickConstants.COLOR_TEXT)
 	else:
 		_text_centered("Rerolls left: %d. %s rerolls. %s skips." % [run.rerolls_left, Settings.key_sentence("offer_reroll"), Settings.key_sentence("skip")], 640.0, 18, KickConstants.COLOR_TEXT)
 	_text_centered("Skip takes nothing.", 666.0, 16, KickConstants.COLOR_TEXT)
