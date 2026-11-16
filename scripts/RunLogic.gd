@@ -333,18 +333,22 @@ func too_weak_report(kick: KickLogic, blocked: bool = false) -> Dictionary:
 	var overpower := 0.0
 	if not practice and not numero:
 		overpower = KickConstants.OVERPOWER_YARDS + tip
-	var shake_count := _belt_count(Vitamins.PROTEIN)
-	var shakes := float(shake_count) * Loadout.scale_amount(6.0, item_effect_scale())
+	# Gear is whatever is already in stats: filled slots, including a second slot.
+	# A benched piece, a banked pass, and a curse that pays only after a make are not added.
+	var open_belt := belt_usable()
+	var shake_count := _belt_count(Vitamins.PROTEIN) if open_belt else 0
+	var shakes := belt_protein_yards()
 	var vitamin_d := 0.0
-	if kick != null and kick.snow_range and _belt_count(Vitamins.VITAMIN_D) > 0 and not vitamin_d_active():
+	if open_belt and kick != null and kick.snow_range and _belt_count(Vitamins.VITAMIN_D) > 0 and not vitamin_d_active():
 		vitamin_d = kick.snow_penalty
-	var retry_possible := attempts >= 2 or _vitamin_count(Vitamins.ELECTROLYTE) > 0 or _belt_count(Vitamins.ELECTROLYTE) > 0
+	var belt_electrolyte := open_belt and _belt_count(Vitamins.ELECTROLYTE) > 0
+	var retry_possible := attempts >= 2 or _vitamin_count(Vitamins.ELECTROLYTE) > 0 or belt_electrolyte
 	var walk_on := 0.0
 	if kicker_id == Kickers.WALK_ON and is_first_ball and not practice and retry_possible:
 		walk_on = 6.0
 	var best := base + overpower + shakes + vitamin_d + walk_on
 	var clearance := kick != null and kick.stats.clearance
-	var zinc_block := _belt_count(Vitamins.ZINC) > 0 and not zinc_used
+	var zinc_block := open_belt and _belt_count(Vitamins.ZINC) > 0 and not zinc_used
 	var at_tee := (
 		phase == Phase.PLAYING
 		and kick != null
@@ -380,6 +384,30 @@ func end_too_weak() -> void:
 	end_reason = "too_weak"
 	phase = Phase.GAME_OVER
 	_save_finished_run()
+
+
+# ALL NATURAL is not in this build. When that curse is owned, the belt cannot be used.
+const BELT_LOCK_CURSE := "all_natural"
+
+
+func belt_usable() -> bool:
+	return not has_curse(BELT_LOCK_CURSE)
+
+
+func _protein_range_bonus(count: int) -> float:
+	if count <= 0:
+		return 0.0
+	return Loadout.scale_amount(6.0 * float(count), item_effect_scale())
+
+
+func belt_protein_yards() -> float:
+	if not belt_usable():
+		return 0.0
+	var extra := _belt_count(Vitamins.PROTEIN)
+	if extra <= 0:
+		return 0.0
+	var already := _vitamin_count(Vitamins.PROTEIN)
+	return _protein_range_bonus(already + extra) - _protein_range_bonus(already)
 
 
 func _belt_count(id: String) -> int:
@@ -2332,7 +2360,7 @@ func _try_unlock(id: String) -> void:
 
 func _apply_ball_vitamins() -> void:
 	var scale := item_effect_scale()
-	stats.range_bonus += Loadout.scale_amount(6.0 * float(_vitamin_count(Vitamins.PROTEIN)), scale)
+	stats.range_bonus += _protein_range_bonus(_vitamin_count(Vitamins.PROTEIN))
 	var mag := _vitamin_count(Vitamins.MAGNESIUM)
 	if mag > 0:
 		var factor := pow(0.7, float(mag))

@@ -4014,6 +4014,26 @@ func _check_tw1() -> void:
 	var shaken := _tw1_kick(phil)
 	var one := Loadout.scale_amount(6.0, phil.item_effect_scale())
 	check(near(float(phil.too_weak_report(shaken)["shakes"]), one * 2.0) and near(float(phil.too_weak_report(shaken)["base"]), float(phil.too_weak_report(plain)["base"])), "each belt Protein Shake adds the scaled 6 and the HUD Max stays the drunk value")
+	phil.shop_stock = [Vitamins.PROTEIN, "", ""]
+	check(near(float(phil.too_weak_report(shaken)["shakes"]), one * 2.0), "a shake on the shop shelf is not on the belt")
+	phil.belt = [Vitamins.PROTEIN, Vitamins.ZINC]
+	var open_belt: Dictionary = phil.too_weak_report(shaken)
+	check(near(float(open_belt["shakes"]), one) and bool(open_belt["zinc_block"]), "an open belt still counts its shake and its Zinc")
+	phil.curse_ids.append(RunLogic.BELT_LOCK_CURSE)
+	var locked: Dictionary = phil.too_weak_report(shaken)
+	check(near(float(locked["shakes"]), 0.0) and not bool(locked["zinc_block"]), "All Natural makes the belt count for nothing")
+	var bare_gear := RunLogic.new()
+	bare_gear.start_with_kicker(Kickers.BIG_BRUCE)
+	var bare_kick := _tw1_kick(bare_gear)
+	var bare_base := float(bare_gear.too_weak_report(bare_kick)["base"])
+	bare_gear.cleats_id = Loadout.CANNON
+	bare_gear.cleats_rank = 1
+	var geared := _tw1_kick(bare_gear)
+	check(float(bare_gear.too_weak_report(geared)["base"]) > bare_base + 1.0, "equipped Cannon yards are in the HUD Max")
+	bare_gear.cleats2_id = Loadout.PINPOINT
+	bare_gear.cleats2_rank = 1
+	var second := _tw1_kick(bare_gear)
+	check(float(bare_gear.too_weak_report(second)["base"]) >= float(bare_gear.too_weak_report(geared)["base"]), "a filled second slot is part of the equipped gear")
 	var snow := RunLogic.new()
 	snow.start_with_kicker(Kickers.BIG_BRUCE)
 	snow.weather = RunLogic.SNOW
