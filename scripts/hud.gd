@@ -1312,10 +1312,11 @@ func _draw_loadout_rail(run: RunLogic) -> void:
 			"slot": str(entry["slot"]),
 			"name": str(entry["name"]),
 		})
-		_draw_slot_icon(str(entry["id"]), int(entry["rank"]), str(entry["slot"]), rect, true)
+		var emphasized := slot_is_emphasized(i, hover_slot, pinned_slot)
+		_draw_slot_icon(str(entry["id"]), int(entry["rank"]), str(entry["slot"]), rect, true, emphasized)
 
 
-func _draw_slot_icon(id: String, rank: int, slot: String, rect: Rect2, show_badge: bool) -> void:
+func _draw_slot_icon(id: String, rank: int, slot: String, rect: Rect2, show_badge: bool, emphasized: bool = false) -> void:
 	draw_rect(rect, Color(0.05, 0.08, 0.1, 0.9))
 	draw_rect(rect, _slot_color(slot), false, 2.0)
 	var path := Loadout.sprite_path(id) if id != "" else Loadout.empty_slot_path(slot)
@@ -1328,17 +1329,64 @@ func _draw_slot_icon(id: String, rank: int, slot: String, rect: Rect2, show_badg
 	elif slot == Loadout.PERK:
 		draw_rect(rect.grow(-8), Color(0.2, 0.24, 0.3, 0.9), false, 2.0)
 	var badge := Loadout.rank_badge(id, rank) if show_badge else ""
-	if badge != "":
-		var font := ThemeDB.fallback_font
-		var text_width := 18.0
-		if font != null:
-			text_width = font.get_string_size(badge, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
-		var box_w := maxf(28.0, text_width + 8.0)
-		var badge_box := Rect2(rect.position.x + rect.size.x - box_w, rect.position.y + rect.size.y - 20, box_w, 20)
-		draw_rect(badge_box, Color(0.95, 0.78, 0.16, 0.96))
-		if font != null:
-			var at := badge_box.position + Vector2((badge_box.size.x - text_width) * 0.5, 15)
-			draw_string(font, at, badge, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.12, 0.08, 0.02))
+	if badge == "":
+		return
+	var mode := "standard"
+	if game != null and game.run != null:
+		mode = game.run.run_mode
+	var is_max := rank == Loadout.max_rank(id, mode)
+	var size_class := "rail" if rect.size.x <= 56.0 else "card"
+	_draw_rank_chip(rect, badge, slot, is_max, emphasized, size_class)
+
+
+static func slot_is_emphasized(index: int, hover: int, pinned: int) -> bool:
+	var active := pinned if pinned >= 0 else hover
+	return index == active and active >= 0
+
+
+static func rank_chip_layout(rect: Rect2, label: String, size_class: String) -> Dictionary:
+	var rail := size_class != "card"
+	var inset := 2.0 if rail else 3.0
+	var pad_x := 2
+	var pad_y := 2
+	var font := 8 if rail else 10
+	var height_cap := 12 if rail else 15
+	var width_cap := floorf(rect.size.x * (0.65 if rail else 0.60) - inset)
+	while font > 5:
+		var text_w := BitmapFonts.measure_px("ui", label, font)
+		if float(text_w + pad_x * 2) <= width_cap:
+			break
+		font -= 1
+	var text_w := BitmapFonts.measure_px("ui", label, font)
+	var chip_w := float(mini(int(width_cap), text_w + pad_x * 2))
+	var chip_h := float(mini(height_cap, font + pad_y * 2))
+	var chip_x := floorf(rect.position.x + rect.size.x - inset - chip_w)
+	var chip_y := floorf(rect.position.y + rect.size.y - inset - chip_h)
+	return {
+		"rect": Rect2(chip_x, chip_y, chip_w, chip_h),
+		"font": font,
+		"text_w": text_w,
+	}
+
+
+static func rank_numeral_color(is_max: bool, emphasized: bool) -> Color:
+	var ink := Color(0.95, 0.78, 0.16) if is_max else KickConstants.COLOR_TEXT
+	ink.a = 1.0 if emphasized else 0.9
+	return ink
+
+
+func _draw_rank_chip(rect: Rect2, badge: String, slot: String, is_max: bool, emphasized: bool, size_class: String) -> void:
+	var layout: Dictionary = rank_chip_layout(rect, badge, size_class)
+	var chip: Rect2 = layout["rect"]
+	var font := int(layout["font"])
+	var backing := Color(0.03, 0.05, 0.07, 0.92 if emphasized else 0.65)
+	draw_rect(chip, backing)
+	var outline := _slot_color(slot)
+	outline.a = 0.8
+	draw_rect(chip, outline, false, 1.0)
+	var text_w := float(layout["text_w"])
+	var at := Vector2(chip.position.x + (chip.size.x - text_w) * 0.5, chip.position.y + (chip.size.y - float(font)) * 0.5)
+	BitmapFonts.paint_px(self, "ui", badge, at, font, rank_numeral_color(is_max, emphasized))
 
 
 func _draw_fit(texture: Texture2D, rect: Rect2) -> void:

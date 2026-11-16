@@ -61,6 +61,7 @@ func _run() -> void:
 	_check_as2()
 	_check_tw1()
 	_check_bl1()
+	_check_ui1()
 	_check_f3()
 	_check_au1()
 	_check_drive_lid_and_power_safety()
@@ -4204,6 +4205,49 @@ func _check_bl1_live() -> void:
 	game.load_current_kick()
 	check(not game._ball_doinked and not game._ball_held and not game.ball_tumble_live(), "the next kick starts the ball clean")
 	game.free()
+
+
+func _check_ui1() -> void:
+	var hud = load("res://scripts/hud.gd")
+	var rail := Rect2(200, 8, 48, 48)
+	var card := Rect2(40, 40, 72, 72)
+	var xviii_rail := 0.0
+	var xxiv_rail := 0.0
+	var xviii_card := 0.0
+	var xxiv_card := 0.0
+	for rank in range(1, 25):
+		var label := Loadout.rank_label(rank)
+		check(BitmapFonts.ui_allows(label), "rank %s stays in Pixel Gothic" % label)
+		for pair in [["rail", rail, 12.0, 0.35], ["card", card, 15.0, 0.40]]:
+			var kind := str(pair[0])
+			var slot: Rect2 = pair[1]
+			var layout: Dictionary = hud.rank_chip_layout(slot, label, kind)
+			var chip: Rect2 = layout["rect"]
+			var inside := chip.position.x >= slot.position.x - 0.01 and chip.position.y >= slot.position.y - 0.01 and chip.end.x <= slot.end.x + 0.01 and chip.end.y <= slot.end.y + 0.01
+			check(inside, "the %s chip for %s stays inside the slot" % [kind, label])
+			check(not chip.has_point(slot.get_center()), "the %s chip for %s stays off the icon center" % [kind, label])
+			check(chip.position.y + 0.01 >= slot.position.y + slot.size.y * 0.70, "the %s chip for %s stays in the bottom 30 percent" % [kind, label])
+			check(chip.position.x + 0.01 >= slot.position.x + slot.size.x * float(pair[3]), "the %s chip for %s stays in the right side" % [kind, label])
+			check(chip.size.y <= float(pair[2]) + 0.01, "the %s chip for %s is at most %s px tall" % [kind, label, pair[2]])
+			if label == "XVIII" and kind == "rail":
+				xviii_rail = chip.size.x
+			if label == "XXIV" and kind == "rail":
+				xxiv_rail = chip.size.x
+			if label == "XVIII" and kind == "card":
+				xviii_card = chip.size.x
+			if label == "XXIV" and kind == "card":
+				xxiv_card = chip.size.x
+	print("UI1 chip width rail XVIII ", xviii_rail, " XXIV ", xxiv_rail, " card XVIII ", xviii_card, " XXIV ", xxiv_card)
+	var gold: Color = hud.rank_numeral_color(true, false)
+	var plain: Color = hud.rank_numeral_color(false, false)
+	var loud: Color = hud.rank_numeral_color(true, true)
+	check(gold.b < 0.4 and plain.b > 0.8, "a max rank uses gold numerals and the others stay off-white")
+	check(is_equal_approx(plain.a, 0.9) and is_equal_approx(loud.a, 1.0), "hover numerals are full strength")
+	check(Loadout.rank_badge("", 1) == "" and Loadout.rank_badge(Loadout.STONE, 1) == "", "curses and empty slots have no chip")
+	check(Loadout.max_rank(Loadout.CANNON, "standard") == 6 and Loadout.max_rank(Loadout.CANNON, "endless") == 24, "equipment max is VI in Standard and XXIV in Endless")
+	check(Loadout.max_rank(Loadout.HOT_STREAK, "standard") == 3 and Loadout.max_rank(Loadout.HOT_STREAK, "endless") == 6, "perk max is III in Standard and VI in Endless")
+	check(hud.slot_is_emphasized(1, 1, -1) and not hud.slot_is_emphasized(0, 1, -1), "hover emphasizes only that slot")
+	check(hud.slot_is_emphasized(2, 1, 2) and not hud.slot_is_emphasized(1, 1, 2), "a pin wins over the hover")
 
 
 func _check_mf1() -> void:

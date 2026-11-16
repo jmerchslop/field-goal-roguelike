@@ -120,6 +120,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "ui1":
+		if not await _capture_ui1():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "bl1":
 		if not await _capture_bl1():
 			get_tree().quit(1)
@@ -1884,6 +1890,77 @@ func _capture_f3() -> bool:
 	for id in saved.keys():
 		SaveData.unlocks[id] = bool(saved[id])
 	SaveData.save_file()
+	return true
+
+
+func _capture_ui1() -> bool:
+	board.front.run_mode = "endless"
+	board.highlight = 1
+	board.confirm_kicker()
+	board.run.run_mode = "endless"
+	board.run.cleats_id = Loadout.CANNON
+	board.run.helmet_id = Loadout.TRUE_LID
+	board.run.perks = [{"id": Loadout.HOT_STREAK, "rank": 2}]
+	board.run.curse_ids = [Loadout.STONE]
+	var names := {1: "i", 4: "iv", 12: "xii", 18: "xviii", 24: "xxiv"}
+	for rank in [1, 4, 12, 18, 24]:
+		board.run.cleats_rank = rank
+		board.run.helmet_rank = 24 if rank == 18 else rank
+		board._sync_debug_loadout()
+		var file_name := "ui1_belt_%s.png" % str(names[rank])
+		if not await _capture(file_name):
+			return false
+	board.run.cleats_rank = 18
+	board.run.helmet_rank = 24
+	board._sync_debug_loadout()
+	if not await _capture_rail_closeup("ui1_belt_closeup.png"):
+		return false
+	board._hud.pinned_slot = 0
+	board.refresh_view()
+	if not await _capture("ui1_hover.png"):
+		return false
+	board._hud.pinned_slot = -1
+	board.run.run_mode = "standard"
+	board.run.cleats_rank = 6
+	board.run.helmet_id = ""
+	board.run.helmet_rank = 0
+	board.run.perks = [{"id": Loadout.HOT_STREAK, "rank": 3}]
+	board._sync_debug_loadout()
+	if not await _capture("ui1_standard_vi_max.png"):
+		return false
+	board.run.force_offer([
+		{"id": Loadout.TRUE_LID, "rank": 2, "kind": Loadout.EQUIPMENT, "slot": Loadout.HELMET},
+		{"id": Loadout.HOT_STREAK, "rank": 1},
+		{"id": Loadout.ICED, "rank": 1},
+	])
+	board.run.roll_offer()
+	if not await _capture("ui1_offer_card.png"):
+		return false
+	return true
+
+
+func _capture_rail_closeup(file_name: String) -> bool:
+	board.refresh_view()
+	await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+	var image: Image = board.get_viewport().get_texture().get_image()
+	var hits: Array = board._hud.slot_hits
+	if hits.size() < 2:
+		print("UI1 rail closeup missed the slots")
+		return false
+	var first: Rect2 = hits[0]["rect"]
+	var second: Rect2 = hits[1]["rect"]
+	var box := Rect2i(int(first.position.x) - 4, int(first.position.y) - 4, int(second.end.x - first.position.x) + 8, int(first.size.y) + 8)
+	box = box.intersection(Rect2i(0, 0, image.get_width(), image.get_height()))
+	if box.size.x < 8:
+		return false
+	var part := image.get_region(box)
+	part.resize(part.get_width() * 4, part.get_height() * 4, Image.INTERPOLATE_NEAREST)
+	var err: Error = part.save_png(shot_dir.path_join(file_name))
+	if err != OK:
+		print("FAILED to save ", file_name, " error ", err)
+		return false
+	print("Saved ", shot_dir.path_join(file_name), " ", part.get_width(), "x", part.get_height())
 	return true
 
 
