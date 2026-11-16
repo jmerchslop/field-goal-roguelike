@@ -492,10 +492,17 @@ func _draw_chips(run: RunLogic, y: float) -> void:
 		if id != "":
 			var icon := _icon(Vitamins.sprite_path(id))
 			var bottle := Rect2(chip.position + Vector2(22, 3), Vector2(18, 18))
+			var locked := not run.belt_usable()
+			var tint := Color(0.55, 0.56, 0.58, 0.85) if locked else Color.WHITE
 			if icon != null:
-				draw_texture_rect(icon, bottle, false)
+				draw_texture_rect(icon, bottle, false, tint)
 			else:
-				draw_rect(bottle, Vitamins.bottle_color(id))
+				var ink := Vitamins.bottle_color(id)
+				if locked:
+					ink = Color(0.35, 0.36, 0.38)
+				draw_rect(bottle, ink)
+			if locked:
+				draw_rect(chip, Color(0.12, 0.13, 0.14, 0.45))
 	var note := BroadcastHud.belt_note(run.vitamin_note)
 	if note != "":
 		_pg(note, Vector2(276, y + 5), 12, Color(1.0, 0.92, 0.45))
@@ -1712,10 +1719,9 @@ func _draw_shop(run: RunLogic) -> void:
 	_text(b12.position + Vector2(16, 64), "$%d" % run.item_price(Vitamins.B12), 20, b12_price)
 	_text(b12.position + Vector2(16, 96), run.vitamin_line(Vitamins.B12), 16, KickConstants.COLOR_TEXT)
 	_draw_bottle(Vitamins.B12, Rect2(b12.position + Vector2(158, 16), Vector2(78, 118)), false)
-	if run.shop_b12_bought:
-		_text(b12.position + Vector2(16, 126), "SOLD", 16, Color(0.8, 0.8, 0.8))
-	elif run.attempts >= run.attempt_cap:
-		_text(b12.position + Vector2(16, 126), "At cap", 16, Color(0.8, 0.8, 0.8))
+	var b12_reason := run.b12_reason()
+	if b12_reason != "":
+		_text(b12.position + Vector2(16, 126), b12_reason, 16, Color(0.8, 0.8, 0.8))
 	var reroll_color := Color(1.0, 0.3, 0.25) if run.shop_flash == "reroll" else KickConstants.COLOR_TEXT
 	_text(Vector2(36, 64), "Reroll (%s): $%d" % [Settings.key_sentence("shop_reroll"), run.shop_reroll_cost()], 16, reroll_color)
 	if run.shop_note != "":

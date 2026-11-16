@@ -63,6 +63,7 @@ func _run() -> void:
 	_check_bl1()
 	_check_ui1()
 	_check_pk2a()
+	_check_pk2b()
 	_check_f3()
 	_check_au1()
 	_check_drive_lid_and_power_safety()
@@ -86,6 +87,7 @@ func _finish_live() -> void:
 	_check_playing_card_live()
 	_check_as2_live()
 	_check_pk2a_live()
+	_check_pk2b_live()
 	_check_tw1_live()
 	_check_bl1_live()
 	_check_floodlights_live()
@@ -8015,5 +8017,262 @@ func _check_pk2a_live() -> void:
 	check(game.run.vitamin_note == "Refused" and game.run._perk_rank(Loadout.HYPE_MAN) == 0, "a refused V shows on the debug note")
 	var source := FileAccess.get_file_as_string("res://scripts/main.gd")
 	check(source.find("key.keycode == KEY_V") >= 0 and source.find("key.keycode == KEY_H") >= 0 and source.find("key.keycode == KEY_Y") >= 0 and source.find("key.keycode == KEY_B") >= 0, "V is added and the reserved keys stay")
+	game.free()
+
+
+func _check_pk2b() -> void:
+	check(Loadout.CURSE_IDS.has(Loadout.SUDDEN_DEATH) and Loadout.CURSE_IDS.has(Loadout.NO_HUDDLE) and Loadout.CURSE_IDS.has(Loadout.ALL_NATURAL) and Loadout.CURSE_IDS.has(Loadout.TRAINING_CAMP), "the four curses are in the pool")
+	check(Loadout.effect_line(Loadout.SUDDEN_DEATH, 1) == "Down: 1 attempt for the run. Up: score Mult ×5.", "Sudden Death uses the down up card")
+	check(Loadout.effect_line(Loadout.NO_HUDDLE, 1) == "Down: 5 second kick clock every kick. Up: +12 yd.", "No Huddle names the 5 second clock and +12")
+	check(Loadout.effect_line(Loadout.ALL_NATURAL, 1) == "Down: no vitamins or B12 for the run. Up: needles ×0.70.", "All Natural names the vitamin lock and ×0.70")
+	check(Loadout.sprite_path(Loadout.SUDDEN_DEATH) == "" and Loadout.sprite_path(Loadout.TRAINING_CAMP) == "", "the new curses have no new icon")
+	var death := RunLogic.new()
+	death.start_with_kicker(Kickers.WALK_ON)
+	death.give(Loadout.DEEP_BENCH, 2)
+	death.attempts = death.attempt_cap
+	death.bench_extra_cap = 2
+	death.give(Loadout.SUDDEN_DEATH)
+	check(death.attempt_cap == 1 and death.attempts == 1, "Sudden Death forces cap 1 and attempts 1 over Deep Bench and the bank")
+	death.kick_resolved = false
+	death.resolve_kick("GOOD", 2.0, false)
+	check(death.attempts == 1 and death.attempt_note == RunLogic.NOTE_CAP, "the first-try bonus cannot raise Sudden Death")
+	check(death.score_line.find("× 5") >= 0 and death.last_points == RunLogic.points_for(death.distance_yards(), 5.0, false, false, false), "the score line and the points apply ×5 last, got %s" % death.score_line)
+	var hero_line := RunLogic.format_score_line(35.0, 1.0, true, false, false, 0.0, 1.0, 0.0, 0.0, 0.0, 5.0)
+	check(hero_line == "35 yd × (1.00 + 1.00 hero) × 5 × 2 = 700", "×5 sits after the Mult sum and before the middle double, got %s" % hero_line)
+	var missed := RunLogic.new()
+	missed.start_with_kicker(Kickers.WALK_ON)
+	missed.give(Loadout.SUDDEN_DEATH)
+	missed.kick_resolved = false
+	missed.resolve_kick("SHORT", 0.0, false)
+	check(missed.attempts == 0 and missed.phase == RunLogic.Phase.GAME_OVER, "a Sudden Death miss ends the run")
+	var saved_try := RunLogic.new()
+	saved_try.start_with_kicker(Kickers.WALK_ON)
+	saved_try.give(Loadout.SUDDEN_DEATH)
+	saved_try.active_vitamins[Vitamins.ELECTROLYTE] = 1
+	saved_try.kick_resolved = false
+	saved_try.resolve_kick("SHORT", 0.0, false)
+	check(saved_try.attempts == 1 and saved_try.phase == RunLogic.Phase.PLAYING, "Electrolyte still saves the Sudden Death attempt")
+	saved_try.awaiting_shop = true
+	saved_try.cash = 40
+	check(saved_try.b12_grey() and saved_try.b12_reason() == "Sudden Death" and not saved_try.buy_b12(), "B12 is greyed because of Sudden Death")
+	var blocked := RunLogic.new()
+	blocked.start_with_kicker(Kickers.WALK_ON)
+	blocked.give(Loadout.DEEP_BENCH, 1)
+	var blocked_curses: Array = Loadout.legal_curses(blocked.loadout_state())
+	var saw_death := false
+	for card in blocked_curses:
+		if str(card.get("id", "")) == Loadout.SUDDEN_DEATH:
+			saw_death = true
+	check(not saw_death, "Sudden Death is not offered while Deep Bench is owned")
+	var blocked_perk := RunLogic.new()
+	blocked_perk.start_with_kicker(Kickers.WALK_ON)
+	blocked_perk.give(Loadout.SUDDEN_DEATH)
+	var saw_bench := false
+	for card in Loadout.legal_perks(blocked_perk.loadout_state(), blocked_perk.attempt_cap):
+		if str(card.get("id", "")) == Loadout.DEEP_BENCH:
+			saw_bench = true
+	check(not saw_bench, "Deep Bench is not offered while Sudden Death is owned")
+	var quiet := RunLogic.new()
+	quiet.start_with_kicker(Kickers.WALK_ON)
+	check(is_equal_approx(quiet.clock_seconds(), 0.0), "a normal kick has no clock")
+	quiet.give(Loadout.NO_HUDDLE)
+	check(is_equal_approx(quiet.clock_seconds(), 5.0), "No Huddle is a 5.0 second clock")
+	quiet.weather = RunLogic.CLOCK
+	check(is_equal_approx(quiet.clock_seconds(), 4.0), "KICK CLOCK stays 4.0 and does not stack with No Huddle")
+	var yards := RunLogic.new()
+	yards.start_with_kicker(Kickers.WALK_ON)
+	yards.give(Loadout.HOWLING)
+	var yards_before := yards.stats.range_bonus
+	yards.give(Loadout.NO_HUDDLE)
+	yards.prepare_kick_stats()
+	check(near(yards.stats.range_bonus - yards_before, 12.0), "No Huddle's +12 is not scaled by Howling")
+	var phil := RunLogic.new()
+	phil.start_with_kicker(Kickers.PHIL)
+	var phil_before := phil.stats.range_bonus
+	phil.give(Loadout.NO_HUDDLE)
+	phil.prepare_kick_stats()
+	check(near(phil.stats.range_bonus - phil_before, Loadout.scale_amount(12.0, phil.item_effect_scale())), "Phil scales the No Huddle yards")
+	var natural := RunLogic.new()
+	natural.start_with_kicker(Kickers.WALK_ON)
+	natural.kick_number = 5
+	natural.last_result_made = true
+	natural.give(Loadout.ALL_NATURAL)
+	check(natural.follow_offer() == "next" and not natural.awaiting_shop, "All Natural skips the Vitamin Shop")
+	natural.belt = [Vitamins.PROTEIN, Vitamins.TART]
+	check(not natural.use_belt(0) and str(natural.belt[0]) == Vitamins.PROTEIN and natural.vitamin_note == "All natural", "the belt refuses and says All natural")
+	check(not natural.use_belt(1) and natural.curse_ids.has(Loadout.ALL_NATURAL) and str(natural.belt[1]) == Vitamins.TART, "Tart Cherry cannot remove All Natural")
+	natural.awaiting_shop = true
+	natural.cash = 40
+	check(not natural.buy_b12() and natural.b12_reason() == "All natural", "All Natural blocks B12")
+	var bare_speed := RunLogic.new()
+	bare_speed.start_with_kicker(Kickers.WALK_ON)
+	bare_speed.prepare_kick_stats()
+	var slow := RunLogic.new()
+	slow.start_with_kicker(Kickers.WALK_ON)
+	slow.give(Loadout.ALL_NATURAL)
+	slow.prepare_kick_stats()
+	check(near(slow.stats.power_speed, bare_speed.stats.power_speed * 0.70), "All Natural is a ×0.70 pre-floor slow")
+	var anchor := RunLogic.new()
+	anchor.start_with_kicker(Kickers.WALK_ON)
+	anchor.run_mode = "endless"
+	anchor.give(Loadout.ANCHOR, 12)
+	anchor.prepare_kick_stats()
+	var floored := RunLogic.new()
+	floored.start_with_kicker(Kickers.WALK_ON)
+	floored.run_mode = "endless"
+	floored.give(Loadout.ANCHOR, 12)
+	floored.give(Loadout.ALL_NATURAL)
+	floored.prepare_kick_stats()
+	var floor_speed := KickConstants.POWER_RISE_PER_SEC * MeterGauge.NEEDLE_SLOW_FLOOR
+	check(anchor.stats.power_speed > floor_speed and near(floored.stats.power_speed, floor_speed), "All Natural joins the slow stack and still hits the 0.35 floor")
+	var big := RunLogic.new()
+	big.start_with_kicker(Kickers.WALK_ON)
+	big.give(Loadout.ALL_NATURAL)
+	big.force_weather(RunLogic.BIG_GAME)
+	big.prepare_kick_stats()
+	var big_bare := RunLogic.new()
+	big_bare.start_with_kicker(Kickers.WALK_ON)
+	big_bare.force_weather(RunLogic.BIG_GAME)
+	big_bare.prepare_kick_stats()
+	check(near(big.stats.power_speed, big_bare.stats.power_speed), "Big Game strips the All Natural slow")
+	var doctor := RunLogic.new()
+	doctor.start_with_kicker(Kickers.WALK_ON)
+	doctor.give(Loadout.TEAM_DOCTOR, 1)
+	var saw_natural := false
+	for card in Loadout.legal_curses(doctor.loadout_state()):
+		if str(card.get("id", "")) == Loadout.ALL_NATURAL:
+			saw_natural = true
+	check(not saw_natural, "All Natural is not offered while Team Doctor is owned")
+	var clean := RunLogic.new()
+	clean.start_with_kicker(Kickers.WALK_ON)
+	clean.give(Loadout.ALL_NATURAL)
+	var saw_doctor := false
+	for card in Loadout.legal_perks(clean.loadout_state(), clean.attempt_cap):
+		if str(card.get("id", "")) == Loadout.TEAM_DOCTOR:
+			saw_doctor = true
+	check(not saw_doctor, "Team Doctor is not offered while All Natural is owned")
+	var camp := RunLogic.new()
+	camp.start_with_kicker(Kickers.WALK_ON)
+	camp.kick_resolved = false
+	camp.resolve_kick("GOOD", 0.0, false)
+	camp.give(Loadout.TRAINING_CAMP)
+	check(camp.camp_makes == 0, "the make that opened the offer does not count")
+	var camp_base := RunLogic.new()
+	camp_base.start_with_kicker(Kickers.WALK_ON)
+	camp_base.prepare_kick_stats()
+	camp.prepare_kick_stats()
+	check(near(camp.stats.power_speed, camp_base.stats.power_speed * 1.30) and near(camp.stats.range_bonus, camp_base.stats.range_bonus), "Training Camp is ×1.30 and has no yards yet")
+	camp.is_first_ball = false
+	camp.kick_resolved = false
+	camp.resolve_kick("GOOD", 0.0, false)
+	check(camp.camp_makes == 1, "a retry make counts")
+	camp.kick_number = 10
+	camp.kick_resolved = false
+	camp.resolve_kick("GOOD", 0.0, false)
+	check(camp.camp_makes == 2, "a boss make counts")
+	camp.kick_resolved = false
+	camp.resolve_kick("GOOD", 0.0, false)
+	check(camp.camp_makes == 3, "the third make finishes camp")
+	camp.is_first_ball = true
+	camp.prepare_kick_stats()
+	check(near(camp.stats.power_speed, camp_base.stats.power_speed) and near(camp.stats.range_bonus, camp_base.stats.range_bonus + 10.0), "after 3 makes the speed-up is gone and +10 is on")
+	check(camp.lived_effect_line(Loadout.TRAINING_CAMP, 1) == "Training done. +10 yd", "the card says training is done")
+	var mid := RunLogic.new()
+	mid.start_with_kicker(Kickers.WALK_ON)
+	mid.give(Loadout.TRAINING_CAMP)
+	mid.camp_makes = 1
+	check(mid.lived_effect_line(Loadout.TRAINING_CAMP, 1).find("Makes 1 of 3.") >= 0, "the tooltip shows the live count")
+	var stacked := RunLogic.new()
+	stacked.start_with_kicker(Kickers.WALK_ON)
+	stacked.run_mode = "endless"
+	stacked.give(Loadout.ANCHOR, 12)
+	stacked.give(Loadout.ALL_NATURAL)
+	stacked.give(Loadout.TRAINING_CAMP)
+	stacked.prepare_kick_stats()
+	check(near(stacked.stats.power_speed, floor_speed * 1.30), "Training Camp still multiplies after the floor")
+	var parked := RunLogic.new()
+	parked.start_with_kicker(Kickers.WALK_ON)
+	parked.give(Loadout.TRAINING_CAMP)
+	parked.camp_makes = 2
+	var saved: Dictionary = parked.export_resume()
+	var loaded := RunLogic.new()
+	loaded.import_resume(saved)
+	loaded.prepare_kick_stats()
+	check(loaded.camp_makes == 2 and loaded.curse_ids.has(Loadout.TRAINING_CAMP) and near(loaded.stats.power_speed, camp_base.stats.power_speed * 1.30), "camp progress survives a save")
+	loaded.belt = [Vitamins.TART, ""]
+	check(loaded.use_belt(0) and not loaded.curse_ids.has(Loadout.TRAINING_CAMP) and loaded.camp_makes == 0, "Tart Cherry removes Training Camp")
+	loaded.prepare_kick_stats()
+	check(near(loaded.stats.power_speed, camp_base.stats.power_speed) and near(loaded.stats.range_bonus, camp_base.stats.range_bonus), "removing Training Camp removes the speed and the yards")
+	var cycle := RunLogic.new()
+	cycle.start_with_kicker(Kickers.WALK_ON)
+	check(RunLogic.PK2_CYCLE.size() == 7, "V cycles all seven PK2 items")
+	check(cycle.debug_pk2(false) == "" and cycle._perk_rank(Loadout.HYPE_MAN) == 1, "V still starts at Hype Man")
+	check(cycle.debug_pk2(false) == "" and cycle._perk_rank(Loadout.GEAR_MANAGER) == 1, "V still grants Gear Manager second")
+	check(cycle.debug_pk2(false) == "Refused", "the third V still refuses a third perk")
+	check(cycle.debug_pk2(false) == "" and cycle.curse_ids.has(Loadout.SUDDEN_DEATH), "the fourth V grants Sudden Death")
+	check(cycle.debug_pk2(false) == "" and cycle.curse_ids.has(Loadout.NO_HUDDLE), "the fifth V grants No Huddle")
+	check(cycle.debug_pk2(false) == "Refused" and not cycle.curse_ids.has(Loadout.ALL_NATURAL), "a third curse is refused")
+	check(cycle.debug_pk2(true) == "" and not cycle.curse_ids.has(Loadout.NO_HUDDLE) and cycle.curse_ids.has(Loadout.SUDDEN_DEATH), "Shift+V removes the last curse")
+	var weak := RunLogic.new()
+	weak.start_with_kicker(Kickers.WALK_ON)
+	weak.attempts = 3
+	weak.give(Loadout.SUDDEN_DEATH)
+	var weak_kick := _tw1_kick(weak)
+	check(near(float(weak.too_weak_report(weak_kick)["walk_on"]), 0.0), "Sudden Death does not count a Walk-On retry without Electrolyte")
+	weak.belt = [Vitamins.ELECTROLYTE, ""]
+	var belt_kick := _tw1_kick(weak)
+	check(near(float(weak.too_weak_report(belt_kick)["walk_on"]), 6.0), "a usable Electrolyte still counts the Walk-On retry")
+	var locked := RunLogic.new()
+	locked.start_with_kicker(Kickers.WALK_ON)
+	locked.give(Loadout.ALL_NATURAL)
+	locked.belt = [Vitamins.PROTEIN, Vitamins.ZINC]
+	var locked_kick := _tw1_kick(locked)
+	locked_kick.kick_distance = 200.0
+	var locked_report: Dictionary = locked.too_weak_report(locked_kick)
+	check(near(float(locked_report["shakes"]), 0.0) and not bool(locked_report["zinc_block"]) and near(float(locked_report["walk_on"]), 0.0), "All Natural makes the belt count for nothing")
+	var early := RunLogic.new()
+	early.start_with_kicker(Kickers.WALK_ON)
+	early.give(Loadout.TRAINING_CAMP)
+	early.camp_makes = 1
+	var early_kick := _tw1_kick(early)
+	var done := RunLogic.new()
+	done.start_with_kicker(Kickers.WALK_ON)
+	done.give(Loadout.TRAINING_CAMP)
+	done.camp_makes = 3
+	var done_kick := _tw1_kick(done)
+	check(near(float(early.too_weak_report(early_kick)["base"]), float(camp_base.too_weak_report(_tw1_kick(camp_base))["base"])), "Training Camp's +10 does not count early")
+	check(near(float(done.too_weak_report(done_kick)["base"]), float(early.too_weak_report(early_kick)["base"]) + 10.0), "the earned +10 is in the TOO WEAK base")
+	print("PK2B sudden points ", death.last_points, " clock ", quiet.clock_seconds(), " natural ", slow.stats.power_speed, " floor ", floored.stats.power_speed, " camp ", stacked.stats.power_speed, " yards ", yards.stats.range_bonus - yards_before)
+
+
+func _check_pk2b_live() -> void:
+	OS.set_environment("FG_SHOTS", "")
+	var packed: PackedScene = load("res://scenes/main.tscn")
+	var game = packed.instantiate()
+	get_root().add_child(game)
+	game._taking_pictures = true
+	game.highlight = 1
+	game.confirm_kicker()
+	game.run.give(Loadout.NO_HUDDLE)
+	game._arm_boss_twist()
+	check(game.clock_digit() == 5, "No Huddle shows a 5 second clock")
+	game.paused = true
+	game.tick_kick_clock(2.0)
+	check(is_equal_approx(game._twist_time, 0.0), "pause holds the No Huddle clock")
+	game.paused = false
+	game.too_weak_age = 1.0
+	game.tick_kick_clock(2.0)
+	check(is_equal_approx(game._twist_time, 0.0), "TOO WEAK holds the No Huddle clock")
+	game.too_weak_age = -1.0
+	game.run.practicing = true
+	check(game.clock_digit() == 0, "Practice Swing has no clock")
+	game.run.practicing = false
+	game.run.force_weather(RunLogic.CLOCK)
+	game._arm_boss_twist()
+	check(game.clock_digit() == 4, "the boss clock is one 4 second countdown")
+	game.run.weather = RunLogic.CLEAR
+	game._arm_boss_twist()
+	game.tick_kick_clock(5.0)
+	check(game.logic.phase != KickLogic.Phase.AIMING, "the No Huddle clock auto-starts the meter")
 	game.free()
 

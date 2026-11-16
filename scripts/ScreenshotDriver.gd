@@ -132,6 +132,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "pk2b":
+		if not await _capture_pk2b():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "bl1":
 		if not await _capture_bl1():
 			get_tree().quit(1)
@@ -1896,6 +1902,91 @@ func _capture_f3() -> bool:
 	for id in saved.keys():
 		SaveData.unlocks[id] = bool(saved[id])
 	SaveData.save_file()
+	return true
+
+
+func _capture_pk2b() -> bool:
+	board.highlight = 1
+	board.confirm_kicker()
+	board._taking_pictures = true
+	board.run.force_offer([
+		{"id": Loadout.SUDDEN_DEATH, "rank": 1, "kind": Loadout.CURSE, "slot": Loadout.CURSE},
+		{"id": Loadout.HOT_STREAK, "rank": 1, "kind": Loadout.PERK, "slot": Loadout.PERK},
+		{"id": Loadout.CANNON, "rank": 1, "kind": Loadout.EQUIPMENT, "slot": Loadout.CLEATS},
+	])
+	board.run.roll_offer()
+	if not await _capture("pk2b_offer_curse.png"):
+		return false
+	board.run.skip_offer()
+	board.run.attempts = 3
+	board.run.attempt_cap = 3
+	board.run.give(Loadout.SUDDEN_DEATH)
+	board.run.kick_resolved = false
+	board.run.resolve_kick("GOOD", 2.0, false)
+	board.logic.phase = KickLogic.Phase.RESULT
+	board.logic.result_text = "GOOD"
+	board.logic.offset_yards = 2.0
+	board.logic.perfect = false
+	board.logic.shanked = false
+	board.logic.power = 80.0
+	board.result_age = 0.5
+	board.run.awaiting_offer = false
+	if board.run.attempts != 1 or board.run.attempt_cap != 1 or board.run.score_line.find("× 5") < 0:
+		print("pk2b sudden ", board.run.attempts, " ", board.run.attempt_cap, " ", board.run.score_line)
+		return false
+	if not await _capture("pk2b_sudden_death_hud.png"):
+		return false
+	board.logic.phase = KickLogic.Phase.AIMING
+	board.logic.reset_kick()
+	board.run.curse_ids = [Loadout.NO_HUDDLE]
+	board.run.weather = RunLogic.CLEAR
+	board.run.rebuild_stats()
+	board.load_current_kick()
+	board._arm_boss_twist()
+	if board.clock_digit() != 5:
+		print("pk2b clock ", board.clock_digit())
+		return false
+	if not await _capture("pk2b_no_huddle_clock.png"):
+		return false
+	board.run.force_weather(RunLogic.CLOCK)
+	board._arm_boss_twist()
+	if board.clock_digit() != 4:
+		print("pk2b boss clock ", board.clock_digit(), " ", board.run.clock_seconds())
+		return false
+	if not await _capture("pk2b_no_huddle_boss.png"):
+		return false
+	board.logic.phase = KickLogic.Phase.AIMING
+	board.run.weather = RunLogic.CLEAR
+	board.run.curse_ids = [Loadout.ALL_NATURAL]
+	board.run.rebuild_stats()
+	board.run.belt = [Vitamins.PROTEIN, ""]
+	board.run.use_belt(0)
+	board._arm_boss_twist()
+	if board.run.vitamin_note != "All natural" or str(board.run.belt[0]) != Vitamins.PROTEIN:
+		print("pk2b belt ", board.run.vitamin_note, " ", board.run.belt)
+		return false
+	if not await _capture("pk2b_all_natural_belt.png"):
+		return false
+	board.run.vitamin_note = ""
+	board.run.curse_ids = [Loadout.TRAINING_CAMP]
+	board.run.camp_makes = 1
+	board.run.rebuild_stats()
+	board._hud.pinned_slot = 5
+	board.refresh_view()
+	if board.run.lived_effect_line(Loadout.TRAINING_CAMP, 1).find("Makes 1 of 3.") < 0:
+		print("pk2b camp ", board.run.lived_effect_line(Loadout.TRAINING_CAMP, 1))
+		return false
+	if not await _capture("pk2b_camp_active.png"):
+		return false
+	board.run.camp_makes = 3
+	board.run.rebuild_stats()
+	board.load_current_kick()
+	board._hud.pinned_slot = 5
+	if board.run.lived_effect_line(Loadout.TRAINING_CAMP, 1) != "Training done. +10 yd":
+		print("pk2b done ", board.run.lived_effect_line(Loadout.TRAINING_CAMP, 1))
+		return false
+	if not await _capture("pk2b_camp_done.png"):
+		return false
 	return true
 
 

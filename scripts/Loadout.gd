@@ -49,6 +49,10 @@ const SHAKY := "shaky_arrow"
 const NARROW := "narrow_posts"
 const STONE := "stone_toe"
 const TIGHT := "tight_window"
+const SUDDEN_DEATH := "sudden_death"
+const NO_HUDDLE := "no_huddle"
+const ALL_NATURAL := "all_natural"
+const TRAINING_CAMP := "training_camp"
 
 const CLEAT_IDS: Array = [CANNON, PINPOINT, ANCHOR, STICKER]
 const HELMET_IDS: Array = [WIND_VISOR, ICE_CAGE, SCOUT_LID, DOINK_CAP, DRIVE_LID, TRUE_LID, SHELTER_LID]
@@ -56,7 +60,7 @@ const HELMET_IDS: Array = [WIND_VISOR, ICE_CAGE, SCOUT_LID, DOINK_CAP, DRIVE_LID
 const POWER_IDS: Array = [CANNON, DRIVE_LID, HIGH_AIR, GLASS_LEG, STONE, SHAKY]
 const GLOVE_IDS: Array = [IRON_GRIP, REPLAY_GLOVES, HIGH_AIR, WEATHER_WRAPS, GUIDE_GLOVES, PATIENT_GLOVES, HUSH_GLOVES]
 const PERK_IDS: Array = [DEEP_BENCH, HOT_STREAK, STORM_CHASER, HERO_BALL, GLASS_LEG, TWO_MINUTE, RAIN_DANCE, SECOND_LOOK, CHAIN_GANG, HYPE_MAN, GEAR_MANAGER, TEAM_DOCTOR]
-const CURSE_IDS: Array = [ICED, SHANKY, HEAVY, HOWLING, SHAKY, NARROW, STONE, TIGHT]
+const CURSE_IDS: Array = [ICED, SHANKY, HEAVY, HOWLING, SHAKY, NARROW, STONE, TIGHT, SUDDEN_DEATH, NO_HUDDLE, ALL_NATURAL, TRAINING_CAMP]
 
 const _ROMAN: Array = [
 	"", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII",
@@ -431,6 +435,14 @@ static func piece_name(id: String) -> String:
 			return "Stone Toe"
 		TIGHT:
 			return "Tight Window"
+		SUDDEN_DEATH:
+			return "Sudden Death"
+		NO_HUDDLE:
+			return "No Huddle"
+		ALL_NATURAL:
+			return "All Natural"
+		TRAINING_CAMP:
+			return "Training Camp"
 	return id
 
 
@@ -608,6 +620,14 @@ static func effect_line(id: String, rank: int) -> String:
 			return "Down: both needles ×1.20. Up: +10 yd"
 		TIGHT:
 			return "Down: Perfect and Good -2. Up: +1.0 Mult"
+		SUDDEN_DEATH:
+			return "Down: 1 attempt for the run. Up: score Mult ×5."
+		NO_HUDDLE:
+			return "Down: 5 second kick clock every kick. Up: +12 yd."
+		ALL_NATURAL:
+			return "Down: no vitamins or B12 for the run. Up: needles ×0.70."
+		TRAINING_CAMP:
+			return "Down: needles ×1.30 for your next 3 makes. Up: then +10 yd for the run."
 	return ""
 
 
@@ -755,6 +775,13 @@ static func lived_line(id: String, rank: int, state: Dictionary) -> String:
 		if _perk_rank(state, GEAR_MANAGER) > 0:
 			line += " Passes left %d" % int(state.get("gm_passes", 0))
 		return line
+	if id == TRAINING_CAMP:
+		var curses: Array = state.get("curses", [])
+		if curses.has(TRAINING_CAMP):
+			var makes := int(state.get("camp_makes", 0))
+			if makes >= 3:
+				return "Training done. +10 yd"
+			return "%s Makes %d of 3." % [effect_line(id, rank), makes]
 	if id == TEAM_DOCTOR and hype > 1.0001:
 		return _doctor_card(doctor_factor(state))
 	if hype <= 1.0001:
@@ -872,6 +899,11 @@ static func legal_perks(state: Dictionary, attempt_cap: int) -> Array:
 		if id == GLASS_LEG and attempt_cap <= 2 and _perk_rank(state, str(id)) == 0:
 			continue
 		var have := _perk_rank(state, str(id))
+		var curses: Array = state.get("curses", [])
+		if id == DEEP_BENCH and curses.has(SUDDEN_DEATH):
+			continue
+		if id == TEAM_DOCTOR and curses.has(ALL_NATURAL):
+			continue
 		if have == 0:
 			if owned.size() < 2:
 				cards.append(_card(PERK, PERK, str(id), 1))
@@ -892,6 +924,10 @@ static func legal_curses(state: Dictionary) -> Array:
 		if owned.has(id) or banned.has(id):
 			continue
 		if id == ICED and blocked_ice:
+			continue
+		if id == SUDDEN_DEATH and _perk_rank(state, DEEP_BENCH) > 0:
+			continue
+		if id == ALL_NATURAL and _perk_rank(state, TEAM_DOCTOR) > 0:
 			continue
 		cards.append(_card(CURSE, CURSE, str(id), 1))
 	return cards
@@ -1383,6 +1419,12 @@ static func apply(stats: KickerStats, state: Dictionary, howling: bool, item_sca
 	if curses.has(TIGHT):
 		curse_mult += 1.0
 		stats.tight_window = true
+	if curses.has(NO_HUDDLE):
+		curse_range += 12.0
+	if curses.has(TRAINING_CAMP) and int(state.get("camp_makes", 0)) >= 3:
+		curse_range += 10.0
+	if curses.has(ALL_NATURAL):
+		needle_mul *= 0.70
 	curse_range = scale_amount(curse_range, item_scale)
 	curse_mult = scale_amount(curse_mult, item_scale)
 	stats.range_bonus += range_add + curse_range

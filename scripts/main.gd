@@ -1276,7 +1276,7 @@ func _arm_boss_twist() -> void:
 	_twist_time = 0.0
 	_clock_done = false
 	_posts_judged = false
-	var clock := run.weather == RunLogic.CLOCK and not run.practicing
+	var clock := run.clock_seconds() > 0.0 and not run.practicing
 	# Practice used to hold the posts still. TAD 10 keeps the sine through that swing.
 	var moving := run.posts_move() and (not run.practicing or run.tad_active(10))
 	_twist_armed = (clock or moving) and logic.phase == KickLogic.Phase.AIMING
@@ -1286,26 +1286,29 @@ func _arm_boss_twist() -> void:
 func clock_digit() -> int:
 	if too_weak_age >= 0.0:
 		return 0
-	if run.weather != RunLogic.CLOCK or run.practicing or not _twist_armed or _clock_done:
+	var seconds := run.clock_seconds()
+	if seconds <= 0.0 or run.practicing or not _twist_armed or _clock_done:
 		return 0
 	if logic.phase != KickLogic.Phase.AIMING:
 		return 0
-	var left := RunLogic.CLOCK_SEC - _twist_time
+	var left := seconds - _twist_time
 	if left <= 0.001:
 		return 0
 	return ceili(left)
 
 
 func tick_kick_clock(delta: float) -> void:
+	# TOO WEAK holds whichever clock is up, Kick Clock or No Huddle.
 	if too_weak_age >= 0.0:
 		return
 	if _twist_blocked() or run.practicing or not _twist_armed or _clock_done:
 		return
-	if run.weather != RunLogic.CLOCK or logic.phase != KickLogic.Phase.AIMING:
+	var seconds := run.clock_seconds()
+	if seconds <= 0.0 or logic.phase != KickLogic.Phase.AIMING:
 		return
-	var remain := RunLogic.CLOCK_SEC - _twist_time
+	var remain := seconds - _twist_time
 	if delta + 0.0000001 >= remain:
-		_twist_time = RunLogic.CLOCK_SEC
+		_twist_time = seconds
 		_clock_done = true
 		_confirm_kick()
 		return

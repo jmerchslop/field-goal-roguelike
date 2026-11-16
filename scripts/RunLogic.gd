@@ -22,6 +22,7 @@ const LIGHTS := "UNDER THE LIGHTS"
 const CLOCK := "KICK CLOCK"
 const MOVING := "MOVING POSTS"
 const CLOCK_SEC := 4.0
+const NO_HUDDLE_SEC := 5.0
 const POST_SWING := 3.0
 const POST_PERIOD := 4.0
 const TAD_MAX := 10
@@ -104,7 +105,11 @@ var gm_offer := false
 var gm_offer_done := false
 var pk2_cursor := 0
 var pk2_grants: Array = []
-const PK2_CYCLE: Array[String] = [Loadout.HYPE_MAN, Loadout.GEAR_MANAGER, Loadout.TEAM_DOCTOR]
+var camp_makes := 0
+const PK2_CYCLE: Array[String] = [
+	Loadout.HYPE_MAN, Loadout.GEAR_MANAGER, Loadout.TEAM_DOCTOR,
+	Loadout.SUDDEN_DEATH, Loadout.NO_HUDDLE, Loadout.ALL_NATURAL, Loadout.TRAINING_CAMP,
+]
 var trophy_name := ""
 var new_record_score := false
 var new_record_long := false
@@ -258,6 +263,7 @@ func new_run() -> void:
 	gm_offer_done = false
 	pk2_cursor = 0
 	pk2_grants = []
+	camp_makes = 0
 	lucky_stacks = 0
 	showtime_mult = 1.0
 	synchronicity_offer_done = false
@@ -357,6 +363,7 @@ func too_weak_report(kick: KickLogic, blocked: bool = false) -> Dictionary:
 	if open_belt and kick != null and kick.snow_range and _belt_count(Vitamins.VITAMIN_D) > 0 and not vitamin_d_active():
 		vitamin_d = kick.snow_penalty
 	var belt_electrolyte := open_belt and _belt_count(Vitamins.ELECTROLYTE) > 0
+	# Sudden Death leaves one attempt, so Walk-On's retry counts only with a usable Electrolyte.
 	var retry_possible := attempts >= 2 or _vitamin_count(Vitamins.ELECTROLYTE) > 0 or belt_electrolyte
 	var walk_on := 0.0
 	if kicker_id == Kickers.WALK_ON and is_first_ball and not practice and retry_possible:
@@ -568,6 +575,15 @@ func drill_bonus() -> float:
 	return stats.drill_mult
 
 
+# One clock. A KICK CLOCK boss stays at 4.0 even when No Huddle is owned.
+func clock_seconds() -> float:
+	if weather == CLOCK:
+		return CLOCK_SEC
+	if has_curse(Loadout.NO_HUDDLE):
+		return NO_HUDDLE_SEC
+	return 0.0
+
+
 func wants_upgrade() -> bool:
 	# Cards only after a make, and not on the win.
 	return phase == Phase.PLAYING and kick_resolved and last_result_made
@@ -616,9 +632,13 @@ func resolve_kick(result_text: String, offset: float, perfect: bool) -> void:
 		var curse_add := curse_bonus()
 		var drill := drill_bonus()
 		var mult := base_mult + storm + hero + curse_add + drill + pre + gel
+		var sudden := 1.0
+		if has_curse(Loadout.SUDDEN_DEATH):
+			sudden = 5.0
+			mult *= sudden
 		last_points = points_for(distance, mult, down_the_middle, boss, score_perfect)
 		score += last_points
-		score_line = format_score_line(distance, base_mult, down_the_middle, boss, score_perfect, storm, hero, curse_add, drill, pre + gel)
+		score_line = format_score_line(distance, base_mult, down_the_middle, boss, score_perfect, storm, hero, curse_add, drill, pre + gel, sudden)
 		kicks_made += 1
 		if distance > longest_make:
 			longest_make = distance
@@ -628,11 +648,13 @@ func resolve_kick(result_text: String, offset: float, perfect: bool) -> void:
 				lucky_stacks += 1
 		# TAD 8 turns off the first-try attempt. Deep Bench and B12 add attempts on their own.
 		if earns_attempt(kick_number, is_first_ball, perfect, down_the_middle, late_earn_rule) and not tad_active(8):
-			if attempts >= attempt_cap:
+			if attempts >= attempt_cap or has_curse(Loadout.SUDDEN_DEATH):
 				attempt_note = NOTE_CAP
 			else:
 				attempts = mini(attempt_cap, attempts + 1)
 				attempt_note = NOTE_EARNED
+		if has_curse(Loadout.TRAINING_CAMP) and camp_makes < 3:
+			camp_makes += 1
 		streak += 1
 		if streak > best_streak:
 			best_streak = streak
@@ -1294,7 +1316,7 @@ func opens_shop() -> bool:
 
 
 func follow_offer() -> String:
-	if opens_shop() and not stats.brand_deal:
+	if opens_shop() and not stats.brand_deal and not has_curse(Loadout.ALL_NATURAL):
 		open_shop()
 		return "shop"
 	return "next"
@@ -1389,6 +1411,9 @@ func buy_shelf(index: int) -> bool:
 func buy_b12() -> bool:
 	if not awaiting_shop or shop_b12_bought:
 		return false
+	if has_curse(Loadout.SUDDEN_DEATH) or has_curse(Loadout.ALL_NATURAL):
+		shop_flash = ""
+		return false
 	if attempts >= attempt_cap:
 		shop_flash = ""
 		return false
@@ -1405,7 +1430,19 @@ func buy_b12() -> bool:
 
 
 func b12_grey() -> bool:
-	return shop_b12_bought or attempts >= attempt_cap or cash < item_price(Vitamins.B12)
+	return has_curse(Loadout.SUDDEN_DEATH) or has_curse(Loadout.ALL_NATURAL) or shop_b12_bought or attempts >= attempt_cap or cash < item_price(Vitamins.B12)
+
+
+func b12_reason() -> String:
+	if has_curse(Loadout.SUDDEN_DEATH):
+		return "Sudden Death"
+	if has_curse(Loadout.ALL_NATURAL):
+		return "All natural"
+	if shop_b12_bought:
+		return "SOLD"
+	if attempts >= attempt_cap:
+		return "At cap"
+	return ""
 
 
 func sell_belt(index: int) -> bool:
@@ -1447,6 +1484,9 @@ func use_belt(index: int) -> bool:
 		return false
 	var id := str(belt[index])
 	if id == "":
+		return false
+	if not belt_usable():
+		vitamin_note = "All natural"
 		return false
 	if id == Vitamins.ZINC:
 		if zinc_used:
@@ -1665,6 +1705,12 @@ func open_gm_offer_after_make() -> bool:
 	return true
 
 
+func _pk2_rank(id: String) -> int:
+	if Loadout.slot_of(id) == Loadout.CURSE:
+		return 1 if curse_ids.has(id) else 0
+	return _perk_rank(id)
+
+
 func debug_pk2(shift: bool) -> String:
 	if shift:
 		if pk2_grants.is_empty():
@@ -1672,15 +1718,21 @@ func debug_pk2(shift: bool) -> String:
 		var grant: Dictionary = pk2_grants.pop_back()
 		var id := str(grant.get("id", ""))
 		var granted := int(grant.get("rank", 1))
-		if _perk_rank(id) <= 0:
+		if _pk2_rank(id) <= 0:
 			return "Nothing to remove"
+		if Loadout.slot_of(id) == Loadout.CURSE:
+			curse_ids.erase(id)
+			if id == Loadout.TRAINING_CAMP:
+				camp_makes = 0
+			rebuild_stats()
+			return ""
 		_set_perk_rank(id, granted - 1)
 		return ""
 	var id := PK2_CYCLE[pk2_cursor % PK2_CYCLE.size()]
 	pk2_cursor += 1
-	var want := _perk_rank(id) + 1
+	var want := _pk2_rank(id) + 1
 	give(id, want)
-	if _perk_rank(id) != want:
+	if _pk2_rank(id) != want:
 		return "Refused"
 	pk2_grants.append({"id": id, "rank": want})
 	return ""
@@ -1836,6 +1888,8 @@ func give(id: String, rank: int = 1) -> void:
 			gm_passes += rank - previous_bench
 	elif slot == Loadout.CURSE:
 		curse_ids.append(id)
+		if id == Loadout.TRAINING_CAMP:
+			camp_makes = 0
 		if curse_ids.size() >= 2:
 			curses_locked = true
 	rebuild_stats()
@@ -1855,13 +1909,15 @@ func give(id: String, rank: int = 1) -> void:
 		practice_left += practice_gain
 	if id == Loadout.SECOND_LOOK and previous_bench == 0 and not tad_active(5):
 		second_look_bank += 1
-	if id == Loadout.DEEP_BENCH:
+	if id == Loadout.DEEP_BENCH and not has_curse(Loadout.SUDDEN_DEATH):
 		if previous_bench < 3 and rank >= 3 and attempts < attempt_cap:
 			attempts += 1
 		_bank_deep_bench(previous_bench, rank)
 
 
 func _grant_bench_attempt() -> void:
+	if has_curse(Loadout.SUDDEN_DEATH):
+		return
 	bench_extra_cap += 1
 	attempt_cap += 1
 	attempts = mini(attempts + 1, attempt_cap)
@@ -1901,6 +1957,7 @@ func loadout_state() -> Dictionary:
 		"run_mode": run_mode,
 		"gm_passes": gm_passes,
 		"gm_second_slots": gm_second_slots.duplicate(),
+		"camp_makes": camp_makes,
 	}
 
 
@@ -1924,6 +1981,9 @@ func _rebuild_raw_stats() -> void:
 	if _walk_on_clutch():
 		stats.range_bonus += 6.0
 	attempt_cap = mini(stats.attempt_cap, KickConstants.ATTEMPT_CAP_MAX) + bench_extra_cap
+	if has_curse(Loadout.SUDDEN_DEATH):
+		attempt_cap = 1
+		attempts = mini(attempts, 1)
 
 
 func _walk_on_clutch() -> bool:
@@ -1945,7 +2005,9 @@ func _finish_needles() -> void:
 	# Practice Swing uses this same combined speed, so the 1.33 applies there too.
 	# Lights stay off during practice because lights_active() is false.
 	var crunch := 1.33 if tad_active(7) else 1.0
-	var combined := MeterGauge.needle_speed(base, stats.power_speed / base * clutch, stone, lights, 1.0, 1.0) * crunch
+	# Training Camp is a post-floor speed-up, so the 0.35 floor cannot swallow it.
+	var camp := 1.30 if has_curse(Loadout.TRAINING_CAMP) and camp_makes < 3 else 1.0
+	var combined := MeterGauge.needle_speed(base, stats.power_speed / base * clutch, stone, lights, 1.0, 1.0) * crunch * camp
 	stats.power_speed = combined
 	stats.accuracy_speed = combined
 
@@ -2131,6 +2193,7 @@ func export_resume() -> Dictionary:
 		"gm_passes": gm_passes,
 		"gm_second_slots": gm_second_slots.duplicate(),
 		"gm_offer": gm_offer,
+		"camp_makes": camp_makes,
 		"kick10_boss": kick10_boss,
 		"standard_bosses": _boss_rows(standard_bosses),
 	}
@@ -2160,6 +2223,7 @@ func import_resume(data: Dictionary) -> void:
 	gm_second_slots = _string_list(data.get("gm_second_slots", []))
 	gm_offer = bool(data.get("gm_offer", false))
 	gm_offer_done = gm_offer
+	camp_makes = int(data.get("camp_makes", 0))
 	bench_extra_cap = int(data.get("bench_extra_cap", 0))
 	bench_bank = float(data.get("bench_bank", 0.0))
 	rebuild_stats()
@@ -2336,7 +2400,7 @@ static func raw_points(distance: float, mult: float, middle: bool, boss: bool, p
 	return total
 
 
-static func format_score_line(distance: float, mult: float, middle: bool, boss: bool, perfect: bool, storm: float = 0.0, hero: float = 0.0, curse_add: float = 0.0, drill: float = 0.0, pre: float = 0.0) -> String:
+static func format_score_line(distance: float, mult: float, middle: bool, boss: bool, perfect: bool, storm: float = 0.0, hero: float = 0.0, curse_add: float = 0.0, drill: float = 0.0, pre: float = 0.0, sudden: float = 1.0) -> String:
 	var product := distance * (mult + storm + hero + curse_add + drill + pre)
 	var text := "%s yd × %s" % [_whole(distance), _two_decimals(mult)]
 	if storm > 0.001 or hero > 0.001 or curse_add > 0.001 or drill > 0.001 or pre > 0.001:
@@ -2352,6 +2416,9 @@ static func format_score_line(distance: float, mult: float, middle: bool, boss: 
 		if pre > 0.001:
 			text += " + %s pre" % _two_decimals(pre)
 		text += ")"
+	if sudden > 1.001:
+		product *= sudden
+		text += " × 5"
 	if middle:
 		product *= KickConstants.MIDDLE_MULTIPLIER
 		text += " × 2"
@@ -2552,6 +2619,8 @@ func _remove_curse_at(index: int) -> void:
 	if not banned_curses.has(id):
 		banned_curses.append(id)
 	curse_ids.remove_at(index)
+	if id == Loadout.TRAINING_CAMP:
+		camp_makes = 0
 	rebuild_stats()
 	_apply_ball_vitamins()
 
