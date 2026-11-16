@@ -120,6 +120,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "bl1":
+		if not await _capture_bl1():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "tw1":
 		if not await _capture_tw1():
 			get_tree().quit(1)
@@ -1878,6 +1884,141 @@ func _capture_f3() -> bool:
 	for id in saved.keys():
 		SaveData.unlocks[id] = bool(saved[id])
 	SaveData.save_file()
+	return true
+
+
+func _capture_bl1() -> bool:
+	board.front.run_mode = "standard"
+	board.highlight = 1
+	board.confirm_kicker()
+	board.refresh_view()
+	var ball_px := float(board.sprite_screen_height(board._ball))
+	var kicker_px := float(board.sprite_screen_height(board._kicker_sprite))
+	print("BL1 tee ball px ", ball_px, " kicker px ", kicker_px, " ratio ", ball_px / maxf(kicker_px, 0.001), " height yd ", board.BALL_TEE_HEIGHT_YD)
+	if not await _capture("bl1_tee_35.png"):
+		return false
+	if not await _capture_ball_closeup("bl1_tee_closeup.png"):
+		return false
+	if not _lock_flight(80.0):
+		print("BL1 flight did not start")
+		return false
+	if not await _capture_tumble_strip("bl1_tumble_strip.png"):
+		return false
+	_set_flight_fraction(0.42)
+	print("BL1 apex h ", board._ball.position.y, " shadow ", board._shadow.scale, " alpha ", board._shadow_mat.albedo_color.a)
+	if not await _capture("bl1_apex_35.png"):
+		return false
+	board.logic.shanked = true
+	board.logic.result_text = "SHANK"
+	_set_flight_fraction(0.35)
+	if not await _capture("bl1_shank.png"):
+		return false
+	for dist in [200.0, 500.0, 1000.0]:
+		board.logic.shanked = false
+		board.logic.result_text = ""
+		board.logic.kick_distance = dist
+		board.logic.travel_yards = dist
+		board.logic.reached_uprights = true
+		board.logic.flight_duration = 1.6
+		board.logic.flight_elapsed = 0.0
+		board.logic.phase = KickLogic.Phase.FLIGHT
+		board._clear_trail()
+		_fly_to(0.85)
+		var shown := float(board.sprite_screen_height(board._ball))
+		print("BL1 far ", dist, " ball y ", board._ball.position.y, " screen px ", shown, " trail ", board._trail_points.size())
+		var name := "bl1_%d.png" % int(dist)
+		if not await _capture(name):
+			return false
+	board.logic.kick_distance = 35.0
+	board.logic.travel_yards = 40.0
+	board.logic.reached_uprights = true
+	board.force_weather(RunLogic.RAIN)
+	board.logic.phase = KickLogic.Phase.FLIGHT
+	_set_flight_fraction(0.4)
+	if not await _capture("bl1_rain.png"):
+		return false
+	return true
+
+
+func _lock_flight(power: float) -> bool:
+	board.logic.press_space()
+	if board.logic.windup_left > 0.0:
+		board.logic.advance(board.logic.windup_left)
+	board.logic.take_power_press(board.logic.seconds_to_power(power))
+	if board.logic.phase == KickLogic.Phase.ACCURACY:
+		var wait := float(board.logic.seconds_until_error(0.0))
+		if wait > 0.0:
+			board.logic.advance(wait)
+		if board.logic.phase == KickLogic.Phase.ACCURACY:
+			board.logic.press_space()
+	board.refresh_view()
+	return board.logic.phase == KickLogic.Phase.FLIGHT
+
+
+func _fly_to(fraction: float) -> void:
+	var end := float(board.logic.flight_duration) * fraction
+	var guard := 0
+	while float(board.logic.flight_elapsed) < end - 0.0001 and board.logic.phase == KickLogic.Phase.FLIGHT and guard < 80:
+		var step := minf(0.05, end - float(board.logic.flight_elapsed))
+		if step <= 0.0:
+			break
+		board.logic.advance(step)
+		board._sample_trail()
+		guard += 1
+	board.refresh_view()
+
+
+func _set_flight_fraction(fraction: float) -> void:
+	board.logic.phase = KickLogic.Phase.FLIGHT
+	board.logic.flight_elapsed = board.logic.flight_duration * fraction
+	board.logic._update_ball()
+	board.refresh_view()
+
+
+func _capture_ball_closeup(file_name: String) -> bool:
+	board.refresh_view()
+	await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+	var image: Image = board.get_viewport().get_texture().get_image()
+	var at: Vector2 = board.world_to_screen(board._ball.global_position)
+	var crop := 36
+	var box := Rect2i(int(at.x) - crop, int(at.y) - crop, crop * 2, crop * 2)
+	box = box.intersection(Rect2i(0, 0, image.get_width(), image.get_height()))
+	if box.size.x < 8 or box.size.y < 8:
+		print("BL1 closeup missed ", at)
+		return false
+	var part := image.get_region(box)
+	part.resize(part.get_width() * 4, part.get_height() * 4, Image.INTERPOLATE_NEAREST)
+	var err: Error = part.save_png(shot_dir.path_join(file_name))
+	if err != OK:
+		print("FAILED to save ", file_name, " error ", err)
+		return false
+	print("Saved ", shot_dir.path_join(file_name), " ", part.get_width(), "x", part.get_height())
+	return true
+
+
+func _capture_tumble_strip(file_name: String) -> bool:
+	var frames: Array[Image] = []
+	for fraction in [0.02, 0.08, 0.14, 0.22, 0.30, 0.40]:
+		_set_flight_fraction(fraction)
+		var sy := float(board._ball.scale.y)
+		print("BL1 tumble t ", fraction, " sy ", sy, " roll ", board._ball.rotation.y)
+		await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		var image: Image = board.get_viewport().get_texture().get_image()
+		frames.append(image.duplicate())
+	if frames.is_empty():
+		return false
+	var frame: Image = frames[0]
+	var sheet := Image.create(frame.get_width() * frames.size(), frame.get_height(), false, frame.get_format())
+	for index in frames.size():
+		var pic: Image = frames[index]
+		sheet.blit_rect(pic, Rect2i(0, 0, pic.get_width(), pic.get_height()), Vector2i(index * frame.get_width(), 0))
+	var err: Error = sheet.save_png(shot_dir.path_join(file_name))
+	if err != OK:
+		print("FAILED to save ", file_name, " error ", err)
+		return false
+	print("Saved ", shot_dir.path_join(file_name), " ", sheet.get_width(), "x", sheet.get_height())
 	return true
 
 

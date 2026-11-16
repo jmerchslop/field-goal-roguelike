@@ -60,6 +60,7 @@ func _run() -> void:
 	_check_as1()
 	_check_as2()
 	_check_tw1()
+	_check_bl1()
 	_check_f3()
 	_check_au1()
 	_check_drive_lid_and_power_safety()
@@ -83,6 +84,7 @@ func _finish_live() -> void:
 	_check_playing_card_live()
 	_check_as2_live()
 	_check_tw1_live()
+	_check_bl1_live()
 	_check_floodlights_live()
 	_check_light_beams()
 	_check_boss1()
@@ -4145,6 +4147,63 @@ func _check_tw1_live() -> void:
 		records.load_file()
 	elif FileAccess.file_exists(path):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+func _check_bl1() -> void:
+	var script = load("res://scripts/main.gd")
+	check(is_equal_approx(script.ball_tumble_sy(0.0), 1.0), "the tumble starts long")
+	check(is_equal_approx(absf(script.ball_tumble_sy(PI * 0.5)), 0.62), "the tumble goes round at a quarter turn")
+	check(script.ball_tumble_sy(PI) < 0.0 and is_equal_approx(script.ball_tumble_sy(PI), -1.0), "the tumble flips the lace end")
+	for step in 12:
+		var sy := float(script.ball_tumble_sy(float(step) * 0.4))
+		check(absf(sy) >= 0.62 - 0.0001 and absf(sy) <= 1.0001, "tumble scale stays between 0.62 and 1")
+	check(is_equal_approx(script.ball_spin_rps(0.0, false, false), 1.8), "a soft kick spins at 1.8")
+	check(is_equal_approx(script.ball_spin_rps(100.0, false, false), 3.6), "a full lock spins at 3.6")
+	check(is_equal_approx(script.ball_spin_rps(100.0, true, false), 4.2), "OVERPOWER spins the fastest")
+	check(script.ball_spin_rps(40.0, false, false) > script.ball_spin_rps(10.0, false, false), "spin rises with locked power")
+	check(is_equal_approx(script.ball_spin_rps(80.0, false, true), script.ball_spin_rps(80.0, false, false) * 0.6), "a shank spins at 0.6")
+	check(script.ball_shadow_factor(0.0) > script.ball_shadow_factor(3.0) and script.ball_shadow_factor(3.0) > script.ball_shadow_factor(6.4), "the shadow shrinks as the ball rises")
+	check(is_equal_approx(script.ball_shadow_alpha_at(0.0), 0.35) and is_equal_approx(script.ball_shadow_alpha_at(6.4), 0.12), "shadow alpha is 0.35 on the ground and 0.12 at the peak")
+	check(is_equal_approx(script.ball_pop_at(0.0), 1.0) and is_equal_approx(script.ball_pop_at(6.4), 1.2), "the height pop is 20 percent at the apex")
+	check(is_equal_approx(script.ball_size_boost(4.0, 576.0), 2.0) and is_equal_approx(script.ball_size_boost(20.0, 576.0), 1.0), "the far ball grows until it is 8 pixels at the reference height")
+	var source := FileAccess.get_file_as_string("res://scripts/main.gd")
+	check(source.find("BALL_EDGE_ON") >= 0 and source.find("key.keycode == KEY_H") >= 0 and source.find("key.keycode == KEY_Y") >= 0, "the ball look adds no debug key")
+
+
+func _check_bl1_live() -> void:
+	OS.set_environment("FG_SHOTS", "")
+	var packed: PackedScene = load("res://scenes/main.tscn")
+	var game = packed.instantiate()
+	get_root().add_child(game)
+	game._taking_pictures = true
+	game.highlight = 1
+	game.confirm_kicker()
+	game.refresh_view()
+	check(not game.ball_tumble_live() and is_equal_approx(game._ball.scale.y, 1.0), "the tee ball does not tumble")
+	var tee_pos: Vector3 = game._ball.position
+	game._pose_ball()
+	check(game._ball.position.distance_to(tee_pos) < 0.001, "the tee pop does not move the ball")
+	check(game._ball_edge != null and game._ball_edge.visible and game._ball_edge.texture == game._ball.texture, "the edge copy uses the ball texture")
+	check(game._shadow.position.y > 0.04 and game._shadow.position.y < 0.06, "the shadow stays on the grass")
+	game.logic.press_space()
+	if game.logic.windup_left > 0.0:
+		game.logic.advance(game.logic.windup_left)
+	game.logic.take_power_press(game.logic.seconds_to_power(80.0))
+	if game.logic.phase == KickLogic.Phase.ACCURACY:
+		game.logic.advance(game.logic.seconds_until_error(0.0))
+		game.logic.press_space()
+	if game.logic.phase == KickLogic.Phase.FLIGHT:
+		game.logic.advance(minf(0.2, game.logic.flight_duration * 0.35))
+	game.refresh_view()
+	var flight_pos: Vector3 = game._ball.position
+	var logical: Vector3 = game._ball_position()
+	check(flight_pos.distance_to(logical) < 0.001, "the tumble does not move the logical ball")
+	check(game.ball_tumble_live() and absf(game._ball.scale.y) >= 0.62 * 0.99, "flight tumble is on")
+	var trail_at: Vector3 = game._trail_points[game._trail_points.size() - 1]
+	check(trail_at.distance_to(logical) < 0.05, "the trail still samples the logical ball")
+	game.load_current_kick()
+	check(not game._ball_doinked and not game._ball_held and not game.ball_tumble_live(), "the next kick starts the ball clean")
+	game.free()
 
 
 func _check_mf1() -> void:

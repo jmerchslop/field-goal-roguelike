@@ -55,6 +55,14 @@ var aim_corridor := {
 	"right": Vector3.ZERO,
 }
 var _shadow: MeshInstance3D
+var _shadow_mat: StandardMaterial3D
+var _ball_edge: Sprite3D
+var _ball_doinked := false
+var _ball_doink_time := 0.0
+var _ball_held := false
+var _ball_hold_sy := 1.0
+var _ball_hold_sx := 1.0
+var _ball_hold_roll := 0.0
 var _kicker_sprite: Sprite3D
 var _post_l: MeshInstance3D
 var _goal_stem: MeshInstance3D
@@ -194,6 +202,35 @@ const TRAIL_POINT_CAP := 80
 const TRAIL_FADE_SEC := 0.55
 const TRAIL_WORLD_HALF := 0.028
 const TRAIL_MIN_PIXELS := 3.2
+# Visual only. Jordan can tune these without touching the kick.
+const BALL_TEE_HEIGHT_YD := 0.65
+const BALL_EDGE_ON := true
+const BALL_EDGE_BRIGHTNESS := 0.45
+const BALL_ART_LONG_PX := 17.0
+const BALL_SHADOW_FALLOFF_YD := 3.0
+const BALL_SHADOW_TEE_ALPHA := 0.35
+const BALL_SHADOW_MIN_ALPHA := 0.12
+const BALL_SHADOW_PEAK_YD := 6.4
+const BALL_SHADOW_OVAL := 1.35
+const BALL_TUMBLE_MIN := 0.62
+const BALL_SPIN_MIN_RPS := 1.8
+const BALL_SPIN_MAX_RPS := 3.6
+const BALL_SPIN_OVERPOWER_RPS := 4.2
+const BALL_ROLL_DEG := 6.0
+const BALL_ROLL_HZ := 1.2
+const BALL_SHANK_SPIN := 0.6
+const BALL_SHANK_ROLL_DEG := 25.0
+const BALL_SHANK_HZ_A := 2.3
+const BALL_SHANK_HZ_B := 3.7
+const BALL_SHANK_SX_MIN := 0.85
+const BALL_DOINK_ROLL_DEG := 20.0
+const BALL_DOINK_ROLL_SEC := 0.3
+const BALL_SETTLE_SEC := 0.15
+const BALL_POP := 0.20
+const BALL_POP_PEAK_YD := 6.4
+const BALL_MIN_PIXELS := 8.0
+const BALL_MIN_REF_HEIGHT := 576.0
+const BALL_TRAIL_START_YD := 0.12
 const TRAIL_COLOR := Color(1.0, 0.93, 0.8, 1.0)
 var _trail: MeshInstance3D
 var _trail_points := PackedVector3Array()
@@ -630,6 +667,7 @@ func _apply_ball_sprite() -> void:
 		_ball.modulate = Color(1, 1, 1, 1)
 	else:
 		_tint_ball()
+	_sync_ball_edge()
 
 
 func advance_run() -> bool:
@@ -3077,8 +3115,26 @@ func _fit_posts(width: float) -> void:
 
 
 func _build_ball() -> void:
+	var shadow_mesh := CylinderMesh.new()
+	shadow_mesh.top_radius = 0.28
+	shadow_mesh.bottom_radius = 0.28
+	shadow_mesh.height = 0.02
+	_shadow = MeshInstance3D.new()
+	_shadow.mesh = shadow_mesh
+	_shadow_mat = _mat(Color(0.02, 0.05, 0.02), 1.0)
+	_shadow_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_shadow_mat.albedo_color.a = BALL_SHADOW_TEE_ALPHA
+	_shadow.material_override = _shadow_mat
+	_shadow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_world.add_child(_shadow)
+	_ball_edge = Sprite3D.new()
+	_style_sprite(_ball_edge, BALL_TEE_HEIGHT_YD)
+	_ball_edge.billboard = BaseMaterial3D.BILLBOARD_DISABLED
+	_ball_edge.visible = false
+	_world.add_child(_ball_edge)
 	_ball = Sprite3D.new()
-	_style_sprite(_ball, 0.55)
+	_style_sprite(_ball, BALL_TEE_HEIGHT_YD)
+	_ball.billboard = BaseMaterial3D.BILLBOARD_DISABLED
 	_fit_sprite(_ball, "res://art/field/football.png")
 	_world.add_child(_ball)
 	var tee_mesh := CylinderMesh.new()
@@ -3089,18 +3145,6 @@ func _build_ball() -> void:
 	_tee.mesh = tee_mesh
 	_tee.material_override = _mat(Color(0.95, 0.42, 0.12), 0.7)
 	_world.add_child(_tee)
-	var shadow_mesh := CylinderMesh.new()
-	shadow_mesh.top_radius = 0.28
-	shadow_mesh.bottom_radius = 0.28
-	shadow_mesh.height = 0.02
-	_shadow = MeshInstance3D.new()
-	_shadow.mesh = shadow_mesh
-	var shade := _mat(Color(0.02, 0.05, 0.02), 1.0)
-	shade.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	shade.albedo_color.a = 0.35
-	_shadow.material_override = shade
-	_shadow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	_world.add_child(_shadow)
 	_arrow = MeshInstance3D.new()
 	_arrow.name = "AimCone"
 	var gel := StandardMaterial3D.new()
@@ -3198,6 +3242,7 @@ func _place_world() -> void:
 	_sample_trail()
 	_apply_lights_look()
 	_place_camera()
+	_pose_ball()
 
 
 func _reset_kick_pose() -> void:
@@ -3663,10 +3708,224 @@ func tick_trail(delta: float) -> void:
 	_trail_alpha = clampf(1.0 - _trail_fade / TRAIL_FADE_SEC, 0.0, 1.0)
 
 
+static func ball_tumble_sy(theta: float) -> float:
+	var c := cos(theta)
+	var mag := maxf(absf(c), BALL_TUMBLE_MIN)
+	var sgn := -1.0 if c < 0.0 else 1.0
+	return sgn * mag
+
+
+static func ball_spin_rps(power: float, overpower: bool, shank: bool) -> float:
+	var rate := lerpf(BALL_SPIN_MIN_RPS, BALL_SPIN_MAX_RPS, clampf(power / 100.0, 0.0, 1.0))
+	if overpower:
+		rate = BALL_SPIN_OVERPOWER_RPS
+	if shank:
+		rate *= BALL_SHANK_SPIN
+	return rate
+
+
+static func ball_shadow_factor(height: float) -> float:
+	return 1.0 / (1.0 + maxf(height, 0.0) / BALL_SHADOW_FALLOFF_YD)
+
+
+static func ball_shadow_alpha_at(height: float) -> float:
+	var along := clampf(maxf(height, 0.0) / BALL_SHADOW_PEAK_YD, 0.0, 1.0)
+	return lerpf(BALL_SHADOW_TEE_ALPHA, BALL_SHADOW_MIN_ALPHA, along)
+
+
+static func ball_pop_at(height: float) -> float:
+	return 1.0 + BALL_POP * clampf(maxf(height, 0.0) / BALL_POP_PEAK_YD, 0.0, 1.0)
+
+
+static func ball_size_boost(measured_px: float, view_h: float) -> float:
+	if measured_px <= 0.01 or view_h <= 1.0:
+		return 1.0
+	var min_px := BALL_MIN_PIXELS * (view_h / BALL_MIN_REF_HEIGHT)
+	return maxf(1.0, min_px / measured_px)
+
+
+func ball_in_flight() -> bool:
+	return logic.phase == KickLogic.Phase.FLIGHT or logic.phase == KickLogic.Phase.RESULT
+
+
+func ball_tumble_live() -> bool:
+	return ball_in_flight() and logic.ball_forward_yards >= BALL_TRAIL_START_YD
+
+
+func _sync_ball_edge() -> void:
+	if _ball_edge == null or _ball == null:
+		return
+	_ball_edge.texture = _ball.texture
+	_ball_edge.region_enabled = _ball.region_enabled
+	_ball_edge.region_rect = _ball.region_rect
+	_ball_edge.pixel_size = _ball.pixel_size
+	_ball_edge.centered = true
+	_ball_edge.billboard = BaseMaterial3D.BILLBOARD_DISABLED
+	_ball.billboard = BaseMaterial3D.BILLBOARD_DISABLED
+
+
+func _note_ball_doink() -> void:
+	if _ball_doinked or not ball_in_flight():
+		return
+	var hit := logic.result_text == "DOINK" or logic.bank_shot
+	if not hit:
+		return
+	if logic.ball_forward_yards >= logic.kick_distance - 4.0 or logic.phase == KickLogic.Phase.RESULT:
+		_ball_doinked = true
+		_ball_doink_time = logic.flight_elapsed
+
+
+func _ball_theta() -> float:
+	var rate := ball_spin_rps(logic.power, logic.overpower_paid, logic.shanked)
+	var t := logic.flight_elapsed
+	if _ball_doinked:
+		var t0 := _ball_doink_time
+		return rate * TAU * t0 - rate * TAU * maxf(t - t0, 0.0)
+	return rate * TAU * t
+
+
+func _ball_roll_sx(t: float) -> Dictionary:
+	if logic.shanked:
+		var mixed := 0.5 * (sin(TAU * BALL_SHANK_HZ_A * t) + sin(TAU * BALL_SHANK_HZ_B * t))
+		var roll := deg_to_rad(BALL_SHANK_ROLL_DEG) * mixed
+		var sx := lerpf(BALL_SHANK_SX_MIN, 1.0, 0.5 + 0.5 * sin(TAU * BALL_SHANK_HZ_A * t))
+		return {"roll": roll, "sx": sx}
+	var roll := deg_to_rad(BALL_ROLL_DEG) * sin(TAU * BALL_ROLL_HZ * t)
+	return {"roll": roll, "sx": 1.0}
+
+
+func _face_sprite(sprite: Sprite3D, roll: float, sx: float, sy: float) -> void:
+	if _camera == null or sprite == null:
+		return
+	var to_cam := _camera.global_position - sprite.global_position
+	if to_cam.length_squared() < 0.0001:
+		return
+	var normal := to_cam.normalized()
+	var up := _camera.global_transform.basis.y
+	var right := up.cross(normal)
+	if right.length_squared() < 0.0001:
+		right = _camera.global_transform.basis.x
+	right = right.normalized()
+	up = normal.cross(right).normalized()
+	var c := cos(roll)
+	var s := sin(roll)
+	var rolled_right := right * c + up * s
+	var rolled_up := -right * s + up * c
+	sprite.global_basis = Basis(rolled_right, rolled_up, normal)
+	sprite.scale = Vector3(sx, sy, 1.0)
+
+
+func sprite_screen_height(sprite: Sprite3D) -> float:
+	if sprite == null or _camera == null or not sprite.visible:
+		return 0.0
+	var tex_h := 0.0
+	if sprite.region_enabled:
+		tex_h = sprite.region_rect.size.y
+	elif sprite.texture != null:
+		tex_h = float(sprite.texture.get_height())
+	var world_h := sprite.pixel_size * tex_h * absf(sprite.scale.y)
+	if world_h <= 0.001:
+		return 0.0
+	var up := sprite.global_transform.basis.y
+	if up.length_squared() < 0.0001:
+		up = Vector3.UP
+	up = up.normalized()
+	var top := sprite.global_position + up * world_h * 0.5
+	var bottom := sprite.global_position - up * world_h * 0.5
+	if _camera.is_position_behind(top) or _camera.is_position_behind(bottom):
+		return 0.0
+	return _camera.unproject_position(top).distance_to(_camera.unproject_position(bottom))
+
+
+func _long_axis_pixels(world_h: float, at: Vector3) -> float:
+	if _camera == null or world_h <= 0.0 or _camera.is_position_behind(at):
+		return 0.0
+	var up := _camera.global_transform.basis.y
+	var a := _camera.unproject_position(at)
+	var b := _camera.unproject_position(at + up * world_h)
+	return a.distance_to(b)
+
+
+func _pose_ball() -> void:
+	if _ball == null or _shadow == null:
+		return
+	var spot := _ball.position
+	var flying := ball_in_flight()
+	var tumbling := ball_tumble_live()
+	_note_ball_doink()
+	var height := spot.y
+	var pop := ball_pop_at(height) if flying else 1.0
+	var view_h := 720.0
+	if get_viewport() != null:
+		view_h = get_viewport().get_visible_rect().size.y
+	var long_world := BALL_TEE_HEIGHT_YD * pop
+	var boost := 1.0
+	if flying:
+		boost = ball_size_boost(_long_axis_pixels(long_world, spot), view_h)
+	var sx := 1.0
+	var sy := 1.0
+	var roll := 0.0
+	if tumbling:
+		var pose := _ball_roll_sx(logic.flight_elapsed)
+		sx = float(pose["sx"])
+		roll = float(pose["roll"])
+		sy = ball_tumble_sy(_ball_theta())
+		if _ball_doinked:
+			var age := logic.flight_elapsed - _ball_doink_time
+			if age >= 0.0 and age <= BALL_DOINK_ROLL_SEC:
+				roll += deg_to_rad(BALL_DOINK_ROLL_DEG) * sin(PI * age / BALL_DOINK_ROLL_SEC)
+	if logic.phase == KickLogic.Phase.RESULT and tumbling:
+		if not _ball_held:
+			_ball_held = true
+			_ball_hold_sy = sy
+			_ball_hold_sx = sx
+			_ball_hold_roll = roll
+		var u := clampf(result_age / BALL_SETTLE_SEC, 0.0, 1.0)
+		sy = lerpf(_ball_hold_sy, 1.0, u)
+		sx = lerpf(_ball_hold_sx, 1.0, u)
+		roll = lerpf(_ball_hold_roll, 0.0, u)
+	else:
+		_ball_held = false
+	var scale_x := sx * pop * boost
+	var scale_y := sy * pop * boost
+	_face_sprite(_ball, roll, scale_x, scale_y)
+	if _ball_edge != null:
+		_sync_ball_edge()
+		var show_edge := BALL_EDGE_ON and _ball.visible
+		_ball_edge.visible = show_edge
+		if show_edge and _camera != null:
+			var art := (BALL_TEE_HEIGHT_YD * pop * boost) / BALL_ART_LONG_PX
+			var right := _camera.global_transform.basis.x
+			var down := -_camera.global_transform.basis.y
+			var away := _ball.global_position - _camera.global_position
+			if away.length_squared() > 0.0001:
+				away = away.normalized()
+			_ball_edge.global_position = _ball.global_position + right * art + down * art + away * 0.05
+			_face_sprite(_ball_edge, roll, scale_x, scale_y)
+			var ink := _ball.modulate
+			_ball_edge.modulate = Color(ink.r * BALL_EDGE_BRIGHTNESS, ink.g * BALL_EDGE_BRIGHTNESS, ink.b * BALL_EDGE_BRIGHTNESS, ink.a)
+	var shadow_scale := 1.0
+	var shadow_alpha := BALL_SHADOW_TEE_ALPHA
+	var oval := 1.0
+	if flying:
+		shadow_scale = ball_shadow_factor(height)
+		shadow_alpha = ball_shadow_alpha_at(height)
+		oval = BALL_SHADOW_OVAL
+	_shadow.scale = Vector3(shadow_scale, 1.0, shadow_scale * oval)
+	if _shadow_mat != null:
+		_shadow_mat.albedo_color.a = shadow_alpha
+
+
 func _clear_trail() -> void:
 	_trail_points = PackedVector3Array()
 	_trail_alpha = 1.0
 	_trail_fade = 0.0
+	_ball_doinked = false
+	_ball_doink_time = 0.0
+	_ball_held = false
+	_ball_hold_sy = 1.0
+	_ball_hold_sx = 1.0
+	_ball_hold_roll = 0.0
 	if _trail != null:
 		_trail.visible = false
 
