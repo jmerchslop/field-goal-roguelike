@@ -89,6 +89,14 @@ static func every_line() -> PackedStringArray:
 	var lines := PackedStringArray()
 	lines.append("CHOOSE YOUR KICKER")
 	lines.append("1 TO 8 HIGHLIGHT. SPACE OR CLICK AGAIN TO START.")
+	lines.append("1 TO 8 HIGHLIGHT. BRACKETS CHANGE TAD. SPACE OR CLICK AGAIN TO START.")
+	lines.append("TWO A DAYS")
+	lines.append("ALL BELOW ALSO APPLY")
+	for level in range(0, 6):
+		lines.append("TAD %d" % level)
+		lines.append(RunLogic.tad_summary(level))
+	lines.append("TAD 1 UNLOCKED")
+	lines.append("OFF AT TAD 5+")
 	for id in order():
 		lines.append(card_name(id))
 		for kit in kit_lines(id):

@@ -57,6 +57,7 @@ func _run() -> void:
 	_check_boss2()
 	_check_pk1()
 	_check_mf1()
+	_check_as1()
 	_check_drive_lid_and_power_safety()
 	_check_m2_kickers()
 	_check_honest_cards_and_bench()
@@ -3570,6 +3571,106 @@ func _check_rw2() -> void:
 	long_make.resolve_kick("GOOD", 0.0, false)
 	check(near(long_make.distance_yards(), 500.0) and records.has_unlock(Kickers.VEX), "an Endless 500-yard make unlocks Vex through resolve_kick")
 	records.unlocks[Kickers.VEX] = had_vex
+
+
+func _check_as1() -> void:
+	var records = load("res://scripts/SaveData.gd").new()
+	records.file_path = "user://fg_as1_tad.cfg"
+	records.reset_save()
+	check(records.tad_unlocked(Kickers.WALK_ON) == 0 and records.tad_selected(Kickers.WALK_ON) == 0, "a fresh save starts every kicker at TAD 0")
+	check(records.tad_unlocked(Kickers.BIG_BRUCE) == 0, "Bruce also starts at TAD 0")
+	var cfg := ConfigFile.new()
+	check(cfg.load(records.file_path) == OK, "the TAD save file can be read")
+	cfg.set_value("kicker_walk_on", "wins", 1)
+	cfg.erase_section_key("kicker_walk_on", "tad_unlocked")
+	cfg.erase_section_key("kicker_walk_on", "tad_selected")
+	cfg.save(records.file_path)
+	records.load_file()
+	check(records.tad_unlocked(Kickers.WALK_ON) == 1 and records.tad_unlocked(Kickers.BIG_BRUCE) == 0, "an old per-kicker Standard win grants TAD 1 to that kicker only")
+	records.reset_save()
+	check(records.grant_tad_win(Kickers.WALK_ON, 0) == 1, "winning TAD 0 unlocks TAD 1")
+	check(records.grant_tad_win(Kickers.WALK_ON, 0) == -1 and records.tad_unlocked(Kickers.WALK_ON) == 1, "winning below the cap does not skip ahead")
+	check(records.grant_tad_win(Kickers.BIG_BRUCE, 0) == 1 and records.tad_unlocked(Kickers.WALK_ON) == 1, "Bruce climbs on his own")
+	records.kickers[Kickers.WALK_ON]["tad_unlocked"] = 4
+	check(records.grant_tad_win(Kickers.WALK_ON, 4) == 5, "winning TAD 4 unlocks TAD 5")
+	check(records.grant_tad_win(Kickers.WALK_ON, 5) == -1 and records.tad_unlocked(Kickers.WALK_ON) == 5, "winning TAD 5 does not unlock level 6")
+	var shelf = get_root().get_node("SaveData")
+	var cole_before := bool(shelf.has_unlock(Kickers.COLE))
+	if not Kickers.is_unlocked(Kickers.COLE):
+		check(records.debug_raise_tad(Kickers.COLE) == -1 and records.tad_unlocked(Kickers.COLE) == 0, "the debug key does not raise a locked kicker")
+	check(bool(shelf.has_unlock(Kickers.COLE)) == cole_before and not KickConstants.debug_unlock_all_kickers, "TAD debug does not unlock kickers or flip the roster flag")
+	records.debug_clear_tad(Kickers.WALK_ON)
+	check(records.tad_unlocked(Kickers.WALK_ON) == 0 and records.tad_selected(Kickers.WALK_ON) == 0, "Shift+U returns that kicker to TAD 0")
+	check(records.debug_raise_tad(Kickers.WALK_ON) == 1, "U raises the highlighted unlocked kicker one step")
+	records.kickers[Kickers.WALK_ON]["tad_unlocked"] = 3
+	records.set_tad_selected(Kickers.WALK_ON, 9)
+	check(records.tad_selected(Kickers.WALK_ON) == 3, "the stepper cannot pass the unlocked cap")
+	records.reset_save()
+	check(records.tad_unlocked(Kickers.WALK_ON) == 0, "F9 reset clears TAD unlocks")
+	var plain := RunLogic.new()
+	plain.start_with_kicker(Kickers.WALK_ON)
+	check(near(plain.distance_yards(), 35.0) and plain.rerolls_left == 2 and near(plain.post_width(), 6.17), "TAD 0 keeps today's distance, rerolls, and posts")
+	check(plain.item_price(Vitamins.PROTEIN) == 4 and plain.shop_reroll_cost() == 2, "TAD 0 shop prices stay 4 and 2")
+	var taxed := RunLogic.new()
+	taxed.start_with_kicker(Kickers.WALK_ON)
+	taxed.tad_level = 1
+	check(taxed.item_price(Vitamins.PROTEIN) == 6 and taxed.item_price(Vitamins.B12) == 11 and taxed.shop_reroll_cost() == 3, "TAD 1 rounds shop prices up by 1.50")
+	var phil := RunLogic.new()
+	phil.start_with_kicker(Kickers.PHIL)
+	phil.tad_level = 1
+	check(phil.item_price(Vitamins.PROTEIN) == 0 and phil.shop_reroll_cost() == 3, "Phil's goods stay free and his shelf reroll is taxed")
+	var calm := RunLogic.new()
+	calm.set_seed(8)
+	calm.new_run()
+	calm.kick_number = 4
+	calm._reroll_zinc()
+	var gust := RunLogic.new()
+	gust.set_seed(8)
+	gust.new_run()
+	gust.tad_level = 2
+	gust.kick_number = 4
+	gust._reroll_zinc()
+	check(gust.wind_speed == calm.wind_speed + 3 and gust.wind_direction == calm.wind_direction, "TAD 2 adds 3 mph after a Zinc reroll and keeps the direction")
+	var long := RunLogic.new()
+	long.start_with_kicker(Kickers.WALK_ON)
+	long.tad_level = 3
+	check(near(long.distance_yards(), 39.0), "TAD 3 makes kick 1 39 yards")
+	long.kick_number = 20
+	check(near(long.distance_yards(), 79.0) and near(long.post_width(), 6.17), "TAD 3 lengthens kick 20 and leaves the posts")
+	long.tad_level = 4
+	check(near(long.post_width(), 5.92) and near(long.post_half_gap(), 2.96), "TAD 4 narrows a normal goal by 0.25")
+	long.weather = RunLogic.SQUEEZE
+	check(near(long.post_width(), 4.92) and near(long.post_half_gap(), long.post_width() * 0.5), "TAD 4 also narrows The Squeeze")
+	var dry := RunLogic.new()
+	dry.start_with_kicker(Kickers.WALK_ON)
+	dry.open_tad(5)
+	check(dry.rerolls_left == 0 and dry.tad_level == 5, "TAD 5 Walk-On starts with no offer rerolls")
+	dry.give(Loadout.SCOUT_LID, 1)
+	dry.give(Loadout.SECOND_LOOK, 1)
+	check(dry.rerolls_left == 0 and dry.second_look_bank == 0, "Scout Lid and Second Look grant no offer rerolls at TAD 5")
+	dry.kick_number = 6
+	dry._refill_quarter()
+	check(dry.second_look_bank == 0, "a new block does not bank a Second Look reroll at TAD 5")
+	dry.awaiting_offer = true
+	dry.offer = [{"id": Loadout.HOT_STREAK, "rank": 1}]
+	check(not dry.reroll_offer() and dry.lived_effect_line(Loadout.SECOND_LOOK, 1).find("Off at TAD 5+") >= 0, "the offer reroll key does nothing and the card says so")
+	dry.awaiting_offer = false
+	dry.awaiting_shop = true
+	dry.cash = 10
+	dry.shop_reroll_price = 2
+	check(dry.reroll_shop() and dry.cash == 7 and dry.shop_reroll_price == 3, "shop F still works at the TAD 1 price")
+	var endless := RunLogic.new()
+	endless.start_with_kicker(Kickers.WALK_ON)
+	endless.run_mode = "endless"
+	endless.tad_level = 5
+	check(not endless.tad_active(1) and endless.rerolls_left == 2 and near(endless.post_width(), 6.17), "Endless ignores a stored TAD level")
+	var saved := RunLogic.new()
+	saved.start_with_kicker(Kickers.WALK_ON)
+	saved.tad_level = 3
+	var resumed := RunLogic.new()
+	resumed.import_resume(saved.export_resume())
+	check(resumed.tad_level == 3 and near(resumed.distance_yards(), 39.0), "Continue keeps TAD 3 and the longer kick")
+	records.free()
 
 
 func _check_mf1() -> void:

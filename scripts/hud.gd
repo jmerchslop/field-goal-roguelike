@@ -81,8 +81,15 @@ func gate_hit(point: Vector2, which: String) -> int:
 	return -1
 
 
+func _pause_drop() -> float:
+	if game == null or game.run == null or not game.run.tad_active(1):
+		return 0.0
+	return 28.0 + 16.0 * float(game.run.tad_level)
+
+
 func _pause_buttons() -> Array:
-	return [Rect2(390, 318, 500, 58), Rect2(390, 392, 500, 58)]
+	var drop := _pause_drop()
+	return [Rect2(390, 318 + drop, 500, 58), Rect2(390, 392 + drop, 500, 58)]
 
 
 func _gate_buttons(which: String) -> Array:
@@ -93,9 +100,17 @@ func _gate_buttons(which: String) -> Array:
 
 func _draw_pause_panel() -> void:
 	draw_rect(Rect2(0, 0, KickConstants.WINDOW_WIDTH, KickConstants.WINDOW_HEIGHT), Color(0, 0, 0, 0.38))
-	var plate := Rect2(330, 168, 620, 320)
+	var drop := _pause_drop()
+	var plate := Rect2(330, 148, 620, 340 + drop)
 	_metal_plate(plate)
-	_pg_center(FrontEnd.PAUSE_WORD, 196, 42, Color(0.96, 0.94, 0.88), "callout")
+	_pg_center(FrontEnd.PAUSE_WORD, 168, 42, Color(0.96, 0.94, 0.88), "callout")
+	if game.run != null and game.run.tad_active(1):
+		var y := 214.0
+		_pg_center("TWO A DAYS %d" % game.run.tad_level, y, 16, Color(0.95, 0.78, 0.28))
+		y += 22.0
+		for level in range(1, game.run.tad_level + 1):
+			_pg_center(RunLogic.tad_summary(level), y, 13, Color(0.93, 0.91, 0.84))
+			y += 16.0
 	var labels := [FrontEnd.RESUME_WORD, FrontEnd.SAVE_QUIT_WORD]
 	var buttons := _pause_buttons()
 	for index in buttons.size():
@@ -351,6 +366,10 @@ func _draw_kick_bug(logic: KickLogic, run: RunLogic) -> void:
 	var wind_x := maxf(bug.position.x + 168.0, name_x + float(BitmapFonts.measure_px("ui", weather, name_size)) + 18.0)
 	_pg(wind, Vector2(wind_x, row_y), 13, cream)
 	_wind_pip(Vector2(wind_x - 12.0, row_y + 8), speed, run.wind_direction)
+	if run.tad_active(1):
+		var tag := "TAD %d" % run.tad_level
+		var tag_w := BitmapFonts.measure_px("ui", tag, 13)
+		_pg(tag, Vector2(bug.position.x + bug.size.x - float(tag_w) - 8.0, row_y), 13, Color(0.95, 0.78, 0.28))
 	row_y += 16
 	if show_mph:
 		_pg(BroadcastHud.wind_detail(speed, run.wind_direction), Vector2(bug.position.x + 8, row_y), 12, Color(0.55, 0.9, 0.95))
@@ -397,6 +416,8 @@ func _draw_kicker_plate(logic: KickLogic, run: RunLogic) -> void:
 	var warn := BroadcastHud.max_warning(required, max_range)
 	var kit := BroadcastHud.kit_text(run.kicker_id)
 	var ball := BroadcastHud.ball_text(run.kicker_id)
+	if run.tad_active(5) and run.kicker_id == Kickers.WALK_ON:
+		kit = "OFF AT TAD 5+"
 	var kit_lines := _pg_wrap(kit, 250, 12)
 	var ball_lines := _pg_wrap(ball, 250, 12)
 	var body := 18 + 16 + 14 * kit_lines.size() + 14 * ball_lines.size()
@@ -541,6 +562,21 @@ func _wind_pip(at: Vector2, speed: int, direction: float) -> void:
 
 var card_rects: Array = []
 var kicker_rects: Array = []
+var tad_left := Rect2()
+var tad_right := Rect2()
+var tad_wheel := Rect2()
+
+
+func tad_step_at(point: Vector2) -> int:
+	if tad_left.has_point(point):
+		return -1
+	if tad_right.has_point(point):
+		return 1
+	return 0
+
+
+func tad_wheel_at(point: Vector2) -> bool:
+	return tad_wheel.size.x > 1.0 and tad_wheel.has_point(point)
 
 
 func kicker_slot_at(point: Vector2) -> int:
@@ -564,7 +600,54 @@ func _draw_kicker_select() -> void:
 	for i in kicker_rects.size():
 		var info: Dictionary = Kickers.ALL[i]
 		_draw_playing_card(kicker_rects[i], str(info["id"]), Kickers.is_unlocked(str(info["id"])), i == picked)
-	_pg_centered("1 TO 8 HIGHLIGHT. SPACE OR CLICK AGAIN TO START.", 694.0, 14, Color(0.95, 0.92, 0.84))
+	_draw_tad_stepper(picked)
+	var footer := "1 TO 8 HIGHLIGHT. SPACE OR CLICK AGAIN TO START."
+	if game.front != null and game.front.run_mode == "standard":
+		footer = "1 TO 8 HIGHLIGHT. BRACKETS CHANGE TAD. SPACE OR CLICK AGAIN TO START."
+	_pg_centered(footer, 700.0, 13, Color(0.95, 0.92, 0.84))
+
+
+func _draw_tad_stepper(slot: int) -> void:
+	tad_left = Rect2()
+	tad_right = Rect2()
+	tad_wheel = Rect2()
+	if game.front == null or game.front.run_mode != "standard":
+		return
+	if slot < 0 or slot >= kicker_rects.size():
+		return
+	var id := str(Kickers.ALL[slot]["id"])
+	if not Kickers.is_unlocked(id):
+		return
+	var card: Rect2 = kicker_rects[slot]
+	var bar := Rect2(card.position.x + card.size.x * 0.14, card.position.y + card.size.y * 0.80, card.size.x * 0.72, 48.0)
+	tad_wheel = bar
+	draw_rect(bar, Color(0.05, 0.06, 0.08, 0.96))
+	draw_rect(bar, Color(0.95, 0.78, 0.28), false, 2.0)
+	tad_left = Rect2(bar.position.x + 3.0, bar.position.y + 3.0, 20.0, 20.0)
+	tad_right = Rect2(bar.position.x + bar.size.x - 23.0, bar.position.y + 3.0, 20.0, 20.0)
+	_tad_chevron(tad_left, true)
+	_tad_chevron(tad_right, false)
+	var level := SaveData.tad_selected(id)
+	var cream := Color(0.95, 0.92, 0.84)
+	_pg_centered_in(bar, "TAD %d" % level, 11, cream, 2.0)
+	_pg_centered_in(bar, RunLogic.tad_summary(level), 10, cream, 16.0)
+	if level >= 2:
+		_pg_centered_in(bar, "ALL BELOW ALSO APPLY", 9, Color(0.95, 0.78, 0.28), 30.0)
+
+
+func _tad_chevron(rect: Rect2, point_left: bool) -> void:
+	var mid := rect.get_center()
+	var color := Color(0.95, 0.92, 0.84)
+	if point_left:
+		draw_colored_polygon(PackedVector2Array([mid + Vector2(-5, 0), mid + Vector2(4, -6), mid + Vector2(4, 6)]), color)
+	else:
+		draw_colored_polygon(PackedVector2Array([mid + Vector2(5, 0), mid + Vector2(-4, -6), mid + Vector2(-4, 6)]), color)
+
+
+func _pg_centered_in(rect: Rect2, text: String, size: int, color: Color, y_offset: float) -> void:
+	var width := BitmapFonts.measure_px("ui", text, size)
+	var at := Vector2(rect.position.x + (rect.size.x - float(width)) * 0.5, rect.position.y + y_offset)
+	_pg(text, at, size, color)
 
 
 func _draw_playing_card(rect: Rect2, id: String, unlocked: bool, picked: bool) -> void:
@@ -912,7 +995,7 @@ func _draw_offer(run: RunLogic) -> void:
 		_text(rect.position + Vector2(96, 32), "%d  %s" % [i + 1, Loadout.type_label(slot)], 16, _slot_color(slot))
 		_draw_slot_icon(id, rank, slot, Rect2(rect.position + Vector2(14, 28), Vector2(72, 72)), true)
 		_text(rect.position + Vector2(96, 62), Loadout.card_title(id, rank), 18, KickConstants.COLOR_ATTEMPT)
-		_draw_wrapped(Loadout.effect_line(id, rank), Rect2(rect.position + Vector2(12, 112), Vector2(width - 24, 90)), 15)
+		_draw_wrapped(run.lived_effect_line(id, rank), Rect2(rect.position + Vector2(12, 112), Vector2(width - 24, 90)), 15)
 	if run.free_reroll_ready():
 		_text_centered("Free rerolls %d. %s rerolls. %s skips." % [run.second_look_bank, Settings.key_sentence("offer_reroll"), Settings.key_sentence("skip")], 640.0, 18, KickConstants.COLOR_TEXT)
 	else:
@@ -1077,6 +1160,8 @@ func _draw_end_screen(run: RunLogic) -> void:
 		title_color = KickConstants.COLOR_GOOD
 	_text_centered(title, box.position.y + 70.0, 40 if run.phase == RunLogic.Phase.FAR else 64, title_color)
 	_text_centered("Score %d" % run.score, box.position.y + 130.0, 32, KickConstants.COLOR_TEXT)
+	if run.tad_toast != "":
+		_pg_center(run.tad_toast, box.position.y + 188.0, 18, Color(0.95, 0.78, 0.28))
 	_text_centered("Kicks made %d" % run.kicks_made, box.position.y + 172.0, 28, KickConstants.COLOR_TEXT)
 	_text_centered("Longest make %s yd" % KickLogic.format_number(run.longest_make), box.position.y + 210.0, 28, KickConstants.COLOR_TEXT)
 	if run.kicker_id != "":
@@ -1278,7 +1363,7 @@ func _draw_slot_tooltip() -> void:
 		if badge != "":
 			title += " " + badge
 		lines.append(title)
-		lines.append_array(_wrap_lines(Loadout.effect_line(id, rank if rank > 0 else 1), 248.0, 14))
+		lines.append_array(_wrap_lines(game.run.lived_effect_line(id, rank if rank > 0 else 1), 248.0, 14))
 	var anchor: Rect2 = hit["rect"]
 	var box := Rect2(anchor.position + Vector2(0, anchor.size.y + 8.0), Vector2(264, 16.0 + float(lines.size()) * 18.0))
 	if box.position.x + box.size.x > KickConstants.WINDOW_WIDTH - 8.0:
@@ -1321,7 +1406,11 @@ func _draw_save_note() -> void:
 		return
 	var box := Rect2(340, 620, 600, 48)
 	draw_rect(box, Color(0.05, 0.08, 0.1, 0.92))
-	_text_centered(str(game.save_note), 650.0, 22, KickConstants.COLOR_ATTEMPT)
+	var note := str(game.save_note)
+	if note.begins_with("TAD "):
+		_pg_center(note, 632.0, 16, Color(0.95, 0.78, 0.28))
+	else:
+		_text_centered(note, 650.0, 22, KickConstants.COLOR_ATTEMPT)
 
 
 func _draw_records() -> void:
@@ -1475,7 +1564,7 @@ func _draw_shop(run: RunLogic) -> void:
 	elif run.attempts >= run.attempt_cap:
 		_text(b12.position + Vector2(16, 126), "At cap", 16, Color(0.8, 0.8, 0.8))
 	var reroll_color := Color(1.0, 0.3, 0.25) if run.shop_flash == "reroll" else KickConstants.COLOR_TEXT
-	_text(Vector2(36, 64), "Reroll (%s): $%d" % [Settings.key_sentence("shop_reroll"), run.shop_reroll_price], 16, reroll_color)
+	_text(Vector2(36, 64), "Reroll (%s): $%d" % [Settings.key_sentence("shop_reroll"), run.shop_reroll_cost()], 16, reroll_color)
 	if run.shop_note != "":
 		_text(Vector2(36, 92), run.shop_note, 18, Color(1.0, 0.45, 0.35))
 	_text_centered("%s/%s/%s buy  %s B12  %s/%s sell  %s reroll  %s leave" % [

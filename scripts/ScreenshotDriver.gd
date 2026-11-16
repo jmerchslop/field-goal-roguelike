@@ -102,6 +102,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "as1":
+		if not await _capture_as1():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "mf1":
 		if not await _capture_mf1():
 			get_tree().quit(1)
@@ -1757,6 +1763,38 @@ func _offer_card(id: String, rank: int, slot: String) -> bool:
 	board.refresh_view()
 	if board.run.offer.is_empty() or str(board.run.offer[0].get("id", "")) != id:
 		print("offer missed ", id)
+		return false
+	return true
+
+
+func _capture_as1() -> bool:
+	board.front.run_mode = "standard"
+	SaveData.kickers[Kickers.WALK_ON]["tad_unlocked"] = 3
+	SaveData.set_tad_selected(Kickers.WALK_ON, 3)
+	board.open_select()
+	board.highlight = 1
+	board.refresh_view()
+	if not await _capture("as1_select_tad.png"):
+		return false
+	board.confirm_kicker()
+	board.load_current_kick()
+	print("AS1 tad3 distance ", board.run.distance_yards(), " posts ", board.run.post_width(), " wind ", board.run.wind_speed)
+	if board.run.tad_level != 3:
+		print("tad level ", board.run.tad_level)
+		return false
+	if not await _capture("as1_hud_tad.png"):
+		return false
+	if not await _capture("as1_tad3_posts.png"):
+		return false
+	board.run.tad_level = 4
+	board.load_current_kick()
+	print("AS1 tad4 distance ", board.run.distance_yards(), " posts ", board.run.post_width())
+	if not await _capture("as1_tad4_posts.png"):
+		return false
+	board.run.phase = RunLogic.Phase.WIN
+	board.run.tad_toast = "TAD 1 UNLOCKED"
+	board.refresh_view()
+	if not await _capture("as1_unlock_toast.png"):
 		return false
 	return true
 

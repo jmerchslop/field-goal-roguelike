@@ -55,13 +55,24 @@ func load_file() -> void:
 	middles = _as_int(cfg.get_value("lifetime", "middles", 0))
 	for id in _kicker_ids():
 		var section := "kicker_%s" % id
+		var wins_now := _as_int(cfg.get_value(section, "wins", 0))
+		var unlocked := 0
+		if cfg.has_section_key(section, "tad_unlocked"):
+			unlocked = _as_int(cfg.get_value(section, "tad_unlocked", 0))
+		elif wins_now > 0:
+			unlocked = 1
+		var selected := 0
+		if cfg.has_section_key(section, "tad_selected"):
+			selected = _as_int(cfg.get_value(section, "tad_selected", 0))
 		kickers[id] = {
 			"runs": _as_int(cfg.get_value(section, "runs", 0)),
-			"wins": _as_int(cfg.get_value(section, "wins", 0)),
+			"wins": wins_now,
 			"best_score": _as_int(cfg.get_value(section, "best_score", 0)),
 			"longest_make": _as_int(cfg.get_value(section, "longest_make", 0)),
 			"makes": _as_int(cfg.get_value(section, "makes", 0)),
 			"attempts": _as_int(cfg.get_value(section, "attempts", 0)),
+			"tad_unlocked": clampi(unlocked, 0, 5),
+			"tad_selected": clampi(selected, 0, clampi(unlocked, 0, 5)),
 		}
 	for id in TROPHY_IDS:
 		trophies[id] = bool(cfg.get_value("trophies", id, false))
@@ -96,6 +107,8 @@ func save_file() -> void:
 		cfg.set_value(section, "longest_make", int(row["longest_make"]))
 		cfg.set_value(section, "makes", int(row["makes"]))
 		cfg.set_value(section, "attempts", int(row["attempts"]))
+		cfg.set_value(section, "tad_unlocked", int(row.get("tad_unlocked", 0)))
+		cfg.set_value(section, "tad_selected", int(row.get("tad_selected", 0)))
 	for id in TROPHY_IDS:
 		cfg.set_value("trophies", id, bool(trophies[id]))
 	for id in _unlock_ids():
@@ -168,6 +181,53 @@ func press_f9(now: float) -> String:
 		return "Save reset"
 	_f9_at = now
 	return "Press F9 again to reset save."
+
+
+func tad_unlocked(id: String) -> int:
+	if not kickers.has(id):
+		return 0
+	return clampi(int(kickers[id].get("tad_unlocked", 0)), 0, 5)
+
+
+func tad_selected(id: String) -> int:
+	return clampi(int(kickers.get(id, {}).get("tad_selected", 0)), 0, tad_unlocked(id))
+
+
+func set_tad_selected(id: String, level: int) -> void:
+	if not kickers.has(id):
+		return
+	kickers[id]["tad_selected"] = clampi(level, 0, tad_unlocked(id))
+	save_file()
+
+
+func grant_tad_win(id: String, played: int) -> int:
+	if not kickers.has(id):
+		return -1
+	var cap := tad_unlocked(id)
+	if played != cap or cap >= 5:
+		return -1
+	kickers[id]["tad_unlocked"] = cap + 1
+	save_file()
+	return cap + 1
+
+
+func debug_raise_tad(id: String) -> int:
+	if not kickers.has(id) or not Kickers.is_unlocked(id):
+		return -1
+	var cap := tad_unlocked(id)
+	if cap >= 5:
+		return cap
+	kickers[id]["tad_unlocked"] = cap + 1
+	save_file()
+	return cap + 1
+
+
+func debug_clear_tad(id: String) -> void:
+	if not kickers.has(id) or not Kickers.is_unlocked(id):
+		return
+	kickers[id]["tad_unlocked"] = 0
+	kickers[id]["tad_selected"] = 0
+	save_file()
 
 
 func kicker_row(id: String) -> Dictionary:
@@ -303,6 +363,8 @@ func _fill_defaults() -> void:
 			"longest_make": 0,
 			"makes": 0,
 			"attempts": 0,
+			"tad_unlocked": 0,
+			"tad_selected": 0,
 		}
 	trophies = {}
 	for id in TROPHY_IDS:

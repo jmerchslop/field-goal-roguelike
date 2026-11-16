@@ -383,6 +383,10 @@ func confirm_kicker() -> void:
 	_cue("select")
 	run.start_with_kicker(id)
 	run.run_mode = mode
+	var picked := 0
+	if mode == "standard":
+		picked = SaveData.tad_selected(id)
+	run.open_tad(picked)
 	front.screen = FrontEnd.Screen.PLAY
 	_tint_ball()
 	load_current_kick()
@@ -420,7 +424,16 @@ func _select_input(event: InputEvent) -> void:
 		return
 	if event is InputEventMouseButton:
 		var mouse := event as InputEventMouseButton
+		if mouse.pressed and (mouse.button_index == MOUSE_BUTTON_WHEEL_UP or mouse.button_index == MOUSE_BUTTON_WHEEL_DOWN):
+			if front.run_mode == "standard" and _hud.tad_wheel_at(mouse.position):
+				var wheel := 1 if mouse.button_index == MOUSE_BUTTON_WHEEL_UP else -1
+				_step_tad(wheel)
+			return
 		if mouse.pressed and mouse.button_index == MOUSE_BUTTON_LEFT:
+			var nudged := int(_hud.tad_step_at(mouse.position))
+			if nudged != 0 and front.run_mode == "standard":
+				_step_tad(nudged)
+				return
 			var slot: int = _hud.kicker_slot_at(mouse.position)
 			var step: Dictionary = Kickers.click_slot(highlight, slot)
 			highlight = int(step["highlight"])
@@ -489,8 +502,44 @@ func _select_input(event: InputEvent) -> void:
 	elif key.keycode == KEY_DOWN or Settings.pressed_event(event, "menu_down"):
 		highlight = SelectCard.step_highlight(highlight, 0, 1)
 		refresh_view()
+	elif key.keycode == KEY_BRACKETLEFT:
+		_step_tad(-1)
+	elif key.keycode == KEY_BRACKETRIGHT:
+		_step_tad(1)
+	elif key.keycode == KEY_U and key.shift_pressed:
+		_debug_tad(true)
+	elif key.keycode == KEY_U:
+		_debug_tad(false)
 	elif Settings.pressed_event(event, "confirm"):
 		confirm_kicker()
+
+
+func _step_tad(delta: int) -> void:
+	if front.run_mode != "standard" or highlight < 0:
+		return
+	var id := Kickers.id_for_slot(highlight)
+	if id == "" or not Kickers.is_unlocked(id):
+		return
+	SaveData.set_tad_selected(id, SaveData.tad_selected(id) + delta)
+	refresh_view()
+
+
+func _debug_tad(clear: bool) -> void:
+	if highlight < 0:
+		return
+	var id := Kickers.id_for_slot(highlight)
+	if id == "" or not Kickers.is_unlocked(id):
+		return
+	if clear:
+		SaveData.debug_clear_tad(id)
+		save_note = "TAD 0 DEBUG"
+	else:
+		var cap := SaveData.debug_raise_tad(id)
+		if cap < 0:
+			return
+		save_note = "TAD %d DEBUG" % cap
+	_note_time = 0.0
+	refresh_view()
 
 
 func _tint_ball() -> void:

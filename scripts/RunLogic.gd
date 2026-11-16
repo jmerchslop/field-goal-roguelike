@@ -94,6 +94,9 @@ var mulligan_used_this_kick := false
 var rerolls_left := 1
 # Second Look. 0 or 1. Set to 1 at the start of each 5-kick block. Does not stack.
 var second_look_bank := 0
+# Standard difficulty for this run. 0 is today's game. Endless stays 0.
+var tad_level := 0
+var tad_toast := ""
 var power_item_seen := false
 var pending_result := ""
 var pending_offset := 0.0
@@ -240,6 +243,8 @@ func new_run() -> void:
 	mulligan_used_this_kick = false
 	rerolls_left = stats.rerolls_per_run
 	second_look_bank = 0
+	tad_level = 0
+	tad_toast = ""
 	power_item_seen = false
 	pending_result = ""
 	wind_speed = 0
@@ -264,7 +269,50 @@ func new_run() -> void:
 func distance_yards() -> float:
 	if run_mode == "endless":
 		return RunTable.endless_distance(kick_number)
-	return float(RunTable.row(kick_number)["distance"])
+	var yards := float(RunTable.row(kick_number)["distance"])
+	if tad_active(3):
+		yards += 4.0
+	return yards
+
+
+func tad_active(level: int) -> bool:
+	return run_mode != "endless" and tad_level >= level
+
+
+func open_tad(level: int) -> void:
+	tad_level = 0 if run_mode == "endless" else clampi(level, 0, 5)
+	if tad_active(5):
+		rerolls_left = 0
+	_add_tad_wind()
+
+
+func lived_effect_line(id: String, rank: int) -> String:
+	var line := Loadout.effect_line(id, rank)
+	if tad_active(5) and (id == Loadout.SCOUT_LID or id == Loadout.SECOND_LOOK):
+		return line + " Off at TAD 5+."
+	return line
+
+
+static func tad_summary(level: int) -> String:
+	match clampi(level, 0, 5):
+		1:
+			return "SHOP PRICES X1.5"
+		2:
+			return "WIND +3 MPH"
+		3:
+			return "KICKS +4 YD"
+		4:
+			return "POSTS 0.25 YD NARROWER"
+		5:
+			return "NO OFFER REROLLS"
+		_:
+			return "STANDARD"
+
+
+func _tad_price(amount: int) -> int:
+	if not tad_active(1) or amount <= 0:
+		return amount
+	return int((amount * 3 + 1) / 2)
 
 
 func is_boss() -> bool:
@@ -468,15 +516,20 @@ func has_mud() -> bool:
 
 
 func post_half_gap() -> float:
+	if tad_active(4):
+		return post_width() * 0.5
 	if weather == SQUEEZE or has_curse(Loadout.NARROW):
 		return SQUEEZE_HALF
 	return KickConstants.POST_HALF_GAP_YARDS
 
 
 func post_width() -> float:
+	var width := KickConstants.POST_SEPARATION_YARDS
 	if weather == SQUEEZE or has_curse(Loadout.NARROW):
-		return SQUEEZE_WIDTH
-	return KickConstants.POST_SEPARATION_YARDS
+		width = SQUEEZE_WIDTH
+	if tad_active(4):
+		width -= 0.25
+	return width
 
 
 func needle_fades() -> bool:
@@ -940,11 +993,13 @@ func skip_offer() -> bool:
 
 
 func free_reroll_ready() -> bool:
+	if tad_active(5):
+		return false
 	return awaiting_offer and not awaiting_shop and second_look_bank > 0 and stats.second_look
 
 
 func reroll_offer() -> bool:
-	if not awaiting_offer or awaiting_shop:
+	if tad_active(5) or not awaiting_offer or awaiting_shop:
 		return false
 	# The banked free reroll is spent before Walk-On or Scout Lid charges.
 	if second_look_bank > 0 and stats.second_look:
@@ -1107,10 +1162,10 @@ func sell_belt(index: int) -> bool:
 func reroll_shop() -> bool:
 	if not awaiting_shop:
 		return false
-	if cash < shop_reroll_price:
+	if cash < shop_reroll_cost():
 		shop_flash = "reroll"
 		return false
-	cash -= shop_reroll_price
+	cash -= shop_reroll_cost()
 	shop_reroll_price += 1
 	shop_flash = ""
 	var previous: Array = shop_stock.duplicate()
@@ -1468,7 +1523,7 @@ func give(id: String, rank: int = 1) -> void:
 	elif attempts > attempt_cap:
 		attempts = attempt_cap
 	var reroll_gain := stats.rerolls_per_run - reroll_before
-	if reroll_gain > 0:
+	if reroll_gain > 0 and not tad_active(5):
 		rerolls_left += reroll_gain
 	var doink_gain := stats.doink_per_quarter - doink_before
 	if doink_gain > 0:
@@ -1476,7 +1531,7 @@ func give(id: String, rank: int = 1) -> void:
 	var practice_gain := stats.practice_per_quarter - practice_before
 	if practice_gain > 0:
 		practice_left += practice_gain
-	if id == Loadout.SECOND_LOOK and previous_bench == 0:
+	if id == Loadout.SECOND_LOOK and previous_bench == 0 and not tad_active(5):
 		second_look_bank += 1
 	if id == Loadout.DEEP_BENCH:
 		if previous_bench < 3 and rank >= 3 and attempts < attempt_cap:
@@ -1599,7 +1654,7 @@ func _close_offer() -> void:
 
 func _refill_quarter() -> void:
 	# Kicks 1–5, 6–10, 11–15, and so on. Each block adds one. Unused ones carry.
-	if (kick_number - 1) % 5 == 0 and _perk_rank(Loadout.SECOND_LOOK) > 0:
+	if (kick_number - 1) % 5 == 0 and _perk_rank(Loadout.SECOND_LOOK) > 0 and not tad_active(5):
 		second_look_bank += 1
 	if kick_number == 1 or kick_number == 6 or kick_number == 11 or kick_number == 16:
 		mulligans_left = 0
@@ -1696,6 +1751,7 @@ func export_resume() -> Dictionary:
 		"cash": cash,
 		"rerolls_left": rerolls_left,
 		"second_look_bank": second_look_bank,
+		"tad_level": tad_level,
 		"mulligans_left": mulligans_left,
 		"insurance_left": insurance_left,
 		"practice_left": practice_left,
@@ -1782,6 +1838,7 @@ func import_resume(data: Dictionary) -> void:
 	cash = int(data.get("cash", 0))
 	rerolls_left = int(data.get("rerolls_left", rerolls_left))
 	second_look_bank = int(data.get("second_look_bank", 0))
+	tad_level = int(data.get("tad_level", 0))
 	mulligans_left = int(data.get("mulligans_left", mulligans_left))
 	insurance_left = int(data.get("insurance_left", insurance_left))
 	practice_left = int(data.get("practice_left", practice_left))
@@ -1894,6 +1951,10 @@ func _save_finished_run() -> void:
 	if data == null:
 		return
 	data.clear_run_slot(run_mode)
+	if phase == Phase.WIN and run_mode != "endless":
+		var unlocked := int(data.grant_tad_win(kicker_id, tad_level))
+		if unlocked > tad_level:
+			tad_toast = "TAD %d UNLOCKED" % unlocked
 	var flags: Dictionary = data.commit_run({
 		"score": score,
 		"longest": int(round(longest_make)),
@@ -2054,7 +2115,11 @@ func item_effect_scale() -> float:
 func item_price(id: String) -> int:
 	if stats.house_account:
 		return 0
-	return Vitamins.price(id)
+	return _tad_price(Vitamins.price(id))
+
+
+func shop_reroll_cost() -> int:
+	return _tad_price(shop_reroll_price)
 
 
 func item_sale_price(id: String) -> int:
@@ -2112,6 +2177,7 @@ func _reroll_zinc() -> void:
 		wind_direction = 0.0
 	else:
 		wind_direction = float(_wind_rng.randi_range(0, 359))
+	_add_tad_wind()
 	if is_standard_boss_slot(kick_number):
 		return
 	weather_forced = false
@@ -2215,8 +2281,14 @@ func _roll_wind() -> void:
 	if wind_speed <= 0:
 		wind_speed = 0
 		wind_direction = 0.0
-		return
-	wind_direction = float(_wind_rng.randi_range(0, 359))
+	else:
+		wind_direction = float(_wind_rng.randi_range(0, 359))
+	_add_tad_wind()
+
+
+func _add_tad_wind() -> void:
+	if tad_active(2):
+		wind_speed += 3
 
 
 static func wind_name(speed: int) -> String:
