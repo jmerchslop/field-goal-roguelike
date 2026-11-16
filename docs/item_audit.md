@@ -24,11 +24,13 @@ RT1: The hidden ±5 red-tip noise is gone. A 95–100 lock is clean, and P=100 i
 
 1. Base: `KickLogic.max_range_at_full_power()`, the same number as the HUD MAX line. That already includes the kicker, gear, drunk vitamins, wind, weather flags, Heavy Ball, Howling Wind, Shelter, High-Air, Phil and Gary item scale, Rain Dance, Weather Wraps, Chain Gang from the current streak, and Walk-On clutch when this ball is already a retry.
 2. OVERPOWER: +4 plus `tip_lock_yards` when a red lock would pay. Carlos and Practice Swing add 0. Big Game uses the stripped `tip_lock_yards` already on the stats.
-3. Each unused Protein Shake on the belt: `scale_amount(6, item_effect_scale())`. Shakes already drunk are inside the base.
+3. Each unused Protein Shake on the belt adds exactly what drinking it now would add: `scale_amount(6, item_effect_scale())`. Shakes already drunk are inside the base. No vitamin booster is on the branch yet. If a later curse locks the belt, belt shakes, Vitamin D, Zinc, and Electrolyte count for nothing, and the Zinc block does not apply. That curse is not in the game yet.
 4. Vitamin D on the belt: the snow penalty, only while snow range is still on and Vitamin D is not already active.
 5. Walk-On: +6, unscaled, on the first ball only, and only when a retry is still possible (2 attempts, or an Electrolyte that is active or still on the belt).
 
-`too_weak` is true when `best_case + 0.05` is still short of `kick_distance`, the kicker has no clearance, no unused Zinc is waiting, and the ball is at the tee. Vex never triggers. An unused Tart Cherry is not counted, because removing a curse is a choice; the check runs again after the player removes one. Chain Gang's next-make pay, Hot Streak, Lucky Ball stacks, and Deep Bench refills are not added on top. Moving posts do not change the distance.
+Gear counts only as it is equipped right now, which is already inside the base. That includes a second slot that is already filled. Hypothetical future gear, unspent passes, and curse yards that pay only later are not added.
+
+`too_weak` is true when `best_case + 0.05` is still short of `kick_distance`, the kicker has no clearance, no unused Zinc is waiting, and the ball is at the tee. Vex never triggers. An unused Tart Cherry is not counted, because removing a curse is a choice; the check runs again after the player removes one. Chain Gang's next-make pay, Hot Streak, Lucky Ball stacks, and Deep Bench refills are not added on top. Moving posts do not change the distance. The flavor lines are NEED MORE LEG., OUT OF RANGE., SEND IN THE PUNTER., CALL THE PUNT TEAM., HIT THE WEIGHT ROOM., NOT ENOUGH BOOT., THE POSTS ARE TOO FAR., and BACK TO THE PRACTICE FIELD.
 
 Numbers below were taken from `Loadout.effect_line`, `Loadout.apply` / `_apply_piece`, `Loadout.cannon_yards`, `Loadout.drive_yards`, `Loadout.high_air_yards`, `Loadout.effect_rank`, `Kickers.apply_to`, `KickLogic.carry_plan`, and `RunLogic.prepare_kick_stats`. A headless run on 2026-11-14 confirmed the range totals and the needle speeds.
 
