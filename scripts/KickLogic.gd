@@ -658,7 +658,7 @@ func _accuracy_omega() -> float:
 
 
 # One speed for the power sweep, the red band, and the accuracy sweep.
-# power_speed already has the slow floor, Stone Toe, and UNDER THE LIGHTS.
+# power_speed already has the slow floor, Stone Toe, UNDER THE LIGHTS, and TAD 7.
 # Rain and ball speed are last and are not floored. Nothing here changes after a lock.
 func _kick_omega() -> float:
 	var rain := rain_scale if rain_faster else 1.0

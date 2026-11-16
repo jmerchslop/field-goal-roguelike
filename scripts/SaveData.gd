@@ -71,8 +71,8 @@ func load_file() -> void:
 			"longest_make": _as_int(cfg.get_value(section, "longest_make", 0)),
 			"makes": _as_int(cfg.get_value(section, "makes", 0)),
 			"attempts": _as_int(cfg.get_value(section, "attempts", 0)),
-			"tad_unlocked": clampi(unlocked, 0, 5),
-			"tad_selected": clampi(selected, 0, clampi(unlocked, 0, 5)),
+			"tad_unlocked": clampi(unlocked, 0, RunLogic.TAD_MAX),
+			"tad_selected": clampi(selected, 0, clampi(unlocked, 0, RunLogic.TAD_MAX)),
 		}
 	for id in TROPHY_IDS:
 		trophies[id] = bool(cfg.get_value("trophies", id, false))
@@ -186,7 +186,7 @@ func press_f9(now: float) -> String:
 func tad_unlocked(id: String) -> int:
 	if not kickers.has(id):
 		return 0
-	return clampi(int(kickers[id].get("tad_unlocked", 0)), 0, 5)
+	return clampi(int(kickers[id].get("tad_unlocked", 0)), 0, RunLogic.TAD_MAX)
 
 
 func tad_selected(id: String) -> int:
@@ -204,7 +204,7 @@ func grant_tad_win(id: String, played: int) -> int:
 	if not kickers.has(id):
 		return -1
 	var cap := tad_unlocked(id)
-	if played != cap or cap >= 5:
+	if played != cap or cap >= RunLogic.TAD_MAX:
 		return -1
 	kickers[id]["tad_unlocked"] = cap + 1
 	save_file()
@@ -215,7 +215,7 @@ func debug_raise_tad(id: String) -> int:
 	if not kickers.has(id) or not Kickers.is_unlocked(id):
 		return -1
 	var cap := tad_unlocked(id)
-	if cap >= 5:
+	if cap >= RunLogic.TAD_MAX:
 		return cap
 	kickers[id]["tad_unlocked"] = cap + 1
 	save_file()

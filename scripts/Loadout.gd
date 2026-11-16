@@ -794,7 +794,7 @@ static func draw_ring_offer(state: Dictionary, rng: RandomNumberGenerator) -> Ar
 	return cards
 
 
-static func draw_offer(state: Dictionary, attempt_cap: int, rng: RandomNumberGenerator, avoid: Array = []) -> Array:
+static func draw_offer(state: Dictionary, attempt_cap: int, rng: RandomNumberGenerator, avoid: Array = [], curse_weight: int = 1) -> Array:
 	var equip := legal_equipment(state)
 	var perks := legal_perks(state, attempt_cap)
 	var curses := legal_curses(state)
@@ -813,7 +813,7 @@ static func draw_offer(state: Dictionary, attempt_cap: int, rng: RandomNumberGen
 			equip = fresh_equip
 			perks = fresh_perks
 			curses = fresh_curses
-	return _compose_offer(equip, perks, curses, rng)
+	return _compose_offer(equip, perks, curses, rng, curse_weight)
 
 
 static func _without_keys(cards: Array, keys: Dictionary) -> Array:
@@ -832,7 +832,7 @@ static func _pools_can_fill_offer(equip: Array, perks: Array, curses: Array) -> 
 	return fillers >= 3
 
 
-static func _compose_offer(equip: Array, perks: Array, curses: Array, rng: RandomNumberGenerator) -> Array:
+static func _compose_offer(equip: Array, perks: Array, curses: Array, rng: RandomNumberGenerator, curse_weight: int = 1) -> Array:
 	var cards: Array = []
 	if equip.size() > 0:
 		var index := rng.randi_range(0, equip.size() - 1)
@@ -840,7 +840,10 @@ static func _compose_offer(equip: Array, perks: Array, curses: Array, rng: Rando
 		equip.remove_at(index)
 	var pool: Array = []
 	pool.append_array(perks)
-	pool.append_array(curses)
+	# TAD 6 doubles curse weight by listing each legal curse twice. Still at most one curse.
+	var copies := maxi(1, curse_weight)
+	for _copy in copies:
+		pool.append_array(curses)
 	_fill_offer(cards, pool, rng, true)
 	# Perks and curses can run out while equipment ranks are still legal.
 	if cards.size() < 3 and equip.size() > 0:

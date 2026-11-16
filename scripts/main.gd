@@ -30,6 +30,7 @@ var _trophy_time := 0.0
 var _cash_time := 0.0
 var _vitamin_time := 0.0
 var highlight := -1
+var tad_picker_slot := -1
 var meter_time := 0.0
 var _pose := "idle"
 var _run_time := 0.0
@@ -249,7 +250,7 @@ func _copy_run_onto_kick() -> void:
 	logic.insured = false
 	_copy_weather_onto_kick()
 	logic.post_half_gap = run.post_half_gap()
-	logic.hold_result = run.weather == RunLogic.MOVING and not run.practicing
+	logic.hold_result = run.posts_move() and not run.practicing
 	logic.heavy_ball = run.has_curse(Loadout.HEAVY)
 	logic.howling_wind = run.has_curse(Loadout.HOWLING)
 	logic.shaky = run.has_curse(Loadout.SHAKY)
@@ -377,6 +378,7 @@ func confirm_kicker() -> void:
 		save_note = Kickers.unlock_hint(id)
 		refresh_view()
 		return
+	tad_picker_slot = -1
 	selecting = false
 	front.came_from_gate = false
 	var mode := front.run_mode
@@ -401,6 +403,7 @@ func tap_f9() -> void:
 func open_select() -> void:
 	selecting = true
 	showing_records = false
+	tad_picker_slot = -1
 	front.screen = FrontEnd.Screen.SELECT
 	highlight = 1
 	_show_fresh_unlocks()
@@ -420,6 +423,7 @@ func _select_input(event: InputEvent) -> void:
 		var hover: int = _hud.kicker_slot_at(moved.position)
 		if hover >= 0 and hover != highlight:
 			highlight = hover
+			tad_picker_slot = -1
 			refresh_view()
 		return
 	if event is InputEventMouseButton:
@@ -429,18 +433,17 @@ func _select_input(event: InputEvent) -> void:
 				var wheel := 1 if mouse.button_index == MOUSE_BUTTON_WHEEL_UP else -1
 				_step_tad(wheel)
 			return
+		if mouse.pressed and mouse.button_index == MOUSE_BUTTON_RIGHT:
+			if tad_picker_slot >= 0:
+				tad_picker_slot = -1
+				refresh_view()
+			return
 		if mouse.pressed and mouse.button_index == MOUSE_BUTTON_LEFT:
 			var nudged := int(_hud.tad_step_at(mouse.position))
-			if nudged != 0 and front.run_mode == "standard":
+			if nudged != 0 and tad_picker_slot == highlight:
 				_step_tad(nudged)
 				return
-			var slot: int = _hud.kicker_slot_at(mouse.position)
-			var step: Dictionary = Kickers.click_slot(highlight, slot)
-			highlight = int(step["highlight"])
-			if bool(step["confirm"]):
-				confirm_kicker()
-			else:
-				refresh_view()
+			_click_select_card(_hud.kicker_slot_at(mouse.position))
 		return
 	if not event is InputEventKey:
 		return
@@ -462,45 +465,45 @@ func _select_input(event: InputEvent) -> void:
 		refresh_view()
 		return
 	if Settings.pressed_event(event, "back") and not showing_records:
+		if tad_picker_slot >= 0:
+			tad_picker_slot = -1
+			refresh_view()
+			return
 		_leave_character_select()
 		return
 	if showing_records:
 		return
 	if Settings.pressed_event(event, "choose_1"):
-		highlight = 0
-		refresh_view()
+		_press_select_slot(0)
 	elif Settings.pressed_event(event, "choose_2"):
-		highlight = 1
-		refresh_view()
+		_press_select_slot(1)
 	elif Settings.pressed_event(event, "choose_3"):
-		highlight = 2
-		refresh_view()
+		_press_select_slot(2)
 	elif key.keycode == KEY_4 or key.keycode == KEY_KP_4:
-		highlight = 3
-		refresh_view()
+		_press_select_slot(3)
 	elif key.keycode == KEY_5 or key.keycode == KEY_KP_5:
-		highlight = 4
-		refresh_view()
+		_press_select_slot(4)
 	elif key.keycode == KEY_6 or key.keycode == KEY_KP_6:
-		highlight = 5
-		refresh_view()
+		_press_select_slot(5)
 	elif key.keycode == KEY_7 or key.keycode == KEY_KP_7:
-		highlight = 6
-		refresh_view()
+		_press_select_slot(6)
 	elif key.keycode == KEY_8 or key.keycode == KEY_KP_8:
-		highlight = 7
-		refresh_view()
+		_press_select_slot(7)
 	elif key.keycode == KEY_LEFT or Settings.pressed_event(event, "menu_left"):
 		highlight = SelectCard.step_highlight(highlight, -1, 0)
+		tad_picker_slot = -1
 		refresh_view()
 	elif key.keycode == KEY_RIGHT or Settings.pressed_event(event, "menu_right"):
 		highlight = SelectCard.step_highlight(highlight, 1, 0)
+		tad_picker_slot = -1
 		refresh_view()
 	elif key.keycode == KEY_UP or Settings.pressed_event(event, "menu_up"):
 		highlight = SelectCard.step_highlight(highlight, 0, -1)
+		tad_picker_slot = -1
 		refresh_view()
 	elif key.keycode == KEY_DOWN or Settings.pressed_event(event, "menu_down"):
 		highlight = SelectCard.step_highlight(highlight, 0, 1)
+		tad_picker_slot = -1
 		refresh_view()
 	elif key.keycode == KEY_BRACKETLEFT:
 		_step_tad(-1)
@@ -511,11 +514,61 @@ func _select_input(event: InputEvent) -> void:
 	elif key.keycode == KEY_U:
 		_debug_tad(false)
 	elif Settings.pressed_event(event, "confirm"):
+		_confirm_select()
+
+
+func _press_select_slot(slot: int) -> void:
+	if highlight != slot:
+		highlight = slot
+		tad_picker_slot = -1
+		refresh_view()
+		return
+	_confirm_select()
+
+
+func _click_select_card(slot: int) -> void:
+	if slot < 0:
+		return
+	var previous := highlight
+	highlight = slot
+	var id := Kickers.id_for_slot(slot)
+	if id == "" or not Kickers.is_unlocked(id):
+		tad_picker_slot = -1
 		confirm_kicker()
+		return
+	if front.run_mode != "standard" or SaveData.tad_unlocked(id) < 1:
+		tad_picker_slot = -1
+		if previous == slot:
+			confirm_kicker()
+		else:
+			refresh_view()
+		return
+	if tad_picker_slot == slot and previous == slot:
+		confirm_kicker()
+		return
+	tad_picker_slot = slot
+	refresh_view()
+
+
+func _confirm_select() -> void:
+	var id := Kickers.id_for_slot(highlight)
+	if id == "" or not Kickers.is_unlocked(id):
+		tad_picker_slot = -1
+		confirm_kicker()
+		return
+	if front.run_mode != "standard" or SaveData.tad_unlocked(id) < 1:
+		tad_picker_slot = -1
+		confirm_kicker()
+		return
+	if tad_picker_slot == highlight:
+		confirm_kicker()
+		return
+	tad_picker_slot = highlight
+	refresh_view()
 
 
 func _step_tad(delta: int) -> void:
-	if front.run_mode != "standard" or highlight < 0:
+	if front.run_mode != "standard" or highlight < 0 or tad_picker_slot != highlight:
 		return
 	var id := Kickers.id_for_slot(highlight)
 	if id == "" or not Kickers.is_unlocked(id):
@@ -595,7 +648,7 @@ func force_spot_side(side: int) -> void:
 func force_weather(name: String) -> void:
 	run.force_weather(name)
 	_apply_conditions()
-	logic.hold_result = run.weather == RunLogic.MOVING and not run.practicing
+	logic.hold_result = run.posts_move() and not run.practicing
 	_arm_boss_twist()
 	refresh_view()
 
@@ -725,7 +778,7 @@ func _apply_conditions() -> void:
 	logic.stats = run.stats
 	_copy_weather_onto_kick()
 	logic.post_half_gap = run.post_half_gap()
-	logic.hold_result = run.weather == RunLogic.MOVING and not run.practicing
+	logic.hold_result = run.posts_move() and not run.practicing
 	logic.heavy_ball = run.has_curse(Loadout.HEAVY)
 	logic.howling_wind = run.has_curse(Loadout.HOWLING)
 	logic.shaky = run.has_curse(Loadout.SHAKY)
@@ -767,6 +820,10 @@ func script_good_kick() -> void:
 func refresh_view() -> void:
 	_place_world()
 	if _hud != null:
+		if selecting:
+			_hud.layout_select_chrome()
+		else:
+			_hud.clear_tad_picker()
 		_hud.queue_redraw()
 
 
@@ -1070,9 +1127,10 @@ func _arm_boss_twist() -> void:
 	_twist_time = 0.0
 	_clock_done = false
 	_posts_judged = false
-	var clock := run.weather == RunLogic.CLOCK
-	var moving := run.weather == RunLogic.MOVING
-	_twist_armed = (clock or moving) and not run.practicing and logic.phase == KickLogic.Phase.AIMING
+	var clock := run.weather == RunLogic.CLOCK and not run.practicing
+	# Practice used to hold the posts still. TAD 10 keeps the sine through that swing.
+	var moving := run.posts_move() and (not run.practicing or run.tad_active(10))
+	_twist_armed = (clock or moving) and logic.phase == KickLogic.Phase.AIMING
 	_apply_post_slide()
 
 
@@ -1102,10 +1160,10 @@ func tick_kick_clock(delta: float) -> void:
 
 
 func tick_moving_posts(before: float, after: float, delta: float) -> void:
-	if run.practicing:
+	if run.practicing and not run.tad_active(10):
 		_apply_post_slide()
 		return
-	if _twist_blocked() or run.weather != RunLogic.MOVING or not _twist_armed:
+	if _twist_blocked() or not run.posts_move() or not _twist_armed:
 		return
 	var live := logic.phase == KickLogic.Phase.AIMING or logic.phase == KickLogic.Phase.POWER or logic.phase == KickLogic.Phase.ACCURACY or logic.phase == KickLogic.Phase.FLIGHT or logic.phase == KickLogic.Phase.RESULT
 	if not live:
@@ -1122,7 +1180,7 @@ func tick_moving_posts(before: float, after: float, delta: float) -> void:
 
 
 func note_goal_line(before: float, after: float, frame_delta: float) -> void:
-	if _posts_judged or run.weather != RunLogic.MOVING or run.practicing:
+	if _posts_judged or not run.posts_move() or run.practicing:
 		return
 	if logic.kick_distance <= 0.0 or before >= logic.kick_distance or after < logic.kick_distance:
 		return
@@ -1146,7 +1204,9 @@ func score_posts_now() -> void:
 
 
 func _posts_sliding() -> bool:
-	if run.weather != RunLogic.MOVING or run.practicing or not _twist_armed:
+	if not run.posts_move() or not _twist_armed:
+		return false
+	if run.practicing and not run.tad_active(10):
 		return false
 	return logic.phase == KickLogic.Phase.AIMING or logic.phase == KickLogic.Phase.POWER or logic.phase == KickLogic.Phase.ACCURACY or logic.phase == KickLogic.Phase.FLIGHT
 

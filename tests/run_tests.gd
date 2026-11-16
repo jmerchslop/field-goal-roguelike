@@ -58,6 +58,7 @@ func _run() -> void:
 	_check_pk1()
 	_check_mf1()
 	_check_as1()
+	_check_as2()
 	_check_f3()
 	_check_au1()
 	_check_drive_lid_and_power_safety()
@@ -79,6 +80,7 @@ func _run() -> void:
 func _finish_live() -> void:
 	_check_pause_saves()
 	_check_playing_card_live()
+	_check_as2_live()
 	_check_floodlights_live()
 	_check_light_beams()
 	_check_boss1()
@@ -3603,7 +3605,7 @@ func _check_f3() -> void:
 	var walk_text := " ".join(Kickers.rundown_lines(Kickers.WALK_ON, true, 2))
 	check(walk_text.find(str(SelectCard.yard_cap(Kickers.WALK_ON))) >= 0, "the Walk-On rundown uses his live range")
 	check(walk_text.find("%.2f" % walk_stats.perfect_band) >= 0 and walk_text.find("Earns His Spot") >= 0 and walk_text.find("2 offer rerolls") >= 0, "the Walk-On rundown names the kit, the band, and the rerolls")
-	check(walk_text.find("Two-a-days 2.") >= 0, "an unlocked rundown can name the selected Two-a-Days level")
+	check(walk_text.find("Two-a-days unlocked through 2.") >= 0, "an unlocked rundown names the Two-a-Days cap while browsing")
 	var bruce_stats := KickerStats.new()
 	Kickers.apply_to(bruce_stats, Kickers.BIG_BRUCE)
 	var bruce_text := " ".join(Kickers.rundown_lines(Kickers.BIG_BRUCE, true, -1))
@@ -3640,7 +3642,7 @@ func _check_as1() -> void:
 	check(records.grant_tad_win(Kickers.BIG_BRUCE, 0) == 1 and records.tad_unlocked(Kickers.WALK_ON) == 1, "Bruce climbs on his own")
 	records.kickers[Kickers.WALK_ON]["tad_unlocked"] = 4
 	check(records.grant_tad_win(Kickers.WALK_ON, 4) == 5, "winning TAD 4 unlocks TAD 5")
-	check(records.grant_tad_win(Kickers.WALK_ON, 5) == -1 and records.tad_unlocked(Kickers.WALK_ON) == 5, "winning TAD 5 does not unlock level 6")
+	check(records.grant_tad_win(Kickers.WALK_ON, 5) == 6 and records.tad_unlocked(Kickers.WALK_ON) == 6, "winning TAD 5 unlocks TAD 6")
 	var shelf = get_root().get_node("SaveData")
 	var cole_before := bool(shelf.has_unlock(Kickers.COLE))
 	if not Kickers.is_unlocked(Kickers.COLE):
@@ -3718,6 +3720,216 @@ func _check_as1() -> void:
 	resumed.import_resume(saved.export_resume())
 	check(resumed.tad_level == 3 and near(resumed.distance_yards(), 39.0), "Continue keeps TAD 3 and the longer kick")
 	records.free()
+
+
+func _check_as2() -> void:
+	var rects: Array = SelectCard.grid_rects()
+	for pair in [[Kickers.WALK_ON, 1], [Kickers.PHIL, 2], [Kickers.CARLOS, 7]]:
+		var id := str(pair[0])
+		var card: Rect2 = rects[int(pair[1])]
+		var layout: Dictionary = SelectCard.picker_layout(card)
+		var labels: Dictionary = SelectCard.label_boxes(card, id)
+		var picker: Rect2 = layout["union"]
+		check(SelectCard.boxes_clear(card, id), "the TAD picker stays off the name, ball, kit, ranks, and face for %s" % id)
+		check(picker.position.x >= card.position.x and picker.position.y >= card.position.y and picker.end.x <= card.end.x + 0.1 and picker.end.y <= card.end.y, "the TAD picker stays inside %s" % id)
+		print("AS2 boxes ", id, " picker ", _rect_text(picker), " badge ", _rect_text(layout["badge"]), " left ", _rect_text(layout["left"]), " right ", _rect_text(layout["right"]), " name ", _rect_text(labels["name"]), " ball ", _rect_text(labels["ball"]), " kit ", _rect_text(labels["kit"]), " rank_tl ", _rect_text(labels["rank_tl"]), " rank_br ", _rect_text(labels["rank_br"]), " face ", _rect_text(labels["face"]))
+	var hud_source := FileAccess.get_file_as_string("res://scripts/hud.gd")
+	check(hud_source.find("_draw_tad_stepper") < 0 and hud_source.find("_draw_tad_picker") >= 0, "the under-card stepper is gone")
+	var browsing := " ".join(Kickers.rundown_lines(Kickers.WALK_ON, true, 5, -1))
+	check(browsing.find("Two-a-days unlocked through 5.") >= 0 and browsing.find("Short week") < 0, "browsing reports only the unlocked cap")
+	check(" ".join(Kickers.rundown_lines(Kickers.WALK_ON, true, 0, -1)).find("Two-a-days not unlocked.") >= 0, "a cap of 0 says Two-a-Days is not unlocked")
+	var open := " ".join(Kickers.rundown_lines(Kickers.WALK_ON, true, 10, 6))
+	check(open.find("Crowded offers") >= 0 and open.find("Curse offers") >= 0 and open.find("All below also apply.") >= 0 and open.find("No rerolls") >= 0, "the open picker lists the selected twist and the ones below it")
+	check(" ".join(Kickers.rundown_lines(Kickers.PHIL, false, 8, 4)).find("Two-a-days") < 0, "a locked card has no Two-a-Days section")
+	var records = load("res://scripts/SaveData.gd").new()
+	records.file_path = "user://fg_as2_tad.cfg"
+	records.reset_save()
+	for step in range(5, 10):
+		records.kickers[Kickers.WALK_ON]["tad_unlocked"] = step
+		check(records.grant_tad_win(Kickers.WALK_ON, step) == step + 1, "winning TAD %d unlocks the next level" % step)
+	check(records.tad_unlocked(Kickers.BIG_BRUCE) == 0, "Walk-On's climb does not raise Bruce")
+	check(records.grant_tad_win(Kickers.WALK_ON, 10) == -1 and records.tad_unlocked(Kickers.WALK_ON) == 10, "winning TAD 10 does not unlock an 11th level")
+	check(records.grant_tad_win(Kickers.WALK_ON, 7) == -1 and records.tad_unlocked(Kickers.WALK_ON) == 10, "a win below the cap does not skip or reset")
+	records.debug_clear_tad(Kickers.WALK_ON)
+	for _raise in 10:
+		records.debug_raise_tad(Kickers.WALK_ON)
+	check(records.tad_unlocked(Kickers.WALK_ON) == 10, "the debug key stops at TAD 10")
+	check(records.debug_raise_tad(Kickers.WALK_ON) == 10, "another debug press stays at 10")
+	records.debug_clear_tad(Kickers.WALK_ON)
+	check(records.tad_unlocked(Kickers.WALK_ON) == 0, "Shift+U still clears that kicker")
+	records.free()
+	var bare := RunLogic.new()
+	bare.start_with_kicker(Kickers.WALK_ON)
+	bare.tad_level = 7
+	bare.prepare_kick_stats()
+	var gauge := KickLogic.new()
+	gauge.stats = bare.stats
+	var base_omega := MeterGauge.omega_base()
+	print("AS2 tad7 power ", bare.stats.power_speed, " omega ", gauge._power_omega(), " base ", base_omega)
+	check(near(bare.stats.power_speed, 133.0, 0.01) and near(gauge._power_omega(), gauge._accuracy_omega()) and near(gauge._power_omega(), base_omega * 1.33, 0.01), "TAD 7 is ×1.33 on both needles after the floor")
+	gauge.rain_faster = true
+	check(near(gauge._power_omega(), base_omega * 1.33 * gauge.rain_scale, 0.01), "rain still multiplies after the TAD 7 speed-up")
+	var slowed := RunLogic.new()
+	slowed.start_with_kicker(Kickers.WALK_ON)
+	slowed.tad_level = 7
+	slowed.stats.power_speed = 10.0
+	slowed._finish_needles()
+	print("AS2 tad7 floored ", slowed.stats.power_speed)
+	check(near(slowed.stats.power_speed, 46.55, 0.02) and near(slowed.stats.accuracy_speed, slowed.stats.power_speed), "a slow stack floored at 0.35 still takes the 1.33")
+	var plain := RunLogic.new()
+	plain.start_with_kicker(Kickers.WALK_ON)
+	var plain_attempts := plain.attempts
+	plain.resolve_kick("GOOD", 0.0, false)
+	var denied := RunLogic.new()
+	denied.start_with_kicker(Kickers.WALK_ON)
+	denied.tad_level = 8
+	var denied_attempts := denied.attempts
+	var denied_cap := denied.attempt_cap
+	denied.resolve_kick("GOOD", 0.0, false)
+	check(plain.attempts == plain_attempts + 1 and denied.attempts == denied_attempts and denied.attempt_cap == denied_cap and denied_attempts == 1 and denied_cap == 3, "TAD 8 skips the first-try attempt and leaves the start at 1 and the cap at 3")
+	var bench := RunLogic.new()
+	bench.start_with_kicker(Kickers.WALK_ON)
+	bench.tad_level = 8
+	var bench_before := bench.attempts
+	bench.give(Loadout.DEEP_BENCH, 3)
+	check(bench.attempts > bench_before, "Deep Bench still adds an attempt at TAD 8")
+	var shot := RunLogic.new()
+	shot.start_with_kicker(Kickers.WALK_ON)
+	shot.tad_level = 8
+	shot.awaiting_shop = true
+	shot.cash = 40
+	var shot_before := shot.attempts
+	check(shot.buy_b12() and shot.attempts == shot_before + 1, "B12 still adds an attempt at TAD 8")
+	var state_run := RunLogic.new()
+	state_run.start_with_kicker(Kickers.WALK_ON)
+	var offer_state: Dictionary = state_run.loadout_state()
+	var perk_n := Loadout.legal_perks(offer_state, state_run.attempt_cap).size()
+	var curse_n := Loadout.legal_curses(offer_state).size()
+	var share_before := float(curse_n) / float(perk_n + curse_n)
+	var share_after := float(curse_n * 2) / float(perk_n + curse_n * 2)
+	var hits_before := 0
+	var hits_after := 0
+	var rng_before := RandomNumberGenerator.new()
+	rng_before.seed = 11
+	var rng_after := RandomNumberGenerator.new()
+	rng_after.seed = 11
+	for _draw in 240:
+		var quiet: Array = Loadout.draw_offer(offer_state, state_run.attempt_cap, rng_before, [], 1)
+		var loud: Array = Loadout.draw_offer(offer_state, state_run.attempt_cap, rng_after, [], 2)
+		check(quiet.size() == 3 and loud.size() == 3, "TAD 6 still offers 3 cards")
+		var quiet_curses := _curse_cards(quiet)
+		var loud_curses := _curse_cards(loud)
+		check(quiet_curses <= 1 and loud_curses <= 1, "an offer still holds at most one curse")
+		if quiet_curses == 1:
+			hits_before += 1
+		if loud_curses == 1:
+			hits_after += 1
+	print("AS2 curse weight perks ", perk_n, " curses ", curse_n, " share ", share_before, " -> ", share_after, " offers ", hits_before, " -> ", hits_after)
+	check(is_equal_approx(share_after / share_before, 2.0 * float(perk_n + curse_n) / float(perk_n + curse_n * 2)) and hits_after > hits_before, "TAD 6 doubles curse weight and curses show up more often")
+	var crowded := RunLogic.new()
+	crowded.start_with_kicker(Kickers.WALK_ON)
+	crowded.tad_level = 6
+	crowded.give(Loadout.STONE, 1)
+	crowded.give(Loadout.HEAVY, 1)
+	crowded.roll_offer()
+	check(crowded.offer.size() == 3 and _curse_cards(crowded.offer) == 0, "two owned curses still block a new curse at TAD 6")
+	var foul_seen := {}
+	for seed in 40:
+		var foul := RunLogic.new()
+		foul.set_seed(seed + 20)
+		foul.start_with_kicker(Kickers.WALK_ON)
+		foul.open_tad(9)
+		check(foul.weather == RunLogic.RAIN or foul.weather == RunLogic.SNOW or foul.weather == RunLogic.MUD, "TAD 9 kick 1 is rain, snow, or mud, got %s" % foul.weather)
+		foul_seen[foul.weather] = true
+		foul.kick_number = 3
+		foul._reroll_zinc()
+		check(foul.weather == RunLogic.RAIN or foul.weather == RunLogic.SNOW or foul.weather == RunLogic.MUD, "Zinc on a TAD 9 kick stays in that pool, got %s" % foul.weather)
+	check(foul_seen.size() >= 1, "TAD 9 rolled a foul-weather name")
+	var boss := RunLogic.new()
+	boss.set_seed(3)
+	boss.start_with_kicker(Kickers.WALK_ON)
+	boss.tad_level = 9
+	boss.kick_number = 5
+	boss._roll_weather()
+	check(boss.weather == str(boss.standard_bosses[5]), "a TAD 9 boss keeps its condition name, got %s" % boss.weather)
+	var wet := RunLogic.new()
+	wet.start_with_kicker(Kickers.WALK_ON)
+	wet.tad_level = 9
+	wet.weather = RunLogic.RAIN
+	wet.prepare_kick_stats()
+	var flags_before: Dictionary = wet.weather_flags_now()
+	wet.active_vitamins[Vitamins.VITAMIN_D] = 1
+	var flags_after: Dictionary = wet.weather_flags_now()
+	check(bool(flags_before["rain_faster"]) and not bool(flags_after["rain_faster"]) and not bool(flags_after["snow_range"]) and not bool(flags_after["mud_power"]), "Vitamin D still clears rain, snow, and mud at TAD 9")
+	var retry := RunLogic.new()
+	retry.start_with_kicker(Kickers.WALK_ON)
+	retry.tad_level = 9
+	retry.weather = RunLogic.SNOW
+	retry.kick_resolved = true
+	retry.last_result_made = false
+	retry.phase = RunLogic.Phase.PLAYING
+	check(retry.begin_retry() and retry.weather == RunLogic.SNOW, "a retry keeps the TAD 9 weather")
+	var crew := RunLogic.new()
+	crew.start_with_kicker(Kickers.WALK_ON)
+	crew.tad_level = 10
+	crew.weather = RunLogic.CLEAR
+	var slide := RunLogic.post_slide(1.0)
+	print("AS2 tad10 slide ", slide, " swing ", RunLogic.POST_SWING, " period ", RunLogic.POST_PERIOD)
+	check(crew.posts_move() and near(slide, RunLogic.POST_SWING), "TAD 10 uses the ±3.0 yd / 4.0 s sine on a non-boss kick")
+	crew.weather = RunLogic.MOVING
+	check(crew.posts_move() and near(RunLogic.post_slide(1.0), slide), "MOVING POSTS plus TAD 10 is still one sine")
+	var finals := {}
+	for seed in 20:
+		var final := RunLogic.new()
+		final.set_seed(seed + 70)
+		final.new_run()
+		final.tad_level = 10
+		var name := str(final.standard_bosses[20])
+		finals[name] = true
+		check(name == RunLogic.BIG_GAME or name == RunLogic.MOVING, "kick 20 is still Big Game or Moving Posts, got %s" % name)
+		check(final.posts_move(), "TAD 10 moves the posts on kick 20 either way")
+	print("AS2 kick 20 names ", finals.keys())
+	var stacked := RunLogic.new()
+	stacked.set_seed(4)
+	stacked.start_with_kicker(Kickers.WALK_ON)
+	var wind_before := stacked.wind_speed
+	stacked.open_tad(10)
+	stacked.prepare_kick_stats()
+	check(stacked.tad_level == 10 and stacked.rerolls_left == 0 and stacked.wind_speed == wind_before + 3, "TAD 10 keeps the wind add and the reroll ban")
+	check(near(stacked.distance_yards(), 39.0) and near(stacked.post_width(), 5.92) and stacked.posts_move(), "TAD 10 keeps the longer kick, the narrower posts, and the wander")
+	check(stacked.item_price(Vitamins.PROTEIN) == 6 and (stacked.weather == RunLogic.RAIN or stacked.weather == RunLogic.SNOW or stacked.weather == RunLogic.MUD), "TAD 10 keeps the shop tax and foul weather")
+	check(near(stacked.stats.power_speed, 133.0, 0.01), "TAD 10 keeps the faster needles")
+	var made := stacked.attempts
+	stacked.resolve_kick("GOOD", 0.0, false)
+	check(stacked.attempts == made, "TAD 10 keeps the missing first-try attempt")
+	stacked.awaiting_shop = true
+	stacked.cash = 10
+	stacked.shop_reroll_price = 2
+	check(stacked.reroll_shop() and stacked.cash == 7, "shop F stays on at the Short Week price")
+	var endless := RunLogic.new()
+	endless.start_with_kicker(Kickers.WALK_ON)
+	endless.run_mode = "endless"
+	endless.open_tad(10)
+	check(endless.tad_level == 0 and not endless.tad_active(1) and endless.rerolls_left == 2 and not endless.posts_move(), "Endless ignores TAD 10")
+	var saved := RunLogic.new()
+	saved.start_with_kicker(Kickers.WALK_ON)
+	saved.tad_level = 10
+	saved.weather = RunLogic.MUD
+	var resumed := RunLogic.new()
+	resumed.import_resume(saved.export_resume())
+	check(resumed.tad_level == 10 and resumed.weather == RunLogic.MUD and resumed.posts_move(), "Continue keeps TAD 10 and the weather")
+
+
+func _curse_cards(offer: Array) -> int:
+	var count := 0
+	for card in offer:
+		if str(card.get("kind", "")) == Loadout.CURSE:
+			count += 1
+	return count
+
+
+func _rect_text(rect: Rect2) -> String:
+	return "(%.1f, %.1f, %.1f, %.1f)" % [rect.position.x, rect.position.y, rect.size.x, rect.size.y]
 
 
 func _check_mf1() -> void:
@@ -6200,6 +6412,122 @@ func _check_playing_card_live() -> void:
 	game.free()
 	records.unlocks = saved
 	_check_reaction_live()
+
+
+func _as2_key(game, code: int) -> void:
+	var key := InputEventKey.new()
+	key.pressed = true
+	key.echo = false
+	key.keycode = code as Key
+	key.physical_keycode = code as Key
+	game._select_input(key)
+
+
+func _check_as2_live() -> void:
+	var records = get_root().get_node("SaveData")
+	var path := str(records.file_path)
+	var had_file := FileAccess.file_exists(path)
+	var backup := PackedByteArray()
+	if had_file:
+		backup = FileAccess.get_file_as_bytes(path)
+	for id in Kickers.UNLOCKABLE:
+		records.unlocks[id] = false
+	records.kickers[Kickers.WALK_ON]["tad_unlocked"] = 4
+	records.kickers[Kickers.WALK_ON]["tad_selected"] = 2
+	records.kickers[Kickers.BIG_BRUCE]["tad_unlocked"] = 0
+	records.kickers[Kickers.BIG_BRUCE]["tad_selected"] = 0
+	OS.set_environment("FG_SHOTS", "")
+	var packed: PackedScene = load("res://scenes/main.tscn")
+	var game = packed.instantiate()
+	get_root().add_child(game)
+	game._taking_pictures = true
+	game.front.run_mode = "standard"
+	game.open_select()
+	game.highlight = 1
+	game.refresh_view()
+	check(game.tad_picker_slot == -1 and game._hud.tad_wheel.size.x < 1.0, "browsing draws no TAD picker")
+	_as2_key(game, KEY_SPACE)
+	check(game.selecting and game.tad_picker_slot == 1 and game._hud.tad_wheel.size.x > 1.0, "Space on a TAD 1+ kicker opens the picker")
+	check(records.tad_selected(Kickers.WALK_ON) == 2, "the picker opens on the last selected level")
+	var right := InputEventMouseButton.new()
+	right.pressed = true
+	right.button_index = MOUSE_BUTTON_RIGHT
+	right.position = Vector2(8, 8)
+	game._select_input(right)
+	check(game.selecting and game.tad_picker_slot == -1 and game._hud.tad_wheel.size.x < 1.0, "right-click closes the picker and stays on select")
+	_as2_key(game, KEY_SPACE)
+	_as2_key(game, KEY_ESCAPE)
+	check(game.selecting and game.tad_picker_slot == -1, "Esc from the picker returns to browsing")
+	_as2_key(game, KEY_ESCAPE)
+	check(not game.selecting and game.front.screen == FrontEnd.Screen.MAIN, "Esc from browsing returns to the main menu")
+	game.front.run_mode = "standard"
+	game.open_select()
+	game.highlight = 1
+	_as2_key(game, KEY_BRACKETRIGHT)
+	check(records.tad_selected(Kickers.WALK_ON) == 2 and game.tad_picker_slot == -1, "brackets do nothing while browsing")
+	_as2_key(game, KEY_SPACE)
+	_as2_key(game, KEY_BRACKETRIGHT)
+	check(records.tad_selected(Kickers.WALK_ON) == 3 and game.selecting, "a bracket raises the picked level and does not start")
+	var wheel := InputEventMouseButton.new()
+	wheel.pressed = true
+	wheel.button_index = MOUSE_BUTTON_WHEEL_DOWN
+	wheel.position = game._hud.tad_badge.get_center()
+	game._select_input(wheel)
+	check(records.tad_selected(Kickers.WALK_ON) == 2 and game.selecting, "the wheel over the badge cycles TAD")
+	var chevron := InputEventMouseButton.new()
+	chevron.pressed = true
+	chevron.button_index = MOUSE_BUTTON_LEFT
+	chevron.position = game._hud.tad_left.get_center()
+	game._select_input(chevron)
+	check(records.tad_selected(Kickers.WALK_ON) == 1 and game.selecting, "a chevron click cycles and does not start")
+	var body := InputEventMouseButton.new()
+	body.pressed = true
+	body.button_index = MOUSE_BUTTON_LEFT
+	body.position = game._hud.kicker_rects[1].get_center()
+	game._select_input(body)
+	check(not game.selecting and game.run.kicker_id == Kickers.WALK_ON and game.run.tad_level == 1, "a second click on the card starts at the picked level")
+	game.front.run_mode = "standard"
+	game.open_select()
+	game.highlight = 1
+	_as2_key(game, KEY_SPACE)
+	records.kickers[Kickers.BIG_BRUCE]["tad_unlocked"] = 3
+	records.kickers[Kickers.BIG_BRUCE]["tad_selected"] = 1
+	var move := InputEventMouseButton.new()
+	move.pressed = true
+	move.button_index = MOUSE_BUTTON_LEFT
+	move.position = game._hud.kicker_rects[0].get_center()
+	game._select_input(move)
+	check(game.selecting and game.highlight == 0 and game.tad_picker_slot == 0, "clicking Bruce moves the picker onto his card")
+	_as2_key(game, KEY_3)
+	check(game.selecting and game.highlight == 2 and game.tad_picker_slot == -1, "a number key on a different card only moves the highlight")
+	_as2_key(game, KEY_3)
+	check(game.selecting and game.tad_picker_slot == -1, "a locked card still does not start")
+	records.kickers[Kickers.BIG_BRUCE]["tad_unlocked"] = 0
+	records.kickers[Kickers.BIG_BRUCE]["tad_selected"] = 0
+	game.highlight = 0
+	game.tad_picker_slot = -1
+	game.refresh_view()
+	_as2_key(game, KEY_SPACE)
+	check(not game.selecting and game.run.kicker_id == Kickers.BIG_BRUCE and game.run.tad_level == 0, "a TAD 0 kicker starts on Space with no picker")
+	game.front.run_mode = "standard"
+	game.open_select()
+	game.highlight = 4
+	_as2_key(game, KEY_SPACE)
+	check(game.selecting and game.tad_picker_slot == -1, "Space on a locked kicker does not open a picker")
+	game.front.run_mode = "endless"
+	game.highlight = 1
+	game.refresh_view()
+	check(game._hud.tad_wheel.size.x < 1.0, "Endless select has no TAD picker")
+	_as2_key(game, KEY_SPACE)
+	check(not game.selecting and game.run.run_mode == "endless" and game.run.tad_level == 0, "Endless starts with no TAD level")
+	game.free()
+	if had_file:
+		var restored := FileAccess.open(path, FileAccess.WRITE)
+		restored.store_buffer(backup)
+		restored.close()
+		records.load_file()
+	elif FileAccess.file_exists(path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
 
 func _check_reaction_live() -> void:

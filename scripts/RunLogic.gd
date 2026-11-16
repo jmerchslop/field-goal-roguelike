@@ -24,6 +24,7 @@ const MOVING := "MOVING POSTS"
 const CLOCK_SEC := 4.0
 const POST_SWING := 3.0
 const POST_PERIOD := 4.0
+const TAD_MAX := 10
 const LIGHTS_NEEDLE := 1.35
 const SQUEEZE_WIDTH := 5.17
 const SQUEEZE_HALF := 2.585
@@ -280,10 +281,23 @@ func tad_active(level: int) -> bool:
 
 
 func open_tad(level: int) -> void:
-	tad_level = 0 if run_mode == "endless" else clampi(level, 0, 5)
+	tad_level = 0 if run_mode == "endless" else clampi(level, 0, TAD_MAX)
 	if tad_active(5):
 		rerolls_left = 0
 	_add_tad_wind()
+	# Kick 1's weather was rolled before the ladder was applied. Foul weather has to roll again.
+	if tad_active(9):
+		weather_forced = false
+		_roll_weather()
+
+
+func posts_move() -> bool:
+	# TAD 10 reuses the MOVING POSTS sine. A kick that already rolled that boss uses it once.
+	return tad_active(10) or weather == MOVING
+
+
+func _curse_weight() -> int:
+	return 2 if tad_active(6) else 1
 
 
 func lived_effect_line(id: String, rank: int) -> String:
@@ -294,7 +308,7 @@ func lived_effect_line(id: String, rank: int) -> String:
 
 
 static func tad_summary(level: int) -> String:
-	match clampi(level, 0, 5):
+	match clampi(level, 0, TAD_MAX):
 		1:
 			return "SHOP PRICES X1.5"
 		2:
@@ -305,8 +319,70 @@ static func tad_summary(level: int) -> String:
 			return "POSTS 0.25 YD NARROWER"
 		5:
 			return "NO OFFER REROLLS"
+		6:
+			return "CURSE OFFERS X2"
+		7:
+			return "NEEDLES X1.33"
+		8:
+			return "NO FREE DOWN"
+		9:
+			return "BAD WEATHER EVERY KICK"
+		10:
+			return "MOVING CREW"
 		_:
 			return "STANDARD"
+
+
+static func tad_name(level: int) -> String:
+	match clampi(level, 0, TAD_MAX):
+		1:
+			return "Short week"
+		2:
+			return "Swirling winds"
+		3:
+			return "Long yardage"
+		4:
+			return "Tight hashes"
+		5:
+			return "No rerolls"
+		6:
+			return "Crowded offers"
+		7:
+			return "Crunch time"
+		8:
+			return "No free down"
+		9:
+			return "Foul weather"
+		10:
+			return "Moving crew"
+		_:
+			return "Standard"
+
+
+static func tad_sentence(level: int) -> String:
+	match clampi(level, 0, TAD_MAX):
+		1:
+			return "Shop prices are 1.50 times, rounded up."
+		2:
+			return "Wind is 3 mph stronger."
+		3:
+			return "Kicks are 4 yards longer."
+		4:
+			return "The posts are 0.25 yards narrower."
+		5:
+			return "Offer rerolls are off. The shop shelf reroll stays."
+		6:
+			return "Curse offers ×2. Still at most one curse."
+		7:
+			return "Needles ×1.33 on every kick."
+		8:
+			return "A first-try make does not grant an attempt."
+		9:
+			return "Every kick is rain, snow, or mud."
+		10:
+			return "The posts move on every kick."
+		_:
+			return "Standard rules."
 
 
 func _tad_price(amount: int) -> int:
@@ -403,7 +479,8 @@ func resolve_kick(result_text: String, offset: float, perfect: bool) -> void:
 			clean_makes[kick_number] = true
 			if stats.lucky_ball:
 				lucky_stacks += 1
-		if earns_attempt(kick_number, is_first_ball, perfect, down_the_middle, late_earn_rule):
+		# TAD 8 turns off the first-try attempt. Deep Bench and B12 add attempts on their own.
+		if earns_attempt(kick_number, is_first_ball, perfect, down_the_middle, late_earn_rule) and not tad_active(8):
 			if attempts >= attempt_cap:
 				attempt_note = NOTE_CAP
 			else:
@@ -969,7 +1046,7 @@ func roll_offer() -> void:
 			offer.append(_as_loadout_card(item))
 		_forced_cards = []
 	else:
-		offer = Loadout.draw_offer(loadout_state(), attempt_cap, _offer_rng)
+		offer = Loadout.draw_offer(loadout_state(), attempt_cap, _offer_rng, [], _curse_weight())
 	_consider_power_safety()
 	if generated:
 		_apply_synchronicity_offer()
@@ -1009,7 +1086,7 @@ func reroll_offer() -> bool:
 	else:
 		rerolls_left -= 1
 	var previous: Array = offer.duplicate(true)
-	offer = Loadout.draw_offer(loadout_state(), attempt_cap, _offer_rng, previous)
+	offer = Loadout.draw_offer(loadout_state(), attempt_cap, _offer_rng, previous, _curse_weight())
 	_consider_power_safety()
 	awaiting_offer = true
 	return true
@@ -1616,7 +1693,12 @@ func _finish_needles() -> void:
 	var clutch := 0.90 if _walk_on_clutch() else 1.0
 	var stone := 1.20 if has_curse(Loadout.STONE) else 1.0
 	var lights := LIGHTS_NEEDLE if lights_active() else 1.0
-	var combined := MeterGauge.needle_speed(base, stats.power_speed / base * clutch, stone, lights, 1.0, 1.0)
+	# TAD 7 sits after the 0.35 floor, with Stone Toe and UNDER THE LIGHTS.
+	# Rain and ball speed still multiply later, in the shared kick omega.
+	# Practice Swing uses this same combined speed, so the 1.33 applies there too.
+	# Lights stay off during practice because lights_active() is false.
+	var crunch := 1.33 if tad_active(7) else 1.0
+	var combined := MeterGauge.needle_speed(base, stats.power_speed / base * clutch, stone, lights, 1.0, 1.0) * crunch
 	stats.power_speed = combined
 	stats.accuracy_speed = combined
 
@@ -1838,7 +1920,7 @@ func import_resume(data: Dictionary) -> void:
 	cash = int(data.get("cash", 0))
 	rerolls_left = int(data.get("rerolls_left", rerolls_left))
 	second_look_bank = int(data.get("second_look_bank", 0))
-	tad_level = int(data.get("tad_level", 0))
+	tad_level = clampi(int(data.get("tad_level", 0)), 0, TAD_MAX)
 	mulligans_left = int(data.get("mulligans_left", mulligans_left))
 	insurance_left = int(data.get("insurance_left", insurance_left))
 	practice_left = int(data.get("practice_left", practice_left))
@@ -2268,6 +2350,11 @@ func _roll_weather() -> void:
 		return
 	if run_mode != "endless" and is_standard_boss_slot(kick_number):
 		weather = str(standard_bosses.get(kick_number, ""))
+		return
+	# One condition string. A boss name already fills it, so foul weather does not stack on top.
+	if tad_active(9):
+		var foul: Array[String] = [RAIN, SNOW, MUD]
+		weather = foul[_weather_rng.randi() % foul.size()]
 		return
 	var template := RunTable.table_kick(run_mode, kick_number)
 	weather = roll_weather_name(template, _previous_weather, _older_weather, _weather_rng, run_mode == "endless")

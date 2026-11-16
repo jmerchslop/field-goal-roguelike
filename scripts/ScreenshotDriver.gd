@@ -120,6 +120,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "as2":
+		if not await _capture_as2():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "as1":
 		if not await _capture_as1():
 			get_tree().quit(1)
@@ -1866,6 +1872,161 @@ func _capture_f3() -> bool:
 	for id in saved.keys():
 		SaveData.unlocks[id] = bool(saved[id])
 	SaveData.save_file()
+	return true
+
+
+func _capture_as2() -> bool:
+	var path := str(SaveData.file_path)
+	var had_file := FileAccess.file_exists(path)
+	var backup := PackedByteArray()
+	if had_file:
+		backup = FileAccess.get_file_as_bytes(path)
+	SaveData.unlocks[Kickers.PHIL] = true
+	SaveData.kickers[Kickers.WALK_ON]["tad_unlocked"] = 5
+	SaveData.kickers[Kickers.WALK_ON]["tad_selected"] = 4
+	board.front.run_mode = "standard"
+	board.open_select()
+	board.highlight = 1
+	board.tad_picker_slot = -1
+	board.refresh_view()
+	var cards: Array = SelectCard.grid_rects()
+	for pair in [[Kickers.WALK_ON, 1], [Kickers.PHIL, 2]]:
+		var id := str(pair[0])
+		var card: Rect2 = cards[int(pair[1])]
+		var layout: Dictionary = SelectCard.picker_layout(card)
+		var labels: Dictionary = SelectCard.label_boxes(card, id)
+		print("AS2 boxes ", id, " picker ", layout["union"], " badge ", layout["badge"], " name ", labels["name"], " ball ", labels["ball"], " kit ", labels["kit"], " rank_tl ", labels["rank_tl"], " rank_br ", labels["rank_br"], " face ", labels["face"])
+	if not await _capture("as2_browse.png"):
+		_restore_as2_save(had_file, path, backup)
+		return false
+	board.tad_picker_slot = 1
+	board.refresh_view()
+	if board._hud.tad_wheel.size.x < 1.0:
+		print("AS2 picker did not open")
+		_restore_as2_save(had_file, path, backup)
+		return false
+	if not await _capture("as2_picker.png"):
+		_restore_as2_save(had_file, path, backup)
+		return false
+	if not await _capture_region("as2_picker_closeup.png", cards[1].grow(6.0)):
+		_restore_as2_save(had_file, path, backup)
+		return false
+	SaveData.kickers[Kickers.WALK_ON]["tad_unlocked"] = 10
+	SaveData.kickers[Kickers.WALK_ON]["tad_selected"] = 6
+	board.highlight = 1
+	board.confirm_kicker()
+	var found := false
+	for seed in 80:
+		board.run._offer_rng.seed = seed + 1
+		board.run.roll_offer()
+		if board.run.offer.size() == 3 and _as2_curse_count(board.run.offer) == 1:
+			found = true
+			break
+	if not found:
+		print("AS2 no TAD 6 curse offer")
+		_restore_as2_save(had_file, path, backup)
+		return false
+	var shown: Array = []
+	for offer_card in board.run.offer:
+		shown.append("%s:%s" % [str(offer_card.get("id", "")), str(offer_card.get("kind", ""))])
+	print("AS2 tad6 offer ", shown)
+	if not await _capture("as2_tad6_offer.png"):
+		_restore_as2_save(had_file, path, backup)
+		return false
+	board.open_select()
+	SaveData.kickers[Kickers.WALK_ON]["tad_selected"] = 7
+	board.highlight = 1
+	board.confirm_kicker()
+	print("AS2 tad7 level ", board.run.tad_level, " power ", board.run.stats.power_speed, " omega ", board.logic._power_omega(), " base ", MeterGauge.omega_base())
+	board.logic.press_space()
+	board.logic.advance(board.logic.windup_left + 0.18)
+	if not await _capture("as2_tad7_meter.png"):
+		_restore_as2_save(had_file, path, backup)
+		return false
+	board.open_select()
+	SaveData.kickers[Kickers.WALK_ON]["tad_selected"] = 8
+	board.highlight = 1
+	board.confirm_kicker()
+	var before := int(board.run.attempts)
+	board.run.resolve_kick("GOOD", 0.0, false)
+	board.logic.phase = KickLogic.Phase.RESULT
+	board.logic.result_text = "GOOD"
+	board.logic.shanked = false
+	print("AS2 tad8 attempts ", before, " -> ", board.run.attempts, " cap ", board.run.attempt_cap)
+	if int(board.run.attempts) != before:
+		_restore_as2_save(had_file, path, backup)
+		return false
+	if not await _capture("as2_tad8_attempts.png"):
+		_restore_as2_save(had_file, path, backup)
+		return false
+	board.open_select()
+	SaveData.kickers[Kickers.WALK_ON]["tad_selected"] = 9
+	board.highlight = 1
+	board.confirm_kicker()
+	print("AS2 tad9 weather ", board.run.weather)
+	if board.run.weather != RunLogic.RAIN and board.run.weather != RunLogic.SNOW and board.run.weather != RunLogic.MUD:
+		_restore_as2_save(had_file, path, backup)
+		return false
+	if not await _capture("as2_tad9_weather.png"):
+		_restore_as2_save(had_file, path, backup)
+		return false
+	board.open_select()
+	SaveData.kickers[Kickers.WALK_ON]["tad_selected"] = 10
+	board.highlight = 1
+	board.confirm_kicker()
+	board._twist_time = 1.0
+	board._apply_post_slide()
+	var left_x := 0.0
+	var right_x := 0.0
+	if board._post_l != null:
+		left_x = board._post_l.position.x
+		right_x = board._post_r.position.x
+	print("AS2 tad10 weather ", board.run.weather, " armed ", board._twist_armed, " slide ", RunLogic.post_slide(board._twist_time), " posts ", left_x, right_x)
+	if not board.run.posts_move() or absf(RunLogic.post_slide(board._twist_time)) < 2.5:
+		_restore_as2_save(had_file, path, backup)
+		return false
+	if not await _capture("as2_tad10_posts.png"):
+		_restore_as2_save(had_file, path, backup)
+		return false
+	_restore_as2_save(had_file, path, backup)
+	return true
+
+
+func _as2_curse_count(offer: Array) -> int:
+	var count := 0
+	for card in offer:
+		if str(card.get("kind", "")) == Loadout.CURSE:
+			count += 1
+	return count
+
+
+func _restore_as2_save(had_file: bool, path: String, backup: PackedByteArray) -> void:
+	if not had_file:
+		return
+	var restored := FileAccess.open(path, FileAccess.WRITE)
+	if restored == null:
+		return
+	restored.store_buffer(backup)
+	restored.close()
+	SaveData.load_file()
+
+
+func _capture_region(file_name: String, region: Rect2) -> bool:
+	board.refresh_view()
+	await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+	var image: Image = board.get_viewport().get_texture().get_image()
+	var box := Rect2i(int(region.position.x), int(region.position.y), int(region.size.x), int(region.size.y))
+	box = box.intersection(Rect2i(0, 0, image.get_width(), image.get_height()))
+	if box.size.x < 2 or box.size.y < 2:
+		print("AS2 crop missed ", region)
+		return false
+	var crop := image.get_region(box)
+	var err: Error = crop.save_png(shot_dir.path_join(file_name))
+	if err != OK:
+		print("FAILED to save ", file_name, " error ", err)
+		return false
+	print("Saved ", shot_dir.path_join(file_name), " ", crop.get_width(), "x", crop.get_height())
 	return true
 
 

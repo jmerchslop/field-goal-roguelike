@@ -256,7 +256,7 @@ static func unlock_hint(id: String) -> String:
 
 
 # Select-screen kit facts. Numbers come from the same stats the kick uses.
-static func rundown_lines(id: String, unlocked: bool, tad_level: int = -1) -> PackedStringArray:
+static func rundown_lines(id: String, unlocked: bool, tad_cap: int = -1, tad_picked: int = -1) -> PackedStringArray:
 	var info := get_def(id)
 	var lines := PackedStringArray()
 	if info.is_empty():
@@ -331,8 +331,26 @@ static func rundown_lines(id: String, unlocked: bool, tad_level: int = -1) -> Pa
 		lines.append("The first loadout offer includes a range item.")
 	if stats.numero_dos:
 		lines.append("A power lock of %s or higher, including the overpower band, is a true perfect and pays no overpower yards." % _plain_number(KickConstants.RED_TIP_START))
-	if tad_level >= 0:
-		lines.append("Two-a-days %d." % tad_level)
+	if tad_cap >= 0:
+		lines.append_array(_tad_rundown(tad_cap, tad_picked))
+	return lines
+
+
+static func _tad_rundown(cap: int, picked: int) -> PackedStringArray:
+	var lines := PackedStringArray()
+	if picked < 0:
+		if cap <= 0:
+			lines.append("Two-a-days not unlocked.")
+		else:
+			lines.append("Two-a-days unlocked through %d." % cap)
+		return lines
+	var level := clampi(picked, 0, cap)
+	lines.append("Two-a-days %d: %s." % [level, RunLogic.tad_name(level)])
+	lines.append(RunLogic.tad_sentence(level))
+	if level >= 2:
+		lines.append("All below also apply.")
+		for below in range(level - 1, 0, -1):
+			lines.append("%s. %s" % [RunLogic.tad_name(below), RunLogic.tad_sentence(below)])
 	return lines
 
 

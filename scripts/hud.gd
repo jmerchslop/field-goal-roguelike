@@ -565,6 +565,8 @@ var kicker_rects: Array = []
 var tad_left := Rect2()
 var tad_right := Rect2()
 var tad_wheel := Rect2()
+var tad_badge := Rect2()
+var tad_font := 11
 
 
 func tad_step_at(point: Vector2) -> int:
@@ -591,58 +593,73 @@ var _card_frames := {}
 var _card_busts := {}
 
 
+func layout_select_chrome() -> void:
+	kicker_rects = SelectCard.grid_rects()
+	clear_tad_picker()
+	if game == null or game.front == null or game.front.run_mode != "standard":
+		return
+	var slot := int(game.tad_picker_slot)
+	if slot < 0 or slot != int(game.highlight) or slot >= kicker_rects.size():
+		return
+	var id := str(Kickers.ALL[slot]["id"])
+	if not Kickers.is_unlocked(id) or SaveData.tad_unlocked(id) < 1:
+		return
+	var layout: Dictionary = SelectCard.picker_layout(kicker_rects[slot])
+	tad_left = layout["left"]
+	tad_right = layout["right"]
+	tad_wheel = layout["union"]
+	tad_badge = layout["badge"]
+	tad_font = int(layout["font"])
+
+
+func clear_tad_picker() -> void:
+	tad_left = Rect2()
+	tad_right = Rect2()
+	tad_wheel = Rect2()
+	tad_badge = Rect2()
+	tad_font = 11
+
+
 func _draw_kicker_select() -> void:
 	# The stadium stays behind a dark gutter. The lock JPEG is not drawn.
 	draw_rect(Rect2(0, 0, KickConstants.WINDOW_WIDTH, KickConstants.WINDOW_HEIGHT), Color(0.02, 0.025, 0.03, 0.78))
 	_pg_centered("CHOOSE YOUR KICKER", 16.0, 18, Color(0.95, 0.92, 0.84))
-	kicker_rects = SelectCard.grid_rects()
+	layout_select_chrome()
 	var picked := int(game.highlight)
 	for i in kicker_rects.size():
 		var info: Dictionary = Kickers.ALL[i]
 		_draw_playing_card(kicker_rects[i], str(info["id"]), Kickers.is_unlocked(str(info["id"])), i == picked)
-	_draw_tad_stepper(picked)
+	_draw_tad_picker()
 	_draw_kicker_rundown(picked)
 	var footer := "1 TO 8 HIGHLIGHT. SPACE OR CLICK AGAIN TO START."
 	if game.front != null and game.front.run_mode == "standard":
-		footer = "1 TO 8 HIGHLIGHT. BRACKETS CHANGE TAD. SPACE OR CLICK AGAIN TO START."
+		if int(game.tad_picker_slot) >= 0:
+			footer = "BRACKETS CHANGE TAD. SPACE OR CLICK AGAIN TO START. ESC BACKS OUT."
+		else:
+			footer = "1 TO 8 HIGHLIGHT. SPACE OR CLICK TO PICK TAD. CLICK AGAIN TO START."
 	_pg_centered(footer, 700.0, 13, Color(0.95, 0.92, 0.84))
 
 
-func _draw_tad_stepper(slot: int) -> void:
-	tad_left = Rect2()
-	tad_right = Rect2()
-	tad_wheel = Rect2()
-	if game.front == null or game.front.run_mode != "standard":
+func _draw_tad_picker() -> void:
+	if tad_wheel.size.x < 1.0:
 		return
-	if slot < 0 or slot >= kicker_rects.size():
-		return
-	var id := str(Kickers.ALL[slot]["id"])
-	if not Kickers.is_unlocked(id):
-		return
-	var card: Rect2 = kicker_rects[slot]
-	var bar := Rect2(card.position.x + card.size.x * 0.14, card.position.y + card.size.y * 0.80, card.size.x * 0.72, 48.0)
-	tad_wheel = bar
-	draw_rect(bar, Color(0.05, 0.06, 0.08, 0.96))
-	draw_rect(bar, Color(0.95, 0.78, 0.28), false, 2.0)
-	tad_left = Rect2(bar.position.x + 3.0, bar.position.y + 3.0, 20.0, 20.0)
-	tad_right = Rect2(bar.position.x + bar.size.x - 23.0, bar.position.y + 3.0, 20.0, 20.0)
+	var cream := Color(0.95, 0.92, 0.84)
+	draw_rect(tad_badge, Color(0.05, 0.06, 0.08, 0.94))
+	draw_rect(tad_badge, Color(0.95, 0.78, 0.28), false, 1.0)
 	_tad_chevron(tad_left, true)
 	_tad_chevron(tad_right, false)
-	var level := SaveData.tad_selected(id)
-	var cream := Color(0.95, 0.92, 0.84)
-	_pg_centered_in(bar, "TAD %d" % level, 11, cream, 2.0)
-	_pg_centered_in(bar, RunLogic.tad_summary(level), 10, cream, 16.0)
-	if level >= 2:
-		_pg_centered_in(bar, "ALL BELOW ALSO APPLY", 9, Color(0.95, 0.78, 0.28), 30.0)
+	var id := str(Kickers.ALL[int(game.tad_picker_slot)]["id"])
+	_pg_centered_in(tad_badge, "TAD %d" % SaveData.tad_selected(id), tad_font, cream, 2.0)
 
 
 func _tad_chevron(rect: Rect2, point_left: bool) -> void:
 	var mid := rect.get_center()
+	var reach := minf(rect.size.x, rect.size.y) * 0.32
 	var color := Color(0.95, 0.92, 0.84)
 	if point_left:
-		draw_colored_polygon(PackedVector2Array([mid + Vector2(-5, 0), mid + Vector2(4, -6), mid + Vector2(4, 6)]), color)
+		draw_colored_polygon(PackedVector2Array([mid + Vector2(-reach, 0), mid + Vector2(reach * 0.75, -reach), mid + Vector2(reach * 0.75, reach)]), color)
 	else:
-		draw_colored_polygon(PackedVector2Array([mid + Vector2(5, 0), mid + Vector2(-4, -6), mid + Vector2(-4, 6)]), color)
+		draw_colored_polygon(PackedVector2Array([mid + Vector2(reach, 0), mid + Vector2(-reach * 0.75, -reach), mid + Vector2(-reach * 0.75, reach)]), color)
 
 
 func _pg_centered_in(rect: Rect2, text: String, size: int, color: Color, y_offset: float) -> void:
@@ -1388,13 +1405,16 @@ func _draw_kicker_rundown(slot: int) -> void:
 		return
 	var id := str(Kickers.ALL[slot]["id"])
 	var unlocked := Kickers.is_unlocked(id)
-	var tad := -1
+	var cap := -1
+	var picked := -1
 	if unlocked and game.front != null and game.front.run_mode == "standard":
-		tad = SaveData.tad_selected(id)
+		cap = SaveData.tad_unlocked(id)
+		if int(game.tad_picker_slot) == slot:
+			picked = SaveData.tad_selected(id)
 	var grid_left := float(kicker_rects[0].position.x)
 	var width := maxf(120.0, grid_left - 16.0)
 	var wrapped: Array = []
-	for sentence in Kickers.rundown_lines(id, unlocked, tad):
+	for sentence in Kickers.rundown_lines(id, unlocked, cap, picked):
 		for row in _wrap_lines(sentence, width - 16.0, 14):
 			wrapped.append(row)
 	var height := 16.0 + float(wrapped.size()) * 18.0
@@ -1402,7 +1422,7 @@ func _draw_kicker_rundown(slot: int) -> void:
 	var limit := 692.0
 	if top + height > limit:
 		height = limit - top
-	# The left gutter stays off the card, the gold rim, the footer, and the TAD stepper.
+	# The left gutter stays off the cards, the gold rim, and the footer.
 	_paint_tooltip(Rect2(8.0, top, width, height), wrapped)
 
 
