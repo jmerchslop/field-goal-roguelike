@@ -103,6 +103,8 @@ var weather := CLEAR
 var weather_forced := false
 # Endless boss name kept for that kick number, including a shop preview.
 var endless_bosses := {}
+# Standard kicks 5, 10, 15, and 20. Rolled once at new_run, no repeats.
+var standard_bosses := {}
 var kick10_boss := ""
 var _forced_cards: Array = []
 var insurance_left := 0
@@ -178,6 +180,7 @@ func new_run() -> void:
 	phase = Phase.PLAYING
 	run_mode = "standard"
 	endless_bosses = {}
+	standard_bosses = {}
 	kick_number = 1
 	attempts = KickConstants.ATTEMPTS_START
 	attempt_cap = mini(KickConstants.ATTEMPT_CAP, KickConstants.ATTEMPT_CAP_MAX)
@@ -251,7 +254,7 @@ func new_run() -> void:
 	_refill_quarter()
 	_place_spot()
 	_roll_wind()
-	_roll_kick10()
+	_roll_standard_bosses()
 	_roll_weather()
 
 
@@ -736,15 +739,12 @@ static func weather_kick_flags(weather_name: String, cut: int) -> Dictionary:
 	}
 
 
-static func boss_weather(kick: int) -> String:
-	if kick == 5:
-		return ICED
-	if kick == 10:
-		return SQUEEZE
-	if kick == 15:
-		return MONSOON
-	if kick == 20:
-		return BIG_GAME
+static func is_standard_boss_slot(kick: int) -> bool:
+	return kick == 5 or kick == 10 or kick == 15 or kick == 20
+
+
+static func boss_weather(_kick: int) -> String:
+	# Standard boss names are rolled into standard_bosses. This no longer names a slot.
 	return ""
 
 
@@ -971,11 +971,11 @@ func next_boss_line() -> String:
 			return ""
 		return "Next boss: %s" % _boss_label(_endless_boss(target))
 	if kick_number == 5:
-		return "Next boss: %s" % _boss_label(_ensure_kick10())
+		return "Next boss: %s" % _boss_label(str(standard_bosses.get(10, "")))
 	if kick_number == 10:
-		return "Next boss: Monsoon"
+		return "Next boss: %s" % _boss_label(str(standard_bosses.get(15, "")))
 	if kick_number == 15:
-		return "Next boss: Big Game"
+		return "Next boss: %s" % _boss_label(str(standard_bosses.get(20, "")))
 	return ""
 
 
@@ -1688,6 +1688,7 @@ func export_resume() -> Dictionary:
 		"ring_debug": _kick_keys(ring_debug),
 		"ring_offer": ring_offer_pending,
 		"kick10_boss": kick10_boss,
+		"standard_bosses": _boss_rows(standard_bosses),
 	}
 
 
@@ -1766,6 +1767,12 @@ func import_resume(data: Dictionary) -> void:
 		ring_sides[int(pair.get("kick", 0))] = int(pair.get("side", 1))
 	ring_offer_pending = bool(data.get("ring_offer", false))
 	kick10_boss = str(data.get("kick10_boss", ""))
+	var saved_bosses: Array = _dict_list(data.get("standard_bosses", []))
+	if saved_bosses.size() >= 4:
+		standard_bosses = {}
+		for pair in saved_bosses:
+			standard_bosses[int(pair.get("kick", 0))] = str(pair.get("name", ""))
+		kick10_boss = str(standard_bosses.get(10, kick10_boss))
 	var place := str(data.get("place", "tee"))
 	if place == "offer":
 		awaiting_offer = true
@@ -2048,7 +2055,7 @@ func _reroll_zinc() -> void:
 		wind_direction = 0.0
 	else:
 		wind_direction = float(_wind_rng.randi_range(0, 359))
-	if boss_weather(kick_number) != "":
+	if is_standard_boss_slot(kick_number):
 		return
 	weather_forced = false
 	_roll_weather()
@@ -2110,14 +2117,23 @@ func lights_active() -> bool:
 	return not practicing and weather == LIGHTS
 
 
-func _ensure_kick10() -> String:
-	if kick10_boss != SQUEEZE and kick10_boss != LIGHTS:
-		_roll_kick10()
-	return kick10_boss
+func _roll_standard_bosses() -> void:
+	# Four uniform picks without replacement. _kick10_rng is the boss generator,
+	# so this does not move the weather sequence. Kick 20 is not weighted.
+	standard_bosses = {}
+	var pool: Array[String] = endless_boss_names()
+	for slot in [5, 10, 15, 20]:
+		var index := _kick10_rng.randi_range(0, pool.size() - 1)
+		standard_bosses[slot] = pool[index]
+		pool.remove_at(index)
+	kick10_boss = str(standard_bosses[10])
 
 
-func _roll_kick10() -> void:
-	kick10_boss = LIGHTS if _kick10_rng.randf() < 0.5 else SQUEEZE
+func _boss_rows(book: Dictionary) -> Array:
+	var rows: Array = []
+	for kick in book.keys():
+		rows.append({"kick": int(kick), "name": str(book[kick])})
+	return rows
 
 
 func _roll_weather() -> void:
@@ -2126,8 +2142,8 @@ func _roll_weather() -> void:
 	if run_mode == "endless" and is_boss():
 		weather = _endless_boss(kick_number)
 		return
-	if run_mode != "endless" and kick_number == 10:
-		weather = _ensure_kick10()
+	if run_mode != "endless" and is_standard_boss_slot(kick_number):
+		weather = str(standard_bosses.get(kick_number, ""))
 		return
 	var template := RunTable.table_kick(run_mode, kick_number)
 	weather = roll_weather_name(template, _previous_weather, _older_weather, _weather_rng, run_mode == "endless")

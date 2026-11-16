@@ -54,6 +54,7 @@ func _run() -> void:
 	_check_rw1()
 	_check_rw2()
 	_check_rt1()
+	_check_boss2()
 	_check_drive_lid_and_power_safety()
 	_check_m2_kickers()
 	_check_honest_cards_and_bench()
@@ -1353,10 +1354,8 @@ func _check_wind_and_pool() -> void:
 
 
 func _check_weather_and_bosses() -> void:
-	check(RunLogic.boss_weather(5) == RunLogic.ICED, "kick 5 is ICED")
-	check(RunLogic.boss_weather(5) == RunLogic.ICED and RunLogic.boss_weather(15) == RunLogic.MONSOON and RunLogic.boss_weather(20) == RunLogic.BIG_GAME, "kicks 5, 15, and 20 stay the same bosses")
-	check(RunLogic.boss_weather(15) == RunLogic.MONSOON, "kick 15 is MONSOON")
-	check(RunLogic.boss_weather(20) == RunLogic.BIG_GAME, "kick 20 is BIG GAME")
+	check(RunLogic.is_standard_boss_slot(5) and RunLogic.is_standard_boss_slot(10) and RunLogic.is_standard_boss_slot(15) and RunLogic.is_standard_boss_slot(20), "Standard bosses stay on kicks 5, 10, 15, and 20")
+	check(not RunLogic.is_standard_boss_slot(1) and not RunLogic.is_standard_boss_slot(11) and not RunLogic.is_standard_boss_slot(16), "other Standard kicks are not boss slots")
 	check(RunLogic.weather_pool(1) == [RunLogic.CLEAR] and RunLogic.weather_pool(4) == [RunLogic.CLEAR], "kicks 1 through 4 are always clear")
 	check(RunLogic.weather_pool(11).size() == 4 and RunLogic.weather_pool(11).has(RunLogic.CLEAR) == false, "kicks 11 through 14 are never clear")
 	var blocked := 0
@@ -1481,18 +1480,12 @@ func _check_weather_and_bosses() -> void:
 	check(launched.phase == KickLogic.Phase.FLIGHT and launched.ball_forward_yards >= 0.0, "accuracy lock starts the flight immediately")
 	launched.advance(0.05)
 	check(launched.ball_forward_yards > 0.2, "the ball has left the tee just after the lock")
-	var squeeze_n := 0
-	var lights_n := 0
-	for seed_value in 80:
+	for seed_value in 8:
 		var rolled := RunLogic.new()
 		rolled.set_seed(seed_value)
 		rolled.new_run()
-		var boss := rolled.kick10_boss
-		check(boss == RunLogic.SQUEEZE or boss == RunLogic.LIGHTS, "kick 10 rolled something else")
-		if boss == RunLogic.SQUEEZE:
-			squeeze_n += 1
-		else:
-			lights_n += 1
+		var boss := str(rolled.standard_bosses[10])
+		check(RunLogic.endless_boss_names().has(boss), "kick 10 rolled outside the boss pool")
 		rolled.kick_number = 5
 		check(rolled.next_boss_line() == "Next boss: " + rolled._boss_label(boss), "the kick 5 preview drifted from kick 10")
 		rolled.kick_number = 10
@@ -1501,11 +1494,10 @@ func _check_weather_and_bosses() -> void:
 		var first := rolled.weather
 		rolled._roll_weather()
 		check(first == boss and rolled.weather == first, "kick 10 changed between retries")
-		if boss == RunLogic.LIGHTS:
-			check(near(rolled.post_width(), KickConstants.POST_SEPARATION_YARDS), "Under the Lights keeps full uprights")
-		else:
+		if boss == RunLogic.SQUEEZE:
 			check(near(rolled.post_width(), RunLogic.SQUEEZE_WIDTH), "The Squeeze still narrows the posts")
-	check(squeeze_n >= 24 and lights_n >= 24, "kick 10 splits between The Squeeze and Under the Lights, got %s / %s" % [squeeze_n, lights_n])
+		else:
+			check(near(rolled.post_width(), KickConstants.POST_SEPARATION_YARDS), "a non-Squeeze boss keeps full uprights")
 	var walk := RunLogic.new()
 	walk.new_run()
 	walk.start_with_kicker(Kickers.WALK_ON)
@@ -2220,8 +2212,7 @@ func _check_vitamin_shop() -> void:
 	var held_rerolls := shop.rerolls_left
 	check(shop.skip_offer() and shop.follow_offer() == "shop" and shop.awaiting_shop, "the shop opens after the kick 5 offer closes")
 	var kick5_preview := shop.next_boss_line()
-	check(kick5_preview == "Next boss: " + shop._boss_label(shop.kick10_boss), "the kick 5 shop matches the rolled kick 10 boss, got %s" % kick5_preview)
-	check(shop.kick10_boss == RunLogic.SQUEEZE or shop.kick10_boss == RunLogic.LIGHTS, "kick 10 is The Squeeze or Under the Lights")
+	check(kick5_preview == "Next boss: " + shop._boss_label(str(shop.standard_bosses[10])), "the kick 5 shop matches the rolled kick 10 boss, got %s" % kick5_preview)
 	check(shop.shop_stock.size() == 3 and shop.shop_stock[0] != shop.shop_stock[1] and shop.shop_stock[1] != shop.shop_stock[2] and shop.shop_stock[0] != shop.shop_stock[2], "the three shelves are different vitamins")
 	check(not shop.shop_b12_bought and shop.shop_reroll_price == 2, "B12 is for sale and the first reroll costs $2")
 	check(shop.rerolls_left == held_rerolls and not shop.reroll_offer(), "shop F does not spend a loadout reroll")
@@ -2258,13 +2249,13 @@ func _check_vitamin_shop() -> void:
 	shop.kick_number = 10
 	shop.resolve_kick("GOOD", 2.0, false)
 	shop.follow_offer()
-	check(shop.awaiting_shop and shop.next_boss_line() == "Next boss: Monsoon" and shop.shop_reroll_price == 2, "the kick 10 shop names Monsoon and reroll starts at $2 again")
+	check(shop.awaiting_shop and shop.next_boss_line() == "Next boss: " + shop._boss_label(str(shop.standard_bosses[15])) and shop.shop_reroll_price == 2, "the kick 10 shop names the rolled kick 15 boss and reroll starts at $2 again")
 	shop.leave_shop()
 	shop.go_to_next_kick()
 	shop.kick_number = 15
 	shop.resolve_kick("GOOD", 2.0, false)
 	shop.follow_offer()
-	check(shop.next_boss_line() == "Next boss: Big Game", "the kick 15 shop names Big Game")
+	check(shop.next_boss_line() == "Next boss: " + shop._boss_label(str(shop.standard_bosses[20])), "the kick 15 shop names the rolled kick 20 boss")
 	var protein := RunLogic.new()
 	protein.new_run()
 	protein.attempts = 3
@@ -3577,6 +3568,83 @@ func _check_rw2() -> void:
 	long_make.resolve_kick("GOOD", 0.0, false)
 	check(near(long_make.distance_yards(), 500.0) and records.has_unlock(Kickers.VEX), "an Endless 500-yard make unlocks Vex through resolve_kick")
 	records.unlocks[Kickers.VEX] = had_vex
+
+
+func _check_boss2() -> void:
+	var pool: Array[String] = RunLogic.endless_boss_names()
+	var slot_counts := {5: {}, 10: {}, 15: {}, 20: {}}
+	for name in pool:
+		for slot in [5, 10, 15, 20]:
+			slot_counts[slot][name] = 0
+	var seen_any := {}
+	for sample in 20:
+		var run := RunLogic.new()
+		run.set_seed(1000 + sample)
+		run.new_run()
+		var names: Array[String] = []
+		var unique := {}
+		for slot in [5, 10, 15, 20]:
+			var boss := str(run.standard_bosses[slot])
+			names.append(boss)
+			unique[boss] = true
+			check(pool.has(boss), "lineup boss %s is outside the pool" % boss)
+			slot_counts[slot][boss] = int(slot_counts[slot][boss]) + 1
+			seen_any[boss] = true
+		check(unique.size() == 4, "run %s repeated a boss: %s" % [sample, names])
+		var again := RunLogic.new()
+		again.set_seed(1000 + sample)
+		again.new_run()
+		check(str(again.standard_bosses[5]) == names[0] and str(again.standard_bosses[20]) == names[3], "the same seed rolls the same lineup")
+		print("BOSS2 lineup %d seed %d: 5=%s 10=%s 15=%s 20=%s" % [sample + 1, 1000 + sample, names[0], names[1], names[2], names[3]])
+	for name in pool:
+		check(seen_any.has(name), "20 Standard runs never rolled %s" % name)
+	var big5 := 0
+	var big20 := 0
+	for sample in 1400:
+		var run := RunLogic.new()
+		run.set_seed(5000 + sample)
+		run.new_run()
+		var picked := {}
+		for slot in [5, 10, 15, 20]:
+			var boss := str(run.standard_bosses[slot])
+			picked[boss] = true
+			slot_counts[slot][boss] = int(slot_counts[slot][boss]) + 1
+		check(picked.size() == 4, "a large sample repeated a boss")
+		if str(run.standard_bosses[5]) == RunLogic.BIG_GAME:
+			big5 += 1
+		if str(run.standard_bosses[20]) == RunLogic.BIG_GAME:
+			big20 += 1
+		run.kick_number = 10
+		var before := str(run.standard_bosses[10])
+		run._roll_weather()
+		run._roll_weather()
+		check(run.weather == before and str(run.standard_bosses[10]) == before, "arriving at the kick does not re-roll the boss")
+	for slot in [5, 10, 15, 20]:
+		for name in pool:
+			var count := int(slot_counts[slot][name])
+			check(count >= 80 and count <= 360, "slot %s rolled %s %s times, not a uniform share" % [slot, name, count])
+	check(abs(big20 - big5) < 80, "kick 20 is not weighted toward Big Game (%s vs kick 5 %s)" % [big20, big5])
+	var saved := RunLogic.new()
+	saved.set_seed(42)
+	saved.new_run()
+	var snap: Dictionary = saved.standard_bosses.duplicate()
+	var resumed := RunLogic.new()
+	resumed.import_resume(saved.export_resume())
+	check(str(resumed.standard_bosses[5]) == str(snap[5]) and str(resumed.standard_bosses[10]) == str(snap[10]) and str(resumed.standard_bosses[15]) == str(snap[15]) and str(resumed.standard_bosses[20]) == str(snap[20]), "a mid-run resume keeps the four bosses")
+	var forced := RunLogic.new()
+	forced.set_seed(7)
+	forced.new_run()
+	var lineup: Dictionary = forced.standard_bosses.duplicate()
+	forced.force_weather(RunLogic.LIGHTS)
+	check(forced.weather == RunLogic.LIGHTS and str(forced.standard_bosses[5]) == str(lineup[5]) and str(forced.standard_bosses[20]) == str(lineup[20]), "Shift+9 forces the kick and does not rewrite the lineup")
+	var endless := RunLogic.new()
+	endless.set_seed(9)
+	endless.new_run()
+	endless.run_mode = "endless"
+	endless.kick_number = 10
+	endless.endless_bosses = {}
+	endless._roll_weather()
+	check(pool.has(str(endless.weather)) and endless.is_boss(), "Endless kick 10 still rolls from the seven-boss pool")
 
 
 func _check_rt1() -> void:
@@ -5831,16 +5899,16 @@ func _check_boss1() -> void:
 	check(pool.size() == 7, "the Endless boss pool has 7 names")
 	for boss_name in [RunLogic.ICED, RunLogic.SQUEEZE, RunLogic.MONSOON, RunLogic.BIG_GAME, RunLogic.LIGHTS, RunLogic.CLOCK, RunLogic.MOVING]:
 		check(pool.has(boss_name), "Endless pool is missing %s" % boss_name)
-	check(RunLogic.boss_weather(5) == RunLogic.ICED and RunLogic.boss_weather(10) == RunLogic.SQUEEZE and RunLogic.boss_weather(15) == RunLogic.MONSOON and RunLogic.boss_weather(20) == RunLogic.BIG_GAME, "Standard boss slots stayed on 5, 10, 15, and 20")
-	check(RunLogic.boss_weather(1) == "" and RunLogic.boss_weather(11) == "", "Standard still has no boss off those slots")
+	check(RunLogic.is_standard_boss_slot(5) and RunLogic.is_standard_boss_slot(20) and not RunLogic.is_standard_boss_slot(11), "Standard boss slots stay 5, 10, 15, and 20")
 	var standard := RunLogic.new()
+	standard.set_seed(4)
 	standard.new_run()
 	standard.kick_number = 5
-	check(standard.next_boss_line().begins_with("Next boss: ") and (standard.kick10_boss == RunLogic.SQUEEZE or standard.kick10_boss == RunLogic.LIGHTS), "the kick 5 preview is still The Squeeze or Under the Lights")
+	check(standard.next_boss_line() == "Next boss: " + standard._boss_label(str(standard.standard_bosses[10])), "the kick 5 preview matches the rolled kick 10 boss")
 	standard.kick_number = 10
-	check(standard.next_boss_line() == "Next boss: Monsoon", "the kick 10 preview is still Monsoon")
+	check(standard.next_boss_line() == "Next boss: " + standard._boss_label(str(standard.standard_bosses[15])), "the kick 10 preview matches the rolled kick 15 boss")
 	standard.kick_number = 15
-	check(standard.next_boss_line() == "Next boss: Big Game", "the kick 15 preview is still Big Game")
+	check(standard.next_boss_line() == "Next boss: " + standard._boss_label(str(standard.standard_bosses[20])), "the kick 15 preview matches the rolled kick 20 boss")
 	var labeled := RunLogic.new()
 	labeled.run_mode = "endless"
 	labeled.endless_bosses[10] = RunLogic.CLOCK

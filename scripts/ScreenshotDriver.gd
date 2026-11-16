@@ -102,6 +102,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "boss2":
+		if not await _capture_boss2():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "rt1":
 		if not await _capture_rt1():
 			get_tree().quit(1)
@@ -953,6 +959,7 @@ func _capture_vitamin_shop() -> bool:
 	board.run.last_result_made = true
 	board.run.cash = 18
 	board.run.set_seed(3)
+	board.run.standard_bosses[10] = RunLogic.SQUEEZE
 	board.run.kick10_boss = RunLogic.SQUEEZE
 	board.run.open_shop()
 	board.run.shop_stock = [Vitamins.PROTEIN, Vitamins.LUTEIN, Vitamins.TART]
@@ -1466,6 +1473,7 @@ func _capture_b5() -> bool:
 		return false
 	if not await _capture("b5_flight.png"):
 		return false
+	board.run.standard_bosses[10] = RunLogic.LIGHTS
 	board.run.kick10_boss = RunLogic.LIGHTS
 	board.run.kick_number = 5
 	board.run.phase = RunLogic.Phase.PLAYING
@@ -1737,6 +1745,64 @@ func _offer_card(id: String, rank: int, slot: String) -> bool:
 	board.refresh_view()
 	if board.run.offer.is_empty() or str(board.run.offer[0].get("id", "")) != id:
 		print("offer missed ", id)
+		return false
+	return true
+
+
+func _capture_boss2() -> bool:
+	board.highlight = 1
+	board.confirm_kicker()
+	var first := ""
+	var second := ""
+	var first_seed := 0
+	var second_seed := 0
+	for seed_value in range(1, 40):
+		board.run.set_seed(seed_value)
+		board.run.new_run()
+		board.run.kicker_id = Kickers.WALK_ON
+		board.run.rebuild_stats()
+		var boss := str(board.run.standard_bosses[5])
+		if first == "":
+			first = boss
+			first_seed = seed_value
+		elif boss != first:
+			second = boss
+			second_seed = seed_value
+			break
+	if first == "" or second == "":
+		print("boss2 seeds did not differ")
+		return false
+	board.run.set_seed(first_seed)
+	board.run.new_run()
+	board.run.kicker_id = Kickers.WALK_ON
+	board.run.rebuild_stats()
+	board.run.kick_number = 5
+	board.run._roll_weather()
+	board.load_current_kick()
+	if board.run.weather != first:
+		print("run a ", board.run.weather, " ", first)
+		return false
+	if not await _capture("boss2_run_a.png"):
+		return false
+	board.run.set_seed(second_seed)
+	board.run.new_run()
+	board.run.kicker_id = Kickers.WALK_ON
+	board.run.rebuild_stats()
+	board.run.kick_number = 5
+	board.run._roll_weather()
+	board.load_current_kick()
+	if board.run.weather != second:
+		print("run b ", board.run.weather, " ", second)
+		return false
+	if not await _capture("boss2_run_b.png"):
+		return false
+	board.run.kick_number = 5
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.kick_resolved = true
+	board.run.last_result_made = true
+	board.run.cash = 20
+	board.run.open_shop()
+	if not await _capture("boss2_shop_preview.png"):
 		return false
 	return true
 
@@ -3870,6 +3936,7 @@ func _capture_t1b() -> bool:
 	board.run.kick_resolved = true
 	board.run.last_result_made = true
 	board.run.cash = 20
+	board.run.standard_bosses[10] = RunLogic.SQUEEZE
 	board.run.kick10_boss = RunLogic.SQUEEZE
 	board.run.open_shop()
 	board.run.shop_stock = [Vitamins.OMEGA, Vitamins.MAGNESIUM, Vitamins.PROTEIN]
@@ -3939,6 +4006,7 @@ func _capture_t1() -> bool:
 	board.run.kick_resolved = true
 	board.run.last_result_made = true
 	board.run.cash = 20
+	board.run.standard_bosses[10] = RunLogic.SQUEEZE
 	board.run.kick10_boss = RunLogic.SQUEEZE
 	board.run.open_shop()
 	board.run.shop_stock = [Vitamins.OMEGA, Vitamins.MAGNESIUM, Vitamins.PROTEIN]
