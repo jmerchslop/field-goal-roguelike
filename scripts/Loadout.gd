@@ -35,6 +35,9 @@ const STORM_CHASER := "storm_chaser"
 const HERO_BALL := "hero_ball"
 const GLASS_LEG := "glass_leg"
 const TWO_MINUTE := "two_minute_drill"
+const RAIN_DANCE := "rain_dance"
+const SECOND_LOOK := "second_look"
+const CHAIN_GANG := "chain_gang"
 const ICED := "iced"
 const SHANKY := "shanky_cleats"
 const HEAVY := "heavy_ball"
@@ -49,7 +52,7 @@ const HELMET_IDS: Array = [WIND_VISOR, ICE_CAGE, SCOUT_LID, DOINK_CAP, DRIVE_LID
 
 const POWER_IDS: Array = [CANNON, DRIVE_LID, HIGH_AIR, GLASS_LEG, STONE, SHAKY]
 const GLOVE_IDS: Array = [IRON_GRIP, REPLAY_GLOVES, HIGH_AIR, WEATHER_WRAPS, GUIDE_GLOVES, PATIENT_GLOVES, HUSH_GLOVES]
-const PERK_IDS: Array = [DEEP_BENCH, HOT_STREAK, STORM_CHASER, HERO_BALL, GLASS_LEG, TWO_MINUTE]
+const PERK_IDS: Array = [DEEP_BENCH, HOT_STREAK, STORM_CHASER, HERO_BALL, GLASS_LEG, TWO_MINUTE, RAIN_DANCE, SECOND_LOOK, CHAIN_GANG]
 const CURSE_IDS: Array = [ICED, SHANKY, HEAVY, HOWLING, SHAKY, NARROW, STONE, TIGHT]
 
 const _ROMAN: Array = [
@@ -394,6 +397,12 @@ static func piece_name(id: String) -> String:
 			return "Glass Leg"
 		TWO_MINUTE:
 			return "Two-Minute Drill"
+		RAIN_DANCE:
+			return "Rain Dance"
+		SECOND_LOOK:
+			return "Second Look"
+		CHAIN_GANG:
+			return "Chain Gang"
 		ICED:
 			return "Iced"
 		SHANKY:
@@ -559,6 +568,12 @@ static func effect_line(id: String, rank: int) -> String:
 			if rank == 5:
 				return "Boss kicks +2.5 Mult, on top of ×1.5"
 			return "Boss kicks +3.0 Mult, on top of ×1.5"
+		RAIN_DANCE:
+			return "In rain, snow, mud, or Monsoon: +4 yd and the accuracy needle ×0.90."
+		SECOND_LOOK:
+			return "One free offer reroll every 5 kicks. Unused free rerolls do not stack."
+		CHAIN_GANG:
+			return "Each consecutive make adds +1 yd on the next kick, up to +10 yd. A miss resets the streak."
 		ICED:
 			return "Down: The meter hides for 0.4s after you start it. Up: +0.75 Mult"
 		SHANKY:
@@ -1120,6 +1135,12 @@ static func apply(stats: KickerStats, state: Dictionary, howling: bool, item_sca
 			stats.attempt_cap = maxi(stats.attempt_cap - 1, 1)
 		elif id == TWO_MINUTE:
 			drill += 0.5 * float(rank)
+		elif id == RAIN_DANCE:
+			stats.rain_dance = true
+		elif id == SECOND_LOOK:
+			stats.second_look = true
+		elif id == CHAIN_GANG:
+			stats.chain_gang = true
 	if howling:
 		range_add *= HOWLING_ITEM
 		perfect_add *= HOWLING_ITEM

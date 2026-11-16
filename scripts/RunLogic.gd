@@ -92,6 +92,8 @@ var awaiting_mulligan := false
 var mulligans_left := 0
 var mulligan_used_this_kick := false
 var rerolls_left := 1
+# Second Look. 0 or 1. Set to 1 at the start of each 5-kick block. Does not stack.
+var second_look_bank := 0
 var power_item_seen := false
 var pending_result := ""
 var pending_offset := 0.0
@@ -237,6 +239,7 @@ func new_run() -> void:
 	awaiting_mulligan = false
 	mulligan_used_this_kick = false
 	rerolls_left = stats.rerolls_per_run
+	second_look_bank = 0
 	power_item_seen = false
 	pending_result = ""
 	wind_speed = 0
@@ -314,7 +317,7 @@ func accepts_restart() -> bool:
 
 
 func resolve_kick(result_text: String, offset: float, perfect: bool) -> void:
-	if kick_resolved or phase != Phase.PLAYING:
+	if practicing or kick_resolved or phase != Phase.PLAYING:
 		return
 	kick_resolved = true
 	var attempts_before := attempts
@@ -518,6 +521,15 @@ func prepare_kick_stats() -> void:
 		if has_curse(Loadout.HOWLING):
 			bonus *= Loadout.HOWLING_ITEM
 		stats.range_bonus += bonus
+	if not practicing and stats.rain_dance:
+		var dance := rain_dance_pay(weather, weather == BIG_GAME, vitamin_d_active())
+		if bool(dance["yards"]):
+			stats.range_bonus += _scaled_perk_yards(4.0)
+		# Accuracy only, before the 0.35 floor. Big Game strips this slow.
+		if bool(dance["slow"]):
+			stats.accuracy_speed *= 0.90
+	if not practicing and stats.chain_gang:
+		stats.range_bonus += _scaled_perk_yards(chain_gang_raw())
 	if weather == BIG_GAME:
 		var base := KickerStats.new()
 		if kicker_id != "":
@@ -926,10 +938,20 @@ func skip_offer() -> bool:
 	return true
 
 
+func free_reroll_ready() -> bool:
+	return awaiting_offer and not awaiting_shop and second_look_bank > 0 and stats.second_look
+
+
 func reroll_offer() -> bool:
-	if not awaiting_offer or awaiting_shop or rerolls_left <= 0:
+	if not awaiting_offer or awaiting_shop:
 		return false
-	rerolls_left -= 1
+	# The banked free reroll is spent before Walk-On or Scout Lid charges.
+	if second_look_bank > 0 and stats.second_look:
+		second_look_bank = 0
+	elif rerolls_left <= 0:
+		return false
+	else:
+		rerolls_left -= 1
 	var previous: Array = offer.duplicate(true)
 	offer = Loadout.draw_offer(loadout_state(), attempt_cap, _offer_rng, previous)
 	_consider_power_safety()
@@ -1144,6 +1166,32 @@ func cancel_curse_prompt() -> void:
 
 func vitamin_d_active() -> bool:
 	return _vitamin_count(Vitamins.VITAMIN_D) > 0
+
+
+# Wet or cold means the condition name is RAIN, SNOW, MUD, or MONSOON.
+# Vitamin D clears the first three. It does not clear Monsoon.
+# big_game strips the accuracy slow and keeps the yards. A kick stores one condition,
+# so BIG GAME by itself is not wet and pays nothing.
+static func rain_dance_pay(weather_name: String, big_game: bool, vitamin_d: bool) -> Dictionary:
+	var wet := false
+	if weather_name == MONSOON:
+		wet = true
+	elif not vitamin_d and (weather_name == RAIN or weather_name == SNOW or weather_name == MUD):
+		wet = true
+	return {"yards": wet, "slow": wet and not big_game}
+
+
+func chain_gang_raw() -> float:
+	return float(mini(maxi(streak, 0), 10))
+
+
+func _scaled_perk_yards(raw: float) -> float:
+	if raw <= 0.0:
+		return 0.0
+	var bonus := raw
+	if has_curse(Loadout.HOWLING):
+		bonus *= Loadout.HOWLING_ITEM
+	return Loadout.scale_amount(bonus, item_effect_scale())
 
 
 func weather_flags_now() -> Dictionary:
@@ -1427,6 +1475,8 @@ func give(id: String, rank: int = 1) -> void:
 	var practice_gain := stats.practice_per_quarter - practice_before
 	if practice_gain > 0:
 		practice_left += practice_gain
+	if id == Loadout.SECOND_LOOK and previous_bench == 0:
+		second_look_bank = 1
 	if id == Loadout.DEEP_BENCH:
 		if previous_bench < 3 and rank >= 3 and attempts < attempt_cap:
 			attempts += 1
@@ -1546,6 +1596,9 @@ func _close_offer() -> void:
 
 
 func _refill_quarter() -> void:
+	# Kicks 1–5, 6–10, 11–15, and so on. The bank is set to 1, not added.
+	if (kick_number - 1) % 5 == 0 and _perk_rank(Loadout.SECOND_LOOK) > 0:
+		second_look_bank = 1
 	if kick_number == 1 or kick_number == 6 or kick_number == 11 or kick_number == 16:
 		mulligans_left = 0
 		if stats.doink_carry:
@@ -1640,6 +1693,7 @@ func export_resume() -> Dictionary:
 		"is_first_ball": is_first_ball,
 		"cash": cash,
 		"rerolls_left": rerolls_left,
+		"second_look_bank": second_look_bank,
 		"mulligans_left": mulligans_left,
 		"insurance_left": insurance_left,
 		"practice_left": practice_left,
@@ -1725,6 +1779,7 @@ func import_resume(data: Dictionary) -> void:
 	is_first_ball = bool(data.get("is_first_ball", true))
 	cash = int(data.get("cash", 0))
 	rerolls_left = int(data.get("rerolls_left", rerolls_left))
+	second_look_bank = int(data.get("second_look_bank", 0))
 	mulligans_left = int(data.get("mulligans_left", mulligans_left))
 	insurance_left = int(data.get("insurance_left", insurance_left))
 	practice_left = int(data.get("practice_left", practice_left))

@@ -5,9 +5,10 @@ BAL1: needle slow floor 0.35, gentler Anchor / Patient / Sticker / Shelter table
 BAL2: Endless ranks XIII–XXIV do something for every equipment style except Wind Visor and Iron Grip. Range late tables are shorter. Curse upsides are higher, and Howling's item boost is ×1.10.
 RW1: Iron Grip VI+ keeps the red tip and pays +5 yd at VI, plus 1 yd per rank, for a power lock in the tip (+23 at XXIV). Heavy Ball's downside is max(2, 2% of the kick distance). Wind Visor resists 10/15/20% at I/II/III and stays at 20%, and the dotted path starts at IV (40%) and is full at VIII.
 RW2: Lucky Ball is still 3% per first-try make, capped at +25%, and any miss resets the stacks. Walk-On clutch, on a retry after a miss, slows both needles ×0.90 before the 0.35 floor and adds +6 yd. Vex unlocks by making 500 yards in Endless, and the saucer is 11 mph of west wind.
+PK1: Rain Dance, Second Look, and Chain Gang join the perk pool. Ranks I–III and I–VI use the same numbers. Rain Dance pays +4 yd and accuracy ×0.90 only when the condition is RAIN, SNOW, MUD, or MONSOON. The ×0.90 is a pre-floor accuracy slow. Big Game strips it and would keep the yards if that kick were also wet; a kick stores one condition, so BIG GAME alone pays nothing. Second Look banks one free offer reroll at kicks 1, 6, 11, and so on, and that reroll is spent before Walk-On or Scout Lid charges. Chain Gang pays min(streak, 10) yards from the same make streak Hot Streak uses for Mult. None of the three has an icon. The card falls back to the first word of the name. Fair Catch, Hold The Rope, Gatorade Bath, Clean Look, and Hash Hero stay parked.
 RT1: The hidden ±5 red-tip noise is gone. A 95–100 lock is clean, and P=100 is clean full power. The needle continues into a red OVERPOWER band of about 14.3 power units (0.10 s at the 0.70 s sweep). A lock inside the band pays +4 yd and speeds the accuracy needle ×1.25 after the floor, Stone Toe, and UNDER THE LIGHTS, and before rain and ball speed. Iron Grip widens that band by 10% per rank through V (+50%, about 121.4) and from VI also pays 5+(rank−6) yd on an OVERPOWER lock. Ice Cage no longer hides the band. It halves the speed-up to ×1.125 and still blocks Iced. Big Game keeps the base band, the +4, and ×1.25, and strips Iron Grip's width, Iron Grip's yards, and the ×1.125. Carlos's Numero Dos covers 95–100 and the band as a true PERFECT at P=100, with no +4, no extra yards, and no OVERPOWER label.
 
-**Loadout items:** 32 (18 equipment, 6 perks, 8 curses)
+**Loadout items:** 35 (18 equipment, 9 perks, 8 curses)
 **Vitamins:** 11 (10 belt vitamins and B12 Shot)
 **Kickers:** 8
 **Kits:** 8
@@ -311,6 +312,33 @@ Rank XII and XIII–XXIV: +11 rerolls and five practice swings a quarter.
 - **actual effect:** `drill_bonus` is `0.5 × rank` and is added on top of the boss score multiplier. Howling multiplies the add by 1.15. It applies on every boss, including UNDER THE LIGHTS.
 - **match:** yes, ranks I–VI
 
+### Rain Dance
+
+- **id:** `rain_dance`
+- **slot:** perk
+- **rank cap:** Standard III, Endless VI
+- **card text:** `"In rain, snow, mud, or Monsoon: +4 yd and the accuracy needle ×0.90."` at every rank.
+- **actual effect:** `prepare_kick_stats` adds +4 yd and multiplies accuracy speed by 0.90 only when the condition is RAIN, SNOW, MUD, or MONSOON. CLEAR, THIN AIR, ICED, THE SQUEEZE, BIG GAME, UNDER THE LIGHTS, KICK CLOCK, and MOVING POSTS do not trigger it. Vitamin D clears rain, snow, and mud, not Monsoon. The ×0.90 joins the other slows before the 0.35 floor and does not touch the power needle. Big Game's speed copy strips that slow. The +4 is a perk range bonus, so Howling (×1.10), Compounding, and Lucky Ball scale it the same way they scale Glass Leg. Practice Swing gets neither.
+- **match:** yes, ranks I–VI. No icon file. The slot draws the word Rain.
+
+### Second Look
+
+- **id:** `second_look`
+- **slot:** perk
+- **rank cap:** Standard III, Endless VI
+- **card text:** `"One free offer reroll every 5 kicks. Unused free rerolls do not stack."` at every rank.
+- **actual effect:** `second_look_bank` is set to 1, not added, when the run arrives at kick 1, 6, 11, 16, 21, and so on, and when the perk is first picked. The offer reroll spends that bank before `rerolls_left`. Shop shelf reroll does not. The offer footer says "Free reroll" in the default font while the bank is the next spend. The bank is saved with the run.
+- **match:** yes, ranks I–VI. No icon file. The slot draws the word Second.
+
+### Chain Gang
+
+- **id:** `chain_gang`
+- **slot:** perk
+- **rank cap:** Standard III, Endless VI
+- **card text:** `"Each consecutive make adds +1 yd on the next kick, up to +10 yd. A miss resets the streak."` at every rank.
+- **actual effect:** uses `RunLogic.streak`, the same counter Hot Streak's Mult uses. The kick being lined up gets `min(streak, 10)` yards. A GOOD, including a retry make, increments it. Any other result, including a shank and a Bonus Ring miss, sets it to 0 before the retry. Big Game keeps the yards. Practice Swing does not get them and does not change the streak. Howling, Compounding, and Lucky Ball scale the yards. The +10 cap is the starting cap for a later Box Score pass.
+- **match:** yes, ranks I–VI. No icon file. The slot draws the word Chain.
+
 ### Iced
 
 - **id:** `iced`
@@ -606,6 +634,9 @@ Blank cells are ranks that item cannot reach. "Next rank adds nothing" is the fi
 | Hero Ball | mult, both needles ×0.80 | +1.0 | +3.5 | | | +0.5 mult per rank after I; needle slow is flat | needle slow is flat at every rank |
 | Glass Leg | yards, cap −1 once | +8 yd, cap −1 | +48 yd | | | flat +8 yd; the cap loss does not repeat | cap loss adds nothing from II |
 | Two-Minute Drill | boss mult | +0.5 | +3.0 | | | flat +0.5 per rank | none inside I–VI |
+| Rain Dance | wet-weather yards and accuracy slow | +4 yd, ×0.90 | same as I | | | flat at every rank | the numbers do not grow |
+| Second Look | free offer reroll | 1 per 5 kicks | same as I | | | bank stays at 1 | the cadence does not grow |
+| Chain Gang | yards from the make streak | +1 per make, cap +10 | same as I | | | flat at every rank | the cap does not grow |
 
 ### Curses
 

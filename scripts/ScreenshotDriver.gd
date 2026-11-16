@@ -102,6 +102,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "pk1":
+		if not await _capture_pk1():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "boss2":
 		if not await _capture_boss2():
 			get_tree().quit(1)
@@ -1745,6 +1751,51 @@ func _offer_card(id: String, rank: int, slot: String) -> bool:
 	board.refresh_view()
 	if board.run.offer.is_empty() or str(board.run.offer[0].get("id", "")) != id:
 		print("offer missed ", id)
+		return false
+	return true
+
+
+func _capture_pk1() -> bool:
+	board.highlight = 1
+	board.confirm_kicker()
+	board.run.give(Loadout.RAIN_DANCE, 1)
+	board.run.force_weather(RunLogic.CLEAR)
+	board._apply_conditions()
+	var clear_max := float(board.logic.max_range_at_full_power())
+	board.run.force_weather(RunLogic.RAIN)
+	board._apply_conditions()
+	var rain_max := float(board.logic.max_range_at_full_power())
+	print("PK1 rain dance clear ", clear_max, " rain ", rain_max, " delta ", rain_max - clear_max)
+	if not await _capture("pk1_rain_dance.png"):
+		return false
+	board.run.give(Loadout.SECOND_LOOK, 1)
+	board.run.second_look_bank = 1
+	board._apply_conditions()
+	board.run.force_offer([
+		{"id": Loadout.DEEP_BENCH, "rank": 1, "kind": Loadout.PERK, "slot": Loadout.PERK},
+		{"id": Loadout.HOT_STREAK, "rank": 1, "kind": Loadout.PERK, "slot": Loadout.PERK},
+		{"id": Loadout.GLASS_LEG, "rank": 1, "kind": Loadout.PERK, "slot": Loadout.PERK},
+	])
+	board.run.roll_offer()
+	board.run.awaiting_offer = true
+	board.refresh_view()
+	if not board.run.free_reroll_ready():
+		print("pk1 free reroll was not ready")
+		return false
+	if not await _capture("pk1_second_look.png"):
+		return false
+	board.run.skip_offer()
+	board.run.perks = [{"id": Loadout.CHAIN_GANG, "rank": 1}]
+	board.run.rebuild_stats()
+	board.run.streak = 0
+	board.run.force_weather(RunLogic.CLEAR)
+	board._apply_conditions()
+	var streak0 := float(board.logic.max_range_at_full_power())
+	board.run.streak = 3
+	board._apply_conditions()
+	var streak3 := float(board.logic.max_range_at_full_power())
+	print("PK1 chain gang streak 0 ", streak0, " streak 3 ", streak3, " delta ", streak3 - streak0)
+	if not await _capture("pk1_chain_gang.png"):
 		return false
 	return true
 

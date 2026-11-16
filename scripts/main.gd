@@ -935,6 +935,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if Settings.pressed_event(event, "practice") and logic.phase == KickLogic.Phase.AIMING and not run.awaiting_offer and not run.awaiting_mulligan:
 		if run.start_practice():
+			_apply_conditions()
 			refresh_view()
 		return
 	if logic.phase == KickLogic.Phase.AIMING and not run.practicing and not run.awaiting_offer and not run.awaiting_mulligan:

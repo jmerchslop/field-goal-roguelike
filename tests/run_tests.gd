@@ -55,6 +55,7 @@ func _run() -> void:
 	_check_rw2()
 	_check_rt1()
 	_check_boss2()
+	_check_pk1()
 	_check_drive_lid_and_power_safety()
 	_check_m2_kickers()
 	_check_honest_cards_and_bench()
@@ -3568,6 +3569,190 @@ func _check_rw2() -> void:
 	long_make.resolve_kick("GOOD", 0.0, false)
 	check(near(long_make.distance_yards(), 500.0) and records.has_unlock(Kickers.VEX), "an Endless 500-yard make unlocks Vex through resolve_kick")
 	records.unlocks[Kickers.VEX] = had_vex
+
+
+func _check_pk1() -> void:
+	var legal: Array = Loadout.legal_perks(Loadout.empty_state(), 4)
+	var offered := {}
+	for card in legal:
+		offered[str(card.get("id", ""))] = true
+	for id in [Loadout.RAIN_DANCE, Loadout.SECOND_LOOK, Loadout.CHAIN_GANG]:
+		check(Loadout.PERK_IDS.has(id) and offered.has(id), "%s is a legal perk offer" % id)
+		check(Loadout.effect_line(id, 1) == Loadout.effect_line(id, 6), "%s uses the same card at every rank" % id)
+		check(Loadout.sprite_path(id) == "", "%s has no new icon and uses the word fallback" % id)
+	var run := RunLogic.new()
+	run.start_with_kicker(Kickers.WALK_ON)
+	run.force_offer([{"id": Loadout.RAIN_DANCE, "rank": 1, "kind": Loadout.PERK, "slot": Loadout.PERK}])
+	run.roll_offer()
+	check(run.pick_card(0) and run._perk_rank(Loadout.RAIN_DANCE) == 1, "Rain Dance can be picked")
+	run.force_offer([{"id": Loadout.RAIN_DANCE, "rank": 2, "kind": Loadout.PERK, "slot": Loadout.PERK}])
+	run.roll_offer()
+	check(run.pick_card(0) and run._perk_rank(Loadout.RAIN_DANCE) == 2, "Rain Dance ranks up")
+	run.give(Loadout.SECOND_LOOK, 1)
+	run.give(Loadout.CHAIN_GANG, 1)
+	check(run._perk_rank(Loadout.CHAIN_GANG) == 0, "a third perk id is rejected")
+	var clear := RunLogic.new()
+	clear.start_with_kicker(Kickers.WALK_ON)
+	clear.give(Loadout.RAIN_DANCE, 1)
+	clear.weather = RunLogic.CLEAR
+	clear.prepare_kick_stats()
+	var clear_range := clear.stats.range_bonus
+	var clear_acc := clear.stats.accuracy_speed
+	var bare := RunLogic.new()
+	bare.start_with_kicker(Kickers.WALK_ON)
+	bare.prepare_kick_stats()
+	check(near(clear.stats.range_bonus, bare.stats.range_bonus) and near(clear.stats.accuracy_speed, bare.stats.accuracy_speed), "Rain Dance does nothing on CLEAR")
+	for wet in [RunLogic.RAIN, RunLogic.SNOW, RunLogic.MUD, RunLogic.MONSOON]:
+		bare.weather = wet
+		bare.prepare_kick_stats()
+		clear.weather = wet
+		clear.prepare_kick_stats()
+		check(near(clear.stats.range_bonus, bare.stats.range_bonus + 4.0), "Rain Dance pays +4 on %s" % wet)
+		check(clear.stats.accuracy_speed < bare.stats.accuracy_speed * 0.91 and clear.stats.accuracy_speed > bare.stats.accuracy_speed * 0.89, "Rain Dance slows accuracy on %s" % wet)
+		check(near(clear.stats.power_speed, bare.stats.power_speed), "Rain Dance does not slow the power needle")
+	for dry in [RunLogic.THIN_AIR, RunLogic.ICED, RunLogic.SQUEEZE, RunLogic.BIG_GAME, RunLogic.LIGHTS, RunLogic.CLOCK, RunLogic.MOVING]:
+		bare.weather = dry
+		bare.prepare_kick_stats()
+		clear.weather = dry
+		clear.prepare_kick_stats()
+		check(near(clear.stats.range_bonus, bare.stats.range_bonus), "Rain Dance pays no yards on %s" % dry)
+		check(near(clear.stats.accuracy_speed, bare.stats.accuracy_speed), "Rain Dance does not slow accuracy on %s" % dry)
+	clear.weather = RunLogic.RAIN
+	clear.practicing = true
+	clear.prepare_kick_stats()
+	check(near(clear.stats.range_bonus, clear_range) and near(clear.stats.accuracy_speed, clear_acc), "Practice Swing skips Rain Dance")
+	clear.practicing = false
+	clear.belt[0] = Vitamins.VITAMIN_D
+	check(clear.use_belt(0), "Vitamin D can be used")
+	clear.prepare_kick_stats()
+	check(near(clear.stats.range_bonus, clear_range) and near(clear.stats.accuracy_speed, clear_acc), "Vitamin D removes the Rain Dance trigger")
+	clear.weather = RunLogic.MONSOON
+	clear.prepare_kick_stats()
+	check(near(clear.stats.range_bonus, clear_range + 4.0), "Vitamin D does not clear Monsoon for Rain Dance")
+	var wet_boss := RunLogic.rain_dance_pay(RunLogic.RAIN, true, false)
+	check(bool(wet_boss["yards"]) and not bool(wet_boss["slow"]), "Big Game keeps Rain Dance yards and strips the slow when the kick is also wet")
+	check(not bool(RunLogic.rain_dance_pay(RunLogic.BIG_GAME, true, false)["yards"]), "Big Game by itself does not trigger Rain Dance")
+	var slow := RunLogic.new()
+	slow.start_with_kicker(Kickers.WALK_ON)
+	slow.run_mode = "endless"
+	slow.give(Loadout.ANCHOR, 12)
+	slow.give(Loadout.ICE_CAGE, 2)
+	slow.give(Loadout.RAIN_DANCE, 1)
+	slow.weather = RunLogic.CLEAR
+	slow.prepare_kick_stats()
+	var floored := slow.stats.accuracy_speed
+	var power_before := slow.stats.power_speed
+	slow.weather = RunLogic.RAIN
+	slow.prepare_kick_stats()
+	check(near(slow.stats.accuracy_speed, 120.0 * 0.35) and slow.stats.accuracy_speed > floored * 0.90, "Rain Dance ×0.90 is inside the slow product before the floor")
+	check(near(slow.stats.power_speed, power_before), "Rain Dance does not slow the power needle when other slows are on")
+	var gang := RunLogic.new()
+	gang.start_with_kicker(Kickers.WALK_ON)
+	gang.give(Loadout.CHAIN_GANG, 1)
+	gang.give(Loadout.HOT_STREAK, 1)
+	gang.streak = 0
+	gang.prepare_kick_stats()
+	var base_range := gang.stats.range_bonus
+	check(near(gang.chain_gang_raw(), 0.0), "streak 0 pays +0")
+	gang.streak = 3
+	gang.prepare_kick_stats()
+	check(near(gang.stats.range_bonus, base_range + 3.0), "streak 3 pays +3")
+	check(near(gang.current_mult(), 1.0 + 0.5 * 3.0), "Hot Streak still pays Mult on the same streak")
+	gang.streak = 10
+	gang.prepare_kick_stats()
+	check(near(gang.stats.range_bonus, base_range + 10.0), "streak 10 pays +10")
+	gang.streak = 11
+	gang.prepare_kick_stats()
+	check(near(gang.stats.range_bonus, base_range + 10.0), "streak 11 stays capped at +10")
+	var plate := KickLogic.new()
+	plate.kick_distance = 40.0
+	plate.stats = gang.stats
+	var capped := plate.max_range_at_full_power()
+	gang.streak = 0
+	gang.prepare_kick_stats()
+	plate.stats = gang.stats
+	var open_range := plate.max_range_at_full_power()
+	check(near(capped - open_range, 10.0), "Chain Gang yards show in the Max yd math")
+	print("PK1 chain yards streak 0/3/10/11 ", base_range, " ", base_range + 3.0, " ", base_range + 10.0, " ", base_range + 10.0)
+	gang.attempts = 4
+	gang.streak = 4
+	gang.kick_resolved = false
+	gang.resolve_kick("SHANK", 0.0, false)
+	check(gang.streak == 0, "a shank resets the streak")
+	gang.kick_resolved = false
+	gang.resolve_kick("GOOD", 0.0, false)
+	check(gang.streak == 1, "a retry make starts the streak at 1")
+	gang.attempts = 4
+	gang.streak = 2
+	gang.kick_resolved = false
+	gang.resolve_kick("BONUS RING", 3.0, false)
+	check(gang.streak == 0, "a Bonus Ring miss resets the streak")
+	gang.streak = 3
+	gang.practicing = true
+	var bank_before := gang.second_look_bank
+	gang.resolve_kick("GOOD", 0.0, false)
+	gang.resolve_kick("SHORT", 0.0, false)
+	check(gang.streak == 3 and gang.second_look_bank == bank_before, "Practice Swing leaves the streak and the free-reroll bank")
+	gang.prepare_kick_stats()
+	check(near(gang.stats.range_bonus, base_range), "Practice Swing does not get Chain Gang yards")
+	var look := RunLogic.new()
+	look.start_with_kicker(Kickers.WALK_ON)
+	look.give(Loadout.SCOUT_LID, 1)
+	var charges := look.rerolls_left
+	check(charges > 2, "Scout Lid added reroll charges")
+	look.give(Loadout.SECOND_LOOK, 1)
+	check(look.second_look_bank == 1, "picking Second Look banks one free reroll")
+	for block_start in [1, 6, 11, 21]:
+		look.kick_number = block_start
+		look.second_look_bank = 1
+		look._refill_quarter()
+		check(look.second_look_bank == 1, "kick %d sets the free-reroll bank to 1" % block_start)
+	look.kick_number = 5
+	look.second_look_bank = 0
+	look._refill_quarter()
+	check(look.second_look_bank == 0, "the offer after kick 5 is still in the first block")
+	look.kick_number = 6
+	look._refill_quarter()
+	check(look.second_look_bank == 1, "a spent bank is set back to 1 at kick 6")
+	look.awaiting_offer = true
+	look.offer = Loadout.draw_offer(look.loadout_state(), look.attempt_cap, look._offer_rng)
+	check(look.free_reroll_ready(), "a banked free reroll is the next offer reroll")
+	check(look.reroll_offer() and look.rerolls_left == charges and look.second_look_bank == 0, "the free reroll does not spend a Walk-On charge")
+	check(look.reroll_offer() and look.rerolls_left == charges - 1, "the next reroll spends a normal charge")
+	look.second_look_bank = 1
+	look.awaiting_offer = false
+	look.awaiting_shop = true
+	look.cash = 10
+	look.shop_reroll_price = 2
+	check(look.reroll_shop() and look.second_look_bank == 1, "shop F does not spend Second Look")
+	check(look.free_reroll_ready() == false, "the free-reroll label is only for the offer")
+	look.awaiting_shop = false
+	look.awaiting_offer = true
+	look.second_look_bank = 1
+	check(look.free_reroll_ready(), "the offer shows a banked free reroll")
+	var hud_source := FileAccess.get_file_as_string("res://scripts/hud.gd")
+	check(hud_source.find("_text_centered(\"Free reroll") >= 0 and hud_source.find("free_reroll_ready") >= 0, "the offer uses a default-font Free reroll label")
+	look.streak = 7
+	var saved := look.export_resume()
+	var resumed := RunLogic.new()
+	resumed.import_resume(saved)
+	check(resumed.second_look_bank == 1 and resumed.streak == 7, "the free-reroll bank and the streak survive a save")
+	var phil := RunLogic.new()
+	phil.start_with_kicker(Kickers.PHIL)
+	phil.give(Loadout.GLASS_LEG, 1)
+	phil.give(Loadout.HOWLING, 1)
+	phil.prepare_kick_stats()
+	check(near(phil.stats.range_bonus, KickLogic.round_tenth(8.0 * Loadout.HOWLING_ITEM * 1.15)), "Howling and Compounding still scale Glass Leg yards")
+	var gary := RunLogic.new()
+	gary.start_with_kicker(Kickers.GARY)
+	gary.lucky_stacks = 1
+	gary.give(Loadout.RAIN_DANCE, 1)
+	gary.give(Loadout.CHAIN_GANG, 1)
+	gary.weather = RunLogic.RAIN
+	gary.streak = 3
+	gary.prepare_kick_stats()
+	var lucky := 1.0 + 0.03
+	check(near(gary.stats.range_bonus, KickLogic.round_tenth(4.0 * lucky) + KickLogic.round_tenth(3.0 * lucky)), "Lucky Ball scales Rain Dance and Chain Gang yards")
 
 
 func _check_boss2() -> void:
