@@ -38,6 +38,9 @@ const TWO_MINUTE := "two_minute_drill"
 const RAIN_DANCE := "rain_dance"
 const SECOND_LOOK := "second_look"
 const CHAIN_GANG := "chain_gang"
+const HYPE_MAN := "hype_man"
+const GEAR_MANAGER := "gear_manager"
+const TEAM_DOCTOR := "team_doctor"
 const ICED := "iced"
 const SHANKY := "shanky_cleats"
 const HEAVY := "heavy_ball"
@@ -52,7 +55,7 @@ const HELMET_IDS: Array = [WIND_VISOR, ICE_CAGE, SCOUT_LID, DOINK_CAP, DRIVE_LID
 
 const POWER_IDS: Array = [CANNON, DRIVE_LID, HIGH_AIR, GLASS_LEG, STONE, SHAKY]
 const GLOVE_IDS: Array = [IRON_GRIP, REPLAY_GLOVES, HIGH_AIR, WEATHER_WRAPS, GUIDE_GLOVES, PATIENT_GLOVES, HUSH_GLOVES]
-const PERK_IDS: Array = [DEEP_BENCH, HOT_STREAK, STORM_CHASER, HERO_BALL, GLASS_LEG, TWO_MINUTE, RAIN_DANCE, SECOND_LOOK, CHAIN_GANG]
+const PERK_IDS: Array = [DEEP_BENCH, HOT_STREAK, STORM_CHASER, HERO_BALL, GLASS_LEG, TWO_MINUTE, RAIN_DANCE, SECOND_LOOK, CHAIN_GANG, HYPE_MAN, GEAR_MANAGER, TEAM_DOCTOR]
 const CURSE_IDS: Array = [ICED, SHANKY, HEAVY, HOWLING, SHAKY, NARROW, STONE, TIGHT]
 
 const _ROMAN: Array = [
@@ -324,6 +327,9 @@ static func scout_practice_count(rank: int) -> int:
 
 
 static func max_rank(id: String, mode: String = "standard") -> int:
+	# Three gear types, so three passes is the cap in both modes.
+	if id == GEAR_MANAGER:
+		return 3
 	if PERK_IDS.has(id):
 		return 6 if mode == "endless" else 3
 	if CURSE_IDS.has(id):
@@ -403,6 +409,12 @@ static func piece_name(id: String) -> String:
 			return "Second Look"
 		CHAIN_GANG:
 			return "Chain Gang"
+		HYPE_MAN:
+			return "Hype Man"
+		GEAR_MANAGER:
+			return "Gear Manager"
+		TEAM_DOCTOR:
+			return "Team Doctor"
 		ICED:
 			return "Iced"
 		SHANKY:
@@ -574,6 +586,12 @@ static func effect_line(id: String, rank: int) -> String:
 			return "One free offer reroll every 5 kicks. Unused free rerolls carry over."
 		CHAIN_GANG:
 			return "Each consecutive make adds +1 yd on the next kick, up to +10 yd. A miss resets the streak."
+		HYPE_MAN:
+			return _hype_card(rank, {})
+		GEAR_MANAGER:
+			return "Unlock a second gear slot of a type you own. I 1 slot, II 2, III 3."
+		TEAM_DOCTOR:
+			return _doctor_card(1.5 + 0.1 * float(maxi(rank, 1) - 1))
 		ICED:
 			return "Down: The meter hides for 0.4s after you start it. Up: +0.75 Mult"
 		SHANKY:
@@ -618,6 +636,187 @@ static func scale_amount(amount: float, item_scale: float) -> float:
 	if absf(item_scale - 1.0) < 0.0001:
 		return amount
 	return KickLogic.round_tenth(amount * item_scale)
+
+
+# ×1.50 at I, then +0.10 per rank. VI is ×2.00.
+static func hype_factor(rank: int) -> float:
+	if rank <= 0:
+		return 1.0
+	return 1.5 + 0.1 * float(rank - 1)
+
+
+static func _hype_scales(id: String) -> bool:
+	return id == HOT_STREAK or id == STORM_CHASER or id == HERO_BALL or id == GLASS_LEG or id == TWO_MINUTE or id == RAIN_DANCE or id == CHAIN_GANG or id == TEAM_DOCTOR
+
+
+# 1.0 when this perk has nothing for Hype Man to scale.
+static func hype_on(state: Dictionary, target: String) -> float:
+	if not _hype_scales(target):
+		return 1.0
+	return hype_factor(_perk_rank(state, HYPE_MAN))
+
+
+static func hot_streak_step(rank: int) -> float:
+	if rank <= 1:
+		return 0.5
+	if rank == 2:
+		return 0.75
+	return 1.0 + 0.25 * float(rank - 3)
+
+
+static func storm_rate(rank: int) -> float:
+	return 0.2 * float(maxi(rank, 0))
+
+
+static func hero_bonus_for(rank: int) -> float:
+	if rank <= 1:
+		return 1.0
+	if rank == 2:
+		return 1.5
+	return 2.0 + 0.5 * float(rank - 3)
+
+
+static func glass_yards(rank: int) -> float:
+	return 8.0 * float(maxi(rank, 0))
+
+
+static func drill_bonus_for(rank: int) -> float:
+	return 0.5 * float(maxi(rank, 0))
+
+
+# Team Doctor's vitamin factor. Hype Man gap-widens it. 1.0 when the perk is absent.
+static func doctor_factor(state: Dictionary) -> float:
+	var rank := _perk_rank(state, TEAM_DOCTOR)
+	if rank <= 0:
+		return 1.0
+	var base := 1.5 + 0.1 * float(rank - 1)
+	var hype := hype_on(state, TEAM_DOCTOR)
+	if hype > 1.0001:
+		base = 1.0 + (base - 1.0) * hype
+	return base
+
+
+static func protein_yards(bottles: int, state: Dictionary, item_scale: float) -> float:
+	if bottles <= 0:
+		return 0.0
+	var raw := 6.0 * float(bottles)
+	if _perk_rank(state, TEAM_DOCTOR) > 0:
+		raw *= doctor_factor(state)
+	return scale_amount(raw, item_scale)
+
+
+static func preworkout_mult(bottles: int, state: Dictionary, item_scale: float) -> float:
+	if bottles <= 0:
+		return 0.0
+	var raw := 0.5 * float(bottles)
+	if _perk_rank(state, TEAM_DOCTOR) > 0:
+		raw *= doctor_factor(state)
+	return scale_amount(raw, item_scale)
+
+
+static func magnesium_factor(bottles: int, state: Dictionary, item_scale: float) -> float:
+	if bottles <= 0:
+		return 1.0
+	if _perk_rank(state, TEAM_DOCTOR) <= 0:
+		return scale_gap(pow(0.7, float(bottles)), item_scale)
+	var one := maxf(0.10, 1.0 - 0.30 * doctor_factor(state))
+	return maxf(0.10, scale_gap(pow(one, float(bottles)), item_scale))
+
+
+static func pickle_factor(bottles: int, state: Dictionary, item_scale: float) -> float:
+	if bottles <= 0:
+		return 1.0
+	if _perk_rank(state, TEAM_DOCTOR) <= 0:
+		return scale_gap(pow(0.5, float(bottles)), item_scale)
+	var one := maxf(0.10, 1.0 - 0.50 * doctor_factor(state))
+	return maxf(0.10, scale_gap(pow(one, float(bottles)), item_scale))
+
+
+static func vitamin_line(id: String, state: Dictionary, item_scale: float) -> String:
+	if _perk_rank(state, TEAM_DOCTOR) <= 0:
+		return Vitamins.effect_line(id)
+	if id == Vitamins.PROTEIN:
+		return "+%s yd this kick" % _trim_number(protein_yards(1, state, item_scale))
+	if id == Vitamins.MAGNESIUM:
+		return "Needles ×%s this kick" % _factor_text(magnesium_factor(1, state, item_scale))
+	if id == Vitamins.PICKLE:
+		return "Sideways wind drift ×%s" % _factor_text(pickle_factor(1, state, item_scale))
+	if id == Vitamins.PREWORKOUT:
+		return "+%s Mult if this kick is made" % _trim_number(preworkout_mult(1, state, item_scale))
+	return Vitamins.effect_line(id)
+
+
+static func lived_line(id: String, rank: int, state: Dictionary) -> String:
+	var hype := hype_on(state, id)
+	if id == HYPE_MAN:
+		return _hype_card(rank, state)
+	if id == GEAR_MANAGER:
+		var line := effect_line(id, rank)
+		if _perk_rank(state, GEAR_MANAGER) > 0:
+			line += " Passes left %d" % int(state.get("gm_passes", 0))
+		return line
+	if id == TEAM_DOCTOR and hype > 1.0001:
+		return _doctor_card(doctor_factor(state))
+	if hype <= 1.0001:
+		return effect_line(id, rank)
+	if id == HOT_STREAK:
+		return "Streak step +%s" % _trim_number(hot_streak_step(rank) * hype)
+	if id == STORM_CHASER:
+		return "+%s Mult per mph of crosswind" % _trim_number(storm_rate(rank) * hype)
+	if id == HERO_BALL:
+		return "+%s Mult, both needles ×0.80" % _trim_number(hero_bonus_for(rank) * hype)
+	if id == GLASS_LEG:
+		var yards := _trim_number(glass_yards(rank) * hype)
+		if rank <= 1:
+			return "+%s yd, attempt cap -1" % yards
+		return "+%s yd total, no extra cap loss" % yards
+	if id == TWO_MINUTE:
+		return "Boss kicks +%s Mult, on top of ×1.5." % _trim_number(drill_bonus_for(rank) * hype)
+	if id == RAIN_DANCE:
+		var slow := 1.0 - (1.0 - 0.90) * hype
+		return "In rain, snow, mud, or Monsoon: +%s yd and the needles ×%s." % [_trim_number(4.0 * hype), _factor_text(slow)]
+	if id == CHAIN_GANG:
+		return "Each consecutive make adds +%s yd on the next kick, up to +%s yd. A miss resets the streak." % [_trim_number(hype), _trim_number(10.0 * hype)]
+	return effect_line(id, rank)
+
+
+static func _hype_card(rank: int, state: Dictionary) -> String:
+	var mult := _tenth_text(hype_factor(maxi(rank, 1)))
+	var other := ""
+	for item in state.get("perks", []):
+		var perk_id := str(item.get("id", ""))
+		if perk_id != "" and perk_id != HYPE_MAN:
+			other = perk_id
+	if other == "" or not _hype_scales(other):
+		return "Boosts your other perk ×%s. Nothing to boost yet." % mult
+	return "Boosts %s ×%s." % [piece_name(other), mult]
+
+
+static func _doctor_card(factor: float) -> String:
+	return "Vitamin upsides ×%s. Protein, magnesium, pickle juice, and pre-workout." % _factor_text(factor)
+
+
+static func _trim_number(value: float) -> String:
+	var hundredths := int(round(absf(value) * 100.0))
+	var whole := int(hundredths / 100)
+	var frac := hundredths % 100
+	if frac == 0:
+		return str(whole)
+	if frac % 10 == 0:
+		return "%d.%d" % [whole, int(frac / 10)]
+	return "%d.%02d" % [whole, frac]
+
+
+static func _tenth_text(value: float) -> String:
+	var tenths := int(round(value * 10.0))
+	return "%d.%d" % [int(tenths / 10.0), tenths % 10]
+
+
+static func _factor_text(value: float) -> String:
+	var thousandths := int(round(absf(value) * 1000.0))
+	if thousandths % 10 != 0:
+		return "%d.%03d" % [int(thousandths / 1000), thousandths % 1000]
+	return _two_decimals(value)
 
 
 static func empty_state() -> Dictionary:
@@ -710,7 +909,7 @@ static func _style_rows(state: Dictionary) -> Array:
 	]
 
 
-static func draw_ring_offer(state: Dictionary, rng: RandomNumberGenerator) -> Array:
+static func draw_ring_offer(state: Dictionary, rng: RandomNumberGenerator, second_only: bool = false) -> Array:
 	# One new style per type first, so a filled helmet does not crowd out cleats and gloves.
 	var rows := _style_rows(state)
 	var cards: Array = []
@@ -746,6 +945,9 @@ static func draw_ring_offer(state: Dictionary, rng: RandomNumberGenerator) -> Ar
 			continue
 		cards.append(pick)
 		used[key] = true
+	# Gear Manager spends a pass on a second style only. The Bonus Ring still fills empties and rank-ups.
+	if second_only:
+		return cards
 	var leftovers: Array = []
 	for bag in empty_bags:
 		if cards.size() >= 3:
@@ -1070,13 +1272,15 @@ static func apply(stats: KickerStats, state: Dictionary, howling: bool, item_sca
 	var power_mul := 1.0
 	var accuracy_mul := 1.0
 	var drift_mul := 1.0
+	var gm_on := _perk_rank(state, GEAR_MANAGER) > 0
+	var benched: Array = state.get("gm_second_slots", [])
 	var pieces: Array = [
-		[str(state.get("cleats_id", "")), int(state.get("cleats_rank", 0))],
-		[str(state.get("cleats2_id", "")), int(state.get("cleats2_rank", 0))],
-		[str(state.get("helmet_id", "")), int(state.get("helmet_rank", 0))],
-		[str(state.get("helmet2_id", "")), int(state.get("helmet2_rank", 0))],
-		[str(state.get("gloves_id", "")), int(state.get("gloves_rank", 0))],
-		[str(state.get("gloves2_id", "")), int(state.get("gloves2_rank", 0))],
+		[str(state.get("cleats_id", "")), int(state.get("cleats_rank", 0)), ""],
+		[str(state.get("cleats2_id", "")), int(state.get("cleats2_rank", 0)), CLEATS],
+		[str(state.get("helmet_id", "")), int(state.get("helmet_rank", 0)), ""],
+		[str(state.get("helmet2_id", "")), int(state.get("helmet2_rank", 0)), HELMET],
+		[str(state.get("gloves_id", "")), int(state.get("gloves_rank", 0)), ""],
+		[str(state.get("gloves2_id", "")), int(state.get("gloves2_rank", 0)), GLOVES],
 	]
 	var acc := {
 		"range": range_add,
@@ -1090,7 +1294,10 @@ static func apply(stats: KickerStats, state: Dictionary, howling: bool, item_sca
 	for piece in pieces:
 		var item_id := str(piece[0])
 		var item_rank := int(piece[1])
+		var second_slot := str(piece[2])
 		if item_id == "":
+			continue
+		if second_slot != "" and not gm_on and benched.has(second_slot):
 			continue
 		_apply_piece(stats, item_id, item_rank, effect_rank(item_rank), howling, item_scale, acc)
 	range_add = float(acc["range"])
@@ -1108,26 +1315,17 @@ static func apply(stats: KickerStats, state: Dictionary, howling: bool, item_sca
 		var rank := _perk_rank(state, id)
 		if rank <= 0:
 			continue
+		var boost := hype_on(state, id)
 		if id == DEEP_BENCH:
 			var cap_ranks := mini(rank, 2)
 			stats.attempt_cap = mini(stats.attempt_cap + cap_ranks, KickConstants.ATTEMPT_CAP_MAX)
 			stats.bench_spare = rank >= 3
 		elif id == HOT_STREAK:
-			if rank <= 1:
-				stats.streak_step = 0.5
-			elif rank == 2:
-				stats.streak_step = 0.75
-			else:
-				stats.streak_step = 1.0 + 0.25 * float(rank - 3)
+			stats.streak_step = hot_streak_step(rank) * boost
 		elif id == STORM_CHASER:
-			storm += 0.2 * float(rank)
+			storm += storm_rate(rank) * boost
 		elif id == HERO_BALL:
-			if rank <= 1:
-				hero_add += 1.0
-			elif rank == 2:
-				hero_add += 1.5
-			else:
-				hero_add += 2.0 + 0.5 * float(rank - 3)
+			hero_add += hero_bonus_for(rank) * boost
 			var factor := 0.80
 			if howling:
 				factor = boost_factor(factor)
@@ -1136,10 +1334,10 @@ static func apply(stats: KickerStats, state: Dictionary, howling: bool, item_sca
 			power_mul *= factor
 			accuracy_mul *= factor
 		elif id == GLASS_LEG:
-			range_add += 8.0 * float(rank)
+			range_add += glass_yards(rank) * boost
 			stats.attempt_cap = maxi(stats.attempt_cap - 1, 1)
 		elif id == TWO_MINUTE:
-			drill += 0.5 * float(rank)
+			drill += drill_bonus_for(rank) * boost
 		elif id == RAIN_DANCE:
 			stats.rain_dance = true
 		elif id == SECOND_LOOK:

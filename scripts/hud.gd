@@ -1312,22 +1312,28 @@ func _draw_loadout_rail(run: RunLogic) -> void:
 			"slot": str(entry["slot"]),
 			"name": str(entry["name"]),
 		})
-		var emphasized := slot_is_emphasized(i, hover_slot, pinned_slot)
-		_draw_slot_icon(str(entry["id"]), int(entry["rank"]), str(entry["slot"]), rect, true, emphasized)
+		var benched := bool(entry.get("second", false)) and not run.gm_live() and run.gm_second_slots.has(str(entry["slot"]))
+		var emphasized := slot_is_emphasized(i, hover_slot, pinned_slot) and not benched
+		_draw_slot_icon(str(entry["id"]), int(entry["rank"]), str(entry["slot"]), rect, true, emphasized, benched)
 
 
-func _draw_slot_icon(id: String, rank: int, slot: String, rect: Rect2, show_badge: bool, emphasized: bool = false) -> void:
-	draw_rect(rect, Color(0.05, 0.08, 0.1, 0.9))
-	draw_rect(rect, _slot_color(slot), false, 2.0)
+func _draw_slot_icon(id: String, rank: int, slot: String, rect: Rect2, show_badge: bool, emphasized: bool = false, dim: bool = false) -> void:
+	var fade := 0.4 if dim else 1.0
+	draw_rect(rect, Color(0.05, 0.08, 0.1, 0.9 * fade))
+	var edge := _slot_color(slot)
+	edge.a = fade
+	draw_rect(rect, edge, false, 2.0)
 	var path := Loadout.sprite_path(id) if id != "" else Loadout.empty_slot_path(slot)
 	var texture := _icon(path)
 	if texture != null:
-		_draw_fit(texture, rect.grow(-4))
+		_draw_fit(texture, rect.grow(-4), Color(1, 1, 1, fade))
 	elif id != "":
 		var words := Loadout.piece_name(id).split(" ")
-		_text(rect.position + Vector2(4, 22), str(words[0]), 12, KickConstants.COLOR_TEXT)
+		var ink := KickConstants.COLOR_TEXT
+		ink.a = fade
+		_text(rect.position + Vector2(4, 22), str(words[0]), 12, ink)
 	elif slot == Loadout.PERK:
-		draw_rect(rect.grow(-8), Color(0.2, 0.24, 0.3, 0.9), false, 2.0)
+		draw_rect(rect.grow(-8), Color(0.2, 0.24, 0.3, 0.9 * fade), false, 2.0)
 	var badge := Loadout.rank_badge(id, rank) if show_badge else ""
 	if badge == "":
 		return
@@ -1336,7 +1342,7 @@ func _draw_slot_icon(id: String, rank: int, slot: String, rect: Rect2, show_badg
 		mode = game.run.run_mode
 	var is_max := rank == Loadout.max_rank(id, mode)
 	var size_class := "rail" if rect.size.x <= 56.0 else "card"
-	_draw_rank_chip(rect, badge, slot, is_max, emphasized, size_class)
+	_draw_rank_chip(rect, badge, slot, is_max, emphasized, size_class, fade)
 
 
 static func slot_is_emphasized(index: int, hover: int, pinned: int) -> bool:
@@ -1375,28 +1381,30 @@ static func rank_numeral_color(is_max: bool, emphasized: bool) -> Color:
 	return ink
 
 
-func _draw_rank_chip(rect: Rect2, badge: String, slot: String, is_max: bool, emphasized: bool, size_class: String) -> void:
+func _draw_rank_chip(rect: Rect2, badge: String, slot: String, is_max: bool, emphasized: bool, size_class: String, fade: float = 1.0) -> void:
 	var layout: Dictionary = rank_chip_layout(rect, badge, size_class)
 	var chip: Rect2 = layout["rect"]
 	var font := int(layout["font"])
-	var backing := Color(0.03, 0.05, 0.07, 0.92 if emphasized else 0.65)
+	var backing := Color(0.03, 0.05, 0.07, (0.92 if emphasized else 0.65) * fade)
 	draw_rect(chip, backing)
 	var outline := _slot_color(slot)
-	outline.a = 0.8
+	outline.a = 0.8 * fade
 	draw_rect(chip, outline, false, 1.0)
 	var text_w := float(layout["text_w"])
 	var at := Vector2(chip.position.x + (chip.size.x - text_w) * 0.5, chip.position.y + (chip.size.y - float(font)) * 0.5)
-	BitmapFonts.paint_px(self, "ui", badge, at, font, rank_numeral_color(is_max, emphasized))
+	var numeral := rank_numeral_color(is_max, emphasized)
+	numeral.a *= fade
+	BitmapFonts.paint_px(self, "ui", badge, at, font, numeral)
 
 
-func _draw_fit(texture: Texture2D, rect: Rect2) -> void:
+func _draw_fit(texture: Texture2D, rect: Rect2, tint: Color = Color.WHITE) -> void:
 	var size := texture.get_size()
 	if size.x <= 0.0 or size.y <= 0.0:
 		return
 	var scale := minf(rect.size.x / size.x, rect.size.y / size.y)
 	var drawn := size * scale
 	var at := rect.position + (rect.size - drawn) * 0.5
-	draw_texture_rect(texture, Rect2(at, drawn), false)
+	draw_texture_rect(texture, Rect2(at, drawn), false, tint)
 
 
 func _meter_art() -> Texture2D:
@@ -1680,7 +1688,8 @@ func _draw_shop(run: RunLogic) -> void:
 		_draw_bottle(id, slot, id == "")
 		_text(slot.position + Vector2(4, 16), label, 12, KickConstants.COLOR_TEXT)
 		if id != "":
-			_text(slot.position + Vector2(42, 30), Vitamins.piece_name(id), 12, KickConstants.COLOR_TEXT)
+			_text(slot.position + Vector2(42, 16), Vitamins.piece_name(id), 11, KickConstants.COLOR_TEXT)
+			_text(slot.position + Vector2(42, 34), run.vitamin_line(id), 10, KickConstants.COLOR_TEXT)
 	var frames := [Rect2(344, 488, 132, 132), Rect2(572, 488, 128, 132), Rect2(796, 488, 128, 132)]
 	for i in 3:
 		var id := str(run.shop_stock[i]) if i < run.shop_stock.size() else ""
@@ -1693,7 +1702,7 @@ func _draw_shop(run: RunLogic) -> void:
 			draw_rect(plate, Color(0.05, 0.04, 0.03, 0.88))
 			var price_color := Color(1.0, 0.3, 0.25) if run.shop_flash == str(i) else KickConstants.COLOR_ATTEMPT
 			_text(plate.position + Vector2(8, 16), "%d  $%d  %s" % [i + 1, run.item_price(id), Vitamins.piece_name(id)], 12, price_color)
-			_draw_wrapped(Vitamins.effect_line(id), Rect2(plate.position + Vector2(8, 30), Vector2(plate.size.x - 16, 40)), 10)
+			_draw_wrapped(run.vitamin_line(id), Rect2(plate.position + Vector2(8, 30), Vector2(plate.size.x - 16, 40)), 10)
 	var b12 := Rect2(980, 250, 250, 150)
 	var grey := run.b12_grey()
 	draw_rect(b12, Color(0.08, 0.08, 0.08, 0.9) if grey else Color(0.16, 0.12, 0.05, 0.92))
@@ -1701,7 +1710,7 @@ func _draw_shop(run: RunLogic) -> void:
 	var b12_price := Color(1.0, 0.3, 0.25) if run.shop_flash == "b12" else (Color(0.7, 0.7, 0.7) if grey else KickConstants.COLOR_ATTEMPT)
 	_text(b12.position + Vector2(16, 32), "%s  B12 Shot" % Settings.key_sentence("buy_b12"), 20, Color(0.75, 0.75, 0.75) if grey else KickConstants.COLOR_TEXT)
 	_text(b12.position + Vector2(16, 64), "$%d" % run.item_price(Vitamins.B12), 20, b12_price)
-	_text(b12.position + Vector2(16, 96), Vitamins.effect_line(Vitamins.B12), 16, KickConstants.COLOR_TEXT)
+	_text(b12.position + Vector2(16, 96), run.vitamin_line(Vitamins.B12), 16, KickConstants.COLOR_TEXT)
 	_draw_bottle(Vitamins.B12, Rect2(b12.position + Vector2(158, 16), Vector2(78, 118)), false)
 	if run.shop_b12_bought:
 		_text(b12.position + Vector2(16, 126), "SOLD", 16, Color(0.8, 0.8, 0.8))

@@ -392,6 +392,10 @@ func _choose_card(index: int) -> void:
 
 
 func _after_cards() -> void:
+	if run.last_result_made and run.open_gm_offer_after_make():
+		_remember_run()
+		refresh_view()
+		return
 	if run.last_result_made:
 		if run.follow_offer() == "shop":
 			_remember_run()
@@ -1148,6 +1152,13 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 	if key.keycode == KEY_Y and run.phase == RunLogic.Phase.PLAYING and not run.awaiting_offer and not run.awaiting_mulligan and logic.phase == KickLogic.Phase.AIMING and not run.practicing:
 		debug_too_weak(key.shift_pressed)
+		return
+	if key.keycode == KEY_V and run.phase == RunLogic.Phase.PLAYING and not run.awaiting_offer and not run.awaiting_mulligan and logic.phase == KickLogic.Phase.AIMING and not run.practicing:
+		var note := run.debug_pk2(key.shift_pressed)
+		if note != "":
+			run.vitamin_note = note
+			_vitamin_time = 0.0
+		_sync_debug_loadout()
 		return
 	if key.keycode == KEY_B and run.phase == RunLogic.Phase.PLAYING and not run.awaiting_offer and not run.awaiting_mulligan and logic.phase == KickLogic.Phase.AIMING and not run.practicing:
 		if run.arm_debug_ring():

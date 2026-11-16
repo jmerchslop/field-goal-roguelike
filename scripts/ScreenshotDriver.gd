@@ -126,6 +126,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "pk2a":
+		if not await _capture_pk2a():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "bl1":
 		if not await _capture_bl1():
 			get_tree().quit(1)
@@ -1890,6 +1896,89 @@ func _capture_f3() -> bool:
 	for id in saved.keys():
 		SaveData.unlocks[id] = bool(saved[id])
 	SaveData.save_file()
+	return true
+
+
+func _capture_pk2a() -> bool:
+	board.highlight = 1
+	board.confirm_kicker()
+	board.run.force_offer([
+		{"id": Loadout.HYPE_MAN, "rank": 1, "kind": Loadout.PERK, "slot": Loadout.PERK},
+		{"id": Loadout.GEAR_MANAGER, "rank": 1, "kind": Loadout.PERK, "slot": Loadout.PERK},
+		{"id": Loadout.TEAM_DOCTOR, "rank": 1, "kind": Loadout.PERK, "slot": Loadout.PERK},
+	])
+	board.run.roll_offer()
+	if not await _capture("pk2a_offer_perks.png"):
+		return false
+	board.run.skip_offer()
+	board.run.perks = []
+	board.run.give(Loadout.HYPE_MAN, 1)
+	board.run.give(Loadout.HOT_STREAK, 1)
+	board.run.awaiting_offer = true
+	board.run.last_result_made = true
+	board.run.offer = [
+		{"id": Loadout.HYPE_MAN, "rank": 1, "kind": Loadout.PERK, "slot": Loadout.PERK},
+		{"id": Loadout.HOT_STREAK, "rank": 1, "kind": Loadout.PERK, "slot": Loadout.PERK},
+	]
+	board._hud.pinned_slot = 4
+	board.refresh_view()
+	if not await _capture("pk2a_hype_hotstreak.png"):
+		return false
+	board._hud.pinned_slot = -1
+	board.run.perks = []
+	board.run.gm_passes = 0
+	board.run.gm_second_slots = []
+	board.run.gm_offer = false
+	board.run.gm_offer_done = false
+	board.run.awaiting_offer = false
+	board.run.offer = []
+	board.run.give(Loadout.CANNON, 1)
+	board.run.give(Loadout.WIND_VISOR, 1)
+	board.run.give(Loadout.IRON_GRIP, 1)
+	board.run.give(Loadout.GEAR_MANAGER, 1)
+	board.run.last_result_made = true
+	board.run.phase = RunLogic.Phase.PLAYING
+	if not board.run.open_gm_offer_after_make():
+		print("pk2a gear offer did not open")
+		return false
+	if not await _capture("pk2a_gm_offer.png"):
+		return false
+	var cleat_card: Dictionary = {"id": Loadout.PINPOINT, "rank": 1, "kind": Loadout.EQUIPMENT, "slot": Loadout.CLEATS}
+	board.run.offer = [cleat_card]
+	if not board.run.pick_card(0):
+		print("pk2a could not take Pinpoint")
+		return false
+	board.run.helmet2_id = Loadout.SCOUT_LID
+	board.run.helmet2_rank = 1
+	board.run.awaiting_offer = false
+	board.run.gm_offer = false
+	board._sync_debug_loadout()
+	if board.run.cleats2_id != Loadout.PINPOINT or board.run.helmet2_id != Loadout.SCOUT_LID:
+		print("pk2a rail setup ", board.run.cleats2_id, " ", board.run.helmet2_id)
+		return false
+	if not await _capture("pk2a_gm_rail.png"):
+		return false
+	board.run.pk2_grants.append({"id": Loadout.GEAR_MANAGER, "rank": 1})
+	board.run.debug_pk2(true)
+	board._sync_debug_loadout()
+	if board.run.gm_live() or board.run.cleats2_id != Loadout.PINPOINT:
+		print("pk2a bench ", board.run.gm_live(), " ", board.run.cleats2_id)
+		return false
+	if not await _capture("pk2a_gm_benched.png"):
+		return false
+	board.run.perks = [{"id": Loadout.TEAM_DOCTOR, "rank": 1}]
+	board.run.cash = 30
+	board.run.kick_number = 5
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.last_result_made = true
+	board.run.rebuild_stats()
+	board.run.open_shop()
+	board.run.shop_stock = [Vitamins.PROTEIN, Vitamins.MAGNESIUM, Vitamins.PICKLE]
+	if board.run.vitamin_line(Vitamins.PROTEIN) != "+9 yd this kick":
+		print("pk2a shop line ", board.run.vitamin_line(Vitamins.PROTEIN))
+		return false
+	if not await _capture("pk2a_doctor_shop.png"):
+		return false
 	return true
 
 

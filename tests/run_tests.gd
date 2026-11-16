@@ -62,6 +62,7 @@ func _run() -> void:
 	_check_tw1()
 	_check_bl1()
 	_check_ui1()
+	_check_pk2a()
 	_check_f3()
 	_check_au1()
 	_check_drive_lid_and_power_safety()
@@ -84,6 +85,7 @@ func _finish_live() -> void:
 	_check_pause_saves()
 	_check_playing_card_live()
 	_check_as2_live()
+	_check_pk2a_live()
 	_check_tw1_live()
 	_check_bl1_live()
 	_check_floodlights_live()
@@ -7661,5 +7663,357 @@ func _check_ring_flight_live() -> void:
 	check(game._ring.visible and game._ring_pop >= 0.0, "threading the ring starts the collect pop when the ball arrives")
 	game._tick_ring(0.3)
 	check(not game._ring.visible, "the collect pop fades the ring out")
+	game.free()
+
+
+func _check_pk2a() -> void:
+	for rank in range(1, 7):
+		check(is_equal_approx(Loadout.hype_factor(rank), 1.5 + 0.1 * float(rank - 1)), "Hype Man %s is ×%s" % [rank, Loadout.hype_factor(rank)])
+	check(Loadout.PERK_IDS.has(Loadout.HYPE_MAN) and Loadout.PERK_IDS.has(Loadout.GEAR_MANAGER) and Loadout.PERK_IDS.has(Loadout.TEAM_DOCTOR), "the three perks are in the pool")
+	check(Loadout.sprite_path(Loadout.HYPE_MAN) == "" and Loadout.sprite_path(Loadout.GEAR_MANAGER) == "" and Loadout.sprite_path(Loadout.TEAM_DOCTOR) == "", "the three perks have no new icon")
+	check(Loadout.max_rank(Loadout.GEAR_MANAGER, "standard") == 3 and Loadout.max_rank(Loadout.GEAR_MANAGER, "endless") == 3, "Gear Manager caps at III in both modes")
+	check(Loadout.max_rank(Loadout.HYPE_MAN, "standard") == 3 and Loadout.max_rank(Loadout.HYPE_MAN, "endless") == 6, "Hype Man keeps the perk cap")
+	check(Loadout.effect_line(Loadout.HYPE_MAN, 1) == "Boosts your other perk ×1.5. Nothing to boost yet.", "Hype Man alone says there is nothing to boost")
+	check(Loadout.effect_line(Loadout.GEAR_MANAGER, 1) == "Unlock a second gear slot of a type you own. I 1 slot, II 2, III 3.", "Gear Manager names the three passes")
+	var fresh: Array = Loadout.legal_perks(Loadout.empty_state(), 4)
+	var fresh_ids := {}
+	for card in fresh:
+		fresh_ids[str(card.get("id", ""))] = true
+	check(fresh_ids.has(Loadout.HYPE_MAN) and fresh_ids.has(Loadout.GEAR_MANAGER) and fresh_ids.has(Loadout.TEAM_DOCTOR), "a fresh offer can draw each new perk")
+	var hype := RunLogic.new()
+	hype.start_with_kicker(Kickers.WALK_ON)
+	hype.give(Loadout.HYPE_MAN, 1)
+	hype.give(Loadout.HOT_STREAK, 1)
+	hype.prepare_kick_stats()
+	check(is_equal_approx(hype.stats.streak_step, 0.75), "Hot Streak I becomes 0.75 under Hype Man I")
+	check(hype.lived_effect_line(Loadout.HOT_STREAK, 1) == "Streak step +0.75", "the Hot Streak card shows the boosted step")
+	check(hype.lived_effect_line(Loadout.HYPE_MAN, 1) == "Boosts Hot Streak ×1.5.", "Hype Man names Hot Streak")
+	var alone := RunLogic.new()
+	alone.start_with_kicker(Kickers.WALK_ON)
+	alone.give(Loadout.HYPE_MAN, 1)
+	check(alone.lived_effect_line(Loadout.HYPE_MAN, 1).find("Nothing to boost yet.") >= 0, "Hype Man with no partner still says nothing to boost")
+	check(is_equal_approx(alone.stats.streak_step, KickConstants.STREAK_MULT_STEP), "Hype Man does not boost itself")
+	var glass := RunLogic.new()
+	glass.start_with_kicker(Kickers.WALK_ON)
+	glass.give(Loadout.GLASS_LEG, 1)
+	var glass_cap := glass.attempt_cap
+	var glass_range := glass.stats.range_bonus
+	var hyped_glass := RunLogic.new()
+	hyped_glass.start_with_kicker(Kickers.WALK_ON)
+	hyped_glass.give(Loadout.HYPE_MAN, 1)
+	hyped_glass.give(Loadout.GLASS_LEG, 1)
+	hyped_glass.prepare_kick_stats()
+	check(hyped_glass.attempt_cap == glass_cap and near(hyped_glass.stats.range_bonus, glass_range + 4.0), "Glass Leg I is +12 yd and the cap cost stays")
+	var bench := RunLogic.new()
+	bench.start_with_kicker(Kickers.WALK_ON)
+	bench.give(Loadout.DEEP_BENCH, 2)
+	var hyped_bench := RunLogic.new()
+	hyped_bench.start_with_kicker(Kickers.WALK_ON)
+	hyped_bench.give(Loadout.HYPE_MAN, 1)
+	hyped_bench.give(Loadout.DEEP_BENCH, 2)
+	check(hyped_bench.attempt_cap == bench.attempt_cap and hyped_bench.attempts == bench.attempts, "Hype Man does not scale Deep Bench")
+	var look := RunLogic.new()
+	look.start_with_kicker(Kickers.WALK_ON)
+	look.give(Loadout.SECOND_LOOK, 1)
+	var hyped_look := RunLogic.new()
+	hyped_look.start_with_kicker(Kickers.WALK_ON)
+	hyped_look.give(Loadout.HYPE_MAN, 1)
+	hyped_look.give(Loadout.SECOND_LOOK, 1)
+	check(hyped_look.second_look_bank == look.second_look_bank and hyped_look.rerolls_left == look.rerolls_left, "Hype Man does not scale Second Look")
+	var hero := RunLogic.new()
+	hero.start_with_kicker(Kickers.WALK_ON)
+	hero.give(Loadout.HERO_BALL, 1)
+	var hyped_hero := RunLogic.new()
+	hyped_hero.start_with_kicker(Kickers.WALK_ON)
+	hyped_hero.give(Loadout.HYPE_MAN, 1)
+	hyped_hero.give(Loadout.HERO_BALL, 1)
+	hyped_hero.prepare_kick_stats()
+	check(is_equal_approx(hyped_hero.stats.hero_mult, 1.5) and is_equal_approx(hyped_hero.stats.power_speed, hero.stats.power_speed), "Hero Ball's Mult scales and its ×0.80 slow does not")
+	var storm := RunLogic.new()
+	storm.start_with_kicker(Kickers.WALK_ON)
+	storm.give(Loadout.HYPE_MAN, 1)
+	storm.give(Loadout.STORM_CHASER, 1)
+	storm.prepare_kick_stats()
+	check(is_equal_approx(storm.stats.storm_per_mph, 0.3), "Storm Chaser I is 0.3 per mph under Hype Man I")
+	var drill := RunLogic.new()
+	drill.start_with_kicker(Kickers.WALK_ON)
+	drill.give(Loadout.HYPE_MAN, 1)
+	drill.give(Loadout.TWO_MINUTE, 1)
+	drill.prepare_kick_stats()
+	check(is_equal_approx(drill.stats.drill_mult, 0.75), "Two-Minute Drill I is +0.75 under Hype Man I")
+	var ordered := RunLogic.new()
+	ordered.start_with_kicker(Kickers.PHIL)
+	ordered.give(Loadout.HOWLING)
+	ordered.give(Loadout.HYPE_MAN, 1)
+	ordered.give(Loadout.GLASS_LEG, 1)
+	ordered.prepare_kick_stats()
+	var plain_order := RunLogic.new()
+	plain_order.start_with_kicker(Kickers.PHIL)
+	plain_order.give(Loadout.HOWLING)
+	plain_order.give(Loadout.GLASS_LEG, 1)
+	plain_order.prepare_kick_stats()
+	var hyped_yards := Loadout.scale_amount(8.0 * 1.5 * Loadout.HOWLING_ITEM, ordered.item_effect_scale())
+	var plain_yards := Loadout.scale_amount(8.0 * Loadout.HOWLING_ITEM, plain_order.item_effect_scale())
+	check(near(ordered.stats.range_bonus - plain_order.stats.range_bonus, hyped_yards - plain_yards), "Glass Leg goes Hype, then Howling, then Phil")
+	var streak_order := RunLogic.new()
+	streak_order.start_with_kicker(Kickers.PHIL)
+	streak_order.give(Loadout.HOWLING)
+	streak_order.give(Loadout.HYPE_MAN, 1)
+	streak_order.give(Loadout.HOT_STREAK, 1)
+	streak_order.prepare_kick_stats()
+	check(is_equal_approx(streak_order.stats.streak_step, 0.75), "Hot Streak stops after Hype, so Howling and Phil do not scale the step")
+	var rain := RunLogic.new()
+	rain.start_with_kicker(Kickers.PHIL)
+	rain.give(Loadout.RAIN_DANCE, 1)
+	rain.weather = RunLogic.RAIN
+	rain.prepare_kick_stats()
+	var wet := RunLogic.new()
+	wet.start_with_kicker(Kickers.PHIL)
+	wet.weather = RunLogic.RAIN
+	wet.prepare_kick_stats()
+	check(near(rain.stats.power_speed / wet.stats.power_speed, 0.90), "Rain Dance without Hype stays ×0.90 even for Phil")
+	var danced := RunLogic.new()
+	danced.start_with_kicker(Kickers.PHIL)
+	danced.give(Loadout.HYPE_MAN, 1)
+	danced.give(Loadout.RAIN_DANCE, 1)
+	danced.weather = RunLogic.RAIN
+	danced.prepare_kick_stats()
+	var danced_slow := Loadout.scale_gap(0.85, danced.item_effect_scale())
+	check(near(danced.stats.power_speed / wet.stats.power_speed, danced_slow), "Hype Man gap-widens Rain Dance to ×0.85, then Phil")
+	check(near(danced.stats.range_bonus - wet.stats.range_bonus, Loadout.scale_amount(6.0, danced.item_effect_scale())), "Rain Dance yards are +6 before Phil")
+	var chain := RunLogic.new()
+	chain.start_with_kicker(Kickers.WALK_ON)
+	chain.give(Loadout.HYPE_MAN, 1)
+	chain.give(Loadout.CHAIN_GANG, 1)
+	chain.streak = 1
+	check(near(chain.chain_gang_raw(), 1.5), "Chain Gang pays +1.5 per make")
+	chain.streak = 20
+	check(near(chain.chain_gang_raw(), 15.0), "Chain Gang caps at +15 under Hype Man I")
+	var chain_plain := RunLogic.new()
+	chain_plain.start_with_kicker(Kickers.WALK_ON)
+	chain_plain.give(Loadout.CHAIN_GANG, 1)
+	chain_plain.streak = 10
+	check(near(chain_plain.chain_gang_raw(), 10.0), "Chain Gang without Hype still caps at +10")
+	var passes := RunLogic.new()
+	passes.start_with_kicker(Kickers.WALK_ON)
+	passes.give(Loadout.HYPE_MAN, 1)
+	passes.give(Loadout.GEAR_MANAGER, 1)
+	check(passes.gm_passes == 1, "Hype Man does not scale Gear Manager passes")
+	var capped := RunLogic.new()
+	capped.start_with_kicker(Kickers.WALK_ON)
+	capped.give(Loadout.GEAR_MANAGER, 4)
+	check(capped._perk_rank(Loadout.GEAR_MANAGER) == 0, "Standard refuses Gear Manager IV")
+	capped.run_mode = "endless"
+	capped.give(Loadout.GEAR_MANAGER, 3)
+	check(capped._perk_rank(Loadout.GEAR_MANAGER) == 3 and capped.gm_passes == 3, "Endless Gear Manager III grants 3 passes and refuses to go past it")
+	capped.give(Loadout.GEAR_MANAGER, 4)
+	check(capped._perk_rank(Loadout.GEAR_MANAGER) == 3 and capped.gm_passes == 3, "Endless still refuses Gear Manager IV")
+	var standard_hype := RunLogic.new()
+	standard_hype.start_with_kicker(Kickers.WALK_ON)
+	standard_hype.give(Loadout.HYPE_MAN, 4)
+	check(standard_hype._perk_rank(Loadout.HYPE_MAN) == 0, "Standard refuses Hype Man IV")
+	standard_hype.run_mode = "endless"
+	standard_hype.give(Loadout.HYPE_MAN, 6)
+	check(standard_hype._perk_rank(Loadout.HYPE_MAN) == 6 and is_equal_approx(Loadout.hype_factor(6), 2.0), "Endless Hype Man VI is ×2.0")
+	var empty_gear := RunLogic.new()
+	empty_gear.start_with_kicker(Kickers.WALK_ON)
+	empty_gear.give(Loadout.GEAR_MANAGER, 1)
+	empty_gear.last_result_made = true
+	check(not empty_gear.open_gm_offer_after_make() and empty_gear.gm_passes == 1 and empty_gear.offer.is_empty(), "no gear means no Gear Manager offer, and the pass waits")
+	var cleats := RunLogic.new()
+	cleats.start_with_kicker(Kickers.WALK_ON)
+	cleats.give(Loadout.CANNON, 1)
+	cleats.give(Loadout.GEAR_MANAGER, 1)
+	cleats.last_result_made = true
+	check(cleats.open_gm_offer_after_make() and not cleats.offer.is_empty(), "Cannon opens a Gear Manager offer")
+	for card in cleats.offer:
+		check(str(card.get("slot", "")) == Loadout.CLEATS and str(card.get("id", "")) != Loadout.CANNON and int(card.get("rank", 0)) == 1, "the offer is a new cleat at rank I")
+	cleats.offer = [{"id": Loadout.PINPOINT, "rank": 1, "kind": Loadout.EQUIPMENT, "slot": Loadout.CLEATS}]
+	check(cleats.pick_card(0), "Pinpoint can be picked from the Gear Manager offer")
+	check(cleats.cleats_id == Loadout.CANNON and cleats.cleats2_id == Loadout.PINPOINT and cleats.gm_passes == 0 and cleats.gm_second_slots.has(Loadout.CLEATS), "the pass fills the second cleat slot")
+	var skipped := RunLogic.new()
+	skipped.start_with_kicker(Kickers.WALK_ON)
+	skipped.give(Loadout.CANNON, 1)
+	skipped.give(Loadout.GEAR_MANAGER, 1)
+	skipped.last_result_made = true
+	check(skipped.open_gm_offer_after_make(), "the skip case opens the offer")
+	check(skipped.skip_offer() and skipped.gm_passes == 1 and skipped.cleats2_id == "" and not skipped.awaiting_offer, "Skip keeps the pass and the slot")
+	check(not skipped.open_gm_offer_after_make(), "the same make does not open a second Gear Manager offer")
+	skipped.gm_offer_done = false
+	check(skipped.open_gm_offer_after_make() and skipped.gm_passes == 1, "the offer returns after the next make")
+	var ringed := RunLogic.new()
+	ringed.start_with_kicker(Kickers.WALK_ON)
+	ringed.give(Loadout.CANNON, 1)
+	ringed.helmet_id = Loadout.WIND_VISOR
+	ringed.helmet_rank = 1
+	ringed.helmet2_id = Loadout.SCOUT_LID
+	ringed.helmet2_rank = 1
+	ringed.give(Loadout.GEAR_MANAGER, 1)
+	ringed.last_result_made = true
+	check(ringed.open_gm_offer_after_make(), "a ring-filled helmet still leaves the cleats offer")
+	for card in ringed.offer:
+		check(str(card.get("slot", "")) != Loadout.HELMET and int(card.get("rank", 0)) == 1 and str(card.get("id", "")) != Loadout.CANNON, "the ring helmet is not offered and nothing is a third style")
+	var full := RunLogic.new()
+	full.start_with_kicker(Kickers.WALK_ON)
+	full.cleats_id = Loadout.CANNON
+	full.cleats_rank = 1
+	full.cleats2_id = Loadout.PINPOINT
+	full.cleats2_rank = 1
+	full.helmet_id = Loadout.WIND_VISOR
+	full.helmet_rank = 1
+	full.helmet2_id = Loadout.SCOUT_LID
+	full.helmet2_rank = 1
+	full.gloves_id = Loadout.IRON_GRIP
+	full.gloves_rank = 1
+	full.gloves2_id = Loadout.GUIDE_GLOVES
+	full.gloves2_rank = 1
+	full.give(Loadout.GEAR_MANAGER, 1)
+	full.last_result_made = true
+	check(not full.open_gm_offer_after_make() and full.gm_passes == 1, "no empty second slot means the pass waits")
+	var benched := RunLogic.new()
+	benched.start_with_kicker(Kickers.WALK_ON)
+	benched.give(Loadout.SCOUT_LID, 1)
+	benched.give(Loadout.GEAR_MANAGER, 1)
+	benched.last_result_made = true
+	check(benched.open_gm_offer_after_make(), "Scout Lid opens a helmet offer")
+	for card in benched.offer:
+		check(str(card.get("slot", "")) == Loadout.HELMET and str(card.get("id", "")) != Loadout.SCOUT_LID and int(card.get("rank", 0)) == 1, "the helmet offer is a new style at rank I")
+	benched.offer = [{"id": Loadout.DRIVE_LID, "rank": 1, "kind": Loadout.EQUIPMENT, "slot": Loadout.HELMET}]
+	check(benched.pick_card(0), "Drive Lid can take the second helmet slot")
+	benched.prepare_kick_stats()
+	var equipped_range := benched.stats.range_bonus
+	benched.pk2_grants.append({"id": Loadout.GEAR_MANAGER, "rank": 1})
+	check(benched.debug_pk2(true) == "" and benched._perk_rank(Loadout.GEAR_MANAGER) == 0 and benched.helmet2_id == Loadout.DRIVE_LID and benched.gm_passes == 0, "Shift+V removes Gear Manager and keeps the second helmet")
+	benched.prepare_kick_stats()
+	var parked_range := benched.stats.range_bonus
+	check(parked_range < equipped_range - 0.5, "the benched Drive Lid drops out of the range")
+	benched.give(Loadout.GEAR_MANAGER, 1)
+	benched.prepare_kick_stats()
+	check(benched.gm_live() and near(benched.stats.range_bonus, equipped_range) and benched.helmet2_id == Loadout.DRIVE_LID, "taking Gear Manager again turns the benched helmet back on")
+	var saved: Dictionary = benched.export_resume()
+	var loaded := RunLogic.new()
+	loaded.import_resume(saved)
+	loaded.prepare_kick_stats()
+	check(loaded.gm_live() and loaded.gm_passes == benched.gm_passes and loaded.helmet2_id == Loadout.DRIVE_LID and loaded.gm_second_slots.has(Loadout.HELMET) and near(loaded.stats.range_bonus, equipped_range), "the pass and the Gear Manager slot survive a save")
+	loaded._set_perk_rank(Loadout.GEAR_MANAGER, 0)
+	var parked: Dictionary = loaded.export_resume()
+	var again := RunLogic.new()
+	again.import_resume(parked)
+	again.prepare_kick_stats()
+	check(not again.gm_live() and again.helmet2_id == Loadout.DRIVE_LID and again.gm_second_slots.has(Loadout.HELMET) and near(again.stats.range_bonus, parked_range), "a benched slot stays in the save and stays off")
+	var doctor := RunLogic.new()
+	doctor.start_with_kicker(Kickers.WALK_ON)
+	doctor.give(Loadout.TEAM_DOCTOR, 1)
+	var doctor_state: Dictionary = doctor.loadout_state()
+	check(is_equal_approx(Loadout.protein_yards(1, doctor_state, 1.0), 9.0), "Team Doctor I protein is +9")
+	check(is_equal_approx(Loadout.magnesium_factor(1, doctor_state, 1.0), 0.55), "Team Doctor I magnesium is ×0.55")
+	check(is_equal_approx(Loadout.pickle_factor(1, doctor_state, 1.0), 0.25), "Team Doctor I pickle is ×0.25")
+	check(is_equal_approx(Loadout.preworkout_mult(1, doctor_state, 1.0), 0.75), "Team Doctor I pre-workout is +0.75")
+	check(doctor.vitamin_line(Vitamins.PROTEIN) == "+9 yd this kick", "the shop line says +9 yd")
+	check(doctor.vitamin_line(Vitamins.MAGNESIUM) == "Needles ×0.55 this kick", "the shop line says ×0.55")
+	check(doctor.vitamin_line(Vitamins.PICKLE) == "Sideways wind drift ×0.25", "the shop line says ×0.25")
+	check(doctor.vitamin_line(Vitamins.PREWORKOUT) == "+0.75 Mult if this kick is made", "the shop line says +0.75 Mult")
+	for quiet in [Vitamins.OMEGA, Vitamins.ELECTROLYTE, Vitamins.VITAMIN_D, Vitamins.ZINC, Vitamins.LUTEIN, Vitamins.TART, Vitamins.B12]:
+		check(doctor.vitamin_line(str(quiet)) == Vitamins.effect_line(str(quiet)), "%s is not scaled" % quiet)
+	doctor.run_mode = "endless"
+	doctor.give(Loadout.TEAM_DOCTOR, 6)
+	var sixth: Dictionary = doctor.loadout_state()
+	check(is_equal_approx(Loadout.doctor_factor(sixth), 2.0) and is_equal_approx(Loadout.pickle_factor(1, sixth, 1.0), 0.10), "Team Doctor VI floors pickle at ×0.10")
+	check(is_equal_approx(Loadout.protein_yards(1, sixth, 1.0), 12.0), "Team Doctor VI protein is +12")
+	var phil := RunLogic.new()
+	phil.start_with_kicker(Kickers.PHIL)
+	phil.give(Loadout.TEAM_DOCTOR, 1)
+	var phil_state: Dictionary = phil.loadout_state()
+	var phil_scale := phil.item_effect_scale()
+	check(near(Loadout.protein_yards(1, phil_state, phil_scale), Loadout.scale_amount(9.0, phil_scale)), "Phil multiplies the Doctor protein yards")
+	check(near(Loadout.magnesium_factor(1, phil_state, phil_scale), Loadout.scale_gap(0.55, phil_scale)), "Phil gap-widens the Doctor magnesium factor")
+	var boosted := RunLogic.new()
+	boosted.start_with_kicker(Kickers.WALK_ON)
+	boosted.give(Loadout.HYPE_MAN, 1)
+	boosted.give(Loadout.TEAM_DOCTOR, 1)
+	var boosted_state: Dictionary = boosted.loadout_state()
+	check(is_equal_approx(Loadout.doctor_factor(boosted_state), 1.75), "Hype Man gap-widens Team Doctor I from 1.50 to 1.75")
+	check(boosted.vitamin_line(Vitamins.PROTEIN) == "+10.5 yd this kick", "the shop shows the Hype-boosted shake")
+	var weak := RunLogic.new()
+	weak.start_with_kicker(Kickers.WALK_ON)
+	weak.belt = [Vitamins.PROTEIN, ""]
+	var weak_kick := _tw1_kick(weak)
+	var weak_base := weak_kick.max_range_at_full_power()
+	weak_kick.kick_distance = weak_base + KickConstants.OVERPOWER_YARDS + 8.0
+	var weak_report: Dictionary = weak.too_weak_report(weak_kick)
+	check(near(float(weak_report["shakes"]), 6.0) and bool(weak_report["too_weak"]), "8 yards past Max plus OVERPOWER still ends without Team Doctor")
+	var treated := RunLogic.new()
+	treated.start_with_kicker(Kickers.WALK_ON)
+	treated.give(Loadout.TEAM_DOCTOR, 1)
+	treated.belt = [Vitamins.PROTEIN, ""]
+	var treated_kick := _tw1_kick(treated)
+	treated_kick.kick_distance = treated_kick.max_range_at_full_power() + KickConstants.OVERPOWER_YARDS + 8.0
+	var treated_report: Dictionary = treated.too_weak_report(treated_kick)
+	check(near(float(treated_report["shakes"]), 9.0) and not bool(treated_report["too_weak"]), "Team Doctor's +9 reaches that same 8-yard gap")
+	var hyped_shake := RunLogic.new()
+	hyped_shake.start_with_kicker(Kickers.WALK_ON)
+	hyped_shake.give(Loadout.HYPE_MAN, 1)
+	hyped_shake.give(Loadout.TEAM_DOCTOR, 1)
+	hyped_shake.belt = [Vitamins.PROTEIN, ""]
+	var shake_kick := _tw1_kick(hyped_shake)
+	shake_kick.kick_distance = shake_kick.max_range_at_full_power() + KickConstants.OVERPOWER_YARDS + 10.0
+	var shake_report: Dictionary = hyped_shake.too_weak_report(shake_kick)
+	check(near(float(shake_report["shakes"]), 10.5) and not bool(shake_report["too_weak"]), "Hype Man on Team Doctor counts the 10.5 shake")
+	var passed := RunLogic.new()
+	passed.start_with_kicker(Kickers.WALK_ON)
+	passed.give(Loadout.GEAR_MANAGER, 1)
+	var passed_kick := _tw1_kick(passed)
+	var bare_pass := RunLogic.new()
+	bare_pass.start_with_kicker(Kickers.WALK_ON)
+	var bare_kick := _tw1_kick(bare_pass)
+	check(near(float(passed.too_weak_report(passed_kick)["best_case"]), float(bare_pass.too_weak_report(bare_kick)["best_case"])), "a banked Gear Manager pass adds no yards")
+	var parked_kick := _tw1_kick(again)
+	var scout_only := RunLogic.new()
+	scout_only.start_with_kicker(Kickers.WALK_ON)
+	scout_only.give(Loadout.SCOUT_LID, 1)
+	var scout_kick := _tw1_kick(scout_only)
+	check(near(float(again.too_weak_report(parked_kick)["base"]), float(scout_only.too_weak_report(scout_kick)["base"])), "a benched Drive Lid is not in the TOO WEAK base")
+	var cycle := RunLogic.new()
+	cycle.start_with_kicker(Kickers.WALK_ON)
+	check(cycle.debug_pk2(false) == "" and cycle._perk_rank(Loadout.HYPE_MAN) == 1, "V grants Hype Man")
+	check(cycle.debug_pk2(false) == "" and cycle._perk_rank(Loadout.GEAR_MANAGER) == 1 and cycle.gm_passes == 1, "V grants Gear Manager")
+	check(cycle.debug_pk2(false) == "Refused" and cycle._perk_rank(Loadout.TEAM_DOCTOR) == 0, "V refuses a third perk")
+	check(cycle.debug_pk2(true) == "" and cycle._perk_rank(Loadout.GEAR_MANAGER) == 0 and cycle._perk_rank(Loadout.HYPE_MAN) == 1, "Shift+V removes the last grant")
+	check(cycle.debug_pk2(true) == "" and cycle._perk_rank(Loadout.HYPE_MAN) == 0, "the next Shift+V removes Hype Man")
+	check(cycle.debug_pk2(true) == "Nothing to remove", "Shift+V with an empty stack says so")
+	print("PK2A hype I-VI ", Loadout.hype_factor(1), " ", Loadout.hype_factor(6), " doctor protein ", Loadout.protein_yards(1, doctor_state, 1.0), " mag ", Loadout.magnesium_factor(1, doctor_state, 1.0), " pickle VI ", Loadout.pickle_factor(1, sixth, 1.0), " phil protein ", Loadout.protein_yards(1, phil_state, phil_scale), " phil mag ", Loadout.magnesium_factor(1, phil_state, phil_scale))
+
+
+func _check_pk2a_live() -> void:
+	OS.set_environment("FG_SHOTS", "")
+	var packed: PackedScene = load("res://scenes/main.tscn")
+	var game = packed.instantiate()
+	get_root().add_child(game)
+	game._taking_pictures = true
+	game.highlight = 1
+	game.confirm_kicker()
+	game._taking_pictures = false
+	var grant := InputEventKey.new()
+	grant.pressed = true
+	grant.keycode = KEY_V
+	game._unhandled_input(grant)
+	game._taking_pictures = true
+	check(game.run._perk_rank(Loadout.HYPE_MAN) == 1 and game.run.vitamin_note == "", "the V key grants Hype Man")
+	game._taking_pictures = false
+	var undo := InputEventKey.new()
+	undo.pressed = true
+	undo.keycode = KEY_V
+	undo.shift_pressed = true
+	game._unhandled_input(undo)
+	game._taking_pictures = true
+	check(game.run._perk_rank(Loadout.HYPE_MAN) == 0, "Shift+V removes that Hype Man")
+	game.run.give(Loadout.HOT_STREAK, 1)
+	game.run.give(Loadout.SECOND_LOOK, 1)
+	game._taking_pictures = false
+	game._unhandled_input(grant)
+	game._taking_pictures = true
+	check(game.run.vitamin_note == "Refused" and game.run._perk_rank(Loadout.HYPE_MAN) == 0, "a refused V shows on the debug note")
+	var source := FileAccess.get_file_as_string("res://scripts/main.gd")
+	check(source.find("key.keycode == KEY_V") >= 0 and source.find("key.keycode == KEY_H") >= 0 and source.find("key.keycode == KEY_Y") >= 0 and source.find("key.keycode == KEY_B") >= 0, "V is added and the reserved keys stay")
 	game.free()
 

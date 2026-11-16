@@ -97,6 +97,14 @@ var ring_sides := {}
 var ring_debug := {}
 var ring_offer_pending := false
 var ring_offer_skipped := false
+# Gear Manager. Passes wait until a legal second-style card exists.
+var gm_passes := 0
+var gm_second_slots: Array = []
+var gm_offer := false
+var gm_offer_done := false
+var pk2_cursor := 0
+var pk2_grants: Array = []
+const PK2_CYCLE: Array[String] = [Loadout.HYPE_MAN, Loadout.GEAR_MANAGER, Loadout.TEAM_DOCTOR]
 var trophy_name := ""
 var new_record_score := false
 var new_record_long := false
@@ -244,6 +252,12 @@ func new_run() -> void:
 	ring_debug = {}
 	ring_offer_pending = false
 	ring_offer_skipped = false
+	gm_passes = 0
+	gm_second_slots = []
+	gm_offer = false
+	gm_offer_done = false
+	pk2_cursor = 0
+	pk2_grants = []
 	lucky_stacks = 0
 	showtime_mult = 1.0
 	synchronicity_offer_done = false
@@ -333,8 +347,9 @@ func too_weak_report(kick: KickLogic, blocked: bool = false) -> Dictionary:
 	var overpower := 0.0
 	if not practice and not numero:
 		overpower = KickConstants.OVERPOWER_YARDS + tip
-	# Gear is whatever is already in stats: filled slots, including a second slot.
-	# A benched piece, a banked pass, and a curse that pays only after a make are not added.
+	# Gear is whatever is already in stats: filled slots, including a second slot that is not benched.
+	# A benched Gear Manager piece, a banked pass, and a curse that pays only after a make are not added.
+	# Belt shakes use the same yards a drink would add now, including Team Doctor and Hype Man.
 	var open_belt := belt_usable()
 	var shake_count := _belt_count(Vitamins.PROTEIN) if open_belt else 0
 	var shakes := belt_protein_yards()
@@ -395,9 +410,7 @@ func belt_usable() -> bool:
 
 
 func _protein_range_bonus(count: int) -> float:
-	if count <= 0:
-		return 0.0
-	return Loadout.scale_amount(6.0 * float(count), item_effect_scale())
+	return Loadout.protein_yards(count, loadout_state(), item_effect_scale())
 
 
 func belt_protein_yards() -> float:
@@ -428,10 +441,18 @@ func _curse_weight() -> int:
 
 
 func lived_effect_line(id: String, rank: int) -> String:
-	var line := Loadout.effect_line(id, rank)
+	var line := Loadout.lived_line(id, rank, loadout_state())
 	if tad_active(5) and (id == Loadout.SCOUT_LID or id == Loadout.SECOND_LOOK):
 		return line + " Off at TAD 5+."
 	return line
+
+
+func vitamin_line(id: String) -> String:
+	return Loadout.vitamin_line(id, loadout_state(), item_effect_scale())
+
+
+func gm_live() -> bool:
+	return _perk_rank(Loadout.GEAR_MANAGER) > 0
 
 
 static func tad_summary(level: int) -> String:
@@ -584,8 +605,7 @@ func resolve_kick(result_text: String, offset: float, perfect: bool) -> void:
 	var pre := 0.0
 	var gel := 0.0
 	if made:
-		pre = 0.5 * float(_vitamin_count(Vitamins.PREWORKOUT))
-		pre = Loadout.scale_amount(pre, item_effect_scale())
+		pre = Loadout.preworkout_mult(_vitamin_count(Vitamins.PREWORKOUT), loadout_state(), item_effect_scale())
 		if stats.gelcap and _belt_vitamin_active():
 			gel = 0.5
 		var base_mult := current_mult()
@@ -672,6 +692,8 @@ func go_to_next_kick() -> bool:
 	last_points = 0
 	awaiting_offer = false
 	ring_offer_pending = false
+	gm_offer = false
+	gm_offer_done = false
 	awaiting_mulligan = false
 	awaiting_shop = false
 	offer = []
@@ -697,6 +719,8 @@ func begin_retry() -> bool:
 	is_first_ball = false
 	awaiting_offer = false
 	ring_offer_pending = false
+	gm_offer = false
+	gm_offer_done = false
 	offer = []
 	attempt_note = ""
 	score_line = ""
@@ -781,11 +805,18 @@ func prepare_kick_stats() -> void:
 	if not practicing and stats.rain_dance:
 		var dance := rain_dance_pay(weather, weather == BIG_GAME, vitamin_d_active())
 		if bool(dance["yards"]):
-			stats.range_bonus += _scaled_perk_yards(4.0)
+			var dance_yards := 4.0 * Loadout.hype_on(loadout_state(), Loadout.RAIN_DANCE)
+			stats.range_bonus += _scaled_perk_yards(dance_yards)
 		# Both needles, before the 0.35 floor. Big Game strips this slow.
+		# Hype gap-widens the 0.90. Howling does not touch this slow. Phil does only after Hype.
 		if bool(dance["slow"]):
-			stats.power_speed *= 0.90
-			stats.accuracy_speed *= 0.90
+			var slow := 0.90
+			var hype := Loadout.hype_on(loadout_state(), Loadout.RAIN_DANCE)
+			if hype > 1.0001:
+				slow = 1.0 - (1.0 - 0.90) * hype
+				slow = Loadout.scale_gap(slow, item_effect_scale())
+			stats.power_speed *= slow
+			stats.accuracy_speed *= slow
 	if not practicing and stats.chain_gang:
 		stats.range_bonus += _scaled_perk_yards(chain_gang_raw())
 	if weather == BIG_GAME:
@@ -1184,6 +1215,19 @@ func pick_card(index: int) -> bool:
 	if not awaiting_offer or index < 0 or index >= offer.size():
 		return false
 	var card := _as_loadout_card(offer[index])
+	if gm_offer:
+		_close_offer()
+		gm_offer = false
+		var slot := str(card.get("slot", ""))
+		var picked := str(card.get("id", ""))
+		var rank := int(card.get("rank", 1))
+		if gm_passes > 0 and _accept_equipment(slot, picked, rank) and _gm_second_ok(slot, picked):
+			_store_equipment(slot, picked, rank)
+			if not gm_second_slots.has(slot):
+				gm_second_slots.append(slot)
+			gm_passes -= 1
+			rebuild_stats()
+		return true
 	_close_offer()
 	give(str(card.get("id", "")), int(card.get("rank", 1)))
 	return true
@@ -1192,8 +1236,16 @@ func pick_card(index: int) -> bool:
 func skip_offer() -> bool:
 	if not awaiting_offer:
 		return false
+	var was_gm := gm_offer
 	_close_offer()
+	if was_gm:
+		gm_offer = false
 	return true
+
+
+func _gm_second_ok(slot: String, id: String) -> bool:
+	var pair := _pair(slot)
+	return str(pair[0]) != "" and str(pair[2]) == "" and id != str(pair[0])
 
 
 func free_reroll_ready() -> bool:
@@ -1213,6 +1265,12 @@ func reroll_offer() -> bool:
 	else:
 		rerolls_left -= 1
 	var previous: Array = offer.duplicate(true)
+	if gm_offer:
+		var redraw := Loadout.draw_ring_offer(loadout_state(), _offer_rng, true)
+		if not redraw.is_empty():
+			offer = redraw
+		awaiting_offer = true
+		return true
 	offer = Loadout.draw_offer(loadout_state(), attempt_cap, _offer_rng, previous, _curse_weight())
 	_consider_power_safety()
 	awaiting_offer = true
@@ -1442,7 +1500,10 @@ static func rain_dance_pay(weather_name: String, big_game: bool, vitamin_d: bool
 
 
 func chain_gang_raw() -> float:
-	return float(mini(maxi(streak, 0), 10))
+	var hype := Loadout.hype_on(loadout_state(), Loadout.CHAIN_GANG)
+	var step := 1.0 * hype
+	var cap := 10.0 * hype
+	return minf(float(maxi(streak, 0)) * step, cap)
 
 
 func _scaled_perk_yards(raw: float) -> float:
@@ -1591,6 +1652,61 @@ func collects_at(offset: float, center: float, result_text: String, reached: boo
 	return absf(offset - center) <= RING_COLLECT_YARDS
 
 
+func open_gm_offer_after_make() -> bool:
+	if gm_offer_done or not last_result_made or gm_passes <= 0 or phase != Phase.PLAYING:
+		return false
+	var cards := Loadout.draw_ring_offer(loadout_state(), _offer_rng, true)
+	if cards.is_empty():
+		return false
+	offer = cards
+	awaiting_offer = true
+	gm_offer = true
+	gm_offer_done = true
+	return true
+
+
+func debug_pk2(shift: bool) -> String:
+	if shift:
+		if pk2_grants.is_empty():
+			return "Nothing to remove"
+		var grant: Dictionary = pk2_grants.pop_back()
+		var id := str(grant.get("id", ""))
+		var granted := int(grant.get("rank", 1))
+		if _perk_rank(id) <= 0:
+			return "Nothing to remove"
+		_set_perk_rank(id, granted - 1)
+		return ""
+	var id := PK2_CYCLE[pk2_cursor % PK2_CYCLE.size()]
+	pk2_cursor += 1
+	var want := _perk_rank(id) + 1
+	give(id, want)
+	if _perk_rank(id) != want:
+		return "Refused"
+	pk2_grants.append({"id": id, "rank": want})
+	return ""
+
+
+func _set_perk_rank(id: String, rank: int) -> void:
+	var have := _perk_rank(id)
+	if have <= 0:
+		return
+	if rank <= 0:
+		var kept: Array = []
+		for item in perks:
+			if str(item.get("id", "")) != id:
+				kept.append(item)
+		perks = kept
+		if id == Loadout.GEAR_MANAGER:
+			gm_passes = 0
+	else:
+		for item in perks:
+			if str(item.get("id", "")) == id:
+				item["rank"] = rank
+		if id == Loadout.GEAR_MANAGER:
+			gm_passes = maxi(gm_passes - (have - rank), 0)
+	rebuild_stats()
+
+
 func open_ring_offer() -> bool:
 	if not ring_offer_pending or phase != Phase.PLAYING:
 		return false
@@ -1716,6 +1832,8 @@ func give(id: String, rank: int = 1) -> void:
 				found = true
 		if not found:
 			perks.append({"id": id, "rank": rank})
+		if id == Loadout.GEAR_MANAGER:
+			gm_passes += rank - previous_bench
 	elif slot == Loadout.CURSE:
 		curse_ids.append(id)
 		if curse_ids.size() >= 2:
@@ -1781,6 +1899,8 @@ func loadout_state() -> Dictionary:
 		"curses_locked": curses_locked,
 		"banned_curses": banned_curses.duplicate(),
 		"run_mode": run_mode,
+		"gm_passes": gm_passes,
+		"gm_second_slots": gm_second_slots.duplicate(),
 	}
 
 
@@ -2008,6 +2128,9 @@ func export_resume() -> Dictionary:
 		"ring_sides": _side_rows(),
 		"ring_debug": _kick_keys(ring_debug),
 		"ring_offer": ring_offer_pending,
+		"gm_passes": gm_passes,
+		"gm_second_slots": gm_second_slots.duplicate(),
+		"gm_offer": gm_offer,
 		"kick10_boss": kick10_boss,
 		"standard_bosses": _boss_rows(standard_bosses),
 	}
@@ -2033,6 +2156,10 @@ func import_resume(data: Dictionary) -> void:
 	curse_ids = _string_list(data.get("curses", []))
 	banned_curses = _string_list(data.get("banned_curses", []))
 	curses_locked = bool(data.get("curses_locked", false))
+	gm_passes = int(data.get("gm_passes", 0))
+	gm_second_slots = _string_list(data.get("gm_second_slots", []))
+	gm_offer = bool(data.get("gm_offer", false))
+	gm_offer_done = gm_offer
 	bench_extra_cap = int(data.get("bench_extra_cap", 0))
 	bench_bank = float(data.get("bench_bank", 0.0))
 	rebuild_stats()
@@ -2101,22 +2228,30 @@ func import_resume(data: Dictionary) -> void:
 		awaiting_offer = true
 		kick_resolved = true
 		last_result_made = true
+		gm_offer = bool(data.get("gm_offer", false))
+		gm_offer_done = gm_offer
 		offer = _dict_list(data.get("offer", []))
 	elif place == "ring":
 		awaiting_offer = true
 		kick_resolved = true
 		last_result_made = false
 		ring_offer_pending = false
+		gm_offer = false
+		gm_offer_done = false
 		offer = _dict_list(data.get("offer", []))
 	elif place == "shop":
 		awaiting_shop = true
 		kick_resolved = true
 		last_result_made = true
+		gm_offer = false
+		gm_offer_done = false
 		shop_stock = _string_list(data.get("shop_stock", ["", "", ""]))
 	else:
 		awaiting_offer = false
 		awaiting_shop = false
 		kick_resolved = false
+		gm_offer = false
+		gm_offer_done = false
 		offer = []
 
 
@@ -2360,16 +2495,17 @@ func _try_unlock(id: String) -> void:
 
 func _apply_ball_vitamins() -> void:
 	var scale := item_effect_scale()
-	stats.range_bonus += _protein_range_bonus(_vitamin_count(Vitamins.PROTEIN))
+	var state := loadout_state()
+	stats.range_bonus += Loadout.protein_yards(_vitamin_count(Vitamins.PROTEIN), state, scale)
 	var mag := _vitamin_count(Vitamins.MAGNESIUM)
 	if mag > 0:
-		var factor := pow(0.7, float(mag))
-		stats.power_speed *= Loadout.scale_gap(factor, scale)
-		stats.accuracy_speed *= Loadout.scale_gap(factor, scale)
+		var factor := Loadout.magnesium_factor(mag, state, scale)
+		stats.power_speed *= factor
+		stats.accuracy_speed *= factor
 	stats.omega = _vitamin_count(Vitamins.OMEGA) > 0
 	var pickle := _vitamin_count(Vitamins.PICKLE)
 	if pickle > 0:
-		stats.drift_factor *= Loadout.scale_gap(pow(0.5, float(pickle)), scale)
+		stats.drift_factor *= Loadout.pickle_factor(pickle, state, scale)
 	if _vitamin_count(Vitamins.LUTEIN) > 0:
 		stats.flag_reader = true
 		stats.laser_line = true
