@@ -102,6 +102,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "au1":
+		if not await _capture_au1():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "f3":
 		if not await _capture_f3():
 			get_tree().quit(1)
@@ -1769,6 +1775,27 @@ func _offer_card(id: String, rank: int, slot: String) -> bool:
 	board.refresh_view()
 	if board.run.offer.is_empty() or str(board.run.offer[0].get("id", "")) != id:
 		print("offer missed ", id)
+		return false
+	return true
+
+
+func _capture_au1() -> bool:
+	await get_tree().create_timer(1.2).timeout
+	if not await _capture("au1_menu_music.png"):
+		return false
+	Settings.set_volume("music", 50, false)
+	Settings.set_volume("crowd", 50, false)
+	board.front.screen = FrontEnd.Screen.OPTIONS
+	board.front.focus = 0
+	board.selecting = false
+	board.refresh_view()
+	if not await _capture("au1_options_sliders.png"):
+		return false
+	board.highlight = 1
+	board.open_select()
+	board.confirm_kicker()
+	await get_tree().create_timer(1.2).timeout
+	if not await _capture("au1_crowd_run.png"):
 		return false
 	return true
 

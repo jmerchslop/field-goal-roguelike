@@ -23,6 +23,7 @@ window/stretch/aspect="keep"
 SaveData="*res://scripts/SaveData.gd"
 Settings="*res://scripts/Settings.gd"
 Sfx="*res://scripts/Sfx.gd"
+Beds="*res://scripts/Beds.gd"
 
 [rendering]
 

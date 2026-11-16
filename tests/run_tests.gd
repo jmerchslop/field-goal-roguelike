@@ -59,6 +59,7 @@ func _run() -> void:
 	_check_mf1()
 	_check_as1()
 	_check_f3()
+	_check_au1()
 	_check_drive_lid_and_power_safety()
 	_check_m2_kickers()
 	_check_honest_cards_and_bench()
@@ -3572,6 +3573,23 @@ func _check_rw2() -> void:
 	long_make.resolve_kick("GOOD", 0.0, false)
 	check(near(long_make.distance_yards(), 500.0) and records.has_unlock(Kickers.VEX), "an Endless 500-yard make unlocks Vex through resolve_kick")
 	records.unlocks[Kickers.VEX] = had_vex
+
+
+func _check_au1() -> void:
+	check(ResourceLoader.exists("res://audio/ambience/crowd_loop.ogg"), "the crowd bed file is in the project")
+	check(ResourceLoader.exists("res://audio/music/main_menu_theme.ogg"), "the menu theme file is in the project")
+	var beds = get_root().get_node("Beds")
+	beds.boot()
+	check(beds.music_ready and beds.crowd_ready, "both beds loaded")
+	check(beds.music_player.bus == "Music" and beds.crowd_player.bus == "Crowd", "the beds use the Music and Crowd buses")
+	check(beds.music_player.stream.loop and beds.crowd_player.stream.loop, "both imported beds loop")
+	var missing := "res://audio/missing_bed.ogg"
+	var before := int(beds._logged.size())
+	beds.note_missing(missing, "sample bed")
+	beds.note_missing(missing, "sample bed")
+	check(beds._logged.size() == before + 1, "a missing bed is logged once")
+	var sfx = get_root().get_node("Sfx")
+	check(sfx.player_bus("menu") == "SFX", "menu clicks stay on the SFX bus")
 
 
 func _check_f3() -> void:
