@@ -102,6 +102,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "f3":
+		if not await _capture_f3():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "as1":
 		if not await _capture_as1():
 			get_tree().quit(1)
@@ -1764,6 +1770,40 @@ func _offer_card(id: String, rank: int, slot: String) -> bool:
 	if board.run.offer.is_empty() or str(board.run.offer[0].get("id", "")) != id:
 		print("offer missed ", id)
 		return false
+	return true
+
+
+func _capture_f3() -> bool:
+	var saved := {}
+	for id in [Kickers.PHIL, Kickers.GARY, Kickers.VEX, Kickers.COLE, Kickers.WILLOW, Kickers.CARLOS]:
+		saved[id] = SaveData.has_unlock(id)
+		SaveData.unlocks[id] = false
+	SaveData.save_file()
+	board.front.run_mode = "standard"
+	SaveData.kickers[Kickers.WALK_ON]["tad_unlocked"] = 3
+	SaveData.set_tad_selected(Kickers.WALK_ON, 2)
+	board.open_select()
+	board.highlight = 0
+	board.refresh_view()
+	if not await _capture("f3_bruce.png"):
+		return false
+	board.highlight = 1
+	board.refresh_view()
+	if not await _capture("f3_walk_on.png"):
+		return false
+	SaveData.unlocks[Kickers.CARLOS] = true
+	board.highlight = 7
+	board.refresh_view()
+	if not await _capture("f3_unlocked_third.png"):
+		return false
+	SaveData.unlocks[Kickers.CARLOS] = false
+	board.highlight = 2
+	board.refresh_view()
+	if not await _capture("f3_locked.png"):
+		return false
+	for id in saved.keys():
+		SaveData.unlocks[id] = bool(saved[id])
+	SaveData.save_file()
 	return true
 
 

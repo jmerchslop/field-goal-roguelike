@@ -58,6 +58,7 @@ func _run() -> void:
 	_check_pk1()
 	_check_mf1()
 	_check_as1()
+	_check_f3()
 	_check_drive_lid_and_power_safety()
 	_check_m2_kickers()
 	_check_honest_cards_and_bench()
@@ -3571,6 +3572,29 @@ func _check_rw2() -> void:
 	long_make.resolve_kick("GOOD", 0.0, false)
 	check(near(long_make.distance_yards(), 500.0) and records.has_unlock(Kickers.VEX), "an Endless 500-yard make unlocks Vex through resolve_kick")
 	records.unlocks[Kickers.VEX] = had_vex
+
+
+func _check_f3() -> void:
+	var walk_stats := KickerStats.new()
+	Kickers.apply_to(walk_stats, Kickers.WALK_ON)
+	var walk_text := " ".join(Kickers.rundown_lines(Kickers.WALK_ON, true, 2))
+	check(walk_text.find(str(SelectCard.yard_cap(Kickers.WALK_ON))) >= 0, "the Walk-On rundown uses his live range")
+	check(walk_text.find("%.2f" % walk_stats.perfect_band) >= 0 and walk_text.find("Earns His Spot") >= 0 and walk_text.find("2 offer rerolls") >= 0, "the Walk-On rundown names the kit, the band, and the rerolls")
+	check(walk_text.find("Two-a-days 2.") >= 0, "an unlocked rundown can name the selected Two-a-Days level")
+	var bruce_stats := KickerStats.new()
+	Kickers.apply_to(bruce_stats, Kickers.BIG_BRUCE)
+	var bruce_text := " ".join(Kickers.rundown_lines(Kickers.BIG_BRUCE, true, -1))
+	check(bruce_text.find(str(SelectCard.yard_cap(Kickers.BIG_BRUCE))) >= 0 and bruce_text.find(_plain_match(bruce_stats.power_floor)) >= 0 and bruce_text.find("Farm Strength") >= 0, "Bruce's rundown uses Farm Strength and the live range")
+	check(bruce_text.find("Two-a-days") < 0, "the rundown skips Two-a-Days when the ladder line is not requested")
+	var locked := " ".join(Kickers.rundown_lines(Kickers.PHIL, false, 4))
+	check(locked.find("Locked.") >= 0 and locked.find(Kickers.unlock_hint(Kickers.PHIL)) >= 0, "a locked rundown shows the live unlock rule")
+	check(locked.find("Compounding") < 0 and locked.find("55") < 0 and locked.find("Two-a-days") < 0, "a locked rundown does not show the kit")
+	var source := FileAccess.get_file_as_string("res://scripts/hud.gd")
+	check(source.find("func _paint_tooltip") >= 0 and source.find("func _draw_slot_tooltip") >= 0 and source.find("func _draw_kicker_rundown") >= 0, "the select rundown reuses the loadout tooltip panel")
+
+
+func _plain_match(value: float) -> String:
+	return str(int(round(value)))
 
 
 func _check_as1() -> void:

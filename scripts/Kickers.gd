@@ -255,6 +255,94 @@ static func unlock_hint(id: String) -> String:
 	return str(get_def(id).get("unlock", ""))
 
 
+# Select-screen kit facts. Numbers come from the same stats the kick uses.
+static func rundown_lines(id: String, unlocked: bool, tad_level: int = -1) -> PackedStringArray:
+	var info := get_def(id)
+	var lines := PackedStringArray()
+	if info.is_empty():
+		return lines
+	lines.append(str(info["name"]))
+	if not unlocked:
+		lines.append("Locked.")
+		var rule := unlock_hint(id)
+		if rule != "":
+			lines.append(rule + ".")
+		return lines
+	var stats := KickerStats.new()
+	apply_to(stats, id)
+	lines.append("%s. %s." % [str(info["kit_line"]), str(info["ball_name"])])
+	if stats.clearance:
+		var sample := KickLogic.new()
+		sample.stats = stats
+		sample.kick_distance = 40.0
+		var at_floor := float(sample.carry_plan(88.0, 0.0)["travel"]) - sample.kick_distance
+		var at_full := float(sample.carry_plan(100.0, 0.0)["travel"]) - sample.kick_distance
+		lines.append("No yard cap. At 88% power the kick clears by %s yards, and full power clears by %s." % [_plain_number(at_floor), _plain_number(at_full)])
+	else:
+		var yards := stats.range_base + stats.range_per_power * 100.0
+		lines.append("Full power with no wind is %s yards." % _plain_number(yards))
+	lines.append("Perfect band %s. Good band %s." % [_plain_number(stats.perfect_band), _plain_number(stats.good_band)])
+	var sweep := "%.2f" % MeterGauge.SWEEP_SEC
+	if is_equal_approx(stats.ball_speed_mult, 1.0):
+		lines.append("Both needles share one speed, the %s second sweep." % sweep)
+	else:
+		lines.append("Both needles share one speed, %s times the %s second sweep." % [_plain_number(stats.ball_speed_mult), sweep])
+	if stats.power_floor > 0.0:
+		var floor_num := _plain_number(stats.power_floor)
+		lines.append("A press under %s%% still kicks at %s%%." % [floor_num, floor_num])
+	if stats.ball_type == "farm_ball":
+		var pushed := KickLogic.drift_at_uprights(10.0, 90.0, 35.0, 0, 0, "farm_ball")
+		var plain := KickLogic.drift_at_uprights(10.0, 90.0, 35.0, 0, 0, "standard")
+		var extra := 0
+		if absf(plain) > 0.0001:
+			extra = int(round((pushed / plain - 1.0) * 100.0))
+		lines.append("Wind pushes the ball %d%% more." % extra)
+	if stats.rerolls_per_run != 1:
+		lines.append("Starts with %d offer rerolls." % stats.rerolls_per_run)
+	if id == WALK_ON:
+		var retry := RunLogic.new()
+		retry.start_with_kicker(WALK_ON)
+		retry.is_first_ball = false
+		retry.prepare_kick_stats()
+		var first := RunLogic.new()
+		first.start_with_kicker(WALK_ON)
+		first.prepare_kick_stats()
+		var slow := 1.0
+		if absf(first.stats.power_speed) > 0.001:
+			slow = retry.stats.power_speed / first.stats.power_speed
+		lines.append("A retry after a miss slows that speed to %s and adds %s yards." % [_plain_number(slow), _plain_number(retry.stats.range_bonus - first.stats.range_bonus)])
+	if stats.house_account:
+		lines.append("Shop goods are free. Shelf rerolls still cost cash.")
+	if stats.compounding:
+		lines.append("Compounding makes item effects 15% stronger.")
+	if stats.gelcap:
+		lines.append("A vitamin used on this kick adds 0.5 Mult on a make.")
+	if stats.good_as_gold:
+		lines.append("The good band counts as perfect.")
+	if stats.lucky_ball:
+		lines.append("Each first-try make adds 3% to item scale, up to 25%. A miss resets it.")
+	if stats.saucer_mph > 0.0:
+		lines.append("The saucer curves left like %s mph of west wind." % _plain_number(stats.saucer_mph))
+	if stats.brand_deal:
+		lines.append("Loadout offers stay. The Vitamin Shop does not.")
+	if stats.showtime:
+		lines.append("A down-the-middle make doubles the stored Mult.")
+	if stats.synchronicity:
+		lines.append("The first loadout offer includes a range item.")
+	if stats.numero_dos:
+		lines.append("A power lock of %s or higher, including the overpower band, is a true perfect and pays no overpower yards." % _plain_number(KickConstants.RED_TIP_START))
+	if tad_level >= 0:
+		lines.append("Two-a-days %d." % tad_level)
+	return lines
+
+
+static func _plain_number(value: float) -> String:
+	var hundredths := snappedf(value, 0.01)
+	if is_equal_approx(hundredths, roundf(hundredths)):
+		return str(int(roundf(hundredths)))
+	return "%.2f" % hundredths
+
+
 static func is_starter(id: String) -> bool:
 	return id == BIG_BRUCE or id == WALK_ON
 

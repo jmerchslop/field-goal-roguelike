@@ -601,6 +601,7 @@ func _draw_kicker_select() -> void:
 		var info: Dictionary = Kickers.ALL[i]
 		_draw_playing_card(kicker_rects[i], str(info["id"]), Kickers.is_unlocked(str(info["id"])), i == picked)
 	_draw_tad_stepper(picked)
+	_draw_kicker_rundown(picked)
 	var footer := "1 TO 8 HIGHLIGHT. SPACE OR CLICK AGAIN TO START."
 	if game.front != null and game.front.run_mode == "standard":
 		footer = "1 TO 8 HIGHLIGHT. BRACKETS CHANGE TAD. SPACE OR CLICK AGAIN TO START."
@@ -1370,12 +1371,39 @@ func _draw_slot_tooltip() -> void:
 		box.position.x = KickConstants.WINDOW_WIDTH - 8.0 - box.size.x
 	if box.position.y + box.size.y > KickConstants.WINDOW_HEIGHT - 8.0:
 		box.position.y = maxf(8.0, anchor.position.y - box.size.y - 8.0)
+	_paint_tooltip(box, lines)
+
+
+func _paint_tooltip(box: Rect2, lines: Array) -> void:
 	draw_rect(box, Color(0.05, 0.08, 0.1, 0.94))
 	draw_rect(box, KickConstants.COLOR_ATTEMPT, false, 2.0)
 	var y := box.position.y + 18.0
 	for line in lines:
 		_text(Vector2(box.position.x + 8, y), str(line), 14, KickConstants.COLOR_TEXT)
 		y += 18.0
+
+
+func _draw_kicker_rundown(slot: int) -> void:
+	if slot < 0 or slot >= Kickers.ALL.size() or kicker_rects.is_empty():
+		return
+	var id := str(Kickers.ALL[slot]["id"])
+	var unlocked := Kickers.is_unlocked(id)
+	var tad := -1
+	if unlocked and game.front != null and game.front.run_mode == "standard":
+		tad = SaveData.tad_selected(id)
+	var grid_left := float(kicker_rects[0].position.x)
+	var width := maxf(120.0, grid_left - 16.0)
+	var wrapped: Array = []
+	for sentence in Kickers.rundown_lines(id, unlocked, tad):
+		for row in _wrap_lines(sentence, width - 16.0, 14):
+			wrapped.append(row)
+	var height := 16.0 + float(wrapped.size()) * 18.0
+	var top := 46.0
+	var limit := 692.0
+	if top + height > limit:
+		height = limit - top
+	# The left gutter stays off the card, the gold rim, the footer, and the TAD stepper.
+	_paint_tooltip(Rect2(8.0, top, width, height), wrapped)
 
 
 func _slot_color(slot: String) -> Color:
