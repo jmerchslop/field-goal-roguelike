@@ -58,6 +58,8 @@ func _draw() -> void:
 	if run.curse_prompt:
 		_draw_curse_prompt(run)
 	_draw_save_note()
+	_draw_too_weak()
+	_draw_too_weak_debug()
 	if game.run != null and game.run.unlock_toast != "":
 		_text_centered(game.run.unlock_toast, 96.0, 22, Color(1.0, 0.92, 0.45))
 	_draw_slot_tooltip()
@@ -489,8 +491,11 @@ func _draw_chips(run: RunLogic, y: float) -> void:
 		var id := str(run.belt[i]) if i < run.belt.size() else ""
 		if id != "":
 			var icon := _icon(Vitamins.sprite_path(id))
+			var bottle := Rect2(chip.position + Vector2(22, 3), Vector2(18, 18))
 			if icon != null:
-				draw_texture_rect(icon, Rect2(chip.position + Vector2(22, 3), Vector2(18, 18)), false)
+				draw_texture_rect(icon, bottle, false)
+			else:
+				draw_rect(bottle, Vitamins.bottle_color(id))
 	var note := BroadcastHud.belt_note(run.vitamin_note)
 	if note != "":
 		_pg(note, Vector2(276, y + 5), 12, Color(1.0, 0.92, 0.45))
@@ -1177,6 +1182,11 @@ func _draw_end_screen(run: RunLogic) -> void:
 		title = "THAT'S FAR ENOUGH"
 		title_color = KickConstants.COLOR_GOOD
 	_text_centered(title, box.position.y + 70.0, 40 if run.phase == RunLogic.Phase.FAR else 64, title_color)
+	if run.end_reason == "too_weak":
+		var reason := "TOO WEAK"
+		var reason_w := float(BitmapFonts.measure_px("ui", reason, 16))
+		var field_width := KickConstants.WINDOW_WIDTH - 500.0
+		_pg(reason, Vector2((field_width - reason_w) * 0.5, box.position.y + 78.0), 16, Color(0.95, 0.55, 0.28))
 	_text_centered("Score %d" % run.score, box.position.y + 130.0, 32, KickConstants.COLOR_TEXT)
 	if run.tad_toast != "":
 		_pg_center(run.tad_toast, box.position.y + 188.0, 18, Color(0.95, 0.78, 0.28))
@@ -1447,6 +1457,44 @@ func _draw_trophy(run: RunLogic) -> void:
 	draw_rect(box, Color(0.45, 0.32, 0.05, 0.94))
 	draw_rect(box, Color(0.95, 0.78, 0.2), false, 3.0)
 	_text_centered("Trophy: %s" % run.trophy_name, 112.0, 26, Color(1.0, 0.9, 0.45))
+
+
+func _draw_too_weak() -> void:
+	if game == null or game.too_weak_age < RunLogic.TOO_WEAK_BEAT or game.run.phase != RunLogic.Phase.PLAYING:
+		return
+	var age := float(game.too_weak_age) - RunLogic.TOO_WEAK_BEAT
+	var scale := 2
+	var lines := PackedStringArray(["TOO", "WEAK"])
+	var block := BitmapFonts.line_height("callout", scale) * lines.size()
+	block += 16 + BitmapFonts.line_height("ui", 1) * 2
+	var top := (KickConstants.WINDOW_HEIGHT - float(block)) * 0.34
+	if age < ResultStamp.SLAM_SEC:
+		top += 12.0
+	draw_rect(Rect2(0, top - 16.0, KickConstants.WINDOW_WIDTH, float(block) + 32.0), Color(0, 0, 0, 0.55))
+	var saved_filter := texture_filter
+	texture_filter = TEXTURE_FILTER_NEAREST
+	var y := top
+	for line in lines:
+		_paint_centered("callout", line, y, scale, Vector2.ZERO)
+		y += float(BitmapFonts.line_height("callout", scale))
+	y += 16.0
+	_paint_centered("ui", game.too_weak_flavor, y, 1, Vector2.ZERO)
+	y += float(BitmapFonts.line_height("ui", 1))
+	_paint_centered("ui", game.too_weak_numbers, y, 1, Vector2.ZERO)
+	texture_filter = saved_filter
+
+
+func _draw_too_weak_debug() -> void:
+	if game == null or game.too_weak_debug == "":
+		return
+	var rows: PackedStringArray = str(game.too_weak_debug).split("\n")
+	var box := Rect2(180, 86, 920, 18.0 + float(rows.size()) * 22.0)
+	draw_rect(box, Color(0.05, 0.08, 0.1, 0.92))
+	draw_rect(box, Color(0.95, 0.78, 0.28), false, 2.0)
+	var y := box.position.y + 22.0
+	for row in rows:
+		_text_centered(str(row), y, 16, KickConstants.COLOR_TEXT)
+		y += 22.0
 
 
 func _draw_save_note() -> void:

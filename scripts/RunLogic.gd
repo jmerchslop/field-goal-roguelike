@@ -25,6 +25,19 @@ const CLOCK_SEC := 4.0
 const POST_SWING := 3.0
 const POST_PERIOD := 4.0
 const TAD_MAX := 10
+const TOO_WEAK_BEAT := 0.5
+const TOO_WEAK_HOLD := 1.8
+const TOO_WEAK_CUSHION := 0.05
+const TOO_WEAK_LINES: PackedStringArray = [
+	"NEED MORE LEG.",
+	"OUT OF RANGE.",
+	"SEND IN THE PUNTER.",
+	"CALL THE PUNT TEAM.",
+	"HIT THE WEIGHT ROOM.",
+	"NOT ENOUGH BOOT.",
+	"THE POSTS ARE TOO FAR.",
+	"BACK TO THE PRACTICE FIELD.",
+]
 const LIGHTS_NEEDLE := 1.35
 const SQUEEZE_WIDTH := 5.17
 const SQUEEZE_HALF := 2.585
@@ -97,6 +110,7 @@ var rerolls_left := 1
 var second_look_bank := 0
 # Standard difficulty for this run. 0 is today's game. Endless stays 0.
 var tad_level := 0
+var end_reason := ""
 var tad_toast := ""
 var power_item_seen := false
 var pending_result := ""
@@ -245,6 +259,7 @@ func new_run() -> void:
 	rerolls_left = stats.rerolls_per_run
 	second_look_bank = 0
 	tad_level = 0
+	end_reason = ""
 	tad_toast = ""
 	power_item_seen = false
 	pending_result = ""
@@ -289,6 +304,90 @@ func open_tad(level: int) -> void:
 	if tad_active(9):
 		weather_forced = false
 		_roll_weather()
+
+
+func too_weak_flavor() -> String:
+	if TOO_WEAK_LINES.is_empty():
+		return ""
+	return TOO_WEAK_LINES[_rng.randi() % TOO_WEAK_LINES.size()]
+
+
+static func too_weak_numbers(best_case: float, required: float) -> String:
+	return "MAX %s YD. NEED %s YD." % [KickLogic.format_number(best_case), KickLogic.format_number(required)]
+
+
+# One report for the tee check, the debug key, and the tests.
+# base is the HUD Max. The other parts are yards still available before this ball is kicked.
+# blocked is pause, the J preview, or a menu over the tee.
+func too_weak_report(kick: KickLogic, blocked: bool = false) -> Dictionary:
+	var base := 0.0
+	var required := 0.0
+	if kick != null:
+		base = kick.max_range_at_full_power()
+		required = kick.kick_distance
+	var practice := practicing or (kick != null and kick.practice_swing)
+	var numero := kick != null and kick.stats.numero_dos
+	var tip := 0.0
+	if kick != null:
+		tip = maxf(kick.stats.tip_lock_yards, 0.0)
+	var overpower := 0.0
+	if not practice and not numero:
+		overpower = KickConstants.OVERPOWER_YARDS + tip
+	var shake_count := _belt_count(Vitamins.PROTEIN)
+	var shakes := float(shake_count) * Loadout.scale_amount(6.0, item_effect_scale())
+	var vitamin_d := 0.0
+	if kick != null and kick.snow_range and _belt_count(Vitamins.VITAMIN_D) > 0 and not vitamin_d_active():
+		vitamin_d = kick.snow_penalty
+	var retry_possible := attempts >= 2 or _vitamin_count(Vitamins.ELECTROLYTE) > 0 or _belt_count(Vitamins.ELECTROLYTE) > 0
+	var walk_on := 0.0
+	if kicker_id == Kickers.WALK_ON and is_first_ball and not practice and retry_possible:
+		walk_on = 6.0
+	var best := base + overpower + shakes + vitamin_d + walk_on
+	var clearance := kick != null and kick.stats.clearance
+	var zinc_block := _belt_count(Vitamins.ZINC) > 0 and not zinc_used
+	var at_tee := (
+		phase == Phase.PLAYING
+		and kick != null
+		and kick.phase == KickLogic.Phase.AIMING
+		and not practice
+		and not blocked
+		and not awaiting_offer
+		and not awaiting_shop
+		and not awaiting_mulligan
+		and not curse_prompt
+		and not ring_offer_pending
+	)
+	var short := best + TOO_WEAK_CUSHION < required
+	var weak := short and not clearance and not zinc_block and at_tee
+	return {
+		"base": base,
+		"overpower": overpower,
+		"shakes": shakes,
+		"shake_count": shake_count,
+		"vitamin_d": vitamin_d,
+		"walk_on": walk_on,
+		"best_case": best,
+		"required": required,
+		"zinc_block": zinc_block,
+		"clearance": clearance,
+		"too_weak": weak,
+	}
+
+
+func end_too_weak() -> void:
+	if phase != Phase.PLAYING or end_reason == "too_weak":
+		return
+	end_reason = "too_weak"
+	phase = Phase.GAME_OVER
+	_save_finished_run()
+
+
+func _belt_count(id: String) -> int:
+	var count := 0
+	for slot in belt:
+		if str(slot) == id:
+			count += 1
+	return count
 
 
 func posts_move() -> bool:
@@ -2045,6 +2144,7 @@ func _save_finished_run() -> void:
 		"middles": middles_this_run,
 		"won": phase == Phase.WIN,
 		"kicker_id": kicker_id,
+		"end_reason": end_reason,
 	})
 	new_record_score = bool(flags.get("score", false))
 	new_record_long = bool(flags.get("longest", false))

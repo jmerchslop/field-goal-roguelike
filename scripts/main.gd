@@ -176,6 +176,11 @@ var stand_bounds := {
 }
 # 0 is the real kick. 1..4 preview 75, 200, 500, 1000, then back to the real kick.
 var _preview_step := 0
+var too_weak_age := -1.0
+var too_weak_flavor := ""
+var too_weak_numbers := ""
+var too_weak_debug := ""
+var _too_weak_sounded := false
 var result_age := 0.0
 const _PREVIEW_DISTANCES: Array[float] = [75.0, 200.0, 500.0, 1000.0]
 var _ribbon_l: MeshInstance3D
@@ -236,6 +241,7 @@ func load_current_kick() -> void:
 	_approach_time = 0.0
 	_bank_time = 0.0
 	_arm_boss_twist()
+	consider_too_weak()
 	refresh_view()
 
 
@@ -322,6 +328,7 @@ func retake_with_mulligan() -> void:
 	logic.sync_tee()
 	_approach_time = 0.0
 	_bank_time = 0.0
+	consider_too_weak()
 	refresh_view()
 
 
@@ -379,6 +386,8 @@ func confirm_kicker() -> void:
 		refresh_view()
 		return
 	tad_picker_slot = -1
+	too_weak_debug = ""
+	too_weak_age = -1.0
 	selecting = false
 	front.came_from_gate = false
 	var mode := front.run_mode
@@ -650,6 +659,69 @@ func force_weather(name: String) -> void:
 	_apply_conditions()
 	logic.hold_result = run.posts_move() and not run.practicing
 	_arm_boss_twist()
+	consider_too_weak()
+	refresh_view()
+
+
+func _too_weak_blocked() -> bool:
+	return paused or selecting or showing_records or _preview_step > 0
+
+
+func consider_too_weak() -> void:
+	if too_weak_age >= 0.0 or run.phase != RunLogic.Phase.PLAYING:
+		return
+	var report := run.too_weak_report(logic, _too_weak_blocked())
+	if not bool(report["too_weak"]):
+		return
+	too_weak_age = 0.0
+	too_weak_debug = ""
+	too_weak_flavor = run.too_weak_flavor()
+	too_weak_numbers = RunLogic.too_weak_numbers(float(report["best_case"]), float(report["required"]))
+	_too_weak_sounded = false
+	# Hold KICK CLOCK. The countdown must not start the meter under the stamp.
+	_twist_armed = false
+	_clock_done = false
+
+
+func _finish_too_weak() -> void:
+	if run.end_reason == "too_weak" and run.phase != RunLogic.Phase.PLAYING:
+		too_weak_age = -1.0
+		return
+	too_weak_age = -1.0
+	run.end_too_weak()
+	refresh_view()
+
+
+func _debug_too_weak_text(report: Dictionary) -> String:
+	var zinc := "yes" if bool(report["zinc_block"]) else "no"
+	var clearance := "yes" if bool(report["clearance"]) else "no"
+	var weak := "yes" if bool(report["too_weak"]) else "no"
+	return "base %s  overpower %s  shakes %s  vitamin d %s  walk-on %s\nzinc %s  clearance %s  required %s  too weak %s" % [
+		KickLogic.format_number(float(report["base"])),
+		KickLogic.format_number(float(report["overpower"])),
+		KickLogic.format_number(float(report["shakes"])),
+		KickLogic.format_number(float(report["vitamin_d"])),
+		KickLogic.format_number(float(report["walk_on"])),
+		zinc,
+		clearance,
+		KickLogic.format_number(float(report["required"])),
+		weak,
+	]
+
+
+func debug_too_weak(shift: bool) -> void:
+	if run.phase != RunLogic.Phase.PLAYING or logic.phase != KickLogic.Phase.AIMING or run.practicing or _preview_step > 0:
+		return
+	if shift:
+		var report := run.too_weak_report(logic, _too_weak_blocked())
+		too_weak_debug = _debug_too_weak_text(report)
+		print("TW1 ", too_weak_debug.replace("\n", " | "))
+		refresh_view()
+		return
+	var before := run.too_weak_report(logic, false)
+	logic.kick_distance = float(before["best_case"]) + 10.0
+	logic.sync_tee()
+	consider_too_weak()
 	refresh_view()
 
 
@@ -689,6 +761,7 @@ func cycle_debug_distance() -> void:
 	if run.attempts != attempts or run.kick_number != kick_number or not is_equal_approx(run.distance_yards(), saved):
 		run.attempts = attempts
 		run.kick_number = kick_number
+	consider_too_weak()
 	refresh_view()
 
 
@@ -745,6 +818,7 @@ func _sync_debug_loadout() -> void:
 	logic.phase = phase
 	_copy_weather_onto_kick()
 	logic.post_half_gap = run.post_half_gap()
+	consider_too_weak()
 	refresh_view()
 
 
@@ -759,6 +833,7 @@ func apply_live_vitamins() -> void:
 	logic.aim_degrees = aim
 	logic.phase = phase
 	logic.post_half_gap = run.post_half_gap()
+	consider_too_weak()
 	refresh_view()
 
 
@@ -865,6 +940,16 @@ func _process(delta: float) -> void:
 		result_age += delta
 	else:
 		result_age = 0.0
+	if too_weak_age >= 0.0:
+		too_weak_age += delta
+		if too_weak_age >= RunLogic.TOO_WEAK_BEAT and not _too_weak_sounded:
+			_too_weak_sounded = true
+			Sfx.play_pool("shank")
+		if too_weak_age >= RunLogic.TOO_WEAK_BEAT + RunLogic.TOO_WEAK_HOLD:
+			_finish_too_weak()
+			return
+		refresh_view()
+		return
 	if logic.phase != KickLogic.Phase.AIMING:
 		meter_time += delta
 	_sway_time += delta
@@ -927,6 +1012,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if _active_run() and _is_back(event):
 		_open_pause()
+		return
+	if too_weak_age >= 0.0:
+		var skip := _is_confirm(event)
+		if event is InputEventMouseButton:
+			var click := event as InputEventMouseButton
+			skip = click.pressed and click.button_index == MOUSE_BUTTON_LEFT
+		if skip:
+			_finish_too_weak()
 		return
 	if _front_input(event):
 		return
@@ -1015,6 +1108,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		if boss != "":
 			force_weather(boss)
 			return
+	if key.keycode == KEY_Y and run.phase == RunLogic.Phase.PLAYING and not run.awaiting_offer and not run.awaiting_mulligan and logic.phase == KickLogic.Phase.AIMING and not run.practicing:
+		debug_too_weak(key.shift_pressed)
+		return
 	if key.keycode == KEY_B and run.phase == RunLogic.Phase.PLAYING and not run.awaiting_offer and not run.awaiting_mulligan and logic.phase == KickLogic.Phase.AIMING and not run.practicing:
 		if run.arm_debug_ring():
 			refresh_view()
@@ -1040,6 +1136,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		run.apply_debug_wind()
 		logic.wind_speed = run.wind_speed
 		logic.wind_direction = run.wind_direction
+		consider_too_weak()
 		refresh_view()
 		return
 	if Settings.pressed_event(event, "practice") and logic.phase == KickLogic.Phase.AIMING and not run.awaiting_offer and not run.awaiting_mulligan:
@@ -1061,6 +1158,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if key.keycode == KEY_C:
 			run.add_debug_cash()
 			_cash_time = 0.0
+			consider_too_weak()
 			refresh_view()
 			return
 	if not Settings.pressed_event(event, "confirm"):
@@ -1069,6 +1167,8 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _confirm_kick() -> void:
+	if too_weak_age >= 0.0:
+		return
 	if run.awaiting_mulligan:
 		run.accept_pending_miss()
 		_cue("mulligan")
@@ -1135,6 +1235,8 @@ func _arm_boss_twist() -> void:
 
 
 func clock_digit() -> int:
+	if too_weak_age >= 0.0:
+		return 0
 	if run.weather != RunLogic.CLOCK or run.practicing or not _twist_armed or _clock_done:
 		return 0
 	if logic.phase != KickLogic.Phase.AIMING:
@@ -1146,6 +1248,8 @@ func clock_digit() -> int:
 
 
 func tick_kick_clock(delta: float) -> void:
+	if too_weak_age >= 0.0:
+		return
 	if _twist_blocked() or run.practicing or not _twist_armed or _clock_done:
 		return
 	if run.weather != RunLogic.CLOCK or logic.phase != KickLogic.Phase.AIMING:
@@ -3383,9 +3487,16 @@ func _place_arrow(tee: Vector3) -> void:
 		boost = 1.28
 	elif logic.kick_distance >= 200.0:
 		boost = 1.12
+	var fade := 1.0
+	if too_weak_age >= 0.0:
+		fade = 0.0 if too_weak_age >= RunLogic.TOO_WEAK_BEAT else 1.0 - too_weak_age / RunLogic.TOO_WEAK_BEAT
+	if fade <= 0.01:
+		_arrow.visible = false
+		aim_corridor["visible"] = false
+		return
 	_arrow.position = Vector3.ZERO
 	_arrow.rotation = Vector3.ZERO
-	_arrow.mesh = _aim_cone_mesh(origin, dir, side, crop, boost)
+	_arrow.mesh = _aim_cone_mesh(origin, dir, side, crop, boost, fade)
 
 
 func _cone_crop(origin: Vector3, dir: Vector3, side: Vector3, full_reach: float, post_half: float) -> Dictionary:
@@ -3423,7 +3534,7 @@ func _cone_crop(origin: Vector3, dir: Vector3, side: Vector3, full_reach: float,
 	}
 
 
-func _aim_cone_mesh(origin: Vector3, dir: Vector3, side: Vector3, crop: Dictionary, boost: float) -> ArrayMesh:
+func _aim_cone_mesh(origin: Vector3, dir: Vector3, side: Vector3, crop: Dictionary, boost: float, fade: float = 1.0) -> ArrayMesh:
 	var near_c := origin + dir * CONE_MOUTH_YARDS
 	var far_c: Vector3 = crop["far"]
 	near_c.y = origin.y
@@ -3432,14 +3543,14 @@ func _aim_cone_mesh(origin: Vector3, dir: Vector3, side: Vector3, crop: Dictiona
 	var far_axis: Vector3 = crop["axis"]
 	var tool := SurfaceTool.new()
 	tool.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var gel_near := Color(1.0, 0.07, 0.05, minf(0.72, 0.58 * boost))
-	var gel_far := Color(1.0, 0.08, 0.04, minf(0.55, 0.36 * boost))
+	var gel_near := Color(1.0, 0.07, 0.05, minf(0.72, 0.58 * boost) * fade)
+	var gel_far := Color(1.0, 0.08, 0.04, minf(0.55, 0.36 * boost) * fade)
 	_cone_layer(tool, near_c, far_c, side, far_axis, CONE_NEAR_HALF, far_half, 0.09, gel_near, gel_far)
-	var rim_near := Color(0.95, 0.1, 0.03, minf(0.95, 0.88 * boost))
-	var rim_far := Color(0.86, 0.07, 0.03, minf(0.78, 0.55 * boost))
+	var rim_near := Color(0.95, 0.1, 0.03, minf(0.95, 0.88 * boost) * fade)
+	var rim_far := Color(0.86, 0.07, 0.03, minf(0.78, 0.55 * boost) * fade)
 	_cone_edges(tool, near_c, far_c, side, far_axis, CONE_NEAR_HALF, far_half, CONE_NEAR_HALF + 0.045, far_half + 0.045, 0.094, rim_near, rim_far)
-	var line_near := Color(0.22, 0.02, 0.02, 0.9)
-	var line_far := Color(0.16, 0.02, 0.02, 0.55)
+	var line_near := Color(0.22, 0.02, 0.02, 0.9 * fade)
+	var line_far := Color(0.16, 0.02, 0.02, 0.55 * fade)
 	_cone_edges(tool, near_c, far_c, side, far_axis, CONE_NEAR_HALF + 0.045, far_half + 0.045, CONE_NEAR_HALF + 0.08, far_half + 0.08, 0.086, line_near, line_far)
 	return tool.commit()
 

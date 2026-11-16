@@ -1,6 +1,7 @@
 # Item, kit, range, and cash audit
 
 Generated: 2026-11-14
+TW1: If this ball cannot reach the posts even with every boost still available, the run ends at the tee. The stamp is TOO WEAK. It is a loss, Continue is cleared, and TAD does not unlock. See the TOO WEAK check section.
 BAL1: needle slow floor 0.35, gentler Anchor / Patient / Sticker / Shelter tables, and multiplier cards use the printed hundredths.
 BAL2: Endless ranks XIII–XXIV do something for every equipment style except Wind Visor and Iron Grip. Range late tables are shorter. Curse upsides are higher, and Howling's item boost is ×1.10.
 RW1: Iron Grip VI+ keeps the red tip and pays +5 yd at VI, plus 1 yd per rank, for a power lock in the tip (+23 at XXIV). Heavy Ball's downside is max(2, 2% of the kick distance). Wind Visor resists 10/15/20% at I/II/III and stays at 20%, and the dotted path starts at IV (40%) and is full at VIII.
@@ -16,6 +17,18 @@ RT1: The hidden ±5 red-tip noise is gone. A 95–100 lock is clean, and P=100 i
 **Kickers:** 8
 **Kits:** 8
 **Mismatches:** 1 (Vex's clearance line). BAL1 closed the ten rounding groups on Anchor, Patient, Sticker, Shelter, and True Lid.
+
+## TOO WEAK check
+
+`RunLogic.too_weak_report()` adds these yards, and nothing else:
+
+1. Base: `KickLogic.max_range_at_full_power()`, the same number as the HUD MAX line. That already includes the kicker, gear, drunk vitamins, wind, weather flags, Heavy Ball, Howling Wind, Shelter, High-Air, Phil and Gary item scale, Rain Dance, Weather Wraps, Chain Gang from the current streak, and Walk-On clutch when this ball is already a retry.
+2. OVERPOWER: +4 plus `tip_lock_yards` when a red lock would pay. Carlos and Practice Swing add 0. Big Game uses the stripped `tip_lock_yards` already on the stats.
+3. Each unused Protein Shake on the belt: `scale_amount(6, item_effect_scale())`. Shakes already drunk are inside the base.
+4. Vitamin D on the belt: the snow penalty, only while snow range is still on and Vitamin D is not already active.
+5. Walk-On: +6, unscaled, on the first ball only, and only when a retry is still possible (2 attempts, or an Electrolyte that is active or still on the belt).
+
+`too_weak` is true when `best_case + 0.05` is still short of `kick_distance`, the kicker has no clearance, no unused Zinc is waiting, and the ball is at the tee. Vex never triggers. An unused Tart Cherry is not counted, because removing a curse is a choice; the check runs again after the player removes one. Chain Gang's next-make pay, Hot Streak, Lucky Ball stacks, and Deep Bench refills are not added on top. Moving posts do not change the distance.
 
 Numbers below were taken from `Loadout.effect_line`, `Loadout.apply` / `_apply_piece`, `Loadout.cannon_yards`, `Loadout.drive_yards`, `Loadout.high_air_yards`, `Loadout.effect_rank`, `Kickers.apply_to`, `KickLogic.carry_plan`, and `RunLogic.prepare_kick_stats`. A headless run on 2026-11-14 confirmed the range totals and the needle speeds.
 

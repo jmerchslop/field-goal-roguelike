@@ -120,6 +120,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "tw1":
+		if not await _capture_tw1():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "as2":
 		if not await _capture_as2():
 			get_tree().quit(1)
@@ -1872,6 +1878,82 @@ func _capture_f3() -> bool:
 	for id in saved.keys():
 		SaveData.unlocks[id] = bool(saved[id])
 	SaveData.save_file()
+	return true
+
+
+func _capture_tw1() -> bool:
+	var path := str(SaveData.file_path)
+	var had_file := FileAccess.file_exists(path)
+	var backup := PackedByteArray()
+	if had_file:
+		backup = FileAccess.get_file_as_bytes(path)
+	board.front.run_mode = "standard"
+	board.highlight = 0
+	board.confirm_kicker()
+	board.run.belt = [Vitamins.PROTEIN, ""]
+	board.apply_live_vitamins()
+	var short := float(board.logic.max_range_at_full_power()) + 2.0
+	board.logic.kick_distance = short
+	board.logic.sync_tee()
+	board.consider_too_weak()
+	if board.too_weak_age >= 0.0:
+		print("TW1 shake should have saved the kick")
+		_restore_as2_save(had_file, path, backup)
+		return false
+	print("TW1 shake max ", board.logic.max_range_at_full_power(), " need ", board.logic.kick_distance)
+	if not await _capture("tw1_shake_saves.png"):
+		_restore_as2_save(had_file, path, backup)
+		return false
+	board.run.belt = ["", ""]
+	board.logic.kick_distance = board.run.distance_yards()
+	board.apply_live_vitamins()
+	board.logic.kick_distance = board.run.distance_yards()
+	board.logic.sync_tee()
+	board.too_weak_debug = ""
+	board.debug_too_weak(true)
+	print("TW1 breakdown ", board.too_weak_debug)
+	if board.too_weak_debug == "":
+		_restore_as2_save(had_file, path, backup)
+		return false
+	if not await _capture("tw1_breakdown.png"):
+		_restore_as2_save(had_file, path, backup)
+		return false
+	board.highlight = 1
+	board.confirm_kicker()
+	board.debug_too_weak(false)
+	if board.too_weak_age < 0.0:
+		print("TW1 Y did not fire")
+		_restore_as2_save(had_file, path, backup)
+		return false
+	board.too_weak_age = RunLogic.TOO_WEAK_BEAT + 0.2
+	board.refresh_view()
+	if not await _capture("tw1_stamp.png"):
+		_restore_as2_save(had_file, path, backup)
+		return false
+	board._finish_too_weak()
+	if not await _capture("tw1_run_over.png"):
+		_restore_as2_save(had_file, path, backup)
+		return false
+	board.front.run_mode = "endless"
+	board.highlight = 1
+	board.confirm_kicker()
+	board.run.score = 80
+	board.run.longest_make = 64.0
+	board.run.kicks_made = 2
+	board.debug_too_weak(false)
+	if board.too_weak_age < 0.0:
+		print("TW1 endless did not fire")
+		_restore_as2_save(had_file, path, backup)
+		return false
+	board._finish_too_weak()
+	print("TW1 endless score ", board.run.score, " long ", board.run.longest_make)
+	if board.run.score != 80 or not is_equal_approx(board.run.longest_make, 64.0):
+		_restore_as2_save(had_file, path, backup)
+		return false
+	if not await _capture("tw1_endless_over.png"):
+		_restore_as2_save(had_file, path, backup)
+		return false
+	_restore_as2_save(had_file, path, backup)
 	return true
 
 

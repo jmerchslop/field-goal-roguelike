@@ -23,6 +23,7 @@ var best_score := 0
 var makes := 0
 var attempts := 0
 var middles := 0
+var last_end := ""
 var kickers := {}
 var trophies := {}
 var unlocks := {}
@@ -53,6 +54,7 @@ func load_file() -> void:
 	makes = _as_int(cfg.get_value("lifetime", "makes", 0))
 	attempts = _as_int(cfg.get_value("lifetime", "attempts", 0))
 	middles = _as_int(cfg.get_value("lifetime", "middles", 0))
+	last_end = str(cfg.get_value("lifetime", "last_end", ""))
 	for id in _kicker_ids():
 		var section := "kicker_%s" % id
 		var wins_now := _as_int(cfg.get_value(section, "wins", 0))
@@ -98,6 +100,7 @@ func save_file() -> void:
 	cfg.set_value("lifetime", "makes", makes)
 	cfg.set_value("lifetime", "attempts", attempts)
 	cfg.set_value("lifetime", "middles", middles)
+	cfg.set_value("lifetime", "last_end", last_end)
 	for id in _kicker_ids():
 		var section := "kicker_%s" % id
 		var row: Dictionary = kickers[id]
@@ -277,6 +280,7 @@ func commit_run(summary: Dictionary) -> Dictionary:
 	middles += _as_int(summary.get("middles", 0))
 	if bool(summary.get("won", false)):
 		wins += 1
+	last_end = str(summary.get("end_reason", ""))
 	if beat_score:
 		best_score = score
 	if beat_long:
@@ -354,6 +358,7 @@ func _fill_defaults() -> void:
 	makes = 0
 	attempts = 0
 	middles = 0
+	last_end = ""
 	kickers = {}
 	for id in _kicker_ids():
 		kickers[id] = {

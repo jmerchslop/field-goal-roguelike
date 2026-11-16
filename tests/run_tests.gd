@@ -59,6 +59,7 @@ func _run() -> void:
 	_check_mf1()
 	_check_as1()
 	_check_as2()
+	_check_tw1()
 	_check_f3()
 	_check_au1()
 	_check_drive_lid_and_power_safety()
@@ -81,6 +82,7 @@ func _finish_live() -> void:
 	_check_pause_saves()
 	_check_playing_card_live()
 	_check_as2_live()
+	_check_tw1_live()
 	_check_floodlights_live()
 	_check_light_beams()
 	_check_boss1()
@@ -3930,6 +3932,219 @@ func _curse_cards(offer: Array) -> int:
 
 func _rect_text(rect: Rect2) -> String:
 	return "(%.1f, %.1f, %.1f, %.1f)" % [rect.position.x, rect.position.y, rect.size.x, rect.size.y]
+
+
+func _tw1_kick(run: RunLogic) -> KickLogic:
+	var kick := KickLogic.new()
+	kick.phase = KickLogic.Phase.AIMING
+	kick.kick_distance = run.distance_yards()
+	run.prepare_kick_stats()
+	kick.stats = run.stats
+	kick.wind_speed = run.wind_speed
+	kick.wind_direction = run.wind_direction
+	kick.howling_wind = run.has_curse(Loadout.HOWLING)
+	kick.heavy_ball = run.has_curse(Loadout.HEAVY)
+	kick.practice_swing = run.practicing
+	var flags: Dictionary = run.weather_flags_now()
+	kick.snow_range = bool(flags["snow_range"])
+	kick.snow_penalty = float(flags["snow_penalty"])
+	kick.thin_air_weather = run.weather == RunLogic.THIN_AIR
+	kick.rain_faster = bool(flags["rain_faster"])
+	kick.rain_scale = float(flags["rain_scale"])
+	return kick
+
+
+func _check_tw1() -> void:
+	for line in RunLogic.TOO_WEAK_LINES:
+		check(BitmapFonts.ui_allows(line), "TOO WEAK flavor stays in Pixel Gothic, got %s" % line)
+	check(BitmapFonts.callout_allows("TOO WEAK") and BitmapFonts.ui_allows("TOO WEAK"), "TOO WEAK fits Stadium Block and Pixel Gothic")
+	check(BitmapFonts.ui_allows(RunLogic.too_weak_numbers(49.5, 75.0)), "the MAX and NEED line stays in Pixel Gothic")
+	var bruce := RunLogic.new()
+	bruce.start_with_kicker(Kickers.BIG_BRUCE)
+	bruce.attempts = 1
+	var kick := _tw1_kick(bruce)
+	var report: Dictionary = bruce.too_weak_report(kick)
+	check(near(float(report["base"]), kick.max_range_at_full_power()), "TOO WEAK base is the HUD Max")
+	check(near(float(report["overpower"]), KickConstants.OVERPOWER_YARDS) and near(float(report["shakes"]), 0.0) and near(float(report["walk_on"]), 0.0), "bare Bruce adds only the OVERPOWER 4")
+	var best := float(report["best_case"])
+	kick.kick_distance = best
+	var exact: Dictionary = bruce.too_weak_report(kick)
+	check(not bool(exact["too_weak"]), "a kick exactly at best case does not end")
+	kick.kick_distance = best + 0.1
+	check(bool(bruce.too_weak_report(kick)["too_weak"]), "best case plus 0.1 yard does end")
+	kick.kick_distance = float(report["base"]) + 3.0
+	check(not bool(bruce.too_weak_report(kick)["too_weak"]), "3 yards past the HUD Max still has the OVERPOWER 4")
+	kick.kick_distance = float(report["base"]) + 6.0
+	check(bool(bruce.too_weak_report(kick)["too_weak"]), "6 yards past the HUD Max ends the run")
+	print("TW1 bruce 35 ", bruce.too_weak_report(_tw1_kick(bruce)))
+	kick.kick_distance = 75.0
+	print("TW1 bruce 75 ", bruce.too_weak_report(kick))
+	bruce.give(Loadout.IRON_GRIP, 6)
+	var gripped := _tw1_kick(bruce)
+	var grip: Dictionary = bruce.too_weak_report(gripped)
+	check(near(float(grip["overpower"]), KickConstants.OVERPOWER_YARDS + 5.0), "Iron Grip VI adds its tip yards on top of the 4")
+	var carlos := RunLogic.new()
+	carlos.start_with_kicker(Kickers.CARLOS)
+	carlos.give(Loadout.IRON_GRIP, 6)
+	var carlos_kick := _tw1_kick(carlos)
+	carlos_kick.kick_distance = 200.0
+	var carlos_report: Dictionary = carlos.too_weak_report(carlos_kick)
+	check(near(float(carlos_report["overpower"]), 0.0), "Carlos pays no OVERPOWER yards")
+	var practice := RunLogic.new()
+	practice.start_with_kicker(Kickers.BIG_BRUCE)
+	var practice_kick := _tw1_kick(practice)
+	practice_kick.practice_swing = true
+	practice_kick.kick_distance = 200.0
+	var practice_report: Dictionary = practice.too_weak_report(practice_kick)
+	check(near(float(practice_report["overpower"]), 0.0) and not bool(practice_report["too_weak"]), "Practice Swing adds no OVERPOWER yards and does not end the run")
+	practice_kick.practice_swing = false
+	practice_kick.phase = KickLogic.Phase.POWER
+	check(not bool(practice.too_weak_report(practice_kick)["too_weak"]), "the check stays quiet during the meter")
+	practice_kick.phase = KickLogic.Phase.FLIGHT
+	check(not bool(practice.too_weak_report(practice_kick)["too_weak"]), "the check stays quiet in flight")
+	practice_kick.phase = KickLogic.Phase.AIMING
+	check(not bool(practice.too_weak_report(practice_kick, true)["too_weak"]), "the J preview does not end the run")
+	var phil := RunLogic.new()
+	phil.start_with_kicker(Kickers.PHIL)
+	var plain := _tw1_kick(phil)
+	phil.belt = [Vitamins.PROTEIN, Vitamins.PROTEIN]
+	var shaken := _tw1_kick(phil)
+	var one := Loadout.scale_amount(6.0, phil.item_effect_scale())
+	check(near(float(phil.too_weak_report(shaken)["shakes"]), one * 2.0) and near(float(phil.too_weak_report(shaken)["base"]), float(phil.too_weak_report(plain)["base"])), "each belt Protein Shake adds the scaled 6 and the HUD Max stays the drunk value")
+	var snow := RunLogic.new()
+	snow.start_with_kicker(Kickers.BIG_BRUCE)
+	snow.weather = RunLogic.SNOW
+	var snowy := _tw1_kick(snow)
+	check(snowy.snow_range and near(float(snow.too_weak_report(snowy)["vitamin_d"]), 0.0), "snow with no Vitamin D adds nothing extra")
+	snow.belt = [Vitamins.VITAMIN_D, ""]
+	check(near(float(snow.too_weak_report(snowy)["vitamin_d"]), snowy.snow_penalty), "a belt Vitamin D gives back the snow penalty")
+	snow.weather = RunLogic.CLEAR
+	var clear_kick := _tw1_kick(snow)
+	check(near(float(snow.too_weak_report(clear_kick)["vitamin_d"]), 0.0), "Vitamin D adds nothing when snow is off")
+	var walk := RunLogic.new()
+	walk.start_with_kicker(Kickers.WALK_ON)
+	walk.attempts = 2
+	var first := _tw1_kick(walk)
+	var first_report: Dictionary = walk.too_weak_report(first)
+	check(near(float(first_report["walk_on"]), 6.0), "Walk-On's first ball with 2 attempts keeps the clutch 6 in reserve")
+	print("TW1 walk-on 2 ", first_report)
+	walk.attempts = 1
+	check(near(float(walk.too_weak_report(first)["walk_on"]), 0.0), "one attempt and no Electrolyte drops the clutch reserve")
+	walk.belt = [Vitamins.ELECTROLYTE, ""]
+	check(near(float(walk.too_weak_report(first)["walk_on"]), 6.0), "an Electrolyte on the belt keeps the clutch reserve")
+	walk.belt = ["", ""]
+	walk.is_first_ball = false
+	var retry := _tw1_kick(walk)
+	var retry_report: Dictionary = walk.too_weak_report(retry)
+	check(near(float(retry_report["walk_on"]), 0.0) and float(retry_report["base"]) > float(first_report["base"]) + 5.0, "a retry ball has the clutch inside the HUD Max and does not add it again")
+	var zinc := RunLogic.new()
+	zinc.start_with_kicker(Kickers.BIG_BRUCE)
+	zinc.belt = [Vitamins.ZINC, ""]
+	var zinc_kick := _tw1_kick(zinc)
+	zinc_kick.kick_distance = 200.0
+	check(bool(zinc.too_weak_report(zinc_kick)["zinc_block"]) and not bool(zinc.too_weak_report(zinc_kick)["too_weak"]), "an unused Zinc blocks the ending")
+	zinc.zinc_used = true
+	zinc.belt = ["", ""]
+	check(bool(zinc.too_weak_report(zinc_kick)["too_weak"]), "a used Zinc no longer blocks the ending")
+	var vex := RunLogic.new()
+	vex.start_with_kicker(Kickers.VEX)
+	var vex_kick := _tw1_kick(vex)
+	vex_kick.kick_distance = 1000.0
+	check(bool(vex.too_weak_report(vex_kick)["clearance"]) and not bool(vex.too_weak_report(vex_kick)["too_weak"]), "Vex never ends TOO WEAK")
+	var ended := RunLogic.new()
+	ended.start_with_kicker(Kickers.BIG_BRUCE)
+	var score_before := ended.score
+	var cash_before := ended.cash
+	var streak_before := ended.streak
+	var balls_before := ended.balls_kicked
+	var long_before := ended.longest_make
+	ended.end_too_weak()
+	ended.end_too_weak()
+	check(ended.phase == RunLogic.Phase.GAME_OVER and ended.end_reason == "too_weak", "TOO WEAK sets GAME OVER once")
+	check(ended.score == score_before and ended.cash == cash_before and ended.streak == streak_before and ended.balls_kicked == balls_before and near(ended.longest_make, long_before), "TOO WEAK does not kick a ball or change score, cash, streak, or best distance")
+	var again: Dictionary = bruce.too_weak_report(_tw1_kick(bruce))
+	var again_2: Dictionary = bruce.too_weak_report(_tw1_kick(bruce))
+	check(near(float(again["best_case"]), float(again_2["best_case"])) and bool(again["too_weak"]) == bool(again_2["too_weak"]), "the same tee reports the same answer twice")
+	var source := FileAccess.get_file_as_string("res://scripts/main.gd")
+	check(source.find("key.keycode == KEY_Y") >= 0 and source.find("debug_too_weak") >= 0, "Y is the TOO WEAK debug key")
+	check(source.find("key.keycode == KEY_H") >= 0 and source.find("key.keycode == KEY_J") >= 0 and source.find("key.keycode == KEY_K") >= 0 and source.find("key.keycode == KEY_L") >= 0, "H J K L stay on their debug jobs")
+	check(source.find("key.keycode == KEY_U") >= 0 and source.find("key.keycode == KEY_B") >= 0 and source.find("key.keycode == KEY_W") >= 0 and source.find("key.keycode == KEY_C") >= 0, "U B W and C stay on their keys")
+
+
+func _check_tw1_live() -> void:
+	var records = get_root().get_node("SaveData")
+	var path := str(records.file_path)
+	var had_file := FileAccess.file_exists(path)
+	var backup := PackedByteArray()
+	if had_file:
+		backup = FileAccess.get_file_as_bytes(path)
+	var cap_before := int(records.tad_unlocked(Kickers.WALK_ON))
+	OS.set_environment("FG_SHOTS", "")
+	var packed: PackedScene = load("res://scenes/main.tscn")
+	var game = packed.instantiate()
+	get_root().add_child(game)
+	game._taking_pictures = true
+	game.front.run_mode = "standard"
+	game.highlight = 1
+	game.confirm_kicker()
+	var spot_before := float(game.run.spot_yards)
+	game._taking_pictures = false
+	var h_key := InputEventKey.new()
+	h_key.pressed = true
+	h_key.keycode = KEY_H
+	game._unhandled_input(h_key)
+	game._taking_pictures = true
+	check(not is_equal_approx(game.run.spot_yards, spot_before), "H still moves the spot")
+	game.force_weather(RunLogic.CLOCK)
+	game._taking_pictures = false
+	var y_key := InputEventKey.new()
+	y_key.pressed = true
+	y_key.keycode = KEY_Y
+	game._unhandled_input(y_key)
+	game._taking_pictures = true
+	check(game.too_weak_age >= 0.0 and game.logic.phase == KickLogic.Phase.AIMING, "Y opens the TOO WEAK beat")
+	var age := float(game.too_weak_age)
+	game.consider_too_weak()
+	check(is_equal_approx(float(game.too_weak_age), age), "a second check does not restart the beat")
+	game.tick_kick_clock(5.0)
+	check(game.logic.phase == KickLogic.Phase.AIMING and game.clock_digit() == 0, "KICK CLOCK does not start the meter under the stamp")
+	records.write_run_slot("standard", {"kicker_id": Kickers.WALK_ON})
+	var score_before := int(game.run.score)
+	var long_before := float(game.run.longest_make)
+	game._finish_too_weak()
+	check(game.run.phase == RunLogic.Phase.GAME_OVER and game.run.end_reason == "too_weak" and not records.has_run_slot("standard"), "the ending clears Continue")
+	check(game.run.score == score_before and near(game.run.longest_make, long_before) and records.tad_unlocked(Kickers.WALK_ON) == cap_before, "the ending keeps the score and does not unlock TAD")
+	game.front.run_mode = "standard"
+	game.highlight = 0
+	game.confirm_kicker()
+	game._taking_pictures = false
+	var shift_key := InputEventKey.new()
+	shift_key.pressed = true
+	shift_key.keycode = KEY_Y
+	shift_key.shift_pressed = true
+	game._unhandled_input(shift_key)
+	game._taking_pictures = true
+	check(game.too_weak_age < 0.0 and game.too_weak_debug.find("base") >= 0, "Shift+Y prints the breakdown and leaves the kick alone")
+	game.front.run_mode = "endless"
+	game.highlight = 1
+	game.confirm_kicker()
+	game.run.run_mode = "endless"
+	game.run.score = 40
+	game.run.longest_make = 55.0
+	game.run.kick_number = 40
+	game.load_current_kick()
+	if game.too_weak_age < 0.0:
+		game.debug_too_weak(false)
+	game._finish_too_weak()
+	check(game.run.phase == RunLogic.Phase.GAME_OVER and game.run.score == 40 and near(game.run.longest_make, 55.0), "Endless TOO WEAK keeps the score and best distance")
+	game.free()
+	if had_file:
+		var restored := FileAccess.open(path, FileAccess.WRITE)
+		restored.store_buffer(backup)
+		restored.close()
+		records.load_file()
+	elif FileAccess.file_exists(path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
 
 func _check_mf1() -> void:
