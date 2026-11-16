@@ -102,6 +102,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "e3":
+		if not await _capture_e3():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "au1":
 		if not await _capture_au1():
 			get_tree().quit(1)
@@ -1776,6 +1782,35 @@ func _offer_card(id: String, rank: int, slot: String) -> bool:
 	if board.run.offer.is_empty() or str(board.run.offer[0].get("id", "")) != id:
 		print("offer missed ", id)
 		return false
+	return true
+
+
+func _capture_e3() -> bool:
+	var saved_wins := SaveData.wins
+	var saved_trophy := SaveData.has_trophy("season_complete")
+	SaveData.wins = 0
+	SaveData.trophies["season_complete"] = false
+	board.selecting = false
+	board.showing_records = false
+	board.front.screen = FrontEnd.Screen.MAIN
+	board.front.lock_message = ""
+	board.front.menu_index = 0
+	board.refresh_view()
+	if not await _capture("e3_endless_locked.png"):
+		return false
+	SaveData.wins = 1
+	board.front.menu_index = 1
+	board.front.lock_message = ""
+	board.refresh_view()
+	print("E3 painting ", MenuLayout.find_texture_path(["main_menu_endless_unlocked.png"]), " unlocked ", board.front.endless_unlocked())
+	if not await _capture("e3_endless_unlocked.png"):
+		return false
+	board.front.menu_index = 0
+	board.refresh_view()
+	if not await _capture("e3_hitboxes.png"):
+		return false
+	SaveData.wins = saved_wins
+	SaveData.trophies["season_complete"] = saved_trophy
 	return true
 
 

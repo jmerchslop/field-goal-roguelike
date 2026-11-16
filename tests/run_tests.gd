@@ -2510,7 +2510,12 @@ func _check_menus() -> void:
 	check(locked.endless_unlocked(), "lifetime.wins >= 1 unlocks Endless")
 	locked.menu_index = 1
 	check(locked.confirm_menu() == "select" and locked.run_mode == "endless" and locked.screen == FrontEnd.Screen.SELECT, "unlocked Endless sets run_mode and opens character select")
-	check(MenuLayout.find_texture_path(["endless_unlocked.png", "main_menu_unlocked.png"]) == "", "no unlocked menu painting is in the project")
+	var unlocked_menu := MenuLayout.find_texture_path(["main_menu_endless_unlocked.png"])
+	check(unlocked_menu != "", "the unlocked Endless painting is in the project")
+	var unlocked_tex := load(unlocked_menu) as Texture2D
+	check(unlocked_tex != null and unlocked_tex.get_width() == 1280 and unlocked_tex.get_height() == 720, "the unlocked painting matches the 1280x720 menu")
+	var menu_source := FileAccess.get_file_as_string("res://scripts/hud.gd")
+	check(menu_source.find("main_menu_endless_unlocked.png") >= 0 and menu_source.find("_draw_padlock_cover") >= 0, "the menu uses the unlocked painting and keeps the metal cover when that file is absent")
 	var again := FrontEnd.new()
 	again.confirm_title()
 	again.menu_index = 1

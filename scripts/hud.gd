@@ -1620,12 +1620,18 @@ func _menu_texture(which: String) -> Texture2D:
 	elif which == "options":
 		names = ["options.png", "options_menu.png"]
 	elif which == "endless":
-		names = ["endless_unlocked.png"]
+		names = ["main_menu_endless_unlocked.png", "endless_unlocked.png"]
 	var path := MenuLayout.find_texture_path(names)
 	if path == "":
 		_menu_textures[which] = null
 		return null
 	var loaded := load(path) as Texture2D
+	if which == "endless" and loaded != null and loaded.get_size() != MenuLayout.IMAGE_SIZE:
+		if not _menu_textures.has("endless_size_warned"):
+			print("E3 unlocked menu painting is %s, expected %s. Keeping the metal cover." % [loaded.get_size(), MenuLayout.IMAGE_SIZE])
+			_menu_textures["endless_size_warned"] = true
+		_menu_textures[which] = null
+		return null
 	if which == "options" and loaded != null:
 		var image := loaded.get_image()
 		if image != null:
