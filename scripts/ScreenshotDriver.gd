@@ -168,6 +168,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "ring1b":
+		if not await _capture_ring1b():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "rs1":
 		if not await _capture_rs1():
 			get_tree().quit(1)
@@ -5955,6 +5961,69 @@ func _capture_pace2() -> bool:
 	board.refresh_view()
 	print("PACE2 willow ", SelectCard.unlock_line(Kickers.WILLOW))
 	var saved := await _capture("pace2_willow_locked_card.png")
+	_restore_pace2_save(had_file, path, backup, had_willow)
+	return saved
+
+
+func _capture_ring1b() -> bool:
+	var path := str(SaveData.file_path)
+	var had_file := FileAccess.file_exists(path)
+	var backup := PackedByteArray()
+	if had_file:
+		backup = FileAccess.get_file_as_bytes(path)
+	board.highlight = 1
+	board.selecting = true
+	board.front.run_mode = "standard"
+	board.confirm_kicker()
+	board.run.kick_number = 2
+	board.run.weather = RunLogic.CLEAR
+	board.run.weather_forced = true
+	board.run.spot_yards = 0.0
+	board.run.set_wind(0.0, 0.0)
+	board.run.post_shifts[2] = -2
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.AIMING
+	print("RING1B left ", board.run.post_shift_yards(), " ", BroadcastHud.posts_text(board.run.post_shift_yards()))
+	if not await _capture("ring1b_shift_left.png"):
+		_restore_pace2_save(had_file, path, backup, bool(SaveData.has_unlock(Kickers.WILLOW)))
+		return false
+	board.run.post_shifts[2] = 3
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.AIMING
+	print("RING1B right ", board.run.post_shift_yards())
+	if not await _capture("ring1b_shift_right.png"):
+		_restore_pace2_save(had_file, path, backup, bool(SaveData.has_unlock(Kickers.WILLOW)))
+		return false
+	board.run.kick_number = 8
+	board.run.spot_yards = 6.0
+	board.run.post_shifts[8] = 3
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.AIMING
+	print("RING1B wide gap ", absf(board.run.spot_yards - float(board.run.post_shift_yards())))
+	if not await _capture("ring1b_wide_clamped.png"):
+		_restore_pace2_save(had_file, path, backup, bool(SaveData.has_unlock(Kickers.WILLOW)))
+		return false
+	board.run.kick_number = 4
+	board.run.force_weather(RunLogic.MOVING)
+	board.run.post_shifts.erase(4)
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.AIMING
+	board._twist_armed = true
+	board._twist_time = 1.0
+	print("RING1B moving shift ", board.run.post_shift_yards())
+	if not await _capture("ring1b_moving_posts_no_dice.png"):
+		_restore_pace2_save(had_file, path, backup, bool(SaveData.has_unlock(Kickers.WILLOW)))
+		return false
+	var had_willow := bool(SaveData.has_unlock(Kickers.WILLOW))
+	SaveData.kickers[Kickers.WALK_ON]["tad_unlocked"] = 2
+	SaveData.kickers[Kickers.WALK_ON]["tad_selected"] = 2
+	board.front.run_mode = "standard"
+	board.open_select()
+	board.highlight = 1
+	board.tad_picker_slot = 1
+	board.refresh_view()
+	print("RING1B tad ", RunLogic.tad_name(2), " ", RunLogic.tad_summary(2))
+	var saved := await _capture("ring1b_tad2_select.png")
 	_restore_pace2_save(had_file, path, backup, had_willow)
 	return saved
 

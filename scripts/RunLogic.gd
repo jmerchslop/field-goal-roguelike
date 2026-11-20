@@ -93,6 +93,7 @@ var ring_spent := {}
 # -1 left, +1 right. Chosen once per kick and kept for retries.
 var ring_sides := {}
 var inner_ring_sides := {}
+var post_shifts := {}
 var ring_debug := {}
 var ring_offer_pending := false
 var ring_offer_skipped := false
@@ -172,6 +173,7 @@ var _weather_rng := RandomNumberGenerator.new()
 var _kick10_rng := RandomNumberGenerator.new()
 var _offer_rng := RandomNumberGenerator.new()
 var _shop_rng := RandomNumberGenerator.new()
+var _dice_rng := RandomNumberGenerator.new()
 var _previous_weather := ""
 var _older_weather := ""
 var _insurance_spent := false
@@ -184,6 +186,7 @@ func _init() -> void:
 	_kick10_rng.randomize()
 	_offer_rng.randomize()
 	_shop_rng.randomize()
+	_dice_rng.randomize()
 	new_run()
 
 
@@ -194,6 +197,7 @@ func set_seed(seed_value: int) -> void:
 	_weather_rng.seed = seed_value + 1543
 	_kick10_rng.seed = seed_value + 9001
 	_shop_rng.seed = seed_value + 4409
+	_dice_rng.seed = seed_value + 3571
 
 
 func set_offer_seed(seed_value: int) -> void:
@@ -254,6 +258,7 @@ func new_run() -> void:
 	ring_spent = {}
 	ring_sides = {}
 	inner_ring_sides = {}
+	post_shifts = {}
 	ring_debug = {}
 	ring_offer_pending = false
 	ring_offer_skipped = false
@@ -443,6 +448,29 @@ func posts_move() -> bool:
 	return tad_active(10) or weather == MOVING
 
 
+func post_shift_yards() -> int:
+	if kick_number <= 1 or posts_move():
+		return 0
+	if not post_shifts.has(kick_number):
+		post_shifts[kick_number] = _roll_post_shift()
+	return int(post_shifts[kick_number])
+
+
+func _roll_post_shift() -> int:
+	if kick_number <= 1 or posts_move():
+		return 0
+	var chance := 1.0 if tad_active(2) else KickConstants.POST_DICE_CHANCE
+	if _dice_rng.randf() >= chance:
+		return 0
+	var legal: Array[int] = []
+	for yards in [-3, -2, -1, 1, 2, 3]:
+		if absf(spot_yards - float(yards)) <= KickConstants.POST_DICE_MAX_GAP:
+			legal.append(int(yards))
+	if legal.is_empty():
+		return 0
+	return legal[_dice_rng.randi() % legal.size()]
+
+
 func _curse_weight() -> int:
 	return 2 if tad_active(6) else 1
 
@@ -467,7 +495,7 @@ static func tad_summary(level: int) -> String:
 		1:
 			return "SHOP PRICES X1.5"
 		2:
-			return "WIND +3 MPH"
+			return "POSTS SHIFT EVERY KICK"
 		3:
 			return "KICKS +4 YD"
 		4:
@@ -493,7 +521,7 @@ static func tad_name(level: int) -> String:
 		1:
 			return "Short week"
 		2:
-			return "Swirling winds"
+			return "Loaded dice"
 		3:
 			return "Long yardage"
 		4:
@@ -519,7 +547,7 @@ static func tad_sentence(level: int) -> String:
 		1:
 			return "Shop prices are 1.50 times, rounded up."
 		2:
-			return "Wind is 3 mph stronger."
+			return "The posts shift on every kick from kick 2."
 		3:
 			return "Kicks are 4 yards longer."
 		4:
@@ -1617,7 +1645,7 @@ static func ring_ideal_center(half_gap: float) -> float:
 	return half_gap + RING_PAST_UPRIGHT
 
 
-static func ring_window_reaches(center: float, side: float, half_gap: float, distance: float, spot: float, cap_deg: float) -> bool:
+static func ring_window_reaches(center: float, side: float, half_gap: float, distance: float, spot: float, cap_deg: float, shift: float = 0.0) -> bool:
 	var reach := distance * tan(deg_to_rad(maxf(cap_deg, 0.0)))
 	var near := spot - reach
 	var far := spot + reach
@@ -1625,9 +1653,9 @@ static func ring_window_reaches(center: float, side: float, half_gap: float, dis
 	var hi := center + RING_COLLECT_YARDS
 	var wide := half_gap + KickConstants.DOINK_BAND_YARDS + 0.001
 	if side < 0.0:
-		hi = minf(hi, -wide)
+		hi = minf(hi, -wide + shift)
 	else:
-		lo = maxf(lo, wide)
+		lo = maxf(lo, wide + shift)
 	if lo > hi:
 		return false
 	return hi >= near and lo <= far
@@ -1635,25 +1663,25 @@ static func ring_window_reaches(center: float, side: float, half_gap: float, dis
 
 # Pulls the center inward only when the ideal spot is outside the aim cap
 # and a point still outside the upright is inside that cap.
-static func ring_placement(side: int, half_gap: float, distance: float, spot: float, cap_deg: float) -> Dictionary:
+static func ring_placement(side: int, half_gap: float, distance: float, spot: float, cap_deg: float, shift: float = 0.0) -> Dictionary:
 	var sign := -1.0 if side < 0 else 1.0
 	var ideal := ring_ideal_center(half_gap)
 	var minimum := ring_min_center(half_gap)
 	if minimum > ideal:
 		minimum = ideal
-	if ring_window_reaches(sign * ideal, sign, half_gap, distance, spot, cap_deg):
-		return {"x": sign * ideal, "pulled": false, "blocked": false}
-	if not ring_window_reaches(sign * minimum, sign, half_gap, distance, spot, cap_deg):
-		return {"x": sign * ideal, "pulled": false, "blocked": true}
+	if ring_window_reaches(sign * ideal + shift, sign, half_gap, distance, spot, cap_deg, shift):
+		return {"x": sign * ideal + shift, "pulled": false, "blocked": false}
+	if not ring_window_reaches(sign * minimum + shift, sign, half_gap, distance, spot, cap_deg, shift):
+		return {"x": sign * ideal + shift, "pulled": false, "blocked": true}
 	var low := minimum
 	var high := ideal
 	for _i in 24:
 		var mid := (low + high) * 0.5
-		if ring_window_reaches(sign * mid, sign, half_gap, distance, spot, cap_deg):
+		if ring_window_reaches(sign * mid + shift, sign, half_gap, distance, spot, cap_deg, shift):
 			low = mid
 		else:
 			high = mid
-	return {"x": sign * low, "pulled": true, "blocked": false}
+	return {"x": sign * low + shift, "pulled": true, "blocked": false}
 
 
 static func cash_payout(made: bool, perfect: bool, ring_hit: bool, boss: bool) -> int:
@@ -1737,7 +1765,7 @@ func _ensure_ring_side() -> void:
 func ring_place(distance: float, spot: float, half_gap: float, cap_deg: float) -> Dictionary:
 	if not ring_showing():
 		return {"x": 0.0, "pulled": false, "blocked": false, "show": false}
-	return ring_placement(ring_side(), half_gap, distance, spot, cap_deg)
+	return ring_placement(ring_side(), half_gap, distance, spot, cap_deg, float(post_shift_yards()))
 
 
 func collects_at(offset: float, center: float, result_text: String, reached: bool, shanked: bool) -> bool:
@@ -2280,6 +2308,7 @@ func export_resume() -> Dictionary:
 		"last_result_made": last_result_made,
 		"ring_spent": _kick_keys(ring_spent),
 		"ring_sides": _side_rows(),
+		"post_shifts": _shift_rows(),
 		"ring_debug": _kick_keys(ring_debug),
 		"ring_offer": ring_offer_pending,
 		"gm_passes": gm_passes,
@@ -2388,6 +2417,9 @@ func import_resume(data: Dictionary) -> void:
 	inner_ring_sides = {}
 	for pair in _dict_list(data.get("inner_ring_sides", [])):
 		inner_ring_sides[int(pair.get("kick", 0))] = int(pair.get("side", 1))
+	post_shifts = {}
+	for pair in _dict_list(data.get("post_shifts", [])):
+		post_shifts[int(pair.get("kick", 0))] = int(pair.get("shift", 0))
 	ring_offer_pending = bool(data.get("ring_offer", false))
 	kick10_boss = str(data.get("kick10_boss", ""))
 	var saved_bosses: Array = _dict_list(data.get("standard_bosses", []))
@@ -2462,6 +2494,13 @@ func _side_rows() -> Array:
 	var rows: Array = []
 	for kick in ring_sides.keys():
 		rows.append({"kick": int(kick), "side": int(ring_sides[kick])})
+	return rows
+
+
+func _shift_rows() -> Array:
+	var rows: Array = []
+	for kick in post_shifts.keys():
+		rows.append({"kick": int(kick), "shift": int(post_shifts[kick])})
 	return rows
 
 
@@ -2834,8 +2873,8 @@ func _roll_wind() -> void:
 
 
 func _add_tad_wind() -> void:
-	if tad_active(2):
-		wind_speed += 3
+	# The table's wind already includes the old +3. TAD 2 is Loaded dice now.
+	pass
 
 
 static func wind_name(speed: int) -> String:

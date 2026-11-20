@@ -339,6 +339,8 @@ func _draw_kick_bug(logic: KickLogic, run: RunLogic) -> void:
 		extra += 16
 	if big_game:
 		extra += 16
+	if run.post_shift_yards() != 0:
+		extra += 16
 	var bug := Rect2(868, 10, 398, 74 + extra)
 	_steel_panel(bug)
 	var cream := Color(0.93, 0.91, 0.84)
@@ -379,6 +381,9 @@ func _draw_kick_bug(logic: KickLogic, run: RunLogic) -> void:
 		row_y += 16
 	if big_game:
 		_pg("METER UPGRADES OFF", Vector2(bug.position.x + 8, row_y), 12, cream)
+		row_y += 16
+	if run.post_shift_yards() != 0:
+		_pg(BroadcastHud.posts_text(run.post_shift_yards()), Vector2(bug.position.x + 8, row_y), 12, Color(0.55, 0.9, 0.95))
 
 
 func _draw_score_bug(run: RunLogic) -> void:
@@ -390,6 +395,8 @@ func _draw_score_bug(run: RunLogic) -> void:
 	if show_mph:
 		extra += 16
 	if big_game:
+		extra += 16
+	if run.post_shift_yards() != 0:
 		extra += 16
 	var bug := Rect2(868, 18 + 74 + extra, 398, 70)
 	_steel_panel(bug)

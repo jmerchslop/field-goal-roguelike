@@ -96,6 +96,9 @@ const ATTEMPT_CAP_MAX := 5
 # Hash spots are 3 yards off center. Wide spots are 6 yards off center.
 const HASH_OFFSET_YARDS := 3.0
 const WIDE_OFFSET_YARDS := 6.0
+# From kick 2, the posts may sit 1–3 yards off center. The ball stays within 6 of them.
+const POST_DICE_CHANCE := 0.5
+const POST_DICE_MAX_GAP := 6.0
 
 # Score: distance × ((1 + 0.25 × streak) × ring factor + flat bonuses).
 # Then ×1.5 on a boss kick, +5 if perfect. The inner ring caps at ×8.

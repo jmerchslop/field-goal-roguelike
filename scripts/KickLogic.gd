@@ -101,6 +101,7 @@ var inner_ring_radius := KickConstants.INNER_RING_RADIUS
 var inner_ring_armed := false
 var inner_ring_hit := false
 var inner_post_center := 0.0
+var post_center := 0.0
 
 # Where the ball is right now. Height is 0 on the ground and 1 at mid-flight.
 var ball_forward_yards := 0.0
@@ -238,6 +239,7 @@ func reset_kick() -> void:
 	ring_center = 0.0
 	inner_ring_hit = false
 	inner_ring_armed = false
+	post_center = 0.0
 	perfect = false
 	bank_shot = false
 	insured = false
@@ -457,7 +459,7 @@ func aim_cap_degrees() -> float:
 	var hook := _good_edge_hook(edge)
 	# Aim that centers the ball against this drift and the unhelpful hook.
 	# The player can stop short of the cap, so a light wind stays at ±12.
-	var ratio := -(start_lateral_yards + drift) / maxf(kick_distance, 0.01)
+	var ratio := (post_center - start_lateral_yards - drift) / maxf(kick_distance, 0.01)
 	var needed := rad_to_deg(atan(ratio)) - hook
 	return maxf(absf(KickConstants.AIM_MAX_DEG), absf(needed))
 
@@ -805,11 +807,11 @@ func _shank() -> void:
 	var needed := target - start_lateral_yards - drift_yards
 	final_angle_degrees = rad_to_deg(atan(needed / maxf(kick_distance, 0.01)))
 	offset_yards = path_lateral(start_lateral_yards, kick_distance, final_angle_degrees, kick_distance, drift_yards)
-	var judged := judge(max_range, kick_distance, offset_yards, stats.ball_type, gap)
+	var judged := judge(max_range, kick_distance, offset_yards - post_center, stats.ball_type, gap)
 	if str(judged["text"]) == "GOOD" or str(judged["text"]) == "DOINK" or str(judged["text"]) == "SHORT":
-		offset_yards = side * (gap + KickConstants.DOINK_BAND_YARDS + 2.0)
+		offset_yards = post_center + side * (gap + KickConstants.DOINK_BAND_YARDS + 2.0)
 		final_angle_degrees = rad_to_deg(atan((offset_yards - start_lateral_yards) / maxf(kick_distance, 0.01)))
-		judged = judge(max_range, kick_distance, offset_yards, stats.ball_type, gap)
+		judged = judge(max_range, kick_distance, offset_yards - post_center, stats.ball_type, gap)
 	result_text = "" if hold_result else str(judged["text"])
 	accuracy_error = side * MeterGauge.ERROR_AT_MAX
 	needle = 0.0
@@ -955,8 +957,11 @@ func _lock_accuracy(value: float) -> void:
 		bank_shot = false
 		insured = false
 	else:
-		var judged := judge(max_range, kick_distance, offset_yards if reached_uprights else 0.0, stats.ball_type, post_half_gap)
-		_apply_arrival(judged, 0.0, post_half_gap)
+		var judged_offset := 0.0
+		if reached_uprights:
+			judged_offset = offset_yards - post_center
+		var judged := judge(max_range, kick_distance, judged_offset, stats.ball_type, post_half_gap)
+		_apply_arrival(judged, post_center, post_half_gap)
 	_assign_flight_look()
 	phase = Phase.FLIGHT
 	flight_elapsed = 0.0

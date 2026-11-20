@@ -307,6 +307,7 @@ func _copy_run_onto_kick() -> void:
 	logic.insured = false
 	_copy_weather_onto_kick()
 	logic.post_half_gap = run.post_half_gap()
+	logic.post_center = float(run.post_shift_yards())
 	logic.hold_result = run.posts_move() and not run.practicing
 	logic.heavy_ball = run.has_curse(Loadout.HEAVY)
 	logic.howling_wind = run.has_curse(Loadout.HOWLING)
@@ -815,6 +816,7 @@ func cycle_debug_distance() -> void:
 	_preview_step = (_preview_step + 1) % 5
 	if logic.phase != KickLogic.Phase.AIMING:
 		logic.reset_kick()
+		logic.post_center = float(run.post_shift_yards())
 	logic.kick_distance = saved if _preview_step == 0 else shown_distance()
 	logic.start_lateral_yards = run.spot_yards
 	logic.sync_tee()
@@ -878,6 +880,7 @@ func _sync_debug_loadout() -> void:
 	logic.phase = phase
 	_copy_weather_onto_kick()
 	logic.post_half_gap = run.post_half_gap()
+	logic.post_center = float(run.post_shift_yards())
 	consider_too_weak()
 	refresh_view()
 
@@ -893,6 +896,7 @@ func apply_live_vitamins() -> void:
 	logic.aim_degrees = aim
 	logic.phase = phase
 	logic.post_half_gap = run.post_half_gap()
+	logic.post_center = float(run.post_shift_yards())
 	consider_too_weak()
 	refresh_view()
 
@@ -913,6 +917,7 @@ func _apply_conditions() -> void:
 	logic.stats = run.stats
 	_copy_weather_onto_kick()
 	logic.post_half_gap = run.post_half_gap()
+	logic.post_center = float(run.post_shift_yards())
 	logic.hold_result = run.posts_move() and not run.practicing
 	logic.heavy_ball = run.has_curse(Loadout.HEAVY)
 	logic.howling_wind = run.has_curse(Loadout.HOWLING)
@@ -1422,15 +1427,16 @@ func _apply_post_slide() -> void:
 
 
 func _place_posts(slide: float) -> void:
+	var at := slide + float(run.post_shift_yards())
 	var half := run.post_width() * 0.5
 	if _post_l != null:
-		_post_l.position.x = -half + slide
+		_post_l.position.x = -half + at
 	if _post_r != null:
-		_post_r.position.x = half + slide
+		_post_r.position.x = half + at
 	if _crossbar != null:
-		_crossbar.position.x = slide
+		_crossbar.position.x = at
 	if _goal_stem != null:
-		_goal_stem.position.x = slide
+		_goal_stem.position.x = at
 
 
 func _active_run() -> bool:
@@ -2745,7 +2751,7 @@ func _place_inner_ring() -> void:
 	logic.inner_ring_x = x_rel
 	logic.inner_ring_radius = radius
 	_inner_ring.pixel_size = RING_PIXEL * (2.0 * radius / 3.0)
-	_inner_ring.position = Vector3(slide + x_rel, RING_CENTER_Y, 0.0)
+	_inner_ring.position = Vector3(slide + float(run.post_shift_yards()) + x_rel, RING_CENTER_Y, 0.0)
 	if logic.phase == KickLogic.Phase.AIMING:
 		_inner_pop = -1.0
 		_inner_ring.scale = Vector3.ONE
@@ -3659,7 +3665,7 @@ func _ball_position() -> Vector3:
 	var height := _arc_height(forward)
 	if logic.bank_shot and logic.phase == KickLogic.Phase.RESULT:
 		var bounce := clampf(_bank_time / 0.3, 0.0, 1.0)
-		lateral = lerpf(logic.offset_yards, 0.0, bounce)
+		lateral = lerpf(logic.offset_yards, logic.post_center, bounce)
 		height = sin(bounce * PI) * 1.6
 		forward = logic.kick_distance
 	elif logic.result_text == "DOINK" and (logic.phase == KickLogic.Phase.FLIGHT or logic.phase == KickLogic.Phase.RESULT):
@@ -3757,8 +3763,8 @@ func _cone_crop(origin: Vector3, dir: Vector3, side: Vector3, full_reach: float,
 	var goal := Vector3(1.0, 0.0, 0.0)
 	var near_l := near_c - side * CONE_NEAR_HALF
 	var near_r := near_c + side * CONE_NEAR_HALF
-	var far_l := far_full - goal * post_half
-	var far_r := far_full + goal * post_half
+	var far_l := far_full - goal * post_half + Vector3(logic.post_center, 0.0, 0.0)
+	var far_r := far_full + goal * post_half + Vector3(logic.post_center, 0.0, 0.0)
 	var left := near_l.lerp(far_l, along)
 	var right := near_r.lerp(far_r, along)
 	var far := near_c.lerp(far_full, along)

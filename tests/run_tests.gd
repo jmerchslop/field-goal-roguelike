@@ -71,6 +71,7 @@ func _run() -> void:
 	_check_pace2()
 	_check_pace3()
 	_check_ring1a()
+	_check_ring1b()
 	_check_f3()
 	_check_au1()
 	_check_drive_lid_and_power_safety()
@@ -3723,7 +3724,7 @@ func _check_as1() -> void:
 	gust.tad_level = 2
 	gust.kick_number = 4
 	gust._reroll_zinc()
-	check(gust.wind_speed == calm.wind_speed + 3 and gust.wind_direction == calm.wind_direction, "TAD 2 adds 3 mph after a Zinc reroll and keeps the direction")
+	check(gust.wind_speed == calm.wind_speed and gust.wind_direction == calm.wind_direction, "TAD 2 no longer adds wind after a Zinc reroll")
 	var long := RunLogic.new()
 	long.start_with_kicker(Kickers.WALK_ON)
 	long.tad_level = 3
@@ -3939,7 +3940,7 @@ func _check_as2() -> void:
 	var wind_before := stacked.wind_speed
 	stacked.open_tad(10)
 	stacked.prepare_kick_stats()
-	check(stacked.tad_level == 10 and stacked.rerolls_left == 0 and stacked.wind_speed == wind_before + 3, "TAD 10 keeps the wind add and the reroll ban")
+	check(stacked.tad_level == 10 and stacked.rerolls_left == 0 and stacked.wind_speed == wind_before, "TAD 10 keeps the reroll ban and leaves the table wind")
 	check(near(stacked.distance_yards(), 39.0) and near(stacked.post_width(), 5.92) and stacked.posts_move(), "TAD 10 keeps the longer kick, the narrower posts, and the wander")
 	check(stacked.item_price(Vitamins.PROTEIN) == 8 and (stacked.weather == RunLogic.RAIN or stacked.weather == RunLogic.SNOW or stacked.weather == RunLogic.MUD), "TAD 10 keeps the shop tax and foul weather")
 	check(near(stacked.stats.power_speed, 133.0, 0.01), "TAD 10 keeps the faster needles")
@@ -9037,7 +9038,7 @@ func _check_pace1() -> void:
 		check(gust.wind_speed == 3, "PACE1 kick 1 wind is 3, got %s" % gust.wind_speed)
 		gust.tad_level = 2
 		gust._roll_wind()
-		check(gust.wind_speed == 6, "PACE1 TAD 2 kick 1 wind is 6, got %s" % gust.wind_speed)
+		check(gust.wind_speed == 3, "PACE1 TAD 2 kick 1 wind stays 3, got %s" % gust.wind_speed)
 	for kick in range(1, 11):
 		var row: Dictionary = RunTable.row(kick)
 		var lo := int(row["wind_min"])
@@ -9051,8 +9052,9 @@ func _check_pace1() -> void:
 			check(gust.wind_speed >= lo and gust.wind_speed <= hi, "PACE1 kick %d wind left %d-%d, got %s" % [kick, lo, hi, gust.wind_speed])
 			gust.tad_level = 2
 			gust._roll_wind()
-			check(gust.wind_speed >= lo + 3 and gust.wind_speed <= hi + 3, "PACE1 TAD 2 kick %d wind left the raised band, got %s" % [kick, gust.wind_speed])
-	check(RunLogic.tad_summary(2) == "WIND +3 MPH" and BitmapFonts.ui_allows(RunLogic.tad_summary(2)), "TAD 2 still says WIND +3 MPH")
+			check(gust.wind_speed >= lo and gust.wind_speed <= hi, "PACE1 TAD 2 kick %d wind left the table band, got %s" % [kick, gust.wind_speed])
+	check(RunLogic.tad_summary(2) == "POSTS SHIFT EVERY KICK" and BitmapFonts.ui_allows(RunLogic.tad_summary(2)), "TAD 2 says POSTS SHIFT EVERY KICK")
+	check(RunLogic.tad_name(2) == "Loaded dice", "TAD 2 is Loaded dice")
 	check(RunLogic.tad_name(8) == "Short bench" and RunLogic.tad_summary(8) == "START WITH 1 ATTEMPT", "TAD 8 says Short bench")
 	check(near(Loadout.HOWLING_ITEM, 1.10), "Howling Wind stays 1.10")
 	var shop := RunLogic.new()
@@ -9683,4 +9685,159 @@ func _check_ring1a() -> void:
 	var records_script = load("res://scripts/SaveData.gd")
 	check(records_script.trophy_condition("bullseye_collector") == "10 lifetime inner ring hits", "Bullseye Collector names inner ring hits")
 	check(str(Kickers.get_def(Kickers.COLE)["ball_description"]) == "A miss halves the stored ring Mult instead of clearing it.", "Cole's ball text is the ring miss")
+
+
+func _check_ring1b() -> void:
+	var fired := 0
+	var dice_kicks := 0
+	var wide_sum := 0.0
+	var wide_n := 0
+	var wide_max := 0.0
+	var hash_sum := 0.0
+	var hash_n := 0
+	var hash_max := 0.0
+	var center_sum := 0.0
+	var center_n := 0
+	var center_max := 0.0
+	var gap_ok := true
+	var shift_ok := true
+	for seed_value in 500:
+		var sample := RunLogic.new()
+		sample.set_seed(1000 + seed_value)
+		sample.new_run()
+		if sample.post_shift_yards() != 0:
+			shift_ok = false
+		for kick in range(2, 11):
+			sample.kick_number = kick
+			sample._place_spot()
+			var moving := sample.posts_move()
+			var shift := sample.post_shift_yards()
+			var gap := absf(sample.spot_yards - float(shift))
+			if gap > KickConstants.POST_DICE_MAX_GAP + 0.001:
+				gap_ok = false
+			if moving:
+				if shift != 0:
+					shift_ok = false
+			else:
+				dice_kicks += 1
+				if shift != 0:
+					fired += 1
+					if absi(shift) > 3:
+						shift_ok = false
+			if absf(sample.spot_yards) >= 5.0:
+				wide_sum += gap
+				wide_n += 1
+				wide_max = maxf(wide_max, gap)
+			elif absf(sample.spot_yards) > 0.5:
+				hash_sum += gap
+				hash_n += 1
+				hash_max = maxf(hash_max, gap)
+			else:
+				center_sum += gap
+				center_n += 1
+				center_max = maxf(center_max, gap)
+	var rate := float(fired) / float(maxi(dice_kicks, 1))
+	check(dice_kicks >= 4000 and rate > 0.47 and rate < 0.53, "dice fire on %s of %s kicks" % [rate, dice_kicks])
+	check(gap_ok and shift_ok, "a fired shift is 1 to 3 yards and the ball stays within 6 of the posts")
+	check(wide_n > 0 and wide_max <= 6.001 and absf(wide_sum / float(wide_n) - 5.5) <= 0.75, "wide gap mean %s max %s" % [wide_sum / float(maxi(wide_n, 1)), wide_max])
+	check(hash_n > 0 and hash_max <= 6.001 and absf(hash_sum / float(hash_n) - 3.0) <= 0.35, "hash gap mean %s max %s" % [hash_sum / float(maxi(hash_n, 1)), hash_max])
+	check(center_n > 0 and center_max <= 3.001 and absf(center_sum / float(center_n) - 1.0) <= 0.25, "center gap mean %s max %s" % [center_sum / float(maxi(center_n, 1)), center_max])
+	var always := 0
+	for seed_value in 40:
+		var loaded := RunLogic.new()
+		loaded.set_seed(3000 + seed_value)
+		loaded.new_run()
+		loaded.tad_level = 2
+		loaded.kick_number = 1
+		loaded._roll_wind()
+		if loaded.wind_speed != 3 or loaded.post_shift_yards() != 0:
+			always += 1
+		for kick in range(2, 11):
+			loaded.kick_number = kick
+			loaded._place_spot()
+			if loaded.posts_move():
+				if loaded.post_shift_yards() != 0:
+					always += 1
+			elif loaded.post_shift_yards() == 0:
+				always += 1
+	check(always == 0, "kick 1 stays centered, its wind stays 3, and TAD 2 shifts every later kick")
+	var kept := RunLogic.new()
+	kept.set_seed(11)
+	kept.new_run()
+	kept.kick_number = 4
+	kept._place_spot()
+	var kept_shift := kept.post_shift_yards()
+	kept.kick_resolved = true
+	kept.last_result_made = false
+	kept.phase = RunLogic.Phase.PLAYING
+	check(kept.begin_retry() and kept.post_shift_yards() == kept_shift, "a retry keeps the post shift")
+	var moving := RunLogic.new()
+	moving.new_run()
+	moving.kick_number = 3
+	moving.force_weather(RunLogic.MOVING)
+	check(moving.post_shift_yards() == 0, "Moving Posts does not roll dice")
+	moving.weather = RunLogic.CLEAR
+	moving.tad_level = 10
+	check(moving.posts_move() and moving.post_shift_yards() == 0, "TAD 10 does not roll dice")
+	var quiet := _ring1b_sequence(false)
+	var rolled := _ring1b_sequence(true)
+	check(quiet == rolled, "dice do not change the wind or weather sequence")
+	var centered := KickLogic.new()
+	centered.kick_distance = 35.0
+	centered.start_lateral_yards = 2.0
+	centered.post_center = 2.0
+	centered.post_half_gap = KickConstants.POST_HALF_GAP_YARDS
+	centered.wind_speed = 0
+	_swing_to(centered, 100.0, 0.0)
+	check(near(centered.offset_yards, 2.0, 0.08) and centered.result_text == "GOOD", "a shift of +2 makes an offset of +2 a center make, got %s at %s" % [centered.result_text, centered.offset_yards])
+	var post := KickLogic.new()
+	post.kick_distance = 35.0
+	post.start_lateral_yards = 2.0 + KickConstants.POST_HALF_GAP_YARDS
+	post.post_center = 2.0
+	post.post_half_gap = KickConstants.POST_HALF_GAP_YARDS
+	post.wind_speed = 0
+	_swing_to(post, 100.0, 0.0)
+	check(post.result_text == "DOINK", "an offset of 2 + 3.08 meets the shifted post, got %s" % post.result_text)
+	var ring := RunLogic.new()
+	ring.new_run()
+	ring.kick_number = 2
+	ring.spot_yards = 0.0
+	ring.post_shifts[2] = 2
+	ring.inner_ring_sides[2] = 1
+	var right: Dictionary = ring.inner_ring_place(ring.post_half_gap())
+	check(near(float(ring.post_shift_yards()) + float(right["x_rel"]), 4.08), "the inner ring sits at shift + 2.08")
+	ring.inner_ring_sides[2] = -1
+	var left: Dictionary = ring.inner_ring_place(ring.post_half_gap())
+	check(near(float(ring.post_shift_yards()) + float(left["x_rel"]), -0.08), "the inner ring sits at shift - 2.08")
+	ring.kick_number = 7
+	ring.post_shifts[7] = -2
+	var side := ring.ring_side()
+	var shifted: Dictionary = ring.ring_place(63.0, 0.0, ring.post_half_gap(), 12.0)
+	var plain: Dictionary = RunLogic.ring_placement(side, ring.post_half_gap(), 63.0, 0.0, 12.0)
+	check(near(float(shifted["x"]), float(plain["x"]) - 2.0), "the Bonus Ring window moves with the shift")
+	check(BitmapFonts.ui_allows(BroadcastHud.posts_text(-2)) and BroadcastHud.posts_text(-2) == "POSTS 2 LEFT", "POSTS 2 LEFT is Pixel Gothic")
+	check(BitmapFonts.ui_allows(BroadcastHud.posts_text(3)) and BroadcastHud.posts_text(3) == "POSTS 3 RIGHT", "POSTS 3 RIGHT is Pixel Gothic")
+	check(BitmapFonts.ui_allows(RunLogic.tad_summary(2)), "the TAD 2 summary is Pixel Gothic")
+	var keeper := RunLogic.new()
+	keeper.new_run()
+	keeper.post_shifts[6] = -3
+	var back := RunLogic.new()
+	back.import_resume(keeper.export_resume())
+	check(int(back.post_shifts.get(6, 0)) == -3, "post_shifts round-trip")
+
+
+func _ring1b_sequence(use_dice: bool) -> Array:
+	var run := RunLogic.new()
+	run.set_seed(42)
+	run.new_run()
+	var rows: Array = []
+	for kick in range(1, 11):
+		run.kick_number = kick
+		run._place_spot()
+		run._roll_wind()
+		run._roll_weather()
+		if use_dice:
+			run.post_shift_yards()
+		rows.append("%s:%s:%s" % [kick, run.wind_speed, run.weather])
+	return rows
 

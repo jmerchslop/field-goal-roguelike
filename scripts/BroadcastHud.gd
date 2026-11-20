@@ -14,6 +14,13 @@ static func kick_title(number: int, endless: bool) -> String:
 	return "KICK %d OF %d" % [number, RunTable.count()]
 
 
+static func posts_text(shift: int) -> String:
+	var yards := absi(shift)
+	if shift < 0:
+		return "POSTS %d LEFT" % yards
+	return "POSTS %d RIGHT" % yards
+
+
 static func yards_text(distance: float) -> String:
 	return "%s YD" % KickLogic.format_number(distance)
 
