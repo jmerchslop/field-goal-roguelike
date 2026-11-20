@@ -466,7 +466,7 @@ No pause screen exists. Esc during a kick is not given its own pause menu. A pri
 ### `select_bruce_range`
 - **screen:** Character select
 - **when:** Under the name, only while this kicker is unlocked.
-- **current:** "65 yd"
+- **current:** "70 yd"
 - **kind:** static
 - **source:** code
 
@@ -501,7 +501,7 @@ No pause screen exists. Esc during a kick is not given its own pause menu. A pri
 ### `select_walk_on_range`
 - **screen:** Character select
 - **when:** Under the name, only while this kicker is unlocked.
-- **current:** "60 yd"
+- **current:** "55 yd"
 - **kind:** static
 - **source:** code
 
@@ -536,7 +536,7 @@ No pause screen exists. Esc during a kick is not given its own pause menu. A pri
 ### `select_phil_range`
 - **screen:** Character select
 - **when:** Under the name, only while this kicker is unlocked.
-- **current:** "55 yd"
+- **current:** "54 yd"
 - **kind:** static
 - **source:** code
 
@@ -620,14 +620,14 @@ No pause screen exists. Esc during a kick is not given its own pause menu. A pri
 ### `select_vex_range`
 - **screen:** Character select
 - **when:** Under the name, only while this kicker is unlocked.
-- **current:** "Infinite Range & Beyond"
+- **current:** "500 yd"
 - **kind:** static
 - **source:** code
 
 ### `select_vex_excels`
 - **screen:** Character select
 - **when:** Kit line under the range, only while this kicker is unlocked.
-- **current:** "Infinite Range & Beyond. 88% power clears by 5 yards."
+- **current:** "Out of This World Range. A 500 yard base, so full power with nothing on carries 500 yards."
 - **kind:** static
 - **source:** code
 
@@ -662,7 +662,7 @@ No pause screen exists. Esc during a kick is not given its own pause menu. A pri
 ### `select_cole_range`
 - **screen:** Character select
 - **when:** Under the name, only while this kicker is unlocked.
-- **current:** "70 yd"
+- **current:** "75 yd"
 - **kind:** static
 - **source:** code
 
@@ -746,7 +746,7 @@ No pause screen exists. Esc during a kick is not given its own pause menu. A pri
 ### `select_carlos_range`
 - **screen:** Character select
 - **when:** Under the name, only while this kicker is unlocked.
-- **current:** "66 yd"
+- **current:** "69 yd"
 - **kind:** static
 - **source:** code
 
@@ -958,7 +958,7 @@ No pause screen exists. Esc during a kick is not given its own pause menu. A pri
 ### `hud_vex_kit`
 - **screen:** In-kick HUD
 - **when:** Short kit name under the kicker name. It is the opening of that kicker's character-select excels line.
-- **current:** "Infinite Range & Beyond"
+- **current:** "OUT OF THIS WORLD RANGE"
 - **kind:** static
 - **source:** code
 
@@ -3975,7 +3975,7 @@ These strings were searched for and are not shown to a player. They are not in t
 ### `kicker_phil_downside_not_drawn`
 - **screen:** Not drawn
 - **when:** Stored on the kicker. No screen draws the downside.
-- **current:** "55 yards with nothing on. Rerolls still cost cash."
+- **current:** "54 yards with nothing on. Rerolls still cost cash."
 - **kind:** static
 - **source:** code
 
@@ -3996,7 +3996,7 @@ These strings were searched for and are not shown to a player. They are not in t
 ### `kicker_vex_lore_not_drawn`
 - **screen:** Not drawn
 - **when:** Stored on the kicker. No screen draws lore.
-- **current:** "The saucer does not need a yard cap. It clears the posts, then keeps curving left."
+- **current:** "The saucer carries a long way, then keeps curving left."
 - **kind:** static
 - **source:** code
 

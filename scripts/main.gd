@@ -6,7 +6,6 @@ extends Node3D
 # Negative sideways yards are -X, which is screen-left when you look up-field.
 
 const ScreenshotDriverScript := preload("res://scripts/ScreenshotDriver.gd")
-const ARC_YARDS := 6.4
 const BALL_RADIUS := 0.18
 
 var logic := KickLogic.new()
@@ -739,16 +738,14 @@ func _finish_too_weak() -> void:
 
 func _debug_too_weak_text(report: Dictionary) -> String:
 	var zinc := "yes" if bool(report["zinc_block"]) else "no"
-	var clearance := "yes" if bool(report["clearance"]) else "no"
 	var weak := "yes" if bool(report["too_weak"]) else "no"
-	return "base %s  overpower %s  shakes %s  vitamin d %s  walk-on %s\nzinc %s  clearance %s  required %s  too weak %s" % [
+	return "base %s  overpower %s  shakes %s  vitamin d %s  walk-on %s\nzinc %s  required %s  too weak %s" % [
 		KickLogic.format_number(float(report["base"])),
 		KickLogic.format_number(float(report["overpower"])),
 		KickLogic.format_number(float(report["shakes"])),
 		KickLogic.format_number(float(report["vitamin_d"])),
 		KickLogic.format_number(float(report["walk_on"])),
 		zinc,
-		clearance,
 		KickLogic.format_number(float(report["required"])),
 		weak,
 	]
@@ -3581,13 +3578,10 @@ func _arc_height(forward: float) -> float:
 	# A short kick is back on the ground before that plane. Scoring does not use this.
 	if logic.phase != KickLogic.Phase.FLIGHT and logic.phase != KickLogic.Phase.RESULT:
 		return 0.0
-	var travel := maxf(logic.travel_yards, 0.001)
-	var dist := maxf(logic.kick_distance, 0.001)
-	var peak := dist if logic.reached_uprights else travel
-	if forward <= peak:
-		return sin(clampf(forward / peak, 0.0, 1.0) * PI * 0.5) * ARC_YARDS
-	var rest := maxf(travel - peak, 0.001)
-	return (1.0 - clampf((forward - peak) / rest, 0.0, 1.0)) * ARC_YARDS
+	var shown := logic.shown_travel_yards
+	if shown <= 0.001:
+		shown = logic.travel_yards
+	return KickLogic.drawn_arc_height(forward, logic.kick_distance, shown, logic.reached_uprights, logic.flight_tier)
 
 
 func world_to_screen(point: Vector3) -> Vector2:
@@ -3948,6 +3942,7 @@ func _long_axis_pixels(world_h: float, at: Vector3) -> float:
 func _pose_ball() -> void:
 	if _ball == null or _shadow == null:
 		return
+	_fade_soaring_ball()
 	var spot := _ball.position
 	var flying := ball_in_flight()
 	var tumbling := ball_tumble_live()
@@ -4012,7 +4007,32 @@ func _pose_ball() -> void:
 		oval = BALL_SHADOW_OVAL
 	_shadow.scale = Vector3(shadow_scale, 1.0, shadow_scale * oval)
 	if _shadow_mat != null:
-		_shadow_mat.albedo_color.a = shadow_alpha
+		_shadow_mat.albedo_color.a = shadow_alpha * _ball.modulate.a
+	if logic.flight_tier == "SOARS" and logic.result_text == "GOOD" and logic.phase == KickLogic.Phase.RESULT:
+		_ball.visible = false
+		_shadow.visible = false
+		if _ball_edge != null:
+			_ball_edge.visible = false
+	else:
+		_ball.visible = true
+		_shadow.visible = true
+
+
+func _fade_soaring_ball() -> void:
+	# _apply_ball_sprite already restored a full alpha. Fade only the last 15% of a soar.
+	if logic.flight_tier != "SOARS" or logic.result_text != "GOOD":
+		return
+	if logic.phase != KickLogic.Phase.FLIGHT and logic.phase != KickLogic.Phase.RESULT:
+		return
+	var fade := 1.0
+	if logic.phase == KickLogic.Phase.RESULT:
+		fade = 0.0
+	elif logic.flight_duration > 0.0:
+		var t := clampf(logic.flight_elapsed / logic.flight_duration, 0.0, 1.0)
+		if t > 0.85:
+			fade = clampf((1.0 - t) / 0.15, 0.0, 1.0)
+	var ink := _ball.modulate
+	_ball.modulate = Color(ink.r, ink.g, ink.b, ink.a * fade)
 
 
 func _clear_trail() -> void:
@@ -4041,7 +4061,8 @@ func _sample_trail() -> void:
 	if logic.ball_forward_yards < 0.12:
 		return
 	var spot := _ball_position()
-	var step := maxf(0.22, logic.travel_yards / float(TRAIL_POINT_CAP - 2))
+	var trail_span := logic.shown_travel_yards if logic.shown_travel_yards > 0.05 else logic.travel_yards
+	var step := maxf(0.22, trail_span / float(TRAIL_POINT_CAP - 2))
 	if _trail_points.is_empty():
 		_trail_points.append(spot)
 		_trail_points.append(spot)

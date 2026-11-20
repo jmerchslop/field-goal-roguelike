@@ -65,6 +65,7 @@ func _run() -> void:
 	_check_pk2a()
 	_check_pk2b()
 	_check_fx1()
+	_check_rs1()
 	_check_f3()
 	_check_au1()
 	_check_drive_lid_and_power_safety()
@@ -611,21 +612,22 @@ func _check_flight_and_reset() -> void:
 	var kick := _kick_power_accuracy(50.0, 0.0)
 	var expected_range := KickLogic.range_yards(50.0)
 	check(near(kick.travel_yards, expected_range), "P=50 flies its max range %s, got %s" % [expected_range, kick.travel_yards])
-	check(near(kick.flight_duration, KickLogic.flight_time_seconds(expected_range)), "flight time follows the yards flown, got %s" % kick.flight_duration)
+	check(kick.flight_tier == "BARELY" and near(kick.shown_travel_yards, kick.kick_distance + 4.0), "a 3-yard margin is drawn as a barely-clear")
+	check(near(kick.flight_duration, KickLogic.flight_time_seconds(kick.shown_travel_yards)), "flight time follows the yards this ball is drawn through, got %s" % kick.flight_duration)
 	check(kick.result_text == "GOOD", "centered P=50 is GOOD")
 	kick.advance(kick.flight_duration * 0.5)
 	check(near(kick.ball_height, 1.0), "mid-flight height is 1, got %s" % kick.ball_height)
-	check(near(kick.ball_forward_yards, expected_range * 0.5), "mid-flight is halfway along the flight, got %s" % kick.ball_forward_yards)
+	check(near(kick.ball_forward_yards, kick.shown_travel_yards * 0.5), "mid-flight is halfway along the drawn flight, got %s" % kick.ball_forward_yards)
 	check(near(kick.ball_lateral_yards, 0.0), "a straight kick stays centered")
-	var to_posts := kick.flight_duration * (kick.kick_distance / kick.travel_yards)
+	var to_posts := kick.flight_duration * (kick.kick_distance / kick.shown_travel_yards)
 	kick.advance(to_posts - kick.flight_duration * 0.5)
 	check(near(kick.ball_forward_yards, 35.0, 0.02), "the ball reaches the uprights before the flight ends, got %s" % kick.ball_forward_yards)
 	kick.advance(kick.flight_duration)
 	check(kick.phase == KickLogic.Phase.RESULT, "the flight ends on the result")
 	check(near(kick.ball_height, 0.0, 0.001), "the ball is back on the ground at the end")
-	check(near(kick.ball_forward_yards, expected_range), "the ball finishes at max range, past the posts")
+	check(near(kick.ball_forward_yards, kick.shown_travel_yards), "the drawn ball finishes 4 yards past the posts")
 	var full := KickLogic.range_yards(100.0)
-	check(absf(full - 60.0) < 0.001, "full power range is 60 yd for The Walk-On, got %s" % full)
+	check(absf(full - 60.0) < 0.001, "the default 0.44 leg is still 60 yd at full power, got %s" % full)
 	var short_kick := _kick_power_accuracy(20.0, 0.0)
 	check(near(short_kick.flight_duration, KickLogic.flight_time_seconds(short_kick.max_range)), "a short kick's flight time uses the yards it actually flies")
 	short_kick.advance(short_kick.flight_duration)
@@ -1078,7 +1080,7 @@ func _check_kickers_and_fixes() -> void:
 	check(Kickers.id_for_slot(0) == Kickers.BIG_BRUCE and Kickers.id_for_slot(1) == Kickers.WALK_ON, "the two slots are Big Bruce and The Walk-On")
 	var bruce := KickerStats.new()
 	Kickers.apply_to(bruce, Kickers.BIG_BRUCE)
-	check(near(bruce.range_per_power, 0.49), "check 1 Big Bruce range per power is 0.49")
+	check(near(bruce.range_per_power, 0.54), "check 1 Big Bruce range per power is 0.54")
 	check(near(bruce.red_tip_start, 95.0) and near(bruce.red_tip_noise, 5.0), "Big Bruce uses the default red tip")
 	check(near(bruce.accuracy_speed, KickConstants.ACCURACY_FALL_PER_SEC), "Big Bruce accuracy needle is the default speed")
 	check(near(bruce.power_floor, 80.0), "Farm Strength floors power at 80")
@@ -1091,7 +1093,7 @@ func _check_kickers_and_fixes() -> void:
 	check(str(KickLogic.judge(20.0, 35.0, 0.0, "farm_ball")["text"]) == "SHORT", "Farm Strength does not save a kick that is still short of the posts")
 	var walk := KickerStats.new()
 	Kickers.apply_to(walk, Kickers.WALK_ON)
-	check(near(walk.red_tip_start, 95.0) and near(walk.range_per_power, 0.44) and walk.ball_type == "standard", "check 4 The Walk-On keeps the normal meter and ball")
+	check(near(walk.red_tip_start, 95.0) and near(walk.range_per_power, 0.39) and walk.ball_type == "standard", "check 4 The Walk-On keeps the normal meter and ball")
 	check(walk.rerolls_per_run == 2, "check 4 The Walk-On gets 2 rerolls")
 	var walked := RunLogic.new()
 	walked.start_with_kicker(Kickers.WALK_ON)
@@ -1103,9 +1105,9 @@ func _check_kickers_and_fixes() -> void:
 	var carried := RunLogic.new()
 	carried.start_with_kicker(Kickers.BIG_BRUCE)
 	carried.give(Loadout.CANNON, 1)
-	check(near(carried.stats.range_per_power, 0.49) and carried.stats.range_bonus == 6.0, "Big Bruce kept his leg and Cannon Cleats")
+	check(near(carried.stats.range_per_power, 0.54) and carried.stats.range_bonus == 6.0, "Big Bruce kept his leg and Cannon Cleats")
 	carried.start_with_kicker(Kickers.WALK_ON)
-	check(near(carried.stats.range_per_power, 0.44) and carried.stats.range_bonus == 0.0, "check 6 the next kicker does not keep the last stats")
+	check(near(carried.stats.range_per_power, 0.39) and carried.stats.range_bonus == 0.0, "check 6 the next kicker does not keep the last stats")
 	check(carried.rerolls_left == 2 and carried.stats.ball_type == "standard", "check 6 The Walk-On starts clean")
 	var short_kick := KickLogic.new()
 	_lock_power_at(short_kick, 12.0)
@@ -1140,35 +1142,35 @@ func _check_kickers_and_fixes() -> void:
 func _check_power_flight() -> void:
 	var walk := KickerStats.new()
 	Kickers.apply_to(walk, Kickers.WALK_ON)
-	check(near(walk.range_per_power, 0.44) and walk.range_bonus == 0.0, "Walk-On kick 1 has no range bonus")
+	check(near(walk.range_per_power, 0.39) and walk.range_bonus == 0.0, "Walk-On kick 1 has no range bonus")
 	var low := KickLogic.new()
 	low.stats = walk
 	_lock_power_at(low, 20.0)
-	check(near(low.power, 20.0) and near(low.max_range, 24.8), "check 1 P=20 max range is 24.8, got %s" % low.max_range)
-	check(near(low.travel_yards, 24.8), "check 1 the ball travels 24.8 yards, not a fixed length")
+	check(near(low.power, 20.0) and near(low.max_range, 23.8), "check 1 P=20 max range is 23.8, got %s" % low.max_range)
+	check(near(low.travel_yards, 23.8), "check 1 the ball travels 23.8 yards, not a fixed length")
 	check(low.result_text == "SHORT" and low.perfect and not low.reached_uprights, "check 1 and 4 a dead-center low kick is SHORT, never GOOD")
-	check(near(low.flight_duration, KickLogic.flight_time_seconds(24.8)), "check 1 flight time uses the yards this ball flies")
+	check(near(low.flight_duration, KickLogic.flight_time_seconds(23.8)), "check 1 flight time uses the yards this ball flies")
 	low.advance(low.flight_duration)
-	check(near(low.ball_forward_yards, 24.8) and low.ball_forward_yards < 35.0, "check 1 the ball stops several yards short of the posts")
-	check(low.detail_line() == "P = 20, max range = 24.8 yd, kick = 35 yd, result = SHORT", "check 1 numbers read '%s'" % low.detail_line())
+	check(near(low.ball_forward_yards, 23.8) and low.ball_forward_yards < 35.0, "check 1 the ball stops several yards short of the posts")
+	check(low.detail_line() == "P = 20, max range = 23.8 yd, kick = 35 yd, result = SHORT", "check 1 numbers read '%s'" % low.detail_line())
 	var mid := KickLogic.new()
 	mid.stats = walk
 	_lock_power_at(mid, 50.0)
-	check(near(mid.max_range, 38.0) and near(mid.travel_yards, 38.0), "check 2 P=50 flies 38.0 yards, got %s" % mid.travel_yards)
-	check(mid.result_text == "GOOD" and mid.reached_uprights, "check 2 centered P=50 is GOOD")
-	var at_posts := mid.flight_duration * (35.0 / mid.travel_yards)
+	check(near(mid.max_range, 35.5) and near(mid.travel_yards, 35.5), "check 2 P=50 flies 35.5 yards, got %s" % mid.travel_yards)
+	check(mid.result_text == "GOOD" and mid.reached_uprights and mid.flight_tier == "BARELY", "check 2 centered P=50 is GOOD and barely clears")
+	var at_posts := mid.flight_duration * (35.0 / mid.shown_travel_yards)
 	mid.advance(at_posts)
 	check(near(mid.ball_forward_yards, 35.0, 0.02), "check 2 the moving ball reaches the uprights, got %s" % mid.ball_forward_yards)
 	check(near(mid.ball_lateral_yards, mid.offset_yards, 0.02), "the result offset is the ball's sideways spot at the posts")
 	mid.advance(mid.flight_duration)
-	check(near(mid.ball_forward_yards, 38.0), "check 2 the ball finishes past the posts, at max range")
+	check(near(mid.ball_forward_yards, mid.shown_travel_yards), "check 2 the drawn ball finishes 4 yards past the posts")
 	check(mid.ball_forward_yards > low.ball_forward_yards, "check 2 P=50 travels farther than P=20")
-	check(mid.detail_line() == "P = 50, max range = 38 yd, kick = 35 yd, result = GOOD", "check 2 numbers read '%s'" % mid.detail_line())
+	check(mid.detail_line() == "P = 50, max range = 35.5 yd, kick = 35 yd, result = GOOD", "check 2 numbers read '%s'" % mid.detail_line())
 	var full := KickLogic.new()
 	full.stats = walk
 	full.set_seed(1)
 	_lock_power_at(full, 100.0)
-	check(near(full.max_range, 60.0) and near(full.travel_yards, 60.0), "check 3 P=100 flies 60 yards, got %s" % full.travel_yards)
+	check(near(full.max_range, 55.0) and near(full.travel_yards, 55.0), "check 3 P=100 flies 55 yards, got %s" % full.travel_yards)
 	check(full.travel_yards > mid.travel_yards, "check 3 full power travels farther than P=50")
 	check(full.flight_duration > mid.flight_duration, "a longer kick takes longer")
 	full.advance(full.flight_duration * 0.7)
@@ -1184,9 +1186,9 @@ func _check_power_flight() -> void:
 	earlier.stats = run.stats
 	earlier.kick_distance = run.distance_yards()
 	_lock_power_at(earlier, 100.0)
-	check(near(earlier.travel_yards, 60.0), "the previous lock flew 60 yards")
+	check(near(earlier.travel_yards, 55.0), "the previous lock flew 55 yards")
 	_lock_power_at(earlier, 20.0)
-	check(earlier.result_text == "SHORT" and near(earlier.travel_yards, 24.8), "the new lock throws away the old range")
+	check(earlier.result_text == "SHORT" and near(earlier.travel_yards, 23.8), "the new lock throws away the old range")
 	run.resolve_kick(earlier.result_text, earlier.offset_yards, earlier.perfect)
 	check(run.kick_number == 1 and near(run.distance_yards(), 35.0) and run.attempts == 1 and run.phase == RunLogic.Phase.PLAYING, "check 5 a short miss with an attempt left stays on kick 1")
 	check(run.begin_retry() and not run.is_first_ball, "check 5 the retry is still kick 1")
@@ -1195,9 +1197,9 @@ func _check_power_flight() -> void:
 	again.kick_distance = run.distance_yards()
 	_lock_power_at(again, 20.0)
 	check(run.kick_number == 1 and near(again.kick_distance, 35.0), "check 5 the retry is still 35 yards")
-	check(near(again.max_range, 24.8) and near(again.travel_yards, 24.8) and again.result_text == "SHORT", "check 5 the retry flies on the new P, not the earlier 60")
+	check(near(again.max_range, 23.8) and near(again.travel_yards, 23.8) and again.result_text == "SHORT", "check 5 the retry flies on the new P, not the earlier 55")
 	again.advance(again.flight_duration)
-	check(near(again.ball_forward_yards, 24.8), "check 5 the retry ball stops at 24.8 yards")
+	check(near(again.ball_forward_yards, 23.8), "check 5 the retry ball stops at 23.8 yards")
 
 
 func _check_wind_and_pool() -> void:
@@ -1267,7 +1269,7 @@ func _check_wind_and_pool() -> void:
 	curve.wind_direction = 90.0
 	_lock_power_at(curve, 50.0)
 	check(curve.offset_yards > 1.5, "check 5 a centered kick in a right wind lands right, offset %s" % curve.offset_yards)
-	curve.advance(curve.flight_duration * (35.0 / curve.travel_yards))
+	curve.advance(curve.flight_duration * (35.0 / curve.shown_travel_yards))
 	check(near(curve.ball_lateral_yards, curve.offset_yards, 0.05), "the curve at the posts is the scored offset")
 	var early := KickLogic.path_lateral(0.0, 10.0, 0.0, 35.0, walk_drift)
 	var late := KickLogic.path_lateral(0.0, 30.0, 0.0, 35.0, walk_drift)
@@ -1930,18 +1932,18 @@ func _check_rank_caps_and_range() -> void:
 	check(not Loadout.PERK_IDS.has("mulligan") and not Loadout.PERK_IDS.has("hash_marksman"), "Mulligan and Hash Marksman stay out of the pool")
 	var bruce_stats := KickerStats.new()
 	Kickers.apply_to(bruce_stats, Kickers.BIG_BRUCE)
-	check(near(bruce_stats.range_base, 16.0) and near(bruce_stats.range_per_power, 0.49), "Bruce keeps range base 16 and 0.49 per power")
-	check(near(bruce_stats.range_base + bruce_stats.range_per_power * 100.0, 65.0), "Bruce P=100 with no bonuses is 65.0 yards")
+	check(near(bruce_stats.range_base, 16.0) and near(bruce_stats.range_per_power, 0.54), "Bruce keeps range base 16 and 0.54 per power")
+	check(near(bruce_stats.range_base + bruce_stats.range_per_power * 100.0, 70.0), "Bruce P=100 with no bonuses is 70.0 yards")
 	var kick17 := KickLogic.new()
 	kick17.stats = bruce_stats
 	kick17.set_seed(2)
 	_lock_power_at(kick17, 100.0, 65.0)
-	check(near(kick17.max_range, 65.0) and kick17.result_text == "GOOD", "kick 17 at 65 can be GOOD on Bruce full power, got %s range %s" % [kick17.result_text, kick17.max_range])
-	var kick18 := KickLogic.new()
-	kick18.stats = bruce_stats
-	kick18.set_seed(2)
-	_lock_power_at(kick18, 100.0, 69.0)
-	check(near(kick18.max_range, 65.0) and kick18.result_text == "SHORT", "kick 18 at 69 is SHORT on Bruce full power, got %s" % kick18.result_text)
+	check(near(kick17.max_range, 70.0) and kick17.result_text == "GOOD", "kick 17 at 65 can be GOOD on Bruce full power, got %s range %s" % [kick17.result_text, kick17.max_range])
+	var kick19 := KickLogic.new()
+	kick19.stats = bruce_stats
+	kick19.set_seed(2)
+	_lock_power_at(kick19, 100.0, 72.0)
+	check(near(kick19.max_range, 70.0) and kick19.result_text == "SHORT", "kick 19 at 72 is SHORT on Bruce full power, got %s" % kick19.result_text)
 	var cannon := RunLogic.new()
 	cannon.start_with_kicker(Kickers.BIG_BRUCE)
 	cannon.give(Loadout.CANNON, 1)
@@ -1950,12 +1952,12 @@ func _check_rank_caps_and_range() -> void:
 	make69.stats = cannon.stats
 	make69.set_seed(2)
 	_lock_power_at(make69, 100.0, 69.0)
-	check(near(make69.max_range, 71.0) and make69.result_text == "GOOD", "Cannon I lifts Bruce to 71 so kick 18 can be GOOD, got %s range %s" % [make69.result_text, make69.max_range])
-	var miss72 := KickLogic.new()
-	miss72.stats = cannon.stats
-	miss72.set_seed(2)
-	_lock_power_at(miss72, 100.0, 72.0)
-	check(near(miss72.max_range, 71.0) and miss72.result_text == "SHORT", "kick 19 at 72 is still SHORT with Cannon I, got %s" % miss72.result_text)
+	check(near(make69.max_range, 76.0) and make69.result_text == "GOOD", "Cannon I lifts Bruce to 76 so kick 18 can be GOOD, got %s range %s" % [make69.result_text, make69.max_range])
+	var miss80 := KickLogic.new()
+	miss80.stats = cannon.stats
+	miss80.set_seed(2)
+	_lock_power_at(miss80, 100.0, 80.0)
+	check(near(miss80.max_range, 76.0) and miss80.result_text == "SHORT", "80 yards is still SHORT with Cannon I, got %s" % miss80.result_text)
 	cannon.give(Loadout.CANNON, 4)
 	check(near(cannon.stats.range_bonus, 24.0), "Cannon Cleats IV is still +24 yards")
 	cannon.give(Loadout.CANNON, 5)
@@ -1966,17 +1968,22 @@ func _check_rank_caps_and_range() -> void:
 	check(cannon.cleats_rank == 6, "equipment does not rank past VI")
 	var walk_stats := KickerStats.new()
 	Kickers.apply_to(walk_stats, Kickers.WALK_ON)
-	check(near(walk_stats.range_base + walk_stats.range_per_power * 100.0, 60.0), "Walk-On P=100 with no bonuses is 60.0 yards")
+	check(near(walk_stats.range_base + walk_stats.range_per_power * 100.0, 55.0), "Walk-On P=100 with no bonuses is 55.0 yards")
+	var kick8 := KickLogic.new()
+	kick8.stats = walk_stats
+	kick8.set_seed(4)
+	_lock_power_at(kick8, 100.0, 53.0)
+	check(near(kick8.max_range, 55.0) and kick8.result_text == "GOOD", "kick 8 at 53 can be GOOD on Walk-On full power, got %s" % kick8.result_text)
 	var kick10 := KickLogic.new()
 	kick10.stats = walk_stats
 	kick10.set_seed(4)
 	_lock_power_at(kick10, 100.0, 60.0)
-	check(near(kick10.max_range, 60.0) and kick10.result_text == "GOOD", "kick 10 at 60 can be GOOD on Walk-On full power, got %s" % kick10.result_text)
+	check(near(kick10.max_range, 55.0) and kick10.result_text == "SHORT", "kick 10 at 60 is SHORT on Walk-On full power, got %s" % kick10.result_text)
 	var kick14 := KickLogic.new()
 	kick14.stats = walk_stats
 	kick14.set_seed(4)
 	_lock_power_at(kick14, 100.0, 65.0)
-	check(near(kick14.max_range, 60.0) and kick14.result_text == "SHORT", "kick 14 at 65 is SHORT on Walk-On full power, got %s" % kick14.result_text)
+	check(near(kick14.max_range, 55.0) and kick14.result_text == "SHORT", "kick 14 at 65 is SHORT on Walk-On full power, got %s" % kick14.result_text)
 	var pins := RunLogic.new()
 	pins.new_run()
 	pins.give(Loadout.PINPOINT, 4)
@@ -2695,7 +2702,7 @@ func _check_endless_and_farm() -> void:
 	var bruce := RunLogic.new()
 	bruce.start_with_kicker(Kickers.BIG_BRUCE)
 	bruce.run_mode = "endless"
-	check(near(bruce.stats.range_base + bruce.stats.range_per_power * 100.0, 65.0), "Bruce with no items is still 65 yards at full power")
+	check(near(bruce.stats.range_base + bruce.stats.range_per_power * 100.0, 70.0), "Bruce with no items is still 70 yards at full power")
 	bruce.kick_number = 11
 	check(near(bruce.distance_yards(), 70.0), "Endless kick 11 is 70 yards")
 	check(KickLogic.classify(65.0, 70.0, 0.0) == "SHORT", "65 yards is SHORT of a 70-yard kick")
@@ -2705,7 +2712,7 @@ func _check_endless_and_farm() -> void:
 	bruce.give(Loadout.STONE)
 	bruce.give(Loadout.SHAKY)
 	var piled := bruce.stats.range_base + bruce.stats.range_per_power * 100.0 + bruce.stats.range_bonus
-	check(piled >= 200.0 and near(piled, 229.0), "Bruce's range pile reaches about 229 yards, got %s" % piled)
+	check(piled >= 200.0 and near(piled, 234.0), "Bruce's range pile reaches about 234 yards, got %s" % piled)
 	var walk := RunLogic.new()
 	walk.start_with_kicker(Kickers.WALK_ON)
 	walk.give(Loadout.CANNON, 12)
@@ -2717,7 +2724,7 @@ func _check_endless_and_farm() -> void:
 	walk.give(Loadout.STONE)
 	walk.give(Loadout.SHAKY)
 	var walk_pile := walk.stats.range_base + walk.stats.range_per_power * 100.0 + walk.stats.range_bonus
-	check(walk_pile >= 200.0 and near(walk_pile, 224.0), "Walk-On's range pile reaches about 224 yards, got %s" % walk_pile)
+	check(walk_pile >= 200.0 and near(walk_pile, 219.0), "Walk-On's range pile reaches about 219 yards, got %s" % walk_pile)
 	var howl := RunLogic.new()
 	howl.start_with_kicker(Kickers.BIG_BRUCE)
 	howl.run_mode = "endless"
@@ -2726,26 +2733,26 @@ func _check_endless_and_farm() -> void:
 	howl.give(Loadout.GLASS_LEG, 6)
 	howl.give(Loadout.HOWLING)
 	var howled := howl.stats.range_base + howl.stats.range_per_power * 100.0 + howl.stats.range_bonus
-	check(near(howled, 65.0 + (72.0 + 24.0 + 48.0) * 1.10), "Howling Wind multiplies the Endless range bonuses, got %s" % howled)
+	check(near(howled, 70.0 + (72.0 + 24.0 + 48.0) * 1.10), "Howling Wind multiplies the Endless range bonuses, got %s" % howled)
 	var low := KickLogic.new()
 	Kickers.apply_to(low.stats, Kickers.BIG_BRUCE)
 	low.kick_distance = 48.0
 	_swing_to(low, 20.0, 0.0)
-	check(near(low.power, 20.0) and near(low.max_range, 55.2), "a raw press of 20 still shows, and the kick uses 55.2 yards")
+	check(near(low.power, 20.0) and near(low.max_range, 59.2), "a raw press of 20 still shows, and the kick uses 59.2 yards")
 	check(low.result_text == "GOOD", "Farm Strength makes a 48-yard kick GOOD from a weak press")
 	var sixty := KickLogic.new()
 	Kickers.apply_to(sixty.stats, Kickers.BIG_BRUCE)
 	sixty.kick_distance = 60.0
 	_swing_to(sixty, 20.0, 0.0)
-	check(sixty.result_text == "SHORT" and near(sixty.max_range, 55.2), "the same weak press is SHORT at 60 yards")
+	check(sixty.result_text == "SHORT" and near(sixty.max_range, 59.2), "the same weak press is SHORT at 60 yards")
 	var ninety := KickLogic.new()
 	Kickers.apply_to(ninety.stats, Kickers.BIG_BRUCE)
 	_swing_to(ninety, 90.0, 0.0)
-	check(near(ninety.power, 90.0) and near(ninety.max_range, 60.1), "P=90 stays 90 and reaches 60.1 yards")
+	check(near(ninety.power, 90.0) and near(ninety.max_range, 64.6), "P=90 stays 90 and reaches 64.6 yards")
 	var full := KickLogic.new()
 	Kickers.apply_to(full.stats, Kickers.BIG_BRUCE)
 	_swing_to(full, 100.0, 0.0)
-	check(near(full.max_range, 65.0), "P=100 is still 65 yards")
+	check(near(full.max_range, 70.0), "P=100 is still 70 yards")
 	var iced := RunLogic.new()
 	iced.start_with_kicker(Kickers.BIG_BRUCE)
 	iced.give(Loadout.ICED)
@@ -2799,7 +2806,7 @@ func _check_new_kickers() -> void:
 	check(near(phil_stats.accuracy, 112.0) and near(phil_stats.perfect_band, 1.68) and near(phil_stats.good_band, 6.72), "Phil bands are ±1.68 / ±6.72")
 	check(near(gary_stats.accuracy, 98.0) and near(gary_stats.perfect_band, 1.47) and near(gary_stats.good_band, 5.88), "Gary bands are ±1.47 / ±5.88")
 	check(near(vex_stats.accuracy, 94.0) and near(vex_stats.perfect_band, 1.41) and near(vex_stats.good_band, 5.64), "Vex bands are ±1.41 / ±5.64")
-	check(near(phil_stats.range_base + phil_stats.range_per_power * 100.0, 55.0), "Phil at P=100 with no items is 55 yards")
+	check(near(phil_stats.range_base + phil_stats.range_per_power * 100.0, 54.0), "Phil at P=100 with no items is 54 yards")
 	check(near(gary_stats.range_base + gary_stats.range_per_power * 100.0, 65.0), "Gary at P=100 with no items is 65 yards")
 	check(gary_stats.ball_type == "standard" and phil_stats.ball_type == "standard" and vex_stats.ball_type == "standard", "the new kickers use default wind, not the Farm Ball")
 	var phil_time := _measure_power_sweep(Kickers.PHIL)
@@ -2891,30 +2898,33 @@ func _check_new_kickers() -> void:
 		dirty.attempts = 3
 		dirty.resolve_kick("GOOD", 0.0, false)
 	check(not records.has_unlock(Kickers.GARY), "a converted miss keeps Gary locked")
-	var vex_short := KickLogic.new()
-	Kickers.apply_to(vex_short.stats, Kickers.VEX)
-	vex_short.kick_distance = 35.0
-	_swing_to(vex_short, 80.0, 0.0)
-	check(near(vex_short.max_range, 30.0) and vex_short.result_text == "SHORT", "Vex at 80 power is SHORT by about 5, got %s %s" % [vex_short.max_range, vex_short.result_text])
-	var vex_88 := KickLogic.new()
-	Kickers.apply_to(vex_88.stats, Kickers.VEX)
-	vex_88.kick_distance = 35.0
-	_swing_to(vex_88, 88.0, 0.0)
-	check(near(vex_88.max_range, 40.0, 0.05) and vex_88.result_text == "GOOD", "Vex at 88 power clears a 35-yard kick by 5, got %s" % vex_88.max_range)
+	var vex_half := KickLogic.new()
+	Kickers.apply_to(vex_half.stats, Kickers.VEX)
+	vex_half.kick_distance = 35.0
+	check(near(float(vex_half.carry_plan(50.0, 0.0)["travel"]), 258.0), "Vex at 50 percent carries 258 yards")
+	var vex_low := KickLogic.new()
+	Kickers.apply_to(vex_low.stats, Kickers.VEX)
+	vex_low.kick_distance = 75.0
+	_swing_to(vex_low, 10.0, 0.0)
+	check(near(vex_low.max_range, 64.4, 0.05) and vex_low.result_text == "SHORT", "Vex at 10 percent on 75 yards is SHORT, got %s %s" % [vex_low.max_range, vex_low.result_text])
 	var vex_100 := KickLogic.new()
 	Kickers.apply_to(vex_100.stats, Kickers.VEX)
 	vex_100.kick_distance = 35.0
 	_swing_to(vex_100, 100.0, 0.0)
-	check(near(vex_100.max_range, 55.0, 0.05), "Vex at 100 power clears by 20 yards, got %s" % vex_100.max_range)
-	vex_88.reset_kick()
-	vex_88.stats.range_bonus = 6.0
-	_swing_to(vex_88, 88.0, 0.0)
-	check(near(vex_88.max_range, 46.0, 0.05), "Cannon +6 adds on top of Vex clearance, got %s" % vex_88.max_range)
+	check(near(vex_100.max_range, 500.0, 0.05) and vex_100.result_text == "GOOD", "Vex at 100 power carries 500 yards, got %s" % vex_100.max_range)
+	var vex_cannon := KickLogic.new()
+	Kickers.apply_to(vex_cannon.stats, Kickers.VEX)
+	vex_cannon.stats.range_bonus = 6.0
+	vex_cannon.kick_distance = 35.0
+	check(near(float(vex_cannon.carry_plan(100.0, 0.0)["travel"]), 506.0), "Cannon I adds 6 yards on top of Vex's 500")
+	vex_cannon.overpower_paid = true
+	vex_cannon.stats.tip_lock_yards = 5.0
+	check(near(float(vex_cannon.carry_plan(100.0, 0.0)["travel"]), 515.0), "OVERPOWER adds 4 and Iron Grip yards for Vex")
 	var vex_far := KickLogic.new()
 	Kickers.apply_to(vex_far.stats, Kickers.VEX)
 	vex_far.kick_distance = 1000.0
-	_swing_to(vex_far, 88.0, 0.0)
-	check(vex_far.result_text != "SHORT" and vex_far.max_range >= 1000.0, "88 power is never SHORT, even at 1000 yards")
+	_swing_to(vex_far, 100.0, 0.0)
+	check(vex_far.result_text == "SHORT" and near(vex_far.max_range, 500.0), "full power is SHORT of 1000 yards")
 	var vex_wind := KickLogic.new()
 	Kickers.apply_to(vex_wind.stats, Kickers.VEX)
 	vex_wind.kick_distance = 35.0
@@ -3558,7 +3568,7 @@ func _check_rw2() -> void:
 	west.wind_speed = 11
 	west.wind_direction = 270.0
 	var blown: Dictionary = west.carry_plan(100.0, 0.0)
-	check(near(float(curved["drift"]), float(blown["drift"])), "no-wind Vex matches 11 mph of west wind, got %s vs %s" % [curved["drift"], blown["drift"]])
+	check(near(float(curved["drift"]), float(blown["drift"])) and near(float(curved["drift"]), -2.5025, 0.0001), "no-wind Vex matches 11 mph of west wind, got %s vs %s" % [curved["drift"], blown["drift"]])
 	saucer.howling_wind = true
 	var howled: Dictionary = saucer.carry_plan(100.0, 0.0)
 	check(near(float(howled["drift"]), float(curved["drift"]) * 1.5), "Howling still scales the wind minus the saucer")
@@ -4078,8 +4088,15 @@ func _check_tw1() -> void:
 	var vex := RunLogic.new()
 	vex.start_with_kicker(Kickers.VEX)
 	var vex_kick := _tw1_kick(vex)
-	vex_kick.kick_distance = 1000.0
-	check(bool(vex.too_weak_report(vex_kick)["clearance"]) and not bool(vex.too_weak_report(vex_kick)["too_weak"]), "Vex never ends TOO WEAK")
+	vex.run_mode = "endless"
+	vex.kick_number = 117
+	vex_kick.kick_distance = vex.distance_yards()
+	var vex_far_report: Dictionary = vex.too_weak_report(vex_kick)
+	check(not vex_far_report.has("clearance") and bool(vex_far_report["too_weak"]), "Endless past Vex's best case is TOO WEAK, got %s" % vex_far_report)
+	var vex_standard := RunLogic.new()
+	vex_standard.start_with_kicker(Kickers.VEX)
+	var vex_open := _tw1_kick(vex_standard)
+	check(not vex_standard.too_weak_report(vex_open).has("clearance") and not bool(vex_standard.too_weak_report(vex_open)["too_weak"]), "Standard kick 1 is not TOO WEAK for Vex")
 	var ended := RunLogic.new()
 	ended.start_with_kicker(Kickers.BIG_BRUCE)
 	var score_before := ended.score
@@ -4878,7 +4895,7 @@ func _check_wind_visor_path() -> void:
 	snowed.snow_penalty = 4.0
 	check(float(snowed.preview_plan()["travel"]) < float(plain.preview_plan()["travel"]) - 3.0, "snow shortens the preview")
 	var cleared := _visor_kick(Kickers.VEX, 0.0, 0.0)
-	check(bool(cleared.preview_plan()["reached"]) and float(cleared.preview_plan()["travel"]) > cleared.kick_distance, "Vex clearance is in the preview")
+	check(bool(cleared.preview_plan()["reached"]) and near(float(cleared.preview_plan()["travel"]), 500.0), "Vex's preview carries the 500 yard base")
 	var before := _visor_kick(Kickers.WALK_ON, 0.0, 0.0)
 	before.phase = KickLogic.Phase.AIMING
 	before.power = 0.0
@@ -4969,9 +4986,9 @@ func _check_drive_lid_and_power_safety() -> void:
 	var bruce := RunLogic.new()
 	bruce.start_with_kicker(Kickers.BIG_BRUCE)
 	var bare := bruce.stats.range_base + bruce.stats.range_per_power * 100.0
-	check(near(bare, 65.0), "full-power Bruce with no range items is 65 yards")
+	check(near(bare, 70.0), "full-power Bruce with no range items is 70 yards")
 	bruce.give(Loadout.DRIVE_LID, 1)
-	check(near(bruce.stats.range_base + bruce.stats.range_per_power * 100.0 + bruce.stats.range_bonus, 69.0), "Drive Lid I makes that Bruce 69 yards")
+	check(near(bruce.stats.range_base + bruce.stats.range_per_power * 100.0 + bruce.stats.range_bonus, 74.0), "Drive Lid I makes that Bruce 74 yards")
 	check(near(bruce.stats.range_bonus, 4.0) and not bruce.stats.flag_reader and not bruce.stats.thin_air, "Drive Lid I is only +4 yards")
 	bruce.give(Loadout.HOWLING)
 	check(near(bruce.stats.range_bonus, 4.4), "Howling Wind makes Drive Lid I +4.4 yards")
@@ -5117,16 +5134,16 @@ func _check_m2_kickers() -> void:
 	var vex_stats := KickerStats.new()
 	Kickers.apply_to(vex_stats, Kickers.VEX)
 	check(near(cole_stats.accuracy, 120.0) and near(cole_stats.perfect_band, 1.8) and near(cole_stats.good_band, 7.2) and near(cole_stats.ball_speed_mult, 1.0), "Cole is accuracy 120, bands ±1.80 / ±7.20, and ball_speed_mult 1")
-	check(near(cole_stats.range_base + cole_stats.range_per_power * 100.0, 70.0) and cole_stats.brand_deal and cole_stats.showtime, "Cole's cap is 70 and his kit is Brand Deal plus Showtime")
+	check(near(cole_stats.range_base + cole_stats.range_per_power * 100.0, 75.0) and cole_stats.brand_deal and cole_stats.showtime, "Cole's cap is 75 and his kit is Brand Deal plus Showtime")
 	check(near(willow_stats.accuracy, 88.0) and near(willow_stats.perfect_band, 1.32) and near(willow_stats.good_band, 5.28) and near(willow_stats.ball_speed_mult, 0.50), "Willow is accuracy 88, bands ±1.32 / ±5.28, and the Chill Ball is 0.50")
 	check(near(willow_stats.range_base + willow_stats.range_per_power * 100.0, 50.0) and willow_stats.synchronicity, "Willow's cap is 50 and her kit is Synchronicity")
 	check(near(carlos_stats.accuracy, 96.0) and near(carlos_stats.perfect_band, 1.44) and near(carlos_stats.good_band, 5.76) and near(carlos_stats.ball_speed_mult, 1.15), "Carlos is accuracy 96, bands ±1.44 / ±5.76, and the Not So Secret Weapon is 1.15")
-	check(near(carlos_stats.range_base + carlos_stats.range_per_power * 100.0, 66.0) and carlos_stats.numero_dos and not carlos_stats.brand_deal, "Carlos's cap is 66, Numero Dos is on, and the shop is not blocked")
+	check(near(carlos_stats.range_base + carlos_stats.range_per_power * 100.0, 69.0) and carlos_stats.numero_dos and not carlos_stats.brand_deal, "Carlos's cap is 69, Numero Dos is on, and the shop is not blocked")
 	check(near(bruce_stats.accuracy, 90.0) and near(bruce_stats.ball_speed_mult, 1.0) and near(bruce_stats.power_floor, 80.0), "Bruce's rating, needle, and Farm Strength are unchanged")
 	check(near(walk_stats.accuracy, 100.0) and near(walk_stats.ball_speed_mult, 1.0) and walk_stats.rerolls_per_run == 2, "Walk-On's rating, needle, and rerolls are unchanged")
 	check(near(phil_stats.accuracy, 112.0) and near(phil_stats.ball_speed_mult, 1.0) and phil_stats.house_account, "Phil's rating, needle, and House Account are unchanged")
 	check(near(gary_stats.accuracy, 98.0) and near(gary_stats.ball_speed_mult, 1.0) and gary_stats.good_as_gold, "Gary's rating, needle, and Good As Gold are unchanged")
-	check(near(vex_stats.accuracy, 94.0) and near(vex_stats.ball_speed_mult, 1.0) and vex_stats.clearance, "Vex's rating, needle, and clearance are unchanged")
+	check(near(vex_stats.accuracy, 94.0) and near(vex_stats.ball_speed_mult, 1.0) and not vex_stats.clearance and near(vex_stats.saucer_mph, 11.0), "Vex's rating, needle, and saucer stay, and clearance is off")
 	check(near(_measure_power_sweep(Kickers.COLE), 0.700, 0.004), "Cole's POWER to MAX is still 0.700s")
 	check(near(_measure_power_sweep(Kickers.WILLOW), 1.400, 0.006), "Willow's Chill Ball POWER to MAX is about 1.400s")
 	check(near(_measure_power_sweep(Kickers.CARLOS), 0.700 / 1.15, 0.006), "Carlos's POWER to MAX is about 0.609s")
@@ -5396,7 +5413,7 @@ func _check_honest_cards_and_bench() -> void:
 	check(Loadout.effect_line(Loadout.CANNON, 12) == "+72 yd" and Loadout.effect_line(Loadout.DRIVE_LID, 12) == "+48 yd", "Cannon and Drive Lid cards still show the growing totals")
 	var phil := str(Kickers.get_def(Kickers.PHIL)["excels"])
 	check(phil.find("including B12") >= 0 and phil.find("Shelf rerolls still cost cash") >= 0 and phil.find("not only shop bottles") >= 0, "Phil's select line names free shop goods and the wider 15 percent")
-	check(str(Kickers.get_def(Kickers.PHIL)["downside"]) == "55 yards with nothing on. Rerolls still cost cash.", "Phil's downside stays 55 yards and paid rerolls")
+	check(str(Kickers.get_def(Kickers.PHIL)["downside"]) == "54 yards with nothing on. Rerolls still cost cash.", "Phil's downside stays 54 yards and paid rerolls")
 	check(Vitamins.effect_line(Vitamins.OMEGA) == "Good wipes the aim error. No +5 Perfect bonus. Perfect cash still pays.", "Omega-3 names the missing score bonus and the cash that still pays")
 	var bench := RunLogic.new()
 	bench.new_run()
@@ -5795,7 +5812,7 @@ func _check_broadcast_hud() -> void:
 	check(BroadcastHud.plate_number(Kickers.WALK_ON) == "NO.4" and BroadcastHud.plate_number(Kickers.BIG_BRUCE) == "NO.55", "Bruce and Walk-On keep their numbers")
 	for id in [Kickers.PHIL, Kickers.GARY, Kickers.VEX, Kickers.COLE, Kickers.WILLOW, Kickers.CARLOS]:
 		check(BroadcastHud.plate_number(id) == "", "no invented jersey for %s" % id)
-	check(BroadcastHud.kit_text(Kickers.VEX) == "INFINITE RANGE AND BEYOND" and BroadcastHud.kit_text(Kickers.VEX).find("&") < 0, "Vex kit text has no ampersand")
+	check(BroadcastHud.kit_text(Kickers.VEX) == "OUT OF THIS WORLD RANGE" and BroadcastHud.kit_text(Kickers.VEX).find("&") < 0 and BroadcastHud.kit_text(Kickers.VEX).find("!") < 0, "Vex kit text is Out of This World Range")
 	check(BroadcastHud.max_warning(70.0, 60.0) and not BroadcastHud.max_warning(35.0, 60.0), "MAX warns only when the kick is longer than the range")
 	check(BroadcastHud.max_fill(35.0, 70.0) < 1.0 and BroadcastHud.max_fill(70.0, 60.0) == 1.0, "the bar fills from required distance over max range")
 	check(BroadcastHud.payout_text("+$4") == "+4" and BroadcastHud.payout_text("") == "", "the payout drops the dollar sign and hides a zero")
@@ -5849,16 +5866,16 @@ func _check_equipment_xxiv() -> void:
 	endless.give(Loadout.CANNON, 24)
 	check(endless.cleats_rank == 24 and Loadout.max_rank(Loadout.CANNON, "endless") == 24, "Endless equipment can reach XXIV")
 	var bruce := _full_power_range(Kickers.BIG_BRUCE, Loadout.CANNON, 12, "", 0)
-	check(near(bruce, 137.0), "Bruce with Cannon XII is 137 yards, got %s" % bruce)
+	check(near(bruce, 142.0), "Bruce with Cannon XII is 142 yards, got %s" % bruce)
 	var bruce_lid := _full_power_range(Kickers.BIG_BRUCE, "", 0, Loadout.DRIVE_LID, 12)
-	check(near(bruce_lid, 113.0), "Bruce with Drive Lid XII is 113 yards, got %s" % bruce_lid)
+	check(near(bruce_lid, 118.0), "Bruce with Drive Lid XII is 118 yards, got %s" % bruce_lid)
 	var willow := _two_power_range(Kickers.WILLOW)
 	check(near(willow, 788.0), "Willow with Cannon XXIV and Drive Lid XXIV is 788, got %s" % willow)
 	var cole := _two_power_range(Kickers.COLE)
-	check(near(cole, 808.0), "Cole with Cannon XXIV and Drive Lid XXIV is 808, got %s" % cole)
+	check(near(cole, 813.0), "Cole with Cannon XXIV and Drive Lid XXIV is 813, got %s" % cole)
 	check(willow < 1000.0 and cole < 1000.0, "Cannon XXIV plus Drive XXIV is short of 1000")
 	check(near(_one_power_range(Kickers.WILLOW), 491.0), "Willow with only Cannon XXIV is 491")
-	check(near(_one_power_range(Kickers.COLE), 511.0), "Cole with only Cannon XXIV is 511")
+	check(near(_one_power_range(Kickers.COLE), 516.0), "Cole with only Cannon XXIV is 516")
 	var stacked := RunLogic.new()
 	stacked.start_with_kicker(Kickers.COLE)
 	stacked.run_mode = "endless"
@@ -5877,7 +5894,7 @@ func _check_equipment_xxiv() -> void:
 	var vex_kick := KickLogic.new()
 	vex_kick.stats = vex.stats
 	vex_kick.kick_distance = 1000.0
-	check(near(vex_kick.max_range_at_full_power(), 1020.0), "Vex at 1000 yards with no items still travels 1020")
+	check(near(vex_kick.max_range_at_full_power(), 500.0) and vex_kick.max_range_at_full_power() < vex_kick.kick_distance, "Vex at 1000 yards with no items carries 500 and is short")
 	_check_soft_caps()
 	_check_new_styles()
 
@@ -5957,13 +5974,13 @@ func _check_soft_caps() -> void:
 	var strong := _pace_range(Kickers.COLE, 24, true)
 	var short_air := _pace_range(Kickers.COLE, 18, true)
 	var bruce_pair := _two_power_range(Kickers.BIG_BRUCE)
-	check(near(strong, 1026.0, 0.1) and strong >= 1000.0, "Cole's strong build makes 1000, got %s" % strong)
-	check(near(short_air, 953.0, 0.1) and short_air < 1000.0, "Cole with High-Air XVIII is short, got %s" % short_air)
-	check(near(bruce_pair, 803.0, 0.1) and bruce_pair < 1000.0, "Bruce with Cannon and Drive XXIV is short, got %s" % bruce_pair)
+	check(near(strong, 1031.0, 0.1) and strong >= 1000.0, "Cole's strong build makes 1000, got %s" % strong)
+	check(near(short_air, 958.0, 0.1) and short_air < 1000.0, "Cole with High-Air XVIII is short, got %s" % short_air)
+	check(near(bruce_pair, 808.0, 0.1) and bruce_pair < 1000.0, "Bruce with Cannon and Drive XXIV is short, got %s" % bruce_pair)
 	check(near(_pace_range(Kickers.WILLOW, 24, false), 932.0, 0.1), "Willow with all three range items at XXIV is 932")
-	check(near(_pace_range(Kickers.COLE, 24, false), 952.0, 0.1), "Cole with all three range items at XXIV is 952")
+	check(near(_pace_range(Kickers.COLE, 24, false), 957.0, 0.1), "Cole with all three range items at XXIV is 957")
 	check(near(_pace_range(Kickers.WILLOW, 24, true), 1006.0, 0.1), "Willow's strong build makes 1000")
-	check(near(_pace_range(Kickers.BIG_BRUCE, 24, true), 1021.0, 0.1), "Bruce's strong build makes 1000")
+	check(near(_pace_range(Kickers.BIG_BRUCE, 24, true), 1026.0, 0.1), "Bruce's strong build makes 1000")
 	check(Loadout.effect_line(Loadout.ICED, 1).find("+0.75 Mult") >= 0, "Iced shows +0.75 Mult")
 	check(Loadout.effect_line(Loadout.NARROW, 1).find("+0.75 Mult") >= 0, "Narrow Posts shows +0.75 Mult")
 	check(Loadout.effect_line(Loadout.TIGHT, 1).find("+1.0 Mult") >= 0, "Tight Window shows +1.0 Mult")
@@ -6678,11 +6695,11 @@ func _check_playing_card() -> void:
 		var card: Rect2 = rect
 		check(card.size.y > card.size.x and absf(card.size.x / card.size.y - 5.0 / 7.0) < 0.03, "cards keep the 5:7 playing-card shape, got %s" % card.size)
 	check(SelectCard.card_name(Kickers.WALK_ON) == "THE WALK ON" and SelectCard.ball_line(Kickers.WALK_ON) == "TEAM ISSUE", "Walk-On copy has no hyphen")
-	check(SelectCard.yard_cap(Kickers.BIG_BRUCE) == 65 and SelectCard.yard_cap(Kickers.WALK_ON) == 60 and SelectCard.yard_cap(Kickers.PHIL) == 55 and SelectCard.yard_cap(Kickers.GARY) == 65, "starter and Phil and Gary caps stay the no-item 100 percent range")
-	check(SelectCard.yard_cap(Kickers.COLE) == 70 and SelectCard.yard_cap(Kickers.WILLOW) == 50 and SelectCard.yard_cap(Kickers.CARLOS) == 66, "Cole, Willow, and Carlos caps stay the no-item 100 percent range")
-	check(SelectCard.yard_cap(Kickers.VEX) < 0 and SelectCard.corner_text(Kickers.VEX, true) == "MAX" and SelectCard.corner_text(Kickers.VEX, true) != "20" and SelectCard.corner_text(Kickers.VEX, true) != "1000", "Vex has no numeric yard cap")
+	check(SelectCard.yard_cap(Kickers.BIG_BRUCE) == 70 and SelectCard.yard_cap(Kickers.WALK_ON) == 55 and SelectCard.yard_cap(Kickers.PHIL) == 54 and SelectCard.yard_cap(Kickers.GARY) == 65, "starter and Phil and Gary caps are the no-item 100 percent range")
+	check(SelectCard.yard_cap(Kickers.COLE) == 75 and SelectCard.yard_cap(Kickers.WILLOW) == 50 and SelectCard.yard_cap(Kickers.CARLOS) == 69, "Cole, Willow, and Carlos caps are the no-item 100 percent range")
+	check(SelectCard.yard_cap(Kickers.VEX) == 500 and SelectCard.corner_text(Kickers.VEX, true) == "500", "Vex's corner is 500")
 	check(SelectCard.corner_text(Kickers.PHIL, false) == ".." and SelectCard.corner_text(Kickers.VEX, false) == "..", "locked corners use a glyph-safe mark instead of a hyphen")
-	check(SelectCard.kit_lines(Kickers.VEX)[0] == "INFINITE RANGE" and SelectCard.ball_line(Kickers.VEX) == "THE FLYING SAUCER", "unlocked Vex shows the saucer kit")
+	check(SelectCard.kit_lines(Kickers.VEX).size() == 2 and SelectCard.kit_lines(Kickers.VEX)[0] == "OUT OF THIS" and SelectCard.kit_lines(Kickers.VEX)[1] == "WORLD RANGE" and SelectCard.ball_line(Kickers.VEX) == "THE FLYING SAUCER", "unlocked Vex shows both kit lines and the saucer")
 	var safe := true
 	var bad := ""
 	for line in SelectCard.every_line():
@@ -8501,4 +8518,140 @@ func _check_fx1_live() -> void:
 	game._shop_click(hud.shop_belt_rect(0).get_center())
 	check(str(game.run.belt[0]) == "", "a belt click sells like the key")
 	game.free()
+
+
+func _rs1_lock(id: String, distance: float, power: float, aim: float) -> KickLogic:
+	var kick := KickLogic.new()
+	Kickers.apply_to(kick.stats, id)
+	kick.kick_distance = distance
+	kick.wind_speed = 0.0
+	kick.aim_degrees = aim
+	kick.set_seed(3)
+	_swing_to(kick, power, 0.0)
+	return kick
+
+
+func _check_rs1() -> void:
+	check(near(KickConstants.RANGE_PER_POWER, 0.44), "the default range per power stays 0.44")
+	var caps := {
+		Kickers.COLE: 75.0,
+		Kickers.BIG_BRUCE: 70.0,
+		Kickers.CARLOS: 69.0,
+		Kickers.GARY: 65.0,
+		Kickers.WALK_ON: 55.0,
+		Kickers.PHIL: 54.0,
+		Kickers.WILLOW: 50.0,
+		Kickers.VEX: 500.0,
+	}
+	for id in caps:
+		var stats := KickerStats.new()
+		Kickers.apply_to(stats, id)
+		var full: float = stats.range_base + stats.range_per_power * 100.0
+		check(near(full, float(caps[id])), "%s full power is %s, got %s" % [id, caps[id], full])
+		check(SelectCard.yard_cap(id) == int(round(full)), "%s yard cap matches the table" % id)
+		check(not stats.clearance, "%s does not set clearance" % id)
+	var bruce := KickLogic.new()
+	Kickers.apply_to(bruce.stats, Kickers.BIG_BRUCE)
+	var floored := KickLogic.power_for_range(50.0, bruce.stats.power_floor)
+	check(near(float(bruce.carry_plan(floored, 0.0)["travel"]), 59.2) and near(float(bruce.carry_plan(80.0, 0.0)["travel"]), 59.2), "Bruce at 50 percent carries the same 59.2 as 80 percent")
+	var vex := KickLogic.new()
+	Kickers.apply_to(vex.stats, Kickers.VEX)
+	vex.wind_speed = 0.0
+	check(near(float(vex.carry_plan(50.0, 0.0)["travel"]), 258.0, 0.02), "Vex at 50 percent carries 258")
+	vex.kick_distance = 75.0
+	check(near(float(vex.carry_plan(10.0, 0.0)["travel"]), 64.4, 0.02) and not bool(vex.carry_plan(10.0, 0.0)["reached"]), "Vex at 10 percent on 75 yards is short of the posts")
+	vex.stats.range_bonus = float(Loadout.cannon_yards(1))
+	vex.kick_distance = 35.0
+	check(near(float(vex.carry_plan(100.0, 0.0)["travel"]), 500.0 + float(Loadout.cannon_yards(1))), "Cannon I adds its yards on top of 500")
+	vex.stats.range_bonus = 0.0
+	vex.overpower_paid = true
+	vex.stats.tip_lock_yards = 5.0
+	check(near(float(vex.carry_plan(100.0, 0.0)["travel"]), 509.0), "an OVERPOWER lock adds 4 plus Iron Grip yards for Vex")
+	var west := KickLogic.new()
+	west.kick_distance = 35.0
+	west.wind_speed = 11
+	west.wind_direction = 270.0
+	check(near(float(vex.carry_plan(100.0, 0.0)["drift"]), -2.5025, 0.0001) and near(float(vex.carry_plan(100.0, 0.0)["drift"]), float(west.carry_plan(100.0, 0.0)["drift"])), "Vex with no wind drifts like 11 mph of west wind")
+	var soars := _rs1_lock(Kickers.VEX, 35.0, 100.0, 0.0)
+	check(soars.result_text == "GOOD" and soars.flight_tier == "SOARS" and near(soars.clear_margin, 465.0) and near(soars.travel_yards, 500.0) and near(soars.shown_travel_yards, 65.0) and near(soars.flight_duration, 2.89, 0.02), "Vex at 35 yards soars, got %s %s" % [soars.flight_tier, soars.flight_duration])
+	var cole_soar := _rs1_lock(Kickers.COLE, 35.0, 100.0, 0.0)
+	check(cole_soar.flight_tier == "SOARS" and near(cole_soar.clear_margin, 40.0), "Cole at 35 yards soars")
+	var standard := _rs1_lock(Kickers.WALK_ON, 45.0, 100.0, 0.0)
+	check(standard.flight_tier == "STANDARD" and near(standard.clear_margin, 10.0) and near(standard.shown_travel_yards, standard.travel_yards) and near(standard.travel_yards, 55.0) and near(standard.flight_duration, KickLogic.flight_time_seconds(55.0)) and near(standard.flight_duration, 2.30, 0.001), "Walk-On at 45 yards keeps today's flight")
+	var barely := _rs1_lock(Kickers.COLE, 72.0, 100.0, 0.0)
+	check(barely.flight_tier == "BARELY" and near(barely.clear_margin, 3.0) and near(barely.shown_travel_yards, 76.0) and near(barely.flight_duration, 2.72, 0.001), "Cole at 72 yards barely clears")
+	var under := _rs1_lock(Kickers.COLE, 70.01, 100.0, 0.0)
+	var on_five := _rs1_lock(Kickers.COLE, 70.0, 100.0, 0.0)
+	var on_twelve := _rs1_lock(Kickers.COLE, 63.0, 100.0, 0.0)
+	var over := _rs1_lock(Kickers.COLE, 62.99, 100.0, 0.0)
+	check(under.flight_tier == "BARELY" and near(under.clear_margin, 4.99, 0.02), "margin 4.99 is BARELY, got %s %s" % [under.flight_tier, under.clear_margin])
+	check(on_five.flight_tier == "STANDARD" and near(on_five.clear_margin, 5.0), "margin 5 is STANDARD")
+	check(on_twelve.flight_tier == "STANDARD" and near(on_twelve.clear_margin, 12.0), "margin 12 is STANDARD")
+	check(over.flight_tier == "SOARS" and near(over.clear_margin, 12.01, 0.02), "margin 12.01 is SOARS, got %s %s" % [over.flight_tier, over.clear_margin])
+	var wide := _rs1_lock(Kickers.COLE, 35.0, 100.0, 10.0)
+	check(wide.result_text.begins_with("WIDE") and wide.flight_tier == "" and near(wide.shown_travel_yards, wide.travel_yards) and near(wide.flight_duration, KickLogic.flight_time_seconds(wide.travel_yards)), "a wide kick keeps today's flight")
+	var doink := _rs1_lock(Kickers.COLE, 35.0, 100.0, 5.0)
+	check(doink.result_text == "DOINK" and doink.flight_tier == "" and near(doink.shown_travel_yards, doink.travel_yards), "a doink keeps today's flight, got %s" % doink.result_text)
+	var ring := KickLogic.new()
+	Kickers.apply_to(ring.stats, Kickers.COLE)
+	ring.kick_distance = 35.0
+	ring.aim_degrees = 9.7
+	ring.ring_active = true
+	ring.ring_center = 35.0 * tan(deg_to_rad(9.7))
+	_swing_to(ring, 100.0, 0.0)
+	check(ring.result_text == "BONUS RING" and ring.flight_tier == "" and near(ring.shown_travel_yards, ring.travel_yards) and near(ring.flight_duration, KickLogic.flight_time_seconds(ring.travel_yards)), "a bonus ring keeps today's flight, got %s" % ring.result_text)
+	var moving := KickLogic.new()
+	Kickers.apply_to(moving.stats, Kickers.COLE)
+	moving.kick_distance = 35.0
+	moving.hold_result = true
+	_swing_to(moving, 100.0, 0.0)
+	check(moving.result_text == "" and moving.flight_tier == "" and near(moving.shown_travel_yards, moving.travel_yards) and near(moving.flight_duration, KickLogic.flight_time_seconds(moving.travel_yards)), "a moving-posts kick waits and keeps today's flight")
+	var bank := _rs1_lock(Kickers.COLE, 35.0, 100.0, 0.0)
+	bank.bank_shot = true
+	bank.flight_duration = KickLogic.flight_time_seconds(bank.travel_yards)
+	bank._assign_flight_look()
+	check(bank.flight_tier == "" and near(bank.shown_travel_yards, bank.travel_yards) and near(bank.flight_duration, KickLogic.flight_time_seconds(bank.travel_yards)), "a bank shot keeps today's flight")
+	for tier_name in ["BARELY", "STANDARD", "SOARS"]:
+		var sample: float = 35.0
+		var shown: float = 39.0
+		if tier_name == "STANDARD":
+			shown = 45.0
+		elif tier_name == "SOARS":
+			shown = 65.0
+		check(KickLogic.drawn_arc_height(sample, sample, shown, true, tier_name) > 3.33, "%s is over the crossbar" % tier_name)
+	var t12 := KickLogic.flight_time_seconds(35.0 + 12.0)
+	check(soars.flight_duration <= KickConstants.FLIGHT_SOAR_TIME_MULT * t12 + 0.001 and soars.flight_duration <= t12 + KickConstants.FLIGHT_SOAR_EXTRA_SEC_MAX + 0.001, "a soar is at most 1.35 times, and at most 1.2 seconds longer than, the top standard flight")
+	var reference := KickLogic.classify(soars.travel_yards, soars.kick_distance, soars.offset_yards)
+	var middle := absf(soars.offset_yards) <= KickConstants.MIDDLE_YARDS
+	var scored := RunLogic.points_for(soars.kick_distance, 1.0, middle, false, soars.perfect)
+	var visual := RunLogic.points_for(soars.shown_travel_yards, 1.0, middle, false, soars.perfect)
+	check(soars.result_text == reference and scored != visual, "the soar keeps the real result and score, got %s offset %s" % [soars.result_text, soars.offset_yards])
+	var plate := BroadcastHud.kit_text(Kickers.VEX)
+	check(BitmapFonts.ui_allows(plate) and plate.find("!") < 0 and plate.find("&") < 0, "the Vex plate is Pixel Gothic")
+	for line in SelectCard.kit_lines(Kickers.VEX):
+		check(BitmapFonts.ui_allows(line) and line.find("!") < 0 and line.find("&") < 0, "Vex card line %s is Pixel Gothic" % line)
+	check(BitmapFonts.ui_allows(SelectCard.corner_text(Kickers.VEX, true)), "the 500 corner is Pixel Gothic")
+	var card: Rect2 = SelectCard.grid_rects()[4]
+	var rank_px := SelectCard.corner_px(card, "500")
+	check(BitmapFonts.measure_px("ui", "500", rank_px) <= int(card.size.x * 0.22), "500 fits the card corner")
+	var labels: Dictionary = SelectCard.label_boxes(card, Kickers.VEX)
+	var kit_box: Rect2 = labels["kit"]
+	check(kit_box.size.y > 12.0, "Vex keeps both kit lines on the card")
+	var wrapped := PackedStringArray()
+	var piece := ""
+	for word in plate.split(" "):
+		var trial := word if piece == "" else piece + " " + word
+		if piece != "" and BitmapFonts.measure_px("ui", trial, 12) > 250:
+			wrapped.append(piece)
+			piece = word
+		else:
+			piece = trial
+	if piece != "":
+		wrapped.append(piece)
+	var joined := " ".join(wrapped)
+	var fits := true
+	for row in wrapped:
+		if BitmapFonts.measure_px("ui", row, 12) > 250:
+			fits = false
+	check(joined == plate and fits and wrapped.size() >= 1, "the plate wraps OUT OF THIS WORLD RANGE on word boundaries, got %s" % wrapped)
 

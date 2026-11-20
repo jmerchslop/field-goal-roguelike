@@ -705,7 +705,7 @@ func _draw_playing_card(rect: Rect2, id: String, unlocked: bool, picked: bool) -
 	var orange := Color(0.95, 0.58, 0.18)
 	var ink := cream if unlocked else orange
 	var rank := SelectCard.corner_text(id, unlocked)
-	var rank_px := maxi(9, int(rect.size.y * 0.048))
+	var rank_px := SelectCard.corner_px(rect, rank)
 	if unlocked:
 		_pg(rank, rect.position + Vector2(rect.size.x * 0.045, rect.size.y * 0.012), rank_px, ink)
 		var rank_w := BitmapFonts.measure_px("ui", rank, rank_px)
@@ -723,7 +723,10 @@ func _draw_playing_card(rect: Rect2, id: String, unlocked: bool, picked: bool) -
 		var kits := SelectCard.kit_lines(id)
 		var ball := SelectCard.ball_line(id)
 		if kits.size() > 1 and not _well_fits(kits, ball, well, body):
-			kits = PackedStringArray([kits[kits.size() - 1]])
+			if id == Kickers.VEX:
+				body -= 1
+			else:
+				kits = PackedStringArray([kits[kits.size() - 1]])
 		var lines: PackedStringArray = kits.duplicate()
 		lines.append(ball)
 		_pg_stack(lines, well, body, cream, lines.size() - 1, Color(0.42, 0.82, 0.4))

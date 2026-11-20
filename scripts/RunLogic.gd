@@ -368,7 +368,6 @@ func too_weak_report(kick: KickLogic, blocked: bool = false) -> Dictionary:
 	if kicker_id == Kickers.WALK_ON and is_first_ball and not practice and retry_possible:
 		walk_on = 6.0
 	var best := base + overpower + shakes + vitamin_d + walk_on
-	var clearance := kick != null and kick.stats.clearance
 	var zinc_block := open_belt and _belt_count(Vitamins.ZINC) > 0 and not zinc_used
 	var at_tee := (
 		phase == Phase.PLAYING
@@ -383,7 +382,7 @@ func too_weak_report(kick: KickLogic, blocked: bool = false) -> Dictionary:
 		and not ring_offer_pending
 	)
 	var short := best + TOO_WEAK_CUSHION < required
-	var weak := short and not clearance and not zinc_block and at_tee
+	var weak := short and not zinc_block and at_tee
 	return {
 		"base": base,
 		"overpower": overpower,
@@ -394,7 +393,6 @@ func too_weak_report(kick: KickLogic, blocked: bool = false) -> Dictionary:
 		"best_case": best,
 		"required": required,
 		"zinc_block": zinc_block,
-		"clearance": clearance,
 		"too_weak": weak,
 	}
 

@@ -54,14 +54,25 @@ const RED_TIP_ERROR_MAX := 5.0
 const ACCURACY_DEG_PER_ERROR := 0.35
 
 # Max range = 16 + range_per_power × power.
-# The Walk-On uses 0.44, so full power is 60 yards.
-# Big Bruce uses 0.49, so full power is 65 yards.
+# RANGE_PER_POWER stays the default 0.44. Each kicker sets its own rate in Kickers.apply_to.
 const RANGE_BASE_YARDS := 16.0
 const RANGE_PER_POWER := 0.44
 
-# Flight time = 1.2 + 0.02 × distance. "Distance" is the kick distance.
+# Flight time = 1.2 + 0.02 × distance. "Distance" is the yards the ball is drawn through.
 const FLIGHT_TIME_BASE_SEC := 1.2
 const FLIGHT_TIME_PER_YARD := 0.02
+
+# Made kicks pick one visual flight. The true carry does not change.
+# Margin under 5 yards barely clears. 5 through 12 is today's arc. Over 12 soars.
+const FLIGHT_BARELY_UNDER_YARDS := 5.0
+const FLIGHT_SOARS_OVER_YARDS := 12.0
+const FLIGHT_BARELY_PAST_YARDS := 4.0
+const FLIGHT_BARELY_POST_HEIGHT := 4.1
+const FLIGHT_SOAR_PAST_YARDS := 30.0
+const FLIGHT_SOAR_TOP_HEIGHT := 16.0
+const FLIGHT_SOAR_TIME_MULT := 1.35
+const FLIGHT_SOAR_EXTRA_SEC_MAX := 1.2
+const FLIGHT_STANDARD_POST_HEIGHT := 6.4
 
 # --- The run --------------------------------------------------------------------
 # You start with 1 attempt. The cap starts at 3 and is never allowed past 5.

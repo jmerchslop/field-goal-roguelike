@@ -1,6 +1,7 @@
 # Item, kit, range, and cash audit
 
 Generated: 2026-11-14
+RS1: No-item full-power range is Cole 75, Bruce 70, Carlos 69, Gary 65, Walk-On 55, Phil 54, Willow 50, and Vex 500. Vex uses the same range formula as everyone else. Clearance and the 88% floor are gone. Made kicks draw as BARELY, STANDARD, or SOARS. The true carry, the result, and the HUD Max stay on the real number. Vex's kit reads Out of This World Range.
 FX1: Unlock text lasts 4 seconds. Equipment Manager (still id gear_manager) puts second-style gear into normal offers while a pass is banked. The MULT chip shows the make Mult, including Sudden Death ×5. Snow and rain allocate their particles once. The Vitamin Shop takes one click. The goal-post flags are bright red.
 PK2B: Sudden Death, No Huddle, All Natural, and Training Camp join the curse pool. Sudden Death forces one attempt after every other cap change and multiplies the make Mult by 5 last. No Huddle runs one clock, 5.0s, or 4.0s when the kick is already KICK CLOCK. All Natural is the belt lock: no shop, no belt, needles ×0.70 before the 0.35 floor, and Big Game strips that slow. Training Camp speeds the needles ×1.30 after the floor for 3 makes, then pays +10 yards. No new art.
 PK2A: Hype Man, Gear Manager, and Team Doctor join the perk pool. Hype Man multiplies the other perk's upside by ×1.50 at I and +0.10 per rank (VI ×2.00). It does not scale downsides, attempts, rerolls, passes, or itself. The live order is raw number, then Hype, then Howling at the existing ×1.10 where Howling already applied, then Phil and Gary. Gear Manager grants 1/2/3 second-slot passes and caps at III in both modes. The pass opens the Bonus Ring offer limited to an empty second style. Skip keeps the pass. Removing Gear Manager benches those second slots at about 40% alpha and leaves them in the save. Team Doctor multiplies Protein, Magnesium, Pickle Juice, and Pre-Workout by ×1.50 at I (+0.10 per rank), floors multiplier factors at ×0.10, and leaves the other vitamins alone. No new art.
@@ -19,7 +20,7 @@ RT1: The hidden ±5 red-tip noise is gone. A 95–100 lock is clean, and P=100 i
 **Vitamins:** 11 (10 belt vitamins and B12 Shot)
 **Kickers:** 8
 **Kits:** 8
-**Mismatches:** 1 (Vex's clearance line). BAL1 closed the ten rounding groups on Anchor, Patient, Sticker, Shelter, and True Lid.
+**Mismatches:** 0. RS1 closed Vex's clearance line. BAL1 closed the ten rounding groups on Anchor, Patient, Sticker, Shelter, and True Lid.
 
 ## TOO WEAK check
 
@@ -33,7 +34,7 @@ RT1: The hidden ±5 red-tip noise is gone. A 95–100 lock is clean, and P=100 i
 
 Gear counts only as it is equipped right now, which is already inside the base. That includes a filled R2 second slot and a Gear Manager second slot that is not benched. A benched Gear Manager piece, a banked Gear Manager pass, a shop bottle, and curse yards that pay only after a make are not added. Owning All Natural locks the belt: no shake yards, no Vitamin D, no Zinc block, and no belt Electrolyte. No Huddle's +12 is already inside the base. Training Camp's +10 is inside the base only after 3 makes. Until then it is not added.
 
-`too_weak` is true when `best_case + 0.05` is still short of `kick_distance`, the kicker has no clearance, no unused Zinc is waiting, and the ball is at the tee. Vex never triggers. An unused Tart Cherry is not counted, because removing a curse is a choice; the check runs again after the player removes one. Chain Gang's next-make pay, Hot Streak, Lucky Ball stacks, and Deep Bench refills are not added on top. Moving posts do not change the distance. The flavor lines are NEED MORE LEG., OUT OF RANGE., SEND IN THE PUNTER., CALL THE PUNT TEAM., HIT THE WEIGHT ROOM., NOT ENOUGH BOOT., THE POSTS ARE TOO FAR., and BACK TO THE PRACTICE FIELD.
+`too_weak` is true when `best_case + 0.05` is still short of `kick_distance`, no unused Zinc is waiting, and the ball is at the tee. Vex uses that same check. Standard kick 1 does not trigger it. Endless can, once the kick is past his best case. An unused Tart Cherry is not counted, because removing a curse is a choice; the check runs again after the player removes one. Chain Gang's next-make pay, Hot Streak, Lucky Ball stacks, and Deep Bench refills are not added on top. Moving posts do not change the distance. The flavor lines are NEED MORE LEG., OUT OF RANGE., SEND IN THE PUNTER., CALL THE PUNT TEAM., HIT THE WEIGHT ROOM., NOT ENOUGH BOOT., THE POSTS ARE TOO FAR., and BACK TO THE PRACTICE FIELD.
 
 Numbers below were taken from `Loadout.effect_line`, `Loadout.apply` / `_apply_piece`, `Loadout.cannon_yards`, `Loadout.drive_yards`, `Loadout.high_air_yards`, `Loadout.effect_rank`, `Kickers.apply_to`, `KickLogic.carry_plan`, and `RunLogic.prepare_kick_stats`. A headless run on 2026-11-14 confirmed the range totals and the needle speeds.
 
@@ -455,44 +456,44 @@ The belt has two slots. Sell is only in the shop. A buy without enough cash turn
 
 ## 3. Kicker kits and balls
 
-Base max range here is `carry_plan` at 100% power, 0 wind, no items, no weather penalty, kick distance 35 unless noted. Vex depends on the required distance. Perfect and good bands start at `1.5 × accuracy / 100` and `6 × accuracy / 100`.
+Base max range here is `carry_plan` at 100% power, 0 wind, no items, no weather penalty. Perfect and good bands start at `1.5 × accuracy / 100` and `6 × accuracy / 100`.
 
 | Kicker | Accuracy | Bands | 100% power, no items | Needle ball mult |
 | --- | --- | --- | --- | --- |
-| Big Bruce | 90 | ±1.35 / ±5.40 | 65 yd | 1.00 |
-| The Walk-On | 100 | ±1.50 / ±6.00 | 60 yd | 1.00 |
-| Phil The Pharmacist | 112 | ±1.68 / ±6.72 | 55 yd | 1.00 |
+| Big Bruce | 90 | ±1.35 / ±5.40 | 70 yd | 1.00 |
+| The Walk-On | 100 | ±1.50 / ±6.00 | 55 yd | 1.00 |
+| Phil The Pharmacist | 112 | ±1.68 / ±6.72 | 54 yd | 1.00 |
 | Gary the Goat | 98 | ±1.47 / ±5.88 | 65 yd | 1.00 |
-| Vex | 94 | ±1.41 / ±5.64 | kick distance + 20 yd | 1.00 |
-| Cole Lang | 120 | ±1.80 / ±7.20 | 70 yd | 1.00 |
+| Vex | 94 | ±1.41 / ±5.64 | 500 yd | 1.00 |
+| Cole Lang | 120 | ±1.80 / ±7.20 | 75 yd | 1.00 |
 | Willow Reed | 88 | ±1.32 / ±5.28 | 50 yd | 0.50 |
-| Carlos Hernandez | 96 | ±1.44 / ±5.76 | 66 yd | 1.15 |
+| Carlos Hernandez | 96 | ±1.44 / ±5.76 | 69 yd | 1.15 |
 
 Cole's ball multiplier is 1.00 in `Kickers.apply_to`. It is not 0.90. Carlos is 1.15. Willow is 0.50. Those multiply the needle omega on top of `power_speed` and `accuracy_speed`.
 
 ### Big Bruce
 
-- **Select range:** `"65 yd"`
+- **Select range:** `"70 yd"`
 - **Kit text:** `"Farm Strength. A press under 80% still kicks at 80%."`
-- **actual effect:** `power_floor` is 80. Full power is `16 + 0.49 × 100` = 65 yards before wind and items.
+- **actual effect:** `power_floor` is 80. Full power is `16 + 0.54 × 100` = 70 yards before wind and items.
 - **match:** yes
 - **Ball:** `"The Farm Ball"`. Wind drift ×1.10. A doink stays a doink.
 - **match:** yes
 
 ### The Walk-On
 
-- **Select range:** `"60 yd"`
+- **Select range:** `"55 yd"`
 - **Kit text:** `"Earns His Spot. 2 rerolls a run."`
-- **actual effect:** `rerolls_per_run` is 2. Full power is `16 + 0.44 × 100` = 60 yards. `ball_speed_mult` is 1. On a retry of a kick he missed (`is_first_ball` false, including a mulligan), both needles ×0.90 before the 0.35 floor and max range gains +6 yd. The first ball of a kick never has clutch. Practice Swing does not. The next kick starts on a first ball, so clutch ends.
+- **actual effect:** `rerolls_per_run` is 2. Full power is `16 + 0.39 × 100` = 55 yards. `RANGE_PER_POWER` stays 0.44 for anyone who does not set a rate. `ball_speed_mult` is 1. On a retry of a kick he missed (`is_first_ball` false, including a mulligan), both needles ×0.90 before the 0.35 floor and max range gains +6 yd. The first ball of a kick never has clutch. Practice Swing does not. The next kick starts on a first ball, so clutch ends.
 - **match:** yes
 - **Ball:** `"Team-Issue"`. No trick.
 - **match:** yes
 
 ### Phil The Pharmacist
 
-- **Select range:** `"55 yd"`
+- **Select range:** `"54 yd"`
 - **Kit text:** `"House Account. Shop goods are free, including B12. Shelf rerolls still cost cash. Compounding. Your items are 15% stronger: equipment, perks, curse upsides, and vitamins, not only shop bottles."`
-- **actual effect:** full power is 55 yards. `item_price` is 0, including B12. The shelf reroll still costs cash. Item scale is 1.15 and hits equipment, perks, curse upsides, and vitamins, including both pieces of a doubled type.
+- **actual effect:** full power is 54 yards. `item_price` is 0, including B12. The shelf reroll still costs cash. Item scale is 1.15 and hits equipment, perks, curse upsides, and vitamins, including both pieces of a doubled type.
 - **match:** yes
 - **Ball:** `"The Gelcap"`. One active ball vitamin adds +0.5 Mult once on a make. Not scaled by Compounding. Zinc and Tart Cherry do not count.
 - **match:** yes
@@ -508,18 +509,18 @@ Cole's ball multiplier is 1.00 in `Kickers.apply_to`. It is not 0.90. Carlos is 
 
 ### Vex
 
-- **Select range:** `"Infinite Range & Beyond"`
-- **Kit text:** `"Infinite Range & Beyond. 88% power clears by 5 yards."`
-- **actual effect:** travel is `kick distance + 5 + (power − 88) × 1.25`, plus items and wind. At 88% with no wind the clearance is 5 yards. At 100% it is 20 yards. If power is at least 88 and a headwind or a penalty would leave the ball short, travel is raised only back to the kick distance, not back up to a 5-yard clearance.
-- **match:** mismatch. A headwind, snow, or Heavy Ball can shrink the 5-yard clearance down to just reaching the posts.
-- **Ball:** `"The Flying Saucer"`. 11 mph is subtracted from the crosswind before drift and wind range. Howling then scales the combined vector. Unlock is an Endless make of at least 500 yards, through `resolve_kick`. Failing past 75 yards does not unlock Vex.
+- **Select range:** `"500 yd"`
+- **Kit text:** `"Out of This World Range. A 500 yard base, so full power with nothing on carries 500 yards."`
+- **actual effect:** `range_base` is 16 and `range_per_power` is 4.84, so full power is 500 yards. Items, wind, snow, mud, Heavy Ball, thin air, OVERPOWER, and Iron Grip add the same way they do for every other kicker. There is no clearance rule and no 88% floor. A made kick that clears by more than 12 yards is drawn as SOARS, out to 30 yards past the posts. The true carry stays 500 plus those bonuses.
+- **match:** yes
+- **Ball:** `"The Flying Saucer"`. 11 mph is subtracted from the crosswind before drift and wind range. Howling then scales the combined vector. Unlock is an Endless make of at least 500 yards, through `resolve_kick`. Failing past 75 yards does not unlock Vex. The plate reads `OUT OF THIS WORLD RANGE`. The card splits that into `OUT OF THIS` and `WORLD RANGE`.
 - **match:** yes
 
 ### Cole Lang
 
-- **Select range:** `"70 yd"`
+- **Select range:** `"75 yd"`
 - **Kit text:** `"Brand Deal. Loadout offers stay. The Vitamin Shop does not."`
-- **actual effect:** `follow_offer` skips the shop. The loadout offer still runs. Full power is `16 + 0.54 × 100` = 70 yards. `ball_speed_mult` is 1.00.
+- **actual effect:** `follow_offer` skips the shop. The loadout offer still runs. Full power is `16 + 0.59 × 100` = 75 yards. `ball_speed_mult` is 1.00.
 - **match:** yes
 - **Ball:** `"Showtime"`. A down-the-middle make doubles the Mult used for that score and doubles the stored Showtime factor afterward. A miss sets the stored factor back to 1.
 - **match:** yes
@@ -535,9 +536,9 @@ Cole's ball multiplier is 1.00 in `Kickers.apply_to`. It is not 0.90. Carlos is 
 
 ### Carlos Hernandez
 
-- **Select range:** `"66 yd"`
+- **Select range:** `"69 yd"`
 - **Kit text:** `"Numero Dos. A lock of 95 or higher, including the OVERPOWER band, is a true PERFECT. OVERPOWER range does not apply."` A power of 94 or below is a normal accuracy swing. Flag for Box Score.
-- **actual effect:** a 95–100 lock and an OVERPOWER band lock both force accuracy error to 0 and `perfect` true, at clean P=100. No +4, no Iron Grip yards, no ×1.25, and no OVERPOWER label. Iron Grip can still widen his safe window unless Big Game strips it. An auto-shank never reaches this check. Full power is `16 + 0.50 × 100` = 66 yards.
+- **actual effect:** a 95–100 lock and an OVERPOWER band lock both force accuracy error to 0 and `perfect` true, at clean P=100. No +4, no Iron Grip yards, no ×1.25, and no OVERPOWER label. Iron Grip can still widen his safe window unless Big Game strips it. An auto-shank never reaches this check. Full power is `16 + 0.53 × 100` = 69 yards.
 - **match:** yes
 - **Ball:** `"The Not So Secret Weapon"`. `ball_speed_mult` is 1.15. Items and weather still multiply on top.
 - **match:** yes
@@ -548,32 +549,32 @@ Cole's ball multiplier is 1.00 in `Kickers.apply_to`. It is not 0.90. Carlos is 
 
 1. Wind vector. Vex subtracts 11 mph from the crosswind. Howling multiplies the combined speed by 1.5. Wind Visor then multiplies by `(1 - resistance)`. Hush Gloves then subtract mph, floored at 0.
 2. Wind range is `head_or_tail mph × 0.4`. High-Air multiplies a positive change by 1.5. Shelter Lid multiplies a negative change by `shelter_factor`.
-3. Vex: `travel = kick distance + 5 + (power − 88) × 1.25 + range_bonus + wind range`.
-4. Everyone else: `travel = 16 + range_per_power × power + range_bonus + wind range`.
-5. Snow, thin air (+4), and Heavy Ball (max(2, 2% of the kick distance)) apply after that.
-6. If Vex is at 88% or more and travel is still short of the posts, travel is raised to the kick distance.
+3. Every kicker, including Vex: `travel = range_base + range_per_power × power + range_bonus + wind range`. The base is 16. Vex's rate is 4.84.
+4. Snow, thin air (+4), and Heavy Ball (max(2, 2% of the kick distance)) apply after that.
+5. OVERPOWER adds 4 yards plus Iron Grip tip yards, including for Vex. Carlos and Practice Swing do not take that bonus.
 
 Worked examples, 100% power, 0 wind, no vitamin, no Howling, no Phil:
 
 | Build | Travel |
 | --- | --- |
-| Big Bruce, no items | 65 yd |
-| Big Bruce, Cannon VI | 101 yd |
-| Big Bruce, Cannon XII | 137 yd |
-| Big Bruce, Cannon XXIV | 506 yd |
-| Big Bruce, Drive Lid VI | 89 yd |
-| Big Bruce, Drive Lid XII | 113 yd |
-| Big Bruce, Drive Lid XXIV | 362 yd |
-| Big Bruce, Cannon XXIV + Drive Lid XXIV | 803 yd |
+| Big Bruce, no items | 70 yd |
+| Big Bruce, Cannon VI | 106 yd |
+| Big Bruce, Cannon XII | 142 yd |
+| Big Bruce, Cannon XXIV | 511 yd |
+| Big Bruce, Drive Lid VI | 94 yd |
+| Big Bruce, Drive Lid XII | 118 yd |
+| Big Bruce, Drive Lid XXIV | 367 yd |
+| Big Bruce, Cannon XXIV + Drive Lid XXIV | 808 yd |
 | Willow, Cannon XXIV + Drive Lid XXIV | 788 yd |
-| Cole, Cannon XXIV + Drive Lid XXIV | 808 yd |
-| Cole, Cannon + Drive + High-Air, all XXIV | 952 yd |
-| Cole, those three plus Glass Leg VI, Shaky Arrow, Stone Toe, and Protein | 1026 yd |
-| Cole, same helpers with High-Air XVIII | 953 yd |
+| Cole, Cannon XXIV + Drive Lid XXIV | 813 yd |
+| Cole, Cannon + Drive + High-Air, all XXIV | 957 yd |
+| Cole, those three plus Glass Leg VI, Shaky Arrow, Stone Toe, and Protein | 1031 yd |
+| Cole, same helpers with High-Air XVIII | 958 yd |
+| Vex, no items | 500 yd |
 
-No two styles in one equipment type both add range. Cannon, Drive Lid, and High-Air are three different types, and their yards add. Bruce with all three at XXIV is 65 + 441 + 297 + 144 = 947 yards. That is still short of 1000. The make needs Glass Leg VI, Shaky Arrow, Stone Toe, and a Protein Shake on top.
+No two styles in one equipment type both add range. Cannon, Drive Lid, and High-Air are three different types, and their yards add. Bruce with all three at XXIV is 70 + 441 + 297 + 144 = 952 yards. That is still short of 1000. The make needs Glass Leg VI, Shaky Arrow, Stone Toe, and a Protein Shake on top.
 
-Vex, no items, 100% power, kick distance 35: 55 yd (35 + 20). The same kick at distance 50: 70 yd.
+Vex, no items, 100% power: 500 yards at any kick distance. A 35-yard make is drawn as SOARS, 30 yards past the posts, in about 2.89 seconds. The true carry stays 500.
 
 ## 5. Cash and Vitamin Shop rules
 
@@ -713,4 +714,4 @@ Fixed since 2026-11-12, and not repeated below: perk cards IV–VI, Wind Visor m
 
 BAL1 closed the rounding gaps. Anchor, Patient, Sticker, and Shelter use lookup tables, and the card prints that table. True Lid's hook uses the hundredths already printed on the card. XIII–XXIV of each of those five still copy XII, on the card and in the code.
 
-- `vex` kit line: `"88% power clears by 5 yards."` That is the no-wind number. A headwind, snow, or Heavy Ball can shrink the clearance, down to just reaching the posts. BAL1 does not change kit text.
+RS1 replaced Vex's clearance kit line with Out of This World Range. Full power with nothing on is 500 yards, and bonuses add on top.

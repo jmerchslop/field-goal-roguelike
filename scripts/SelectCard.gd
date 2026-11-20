@@ -6,7 +6,6 @@ extends RefCounted
 
 const FRAME_PATH := "res://art/ui/playing-card.png"
 const LOCKED_MARK := ".."
-const VEX_MARK := "MAX"
 
 # Portrait window and the two type bands, in the 96×134 art grid.
 const WIN_X := 12.0 / 96.0
@@ -34,7 +33,7 @@ static func kit_lines(id: String) -> PackedStringArray:
 	if id == Kickers.PHIL:
 		return PackedStringArray(["HOUSE ACCOUNT", "COMPOUNDING"])
 	if id == Kickers.VEX:
-		return PackedStringArray(["INFINITE RANGE"])
+		return PackedStringArray(["OUT OF THIS", "WORLD RANGE"])
 	var line := BroadcastHud.kit_text(id)
 	if line == "":
 		return PackedStringArray()
@@ -64,21 +63,25 @@ static func unlock_line(id: String) -> String:
 
 
 static func yard_cap(id: String) -> int:
-	# No-item distance at a 100% lock. Vex has no cap, so this stays negative.
+	# No-item distance at a 100% lock.
 	var stats := KickerStats.new()
 	Kickers.apply_to(stats, id)
-	if id == Kickers.VEX or stats.clearance:
-		return -1
 	return int(round(stats.range_base + stats.range_per_power * 100.0))
 
 
 static func corner_text(id: String, unlocked: bool) -> String:
 	if not unlocked:
 		return LOCKED_MARK
-	var cap := yard_cap(id)
-	if cap < 0:
-		return VEX_MARK
-	return str(cap)
+	return str(yard_cap(id))
+
+
+# One crisp step down when a three-digit corner does not fit the index pocket.
+static func corner_px(card: Rect2, text: String) -> int:
+	var px := maxi(9, int(card.size.y * 0.048))
+	var pocket := int(card.size.x * 0.22)
+	if BitmapFonts.measure_px("ui", text, px) > pocket:
+		px = maxi(8, px - 1)
+	return px
 
 
 static func glyph_safe(text: String) -> bool:
@@ -176,7 +179,10 @@ static func label_boxes(card: Rect2, id: String) -> Dictionary:
 	var kits := kit_lines(id)
 	var ball := ball_line(id)
 	if kits.size() > 1 and not _well_fits(kits, ball, well, body):
-		kits = PackedStringArray([kits[kits.size() - 1]])
+		if id == Kickers.VEX:
+			body -= 1
+		else:
+			kits = PackedStringArray([kits[kits.size() - 1]])
 	var lines := kits.duplicate()
 	if ball != "":
 		lines.append(ball)
@@ -192,7 +198,7 @@ static func label_boxes(card: Rect2, id: String) -> Dictionary:
 	elif stacked.size() > 0:
 		kit = stacked[0]
 	var rank := corner_text(id, true)
-	var rank_px := maxi(9, int(card.size.y * 0.048))
+	var rank_px := corner_px(card, rank)
 	var rank_w := float(BitmapFonts.measure_px("ui", rank, rank_px))
 	var rank_tl := Rect2(card.position + Vector2(card.size.x * 0.045, card.size.y * 0.012), Vector2(rank_w, float(rank_px)))
 	var rank_br := Rect2(card.position + Vector2(card.size.x * 0.955 - rank_w, card.size.y * 0.905), Vector2(rank_w, float(rank_px)))

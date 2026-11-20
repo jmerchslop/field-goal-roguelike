@@ -138,6 +138,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "rs1":
+		if not await _capture_rs1():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "fx1":
 		if not await _capture_fx1():
 			get_tree().quit(1)
@@ -409,7 +415,7 @@ func _ready() -> void:
 	_lock_full_power_straight()
 	# In the air, past the posts and past where a P=50 kick lands.
 	var flight: float = board.logic.flight_duration
-	board.logic.advance(flight * (58.0 / board.logic.travel_yards))
+	board.logic.advance(flight * (58.0 / _shown_yards()))
 	if not await _capture("power_100_long.png"):
 		get_tree().quit(1)
 		return
@@ -449,7 +455,7 @@ func _ready() -> void:
 	board.logic.press_space()
 	board.logic.advance(board.logic.power / stats.accuracy_speed)
 	board.logic.press_space()
-	var to_posts: float = board.logic.flight_duration * (34.0 / board.logic.travel_yards)
+	var to_posts: float = board.logic.flight_duration * (34.0 / _shown_yards())
 	board.logic.advance(to_posts)
 	if not await _capture("wind_curve.png"):
 		get_tree().quit(1)
@@ -521,7 +527,7 @@ func _ready() -> void:
 	board.logic.press_space()
 	board.logic.advance(board.logic.power / curve_stats.accuracy_speed)
 	board.logic.press_space()
-	board.logic.advance(board.logic.flight_duration * (32.0 / board.logic.travel_yards))
+	board.logic.advance(board.logic.flight_duration * (32.0 / _shown_yards()))
 	if not await _capture("windy_curve.png"):
 		get_tree().quit(1)
 		return
@@ -839,18 +845,18 @@ func _capture_range_hotfix() -> bool:
 	board._note_time = 0.0
 	board.highlight = 0
 	board.confirm_kicker()
-	if not await _shoot_power_result(18, "bruce_p100_kick18_short.png", "SHORT", 65.0):
+	if not await _shoot_power_result(19, "bruce_p100_kick19_short.png", "SHORT", 70.0):
 		return false
 	board.highlight = 1
 	board.confirm_kicker()
-	if not await _shoot_power_result(14, "walkon_p100_kick14_short.png", "SHORT", 60.0):
+	if not await _shoot_power_result(14, "walkon_p100_kick14_short.png", "SHORT", 55.0):
 		return false
 	board.highlight = 0
 	board.confirm_kicker()
 	board.run.give(Loadout.CANNON, 1)
-	if not await _shoot_power_result(18, "bruce_cannon_kick18_good.png", "GOOD", 71.0):
+	if not await _shoot_power_result(18, "bruce_cannon_kick18_good.png", "GOOD", 76.0):
 		return false
-	if not await _shoot_power_result(19, "bruce_cannon_kick19_short.png", "SHORT", 71.0):
+	if not await _shoot_power_result(20, "bruce_cannon_kick20_good.png", "GOOD", 76.0):
 		return false
 	board.run.give(Loadout.CANNON, 5)
 	board.load_current_kick()
@@ -1749,7 +1755,7 @@ func _capture_rw2() -> bool:
 		return false
 	board.load_current_kick()
 	board.refresh_view()
-	if board.run.is_first_ball or absf(board.logic.max_range_at_full_power() - 66.0) > 0.05:
+	if board.run.is_first_ball or absf(board.logic.max_range_at_full_power() - 61.0) > 0.05:
 		print("clutch range ", board.logic.max_range_at_full_power(), " first ", board.run.is_first_ball)
 		return false
 	if not await _capture("rw2_walkon_clutch.png"):
@@ -5756,6 +5762,134 @@ func _stamp(result: String, shanked: bool, insured: bool, middle: bool, error: f
 	board.result_age = 0.4
 	board.run.awaiting_offer = false
 	board.run.phase = RunLogic.Phase.PLAYING
+
+
+func _shown_yards() -> float:
+	var shown: float = board.logic.shown_travel_yards
+	if shown <= 0.05:
+		shown = board.logic.travel_yards
+	return shown
+
+
+func _capture_rs1() -> bool:
+	var path := str(SaveData.file_path)
+	var had_file := FileAccess.file_exists(path)
+	var backup := PackedByteArray()
+	if had_file:
+		backup = FileAccess.get_file_as_bytes(path)
+	for id in Kickers.UNLOCKABLE:
+		SaveData.unlocks[id] = true
+	board.open_select()
+	board.highlight = 0
+	board.refresh_view()
+	if not await _capture("rs1_select_all_unlocked.png"):
+		_restore_as2_save(had_file, path, backup)
+		return false
+	board.highlight = 4
+	board.refresh_view()
+	if not await _capture("rs1_vex_card.png"):
+		_restore_as2_save(had_file, path, backup)
+		return false
+	if not await _rs1_hud(5, "rs1_hud_max_cole.png", 75.0):
+		_restore_as2_save(had_file, path, backup)
+		return false
+	if not await _rs1_plate():
+		_restore_as2_save(had_file, path, backup)
+		return false
+	if not await _rs1_hud(1, "rs1_hud_max_walkon.png", 55.0):
+		_restore_as2_save(had_file, path, backup)
+		return false
+	if not await _rs1_hud(4, "rs1_hud_max_vex.png", 500.0):
+		_restore_as2_save(had_file, path, backup)
+		return false
+	if not await _rs1_flight(4, 35.0, "rs1_flight_soars_posts.png", "rs1_flight_soars_late.png", "SOARS"):
+		_restore_as2_save(had_file, path, backup)
+		return false
+	if not await _rs1_flight(1, 45.0, "rs1_flight_standard_posts.png", "rs1_flight_standard_late.png", "STANDARD"):
+		_restore_as2_save(had_file, path, backup)
+		return false
+	if not await _rs1_flight(5, 72.0, "rs1_flight_barely_posts.png", "rs1_flight_barely_late.png", "BARELY"):
+		_restore_as2_save(had_file, path, backup)
+		return false
+	board.front.run_mode = "endless"
+	board.highlight = 4
+	board.selecting = true
+	board.confirm_kicker()
+	board.run.kick_number = 117
+	board.run.set_wind(0.0, 0.0)
+	board.run.weather = RunLogic.CLEAR
+	board.load_current_kick()
+	if board.too_weak_age < 0.0 or absf(board.logic.kick_distance - 600.0) > 0.1:
+		print("RS1 too weak ", board.too_weak_age, " dist ", board.logic.kick_distance, " max ", board.logic.max_range_at_full_power())
+		_restore_as2_save(had_file, path, backup)
+		return false
+	board.too_weak_age = RunLogic.TOO_WEAK_BEAT + 0.2
+	board.refresh_view()
+	if not await _capture("rs1_vex_too_weak.png"):
+		_restore_as2_save(had_file, path, backup)
+		return false
+	_restore_as2_save(had_file, path, backup)
+	return true
+
+
+func _rs1_hud(slot: int, file_name: String, expect: float) -> bool:
+	board.front.run_mode = "standard"
+	board.highlight = slot
+	board.selecting = true
+	board.confirm_kicker()
+	board.set_wind(0.0, 0.0)
+	board.force_weather(RunLogic.CLEAR)
+	board.load_current_kick()
+	var got: float = board.logic.max_range_at_full_power()
+	if absf(got - expect) > 0.05:
+		print(file_name, " max ", got)
+		return false
+	return await _capture(file_name)
+
+
+func _rs1_plate() -> bool:
+	board.front.run_mode = "standard"
+	board.highlight = 4
+	board.selecting = true
+	board.confirm_kicker()
+	board.set_wind(0.0, 0.0)
+	board.force_weather(RunLogic.CLEAR)
+	board.load_current_kick()
+	if BroadcastHud.kit_text(Kickers.VEX) != "OUT OF THIS WORLD RANGE":
+		print("RS1 plate kit ", BroadcastHud.kit_text(Kickers.VEX))
+		return false
+	return await _capture("rs1_hud_plate_vex.png")
+
+
+func _rs1_flight(slot: int, distance: float, posts_name: String, late_name: String, tier: String) -> bool:
+	board.front.run_mode = "standard"
+	board.highlight = slot
+	board.selecting = true
+	board.confirm_kicker()
+	board.set_wind(0.0, 0.0)
+	board.force_weather(RunLogic.CLEAR)
+	board.logic.kick_distance = distance
+	board.logic.start_lateral_yards = 0.0
+	board.logic.hold_result = false
+	board.logic.sync_tee()
+	if not _lock_flight(100.0):
+		print(posts_name, " did not fly ", board.logic.phase, " ", board.logic.result_text)
+		return false
+	if board.logic.flight_tier != tier or board.logic.result_text != "GOOD":
+		print(posts_name, " tier ", board.logic.flight_tier, " result ", board.logic.result_text, " margin ", board.logic.clear_margin)
+		return false
+	var shown: float = _shown_yards()
+	var to_posts: float = board.logic.flight_duration * (distance / shown)
+	board.logic.advance(to_posts)
+	board.refresh_view()
+	if not await _capture(posts_name):
+		return false
+	var late: float = board.logic.flight_duration * 0.96
+	var remain: float = late - float(board.logic.flight_elapsed)
+	if remain > 0.0:
+		board.logic.advance(remain)
+	board.refresh_view()
+	return await _capture(late_name)
 
 
 func _capture(file_name: String) -> bool:

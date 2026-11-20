@@ -88,6 +88,10 @@ var aim_base := 0.0
 var flight_elapsed := 0.0
 var flight_duration := 0.0
 var travel_yards := 0.0
+# Visual flight only. travel_yards stays the true carry.
+var flight_tier := ""
+var clear_margin := 0.0
+var shown_travel_yards := 0.0
 # True when the power sweep reached MAX with no Space #2. Not a power lock.
 var shanked := false
 var ring_active := false
@@ -236,6 +240,9 @@ func reset_kick() -> void:
 	flight_duration = 0.0
 	shanked = false
 	travel_yards = 0.0
+	flight_tier = ""
+	clear_margin = 0.0
+	shown_travel_yards = 0.0
 	ball_forward_yards = 0.0
 	ball_lateral_yards = lateral
 	ball_height = 0.0
@@ -478,6 +485,55 @@ static func flight_time_seconds(distance_yards: float) -> float:
 	return KickConstants.FLIGHT_TIME_BASE_SEC + KickConstants.FLIGHT_TIME_PER_YARD * distance_yards
 
 
+# Visual flight for a make that is not a bank and not waiting on moving posts.
+# "" keeps today's drawn distance and today's flight time.
+static func flight_look(margin: float, kick_distance: float, travel: float, duration: float, made: bool) -> Dictionary:
+	var tier := ""
+	if made:
+		if margin < KickConstants.FLIGHT_BARELY_UNDER_YARDS:
+			tier = "BARELY"
+		elif margin <= KickConstants.FLIGHT_SOARS_OVER_YARDS:
+			tier = "STANDARD"
+		else:
+			tier = "SOARS"
+	var shown := travel
+	var time := duration
+	if tier == "BARELY":
+		shown = kick_distance + KickConstants.FLIGHT_BARELY_PAST_YARDS
+		time = flight_time_seconds(shown)
+	elif tier == "SOARS":
+		shown = kick_distance + KickConstants.FLIGHT_SOAR_PAST_YARDS
+		var t12 := flight_time_seconds(kick_distance + KickConstants.FLIGHT_SOARS_OVER_YARDS)
+		time = minf(KickConstants.FLIGHT_SOAR_TIME_MULT * t12, t12 + KickConstants.FLIGHT_SOAR_EXTRA_SEC_MAX)
+	return {"tier": tier, "shown": shown, "duration": time}
+
+
+static func drawn_arc_height(forward: float, kick_distance: float, shown_travel: float, reached: bool, tier: String) -> float:
+	var travel := maxf(shown_travel, 0.001)
+	var dist := maxf(kick_distance, 0.001)
+	if tier == "SOARS":
+		return sin(clampf(forward / travel, 0.0, 1.0) * PI * 0.5) * KickConstants.FLIGHT_SOAR_TOP_HEIGHT
+	var post_h := KickConstants.FLIGHT_STANDARD_POST_HEIGHT
+	if tier == "BARELY":
+		post_h = KickConstants.FLIGHT_BARELY_POST_HEIGHT
+	var peak := dist if reached else travel
+	if forward <= peak:
+		return sin(clampf(forward / maxf(peak, 0.001), 0.0, 1.0) * PI * 0.5) * post_h
+	var rest := maxf(travel - peak, 0.001)
+	return (1.0 - clampf((forward - peak) / rest, 0.0, 1.0)) * post_h
+
+
+func _assign_flight_look() -> void:
+	clear_margin = max_range - kick_distance
+	var made := result_text == "GOOD" and not bank_shot and not hold_result
+	var look := flight_look(clear_margin, kick_distance, travel_yards, flight_duration, made)
+	flight_tier = str(look["tier"])
+	shown_travel_yards = float(look["shown"])
+	flight_duration = float(look["duration"])
+	if flight_tier != "":
+		print("FLIGHT %s margin %.1f yd shown %.1f yd %.2fs" % [flight_tier, clear_margin, shown_travel_yards, flight_duration])
+
+
 static func classify(max_range_yards: float, distance_yards: float, offset: float) -> String:
 	# The ball has to reach the posts. A perfect aim that falls short is still SHORT.
 	return str(judge(max_range_yards, distance_yards, offset, "standard")["text"])
@@ -712,10 +768,7 @@ func _shank() -> void:
 		blown *= maxf(0.0, 1.0 - stats.visor_resist)
 	drift_yards = drift_at_uprights(blown, blown_dir, kick_distance, 0, 0, stats.ball_type) * stats.drift_factor
 	var wind_range := wind_range_delta(blown, blown_dir, 0, stats.thin_air)
-	if stats.clearance:
-		max_range = kick_distance + 5.0 + (full - 88.0) * 1.25 + stats.range_bonus + wind_range
-	else:
-		max_range = stats.range_base + stats.range_per_power * full + stats.range_bonus + wind_range
+	max_range = stats.range_base + stats.range_per_power * full + stats.range_bonus + wind_range
 	if snow_range:
 		max_range -= snow_penalty
 	if thin_air_weather:
@@ -726,6 +779,9 @@ func _shank() -> void:
 		max_range = kick_distance
 	travel_yards = max_range
 	flight_duration = flight_time_seconds(travel_yards)
+	flight_tier = ""
+	clear_margin = max_range - kick_distance
+	shown_travel_yards = travel_yards
 	reached_uprights = true
 	var gap := post_half_gap
 	var target := side * (gap + KickConstants.DOINK_BAND_YARDS + 2.0 + absf(drift_yards))
@@ -886,6 +942,7 @@ func _lock_accuracy(value: float) -> void:
 	else:
 		var judged := judge(max_range, kick_distance, offset_yards if reached_uprights else 0.0, stats.ball_type, post_half_gap)
 		_apply_arrival(judged, 0.0, post_half_gap)
+	_assign_flight_look()
 	phase = Phase.FLIGHT
 	flight_elapsed = 0.0
 
@@ -894,7 +951,7 @@ func _update_ball() -> void:
 	var t := 0.0
 	if flight_duration > 0.0 and (phase == Phase.FLIGHT or phase == Phase.RESULT):
 		t = clampf(flight_elapsed / flight_duration, 0.0, 1.0)
-	ball_forward_yards = t * travel_yards
+	ball_forward_yards = t * shown_travel_yards
 	ball_lateral_yards = path_lateral(start_lateral_yards, ball_forward_yards, final_angle_degrees, kick_distance, drift_yards)
 	# The arc grows the ball on the way up and shrinks it on the way down.
 	ball_height = sin(t * PI)
@@ -936,12 +993,7 @@ func carry_plan(ranged_power: float, angle_degrees: float) -> Dictionary:
 	if wind_range < 0.0:
 		wind_range *= stats.shelter_factor
 	var used_power := minf(ranged_power, KickConstants.METER_MAX)
-	var travel := 0.0
-	if stats.clearance:
-		var clearance := 5.0 + (used_power - 88.0) * 1.25
-		travel = kick_distance + clearance + stats.range_bonus + wind_range
-	else:
-		travel = stats.range_base + stats.range_per_power * used_power + stats.range_bonus + wind_range
+	var travel := stats.range_base + stats.range_per_power * used_power + stats.range_bonus + wind_range
 	if snow_range:
 		travel -= snow_penalty
 	if thin_air_weather:
@@ -954,9 +1006,6 @@ func carry_plan(ranged_power: float, angle_degrees: float) -> Dictionary:
 		travel += KickConstants.OVERPOWER_YARDS + maxf(stats.tip_lock_yards, 0.0)
 	if travel < 0.0:
 		travel = 0.0
-	# 88% and above clears the posts even if a headwind or a penalty would otherwise leave it short.
-	if stats.clearance and ranged_power >= 88.0 and travel < kick_distance:
-		travel = kick_distance
 	return {
 		"travel": travel,
 		"drift": drift,
@@ -1001,10 +1050,10 @@ static func flight_visual_point(forward: float, lateral: float, kick_distance: f
 	var peak := real if reached else trip
 	var height := 0.0
 	if forward <= peak:
-		height = sin(clampf(forward / maxf(peak, 0.001), 0.0, 1.0) * PI * 0.5) * 6.4
+		height = sin(clampf(forward / maxf(peak, 0.001), 0.0, 1.0) * PI * 0.5) * KickConstants.FLIGHT_STANDARD_POST_HEIGHT
 	else:
 		var rest := maxf(trip - peak, 0.001)
-		height = (1.0 - clampf((forward - peak) / rest, 0.0, 1.0)) * 6.4
+		height = (1.0 - clampf((forward - peak) / rest, 0.0, 1.0)) * KickConstants.FLIGHT_STANDARD_POST_HEIGHT
 	if height < 0.2:
 		height = 0.22
 	return Vector3(lateral, height, span - forward * (span / real))

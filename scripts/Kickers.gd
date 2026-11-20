@@ -27,7 +27,7 @@ const ALL: Array = [
 		"ball_description": "A light hay ball. Wind moves it 10% more than a normal ball. A doink stays a doink.",
 		"ball_type": "farm_ball",
 		"accuracy": 90,
-		"range_line": "65 yd",
+		"range_line": "70 yd",
 		"kit_line": "Farm Strength",
 		"unlock": "",
 		"color": Color(0.55, 0.09, 0.08),
@@ -44,7 +44,7 @@ const ALL: Array = [
 		"ball_description": "A normal ball. No special trick.",
 		"ball_type": "standard",
 		"accuracy": 100,
-		"range_line": "60 yd",
+		"range_line": "55 yd",
 		"kit_line": "Earns His Spot",
 		"unlock": "",
 		"color": Color(0.22, 0.38, 0.82),
@@ -56,12 +56,12 @@ const ALL: Array = [
 		"name": "Phil the Pharmacist",
 		"lore": "He compounds the little things. The shop knows his name, and the gelcap only pays when he actually took it.",
 		"excels": "House Account. Shop goods are free, including B12. Shelf rerolls still cost cash. Compounding. Your items are 15% stronger: equipment, perks, curse upsides, and vitamins, not only shop bottles.",
-		"downside": "55 yards with nothing on. Rerolls still cost cash.",
+		"downside": "54 yards with nothing on. Rerolls still cost cash.",
 		"ball_name": "The Gelcap",
 		"ball_description": "A vitamin used on this attempt adds +0.5 Mult on a make.",
 		"ball_type": "standard",
 		"accuracy": 112,
-		"range_line": "55 yd",
+		"range_line": "54 yd",
 		"kit_line": "House Account",
 		"unlock": "Buy something from the Vitamin Shop",
 		"color": Color(0.85, 0.9, 0.95),
@@ -88,15 +88,15 @@ const ALL: Array = [
 	{
 		"id": VEX,
 		"name": "Vex",
-		"lore": "The saucer does not need a yard cap. It clears the posts, then keeps curving left.",
-		"excels": "Infinite Range & Beyond. 88% power clears by 5 yards.",
+		"lore": "The saucer carries a long way, then keeps curving left.",
+		"excels": "Out of This World Range. A 500 yard base, so full power with nothing on carries 500 yards.",
 		"downside": "The Flying Saucer always curves left.",
 		"ball_name": "The Flying Saucer",
 		"ball_description": "Curves left like 11 mph of west wind, on top of the real wind.",
 		"ball_type": "standard",
 		"accuracy": 94,
-		"range_line": "Infinite Range & Beyond",
-		"kit_line": "Infinite Range & Beyond",
+		"range_line": "500 yd",
+		"kit_line": "Out of This World Range",
 		"unlock": "Make a 500-yard field goal in Endless",
 		"color": Color(0.75, 0.8, 0.88),
 		"shape": "circle",
@@ -112,7 +112,7 @@ const ALL: Array = [
 		"ball_description": "A down-the-middle make doubles stored Mult, and that kick scores with the doubled Mult.",
 		"ball_type": "standard",
 		"accuracy": 120,
-		"range_line": "70 yd",
+		"range_line": "75 yd",
 		"kit_line": "Brand Deal",
 		"unlock": "Beat Standard",
 		"color": Color(0.85, 0.45, 0.12),
@@ -146,7 +146,7 @@ const ALL: Array = [
 		"ball_description": "Both needles run 15% faster. Items and weather still stack on top.",
 		"ball_type": "standard",
 		"accuracy": 96,
-		"range_line": "66 yd",
+		"range_line": "69 yd",
 		"kit_line": "Numero Dos",
 		"unlock": "Make a 100-yard field goal",
 		"color": Color(0.93, 0.9, 0.82),
@@ -218,12 +218,13 @@ static func apply_to(stats: KickerStats, id: String) -> void:
 	stats.good_band = KickConstants.METER_INNER_BAND * (stats.accuracy / 100.0)
 	stats.ball_speed_mult = 1.0
 	if id == BIG_BRUCE:
-		stats.range_per_power = 0.49
+		stats.range_per_power = 0.54
 		stats.power_floor = 80.0
 	elif id == WALK_ON:
+		stats.range_per_power = 0.39
 		stats.rerolls_per_run = 2
 	elif id == PHIL:
-		stats.range_per_power = 0.39
+		stats.range_per_power = 0.38
 		stats.compounding = true
 		stats.house_account = true
 		stats.gelcap = true
@@ -232,12 +233,12 @@ static func apply_to(stats: KickerStats, id: String) -> void:
 		stats.good_as_gold = true
 		stats.lucky_ball = true
 	elif id == VEX:
-		stats.clearance = true
+		stats.clearance = false
 		stats.saucer_mph = 11.0
-		stats.range_base = 0.0
-		stats.range_per_power = 0.0
+		stats.range_base = 16.0
+		stats.range_per_power = 4.84
 	elif id == COLE:
-		stats.range_per_power = 0.54
+		stats.range_per_power = 0.59
 		stats.ball_speed_mult = 1.0
 		stats.brand_deal = true
 		stats.showtime = true
@@ -246,7 +247,7 @@ static func apply_to(stats: KickerStats, id: String) -> void:
 		stats.ball_speed_mult = 0.50
 		stats.synchronicity = true
 	elif id == CARLOS:
-		stats.range_per_power = 0.50
+		stats.range_per_power = 0.53
 		stats.ball_speed_mult = 1.15
 		stats.numero_dos = true
 
@@ -271,16 +272,8 @@ static func rundown_lines(id: String, unlocked: bool, tad_cap: int = -1, tad_pic
 	var stats := KickerStats.new()
 	apply_to(stats, id)
 	lines.append("%s. %s." % [str(info["kit_line"]), str(info["ball_name"])])
-	if stats.clearance:
-		var sample := KickLogic.new()
-		sample.stats = stats
-		sample.kick_distance = 40.0
-		var at_floor := float(sample.carry_plan(88.0, 0.0)["travel"]) - sample.kick_distance
-		var at_full := float(sample.carry_plan(100.0, 0.0)["travel"]) - sample.kick_distance
-		lines.append("No yard cap. At 88% power the kick clears by %s yards, and full power clears by %s." % [_plain_number(at_floor), _plain_number(at_full)])
-	else:
-		var yards := stats.range_base + stats.range_per_power * 100.0
-		lines.append("Full power with no wind is %s yards." % _plain_number(yards))
+	var yards := stats.range_base + stats.range_per_power * 100.0
+	lines.append("Full power with no wind is %s yards." % _plain_number(yards))
 	lines.append("Perfect band %s. Good band %s." % [_plain_number(stats.perfect_band), _plain_number(stats.good_band)])
 	var sweep := "%.2f" % MeterGauge.SWEEP_SEC
 	if is_equal_approx(stats.ball_speed_mult, 1.0):

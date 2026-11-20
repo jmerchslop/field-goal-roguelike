@@ -99,7 +99,7 @@ static func kit_text(kicker_id: String) -> String:
 		Kickers.GARY:
 			return "GOOD AS GOLD"
 		Kickers.VEX:
-			return "INFINITE RANGE AND BEYOND"
+			return "OUT OF THIS WORLD RANGE"
 		Kickers.COLE:
 			return "BRAND DEAL"
 		Kickers.WILLOW:
