@@ -33,6 +33,7 @@ var file_path := FILE_PATH_DEFAULT
 var music := 100
 var crowd := 100
 var sfx := 100
+var ball_cam := KickConstants.BALL_CAM_DEFAULT
 var binds: Dictionary = {}
 
 
@@ -67,6 +68,7 @@ func load_file() -> void:
 	music = _clamp_volume(cfg.get_value("audio", "music", 100))
 	crowd = _clamp_volume(cfg.get_value("audio", "crowd", 100))
 	sfx = _clamp_volume(cfg.get_value("audio", "sfx", 100))
+	ball_cam = bool(cfg.get_value("video", "ball_cam", KickConstants.BALL_CAM_DEFAULT))
 	for row in ACTION_ROWS:
 		var id := str(row["id"])
 		binds[id] = int(cfg.get_value("input", id, int(row["key"])))
@@ -79,6 +81,7 @@ func save_file() -> void:
 	cfg.set_value("audio", "music", music)
 	cfg.set_value("audio", "crowd", crowd)
 	cfg.set_value("audio", "sfx", sfx)
+	cfg.set_value("video", "ball_cam", ball_cam)
 	for id in binds.keys():
 		cfg.set_value("input", str(id), int(binds[id]))
 	cfg.save(file_path)
@@ -185,7 +188,13 @@ func _share_ok(left_id: String, right_id: String) -> bool:
 	return (left_id == "aim_left" and right_id == "menu_left") or (left_id == "menu_left" and right_id == "aim_left") or (left_id == "aim_right" and right_id == "menu_right") or (left_id == "menu_right" and right_id == "aim_right")
 
 
+func set_ball_cam(on: bool) -> void:
+	ball_cam = on
+	save_file()
+
+
 func reset_controls() -> void:
+	ball_cam = KickConstants.BALL_CAM_DEFAULT
 	_fill_default_binds()
 	apply_binds()
 	save_file()

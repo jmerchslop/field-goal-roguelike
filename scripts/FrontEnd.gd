@@ -128,13 +128,15 @@ func back_options() -> void:
 
 
 func focus_count() -> int:
-	return 3 + _rows().size() + 2
+	return 4 + _rows().size() + 2
 
 
 func focus_kind(index: int) -> String:
 	if index < 3:
 		return "slider"
-	if index < 3 + _rows().size():
+	if index == 3:
+		return "toggle"
+	if index < 4 + _rows().size():
 		return "bind"
 	if index == focus_count() - 2:
 		return "reset"
@@ -150,7 +152,7 @@ func slider_id(index: int) -> String:
 
 
 func bind_row(index: int) -> Dictionary:
-	return _rows()[index - 3]
+	return _rows()[index - 4]
 
 
 func move_focus(direction: Vector2) -> void:
@@ -218,6 +220,11 @@ func finish_rebind(code: int) -> String:
 
 func activate_focus() -> String:
 	var kind := focus_kind(focus)
+	if kind == "toggle":
+		var options = _options()
+		if options != null:
+			options.set_ball_cam(not bool(options.ball_cam))
+		return "toggle"
 	if kind == "bind":
 		begin_rebind()
 		return "rebind"
@@ -234,8 +241,10 @@ func activate_focus() -> String:
 func _focus_point(index: int) -> Vector2:
 	if index < 3:
 		return MenuLayout.SLIDERS[index].get_center()
-	if index < 3 + _rows().size():
-		var row: Dictionary = _rows()[index - 3]
+	if index == 3:
+		return MenuLayout.BALL_CAM.get_center()
+	if index < 4 + _rows().size():
+		var row: Dictionary = _rows()[index - 4]
 		return MenuLayout.bind_rect(int(row["column"]), int(row["row"])).get_center()
 	if index == focus_count() - 2:
 		return MenuLayout.RESET_BUTTON.get_center()

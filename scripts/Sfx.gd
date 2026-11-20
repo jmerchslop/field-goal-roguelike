@@ -17,7 +17,12 @@ const POOL_NAMES := {
 	"doink": ["goalpostdoink1"],
 	"menu": ["menuclick1", "menuclick2", "menuclick3"],
 	"ui": ["menuclick1", "menuclick2", "menuclick3"],
+	"cheer": ["crowdcheer1", "crowdcheer2"],
+	"groan": ["crowdgroan1", "crowdgroan2"],
+	"ooh": ["crowdooh1"],
 }
+
+const CROWD_BUS := "Crowd"
 
 const MENU_CONTEXTS: Array[String] = ["title", "menu", "options", "select", "records"]
 const UI_CONTEXTS: Array[String] = ["offer", "shop", "belt", "curse", "mulligan"]
@@ -40,6 +45,7 @@ var _last: Dictionary = {}
 var _streams: Dictionary = {}
 var _players: Dictionary = {}
 var _air: AudioStreamPlayer
+var _crowd_logged := {}
 
 
 func _ready() -> void:
@@ -52,11 +58,16 @@ func _ensure_players() -> void:
 	if _air != null:
 		_assign_bus(_air)
 		for pool in _players.keys():
-			_assign_bus(_players[pool])
+			if pool == "cheer" or pool == "groan" or pool == "ooh":
+				_assign_crowd(_players[pool])
+			else:
+				_assign_bus(_players[pool])
 		return
 	_air = _make_player("Airborne")
-	for pool in ["footsteps", "ballcontact", "shank", "doink", "menu", "ui"]:
+	for pool in ["footsteps", "ballcontact", "shank", "doink", "menu", "ui", "cheer", "groan", "ooh"]:
 		_players[pool] = _make_player(pool)
+	for pool in ["cheer", "groan", "ooh"]:
+		_assign_crowd(_players[pool])
 	_players["air_bad"] = _air
 	_players["air_good"] = _air
 	_players["air_perfect"] = _air
@@ -67,6 +78,19 @@ func _assign_bus(player: AudioStreamPlayer) -> void:
 		return
 	player.bus = BUS
 	player.pitch_scale = 1.0
+
+
+func _assign_crowd(player: AudioStreamPlayer) -> void:
+	if player == null:
+		return
+	player.bus = CROWD_BUS
+	player.pitch_scale = 1.0
+
+
+func _bus_for(pool: String) -> String:
+	if pool == "cheer" or pool == "groan" or pool == "ooh":
+		return CROWD_BUS
+	return BUS
 
 
 func _make_player(node_name: String) -> AudioStreamPlayer:
@@ -190,18 +214,50 @@ func cue(context: String) -> String:
 func play_pool(pool: String) -> String:
 	var path := _pick(pool)
 	if path == "":
+		if pool == "cheer" or pool == "groan" or pool == "ooh":
+			_note_crowd_missing(pool)
 		return ""
 	var stream: Resource = _streams.get(path)
 	_ensure_players()
 	var player: AudioStreamPlayer = _players.get(pool)
 	if player != null and stream != null and is_inside_tree():
 		player.stream = stream
-		player.bus = BUS
+		player.bus = _bus_for(pool)
 		player.pitch_scale = 1.0
 		player.play()
 		play_calls += 1
 	played.append({"pool": pool, "file": path.get_file()})
 	return path.get_file()
+
+
+func _note_crowd_missing(pool: String) -> void:
+	if _crowd_logged.has(pool):
+		return
+	_crowd_logged[pool] = true
+	print("CAM1 missing crowd %s" % pool)
+
+
+static func crowd_pick(result: String, shanked: bool, bank: bool, practice: bool) -> String:
+	if practice or shanked or result == "":
+		return ""
+	if result == "GOOD" or bank or result == "BONUS RING":
+		return "cheer"
+	if result == "DOINK":
+		return "ooh"
+	if result == "SHORT" or result.begins_with("WIDE"):
+		return "groan"
+	return ""
+
+
+func play_crowd_reaction(result: String, shanked: bool, bank: bool, practice: bool) -> String:
+	var pick := crowd_pick(result, shanked, bank, practice)
+	if pick == "":
+		return ""
+	var pool := pick
+	if pool == "ooh" and files_of("ooh").is_empty():
+		_note_crowd_missing("ooh")
+		pool = "groan"
+	return play_pool(pool)
 
 
 func player_bus(pool: String) -> String:

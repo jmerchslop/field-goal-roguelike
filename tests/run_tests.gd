@@ -66,6 +66,7 @@ func _run() -> void:
 	_check_pk2b()
 	_check_fx1()
 	_check_rs1()
+	_check_cam1()
 	_check_f3()
 	_check_au1()
 	_check_drive_lid_and_power_safety()
@@ -91,6 +92,7 @@ func _finish_live() -> void:
 	_check_pk2a_live()
 	_check_pk2b_live()
 	_check_fx1_live()
+	_check_cam1_live()
 	_check_tw1_live()
 	_check_bl1_live()
 	_check_floodlights_live()
@@ -8654,4 +8656,243 @@ func _check_rs1() -> void:
 		if BitmapFonts.measure_px("ui", row, 12) > 250:
 			fits = false
 	check(joined == plate and fits and wrapped.size() >= 1, "the plate wraps OUT OF THIS WORLD RANGE on word boundaries, got %s" % wrapped)
+
+
+func _check_cam1() -> void:
+	check(BitmapFonts.ui_allows("BALL CAM ON") and BitmapFonts.ui_allows("BALL CAM OFF"), "BALL CAM ON and OFF are Pixel Gothic")
+	check("BALL CAM ON".find("!") < 0 and "BALL CAM OFF".find("!") < 0, "the ball cam labels have no exclamation")
+	var cam_box := MenuLayout.BALL_CAM
+	check(cam_box.position.y > MenuLayout.SLIDERS[2].position.y + MenuLayout.SLIDERS[2].size.y, "the toggle sits under the volume sliders")
+	check(cam_box.position.y + cam_box.size.y < MenuLayout.RESET_BUTTON.position.y, "the toggle sits above reset")
+	var clear_of_binds := true
+	for row in Settings.ACTION_ROWS:
+		var plate := MenuLayout.bind_rect(int(row["column"]), int(row["row"]))
+		if cam_box.intersects(plate):
+			clear_of_binds = false
+	check(clear_of_binds, "the toggle does not cover the keybind grid")
+	var options: GameSettings = get_root().get_node("Settings")
+	var kept := str(options.file_path)
+	var kept_cam := bool(options.ball_cam)
+	options.file_path = "user://fg_cam1_settings.cfg"
+	options.ball_cam = true
+	options.set_ball_cam(false)
+	options.load_file()
+	check(not options.ball_cam, "ball_cam=false loads back as false")
+	options.reset_controls()
+	check(options.ball_cam, "RESET turns the ball cam on")
+	options.file_path = kept
+	options.load_file()
+	options.ball_cam = kept_cam
+	var beds = get_root().get_node("Beds")
+	beds.reset_duck()
+	beds._crowd_gain = 1.0
+	beds.begin_flight_duck()
+	beds.tick_duck(0.4)
+	check(near(beds.duck_now(), 0.25, 0.02) and near(beds.crowd_gain(), beds.bed_gain() * 0.25, 0.02), "the crowd ducks to about a quarter, got %s" % beds.duck_now())
+	beds.begin_result_duck(true, false)
+	var swell_peak := 0.0
+	for _i in 50:
+		beds.tick_duck(0.016)
+		swell_peak = maxf(swell_peak, beds.duck_now())
+	check(near(swell_peak, 1.35, 0.05) and near(beds.duck_now(), 1.0, 0.08), "a make with no cheer file swells to 1.35 and is back near 1 after 0.8 seconds, got peak %s now %s" % [swell_peak, beds.duck_now()])
+	beds.begin_flight_duck()
+	beds.tick_duck(0.4)
+	beds.begin_result_duck(false, true)
+	beds.tick_duck(0.8)
+	check(near(beds.duck_now(), 1.0, 0.02), "with the files present the bed is back 0.8 seconds after the result")
+	beds.reset_duck()
+	check(KickSfx.crowd_pick("GOOD", false, false, false) == "cheer", "GOOD picks cheer")
+	check(KickSfx.crowd_pick("BONUS RING", false, false, false) == "cheer", "BONUS RING picks cheer")
+	check(KickSfx.crowd_pick("DOINK", false, false, false) == "ooh", "DOINK picks ooh")
+	check(KickSfx.crowd_pick("SHORT", false, false, false) == "groan" and KickSfx.crowd_pick("WIDE LEFT", false, false, false) == "groan", "SHORT and WIDE pick groan")
+	check(KickSfx.crowd_pick("WIDE RIGHT", true, false, false) == "" and KickSfx.crowd_pick("GOOD", false, false, true) == "", "a shank and a practice swing pick no reaction")
+	var sfx: KickSfx = get_root().get_node("Sfx")
+	sfx.play_crowd_reaction("DOINK", false, false, false)
+	sfx.play_crowd_reaction("DOINK", false, false, false)
+	check(sfx._crowd_logged.has("ooh") and sfx.player_bus("cheer") == "Crowd" and sfx.player_bus("groan") == "Crowd" and sfx.player_bus("ooh") == "Crowd", "missing crowd pools log once and use the Crowd bus")
+
+
+func _cam_finish(game, scale: float) -> Dictionary:
+	var steps := 0
+	var used := 0.0
+	while game.logic.phase == KickLogic.Phase.FLIGHT and steps < 500:
+		var before: float = game.logic.ball_forward_yards
+		var remain: float = game.logic.flight_duration - game.logic.flight_elapsed
+		var dt := minf(0.05 * scale, maxf(remain, 0.0))
+		if dt <= 0.00001:
+			game.logic.advance(0.001 * scale)
+		else:
+			game.logic.advance(dt)
+			used += dt / scale
+		var after: float = game.logic.ball_forward_yards
+		game.tick_moving_posts(before, after, dt if dt > 0.0 else 0.001 * scale)
+		steps += 1
+	var mult := str(game.run.kick_mult_preview())
+	var before_score: int = game.run.score
+	game.run.resolve_kick(game.logic.result_text, game.logic.offset_yards, game.logic.perfect)
+	return {
+		"text": game.logic.result_text,
+		"offset": game.logic.offset_yards,
+		"score": game.run.score - before_score,
+		"mult": mult,
+		"time": used,
+	}
+
+
+func _cam_setup(game, aim: float, weather: String) -> void:
+	game.highlight = 1
+	game.selecting = true
+	game.confirm_kicker()
+	game.set_wind(0.0, 0.0)
+	game.force_weather(weather)
+	game.logic.set_seed(7)
+	game.logic.aim_degrees = aim
+	game.logic.hold_result = game.run.posts_move() and not game.run.practicing
+	game.logic.press_space()
+	if game.logic.windup_left > 0.0:
+		game.logic.advance(game.logic.windup_left)
+	game.logic.take_power_press(game.logic.seconds_to_power(100.0))
+	if game.logic.phase == KickLogic.Phase.ACCURACY:
+		var wait: float = game.logic.seconds_until_error(0.0)
+		if wait > 0.0:
+			game.logic.advance(wait)
+		if game.logic.phase == KickLogic.Phase.ACCURACY:
+			game.logic.press_space()
+
+
+func _check_cam1_live() -> void:
+	var options: GameSettings = get_root().get_node("Settings")
+	var kept_cam := bool(options.ball_cam)
+	options.ball_cam = true
+	var packed: PackedScene = load("res://scenes/main.tscn")
+	var game = packed.instantiate()
+	game._taking_pictures = true
+	get_root().add_child(game)
+	check(game.front.focus_kind(3) == "toggle", "Options focus 3 is the ball cam toggle")
+	game.highlight = 1
+	game.confirm_kicker()
+	game.logic.phase = KickLogic.Phase.RESULT
+	game.logic.result_text = "GOOD"
+	game.logic.shanked = false
+	game.logic.perfect = false
+	game.logic.offset_yards = 0.0
+	game.run.kick_resolved = false
+	game.run.awaiting_offer = false
+	game.run.phase = RunLogic.Phase.PLAYING
+	game.cam_started = true
+	game.cam_skipped = false
+	game.cam_delay = 0.52
+	game.result_age = 0.52
+	game._step_kick_pose(0.0)
+	check(game._pose == "react_front", "with the cam on, the reaction at 0.52 seconds is still the front pose")
+	game.result_age = 1.31
+	game.settle_kick()
+	check(not game.run.kick_resolved, "the offer waits until 0.52 plus 0.8 seconds")
+	game.result_age = 1.32
+	game.settle_kick()
+	check(game.run.awaiting_offer, "the offer opens at 0.52 plus 0.8 seconds")
+	game.highlight = 1
+	game.confirm_kicker()
+	game.logic.phase = KickLogic.Phase.RESULT
+	game.logic.result_text = "GOOD"
+	game.logic.shanked = false
+	game.run.kick_resolved = false
+	game.run.awaiting_offer = false
+	game.run.phase = RunLogic.Phase.PLAYING
+	game.cam_started = false
+	game.cam_delay = 0.0
+	game.result_age = 0.0
+	game._step_kick_pose(0.0)
+	check(game._pose == "react_front", "with the cam off, the reaction starts at the result")
+	game.result_age = 0.8
+	game.settle_kick()
+	check(game.run.awaiting_offer, "with the cam off, the offer opens at 0.8 seconds")
+	game.run.practicing = true
+	game.logic.practice_swing = true
+	game.logic.phase = KickLogic.Phase.FLIGHT
+	game.cam_started = false
+	game._on_kick_launched()
+	game._update_cam_weight()
+	check(not game.cam_started and near(game.cam_w, 0.0), "a practice swing does not start the ball cam")
+	game.run.practicing = false
+	game.logic.practice_swing = false
+	game.too_weak_age = 0.2
+	game.logic.phase = KickLogic.Phase.AIMING
+	game._on_kick_launched()
+	game._update_cam_weight()
+	check(not game.cam_started and near(game.cam_w, 0.0), "TOO WEAK does not start the ball cam")
+	game.too_weak_age = -1.0
+	for distance in [35.0, 60.0, 80.0, 200.0]:
+		game.logic.kick_distance = distance
+		game.logic.phase = KickLogic.Phase.FLIGHT
+		game.logic.reached_uprights = true
+		game.logic.flight_tier = ""
+		game.logic.travel_yards = distance + 8.0
+		game.logic.shown_travel_yards = distance + 8.0
+		game.logic.flight_duration = KickLogic.flight_time_seconds(distance + 8.0)
+		game.logic.flight_elapsed = 0.0
+		game.cam_started = true
+		game.cam_skipped = false
+		game.run.practicing = false
+		for frac in [0.0, 0.25, 0.5, 0.75, 1.0]:
+			game.logic.flight_elapsed = game.logic.flight_duration * frac
+			game.logic._update_ball()
+			var pose: Dictionary = game._ball_cam_pose()
+			var at: Vector3 = pose["position"]
+			check(at.z >= 4.0 - 0.001 and at.y >= 2.2 - 0.001, "chase at %s yards fraction %s stays in front of the posts, got %s" % [distance, frac, at])
+	game.logic.kick_distance = 35.0
+	game.logic.phase = KickLogic.Phase.RESULT
+	game.logic.flight_elapsed = game.logic.flight_duration
+	game.logic._update_ball()
+	game.result_age = 0.2
+	game.cam_started = true
+	game.cam_skipped = false
+	game._cam_hold = game._ball_cam_pose()
+	game._cam_hold_on = true
+	game.refresh_view()
+	var view: Vector2 = game.get_viewport().get_visible_rect().size
+	var bar := Vector3(0.0, 3.33, 0.0)
+	check(not game._camera.is_position_behind(bar), "the crossbar is in front of the chase camera")
+	var bar_screen: Vector2 = game._camera.unproject_position(bar)
+	check(bar_screen.x >= 0.0 and bar_screen.y >= 0.0 and bar_screen.x <= view.x and bar_screen.y <= view.y, "the crossbar stays on screen at the hold, got %s in %s" % [bar_screen, view])
+	for post in [game._post_l, game._post_r]:
+		var mouth: Vector3 = Vector3(post.global_position.x, 3.33, 0.0)
+		check(not game._camera.is_position_behind(mouth), "an upright stays in front of the chase camera")
+		var screen: Vector2 = game._camera.unproject_position(mouth)
+		check(screen.x >= -2.0 and screen.y >= -2.0 and screen.x <= view.x + 2.0 and screen.y <= view.y + 2.0, "the upright at the crossbar stays on screen at the hold, got %s in %s" % [screen, view])
+	game.result_age = 0.52
+	game.refresh_view()
+	var rig: Dictionary = game.camera_rig(game.logic.kick_distance, game.logic.start_lateral_yards)
+	var back: Vector3 = rig["position"]
+	var look: Vector3 = rig["look"]
+	check(game._camera.position.distance_to(back) < 0.05 and near(game._camera.fov, float(rig["fov"]), 0.05), "after the cut the camera is back on the kicker's rig")
+	var facing: Vector3 = -game._camera.global_transform.basis.z
+	var wanted: Vector3 = (look - back).normalized()
+	check(facing.distance_to(wanted) < 0.05, "after the cut the camera looks along the kicker's line")
+	var cases := [
+		{"aim": 0.0, "weather": RunLogic.CLEAR, "name": "GOOD"},
+		{"aim": 10.0, "weather": RunLogic.CLEAR, "name": "WIDE"},
+		{"aim": 5.0, "weather": RunLogic.CLEAR, "name": "DOINK"},
+		{"aim": 0.0, "weather": RunLogic.MOVING, "name": "MOVING"},
+	]
+	for item in cases:
+		_cam_setup(game, float(item["aim"]), str(item["weather"]))
+		var watched: Dictionary = _cam_finish(game, 1.0)
+		_cam_setup(game, float(item["aim"]), str(item["weather"]))
+		var elapsed: float = game.logic.flight_duration * 0.35
+		var before_skip: float = game.logic.ball_forward_yards
+		game.logic.advance(elapsed)
+		game.tick_moving_posts(before_skip, game.logic.ball_forward_yards, elapsed)
+		var skipped: Dictionary = _cam_finish(game, 3.0)
+		check(str(watched["text"]) == str(skipped["text"]) and near(float(watched["offset"]), float(skipped["offset"]), 0.05) and int(watched["score"]) == int(skipped["score"]) and str(watched["mult"]) == str(skipped["mult"]), "%s matches when the flight is skipped, %s vs %s" % [item["name"], watched, skipped])
+		if str(item["name"]) == "GOOD":
+			check(str(watched["text"]) == "GOOD", "the centered kick is GOOD")
+			var remain: float = game.logic.flight_duration * 0.65
+			check(float(skipped["time"]) < remain * 0.45 and float(skipped["time"]) > remain * 0.2, "the skipped remainder takes about a third of the real time, got %s of %s" % [skipped["time"], remain])
+		if str(item["name"]) == "WIDE":
+			check(str(watched["text"]).begins_with("WIDE"), "the aimed kick is wide, got %s" % watched["text"])
+		if str(item["name"]) == "DOINK":
+			check(str(watched["text"]) == "DOINK", "the post aim is a doink, got %s" % watched["text"])
+	options.ball_cam = kept_cam
+	game.free()
 

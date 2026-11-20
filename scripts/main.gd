@@ -193,6 +193,12 @@ var too_weak_numbers := ""
 var too_weak_debug := ""
 var _too_weak_sounded := false
 var result_age := 0.0
+var cam_w := 0.0
+var cam_started := false
+var cam_skipped := false
+var cam_delay := 0.0
+var _cam_hold: Dictionary = {}
+var _cam_hold_on := false
 const _PREVIEW_DISTANCES: Array[float] = [75.0, 200.0, 500.0, 1000.0]
 var _ribbon_l: MeshInstance3D
 var _ribbon_r: MeshInstance3D
@@ -312,7 +318,7 @@ func _copy_run_onto_kick() -> void:
 
 
 func settle_kick() -> void:
-	if logic.phase == KickLogic.Phase.RESULT and not ResultStamp.hold_ready(result_age):
+	if logic.phase == KickLogic.Phase.RESULT and not ResultStamp.hold_ready(reaction_age()):
 		return
 	if _preview_step > 0 and logic.phase == KickLogic.Phase.RESULT:
 		var dist := shown_distance()
@@ -996,6 +1002,10 @@ func _process(delta: float) -> void:
 		result_age += delta
 	else:
 		result_age = 0.0
+	var kick_delta := delta
+	if cam_skipped and logic.phase == KickLogic.Phase.FLIGHT:
+		kick_delta = delta * KickConstants.CAM_SKIP_SPEED
+	Beds.duck_time_scale = KickConstants.CAM_SKIP_SPEED if cam_skipped and logic.phase == KickLogic.Phase.FLIGHT else 1.0
 	if too_weak_age >= 0.0:
 		too_weak_age += delta
 		if too_weak_age >= RunLogic.TOO_WEAK_BEAT and not _too_weak_sounded:
@@ -1022,7 +1032,7 @@ func _process(delta: float) -> void:
 	var phase_before := logic.phase
 	var forward_before := logic.ball_forward_yards
 	if logic.bank_shot and logic.phase == KickLogic.Phase.RESULT and _bank_time < 0.3:
-		_bank_time += delta
+		_bank_time += kick_delta
 	if run.phase == RunLogic.Phase.PLAYING and logic.phase != KickLogic.Phase.RESULT:
 		var direction := 0.0
 		if Settings.held("aim_left"):
@@ -1038,17 +1048,19 @@ func _process(delta: float) -> void:
 		else:
 			_power_press_queued = false
 			var forward_at := logic.ball_forward_yards
-			logic.advance(delta)
-			tick_moving_posts(forward_at, logic.ball_forward_yards, delta)
+			logic.advance(kick_delta)
+			tick_moving_posts(forward_at, logic.ball_forward_yards, kick_delta)
 		_sync_kick_audio(phase_before, forward_before)
-		if logic.insured:
-			run.consume_insurance()
+		var was_meter := phase_before == KickLogic.Phase.AIMING or phase_before == KickLogic.Phase.POWER or phase_before == KickLogic.Phase.ACCURACY
+		if was_meter and logic.phase == KickLogic.Phase.FLIGHT:
+			_on_kick_launched()
 		if phase_before != KickLogic.Phase.RESULT and logic.phase == KickLogic.Phase.RESULT:
+			_on_kick_result()
 			_step_kick_pose(0.0)
 		settle_kick()
 		if logic.phase == KickLogic.Phase.POWER or logic.phase == KickLogic.Phase.ACCURACY:
 			_approach_time += delta
-	tick_trail(delta)
+	tick_trail(kick_delta)
 	refresh_view()
 
 
@@ -1069,6 +1081,14 @@ func _unhandled_input(event: InputEvent) -> void:
 	if _active_run() and _is_back(event):
 		_open_pause()
 		return
+	if _cam_skippable():
+		var skip_cam := _is_confirm(event)
+		if event is InputEventMouseButton:
+			var cam_click := event as InputEventMouseButton
+			skip_cam = cam_click.pressed and cam_click.button_index == MOUSE_BUTTON_LEFT
+		if skip_cam:
+			_skip_ball_cam()
+			return
 	if too_weak_age >= 0.0:
 		var skip := _is_confirm(event)
 		if event is InputEventMouseButton:
@@ -1720,7 +1740,7 @@ func _options_key(event: InputEvent, key: InputEventKey) -> bool:
 		_cue("options")
 	elif Settings.pressed_event(event, "confirm") or key.keycode == KEY_ENTER or key.keycode == KEY_KP_ENTER:
 		var result := front.activate_focus()
-		if result == "rebind" or result == "reset" or result == "back":
+		if result == "rebind" or result == "reset" or result == "back" or result == "toggle":
 			_cue("options")
 	refresh_view()
 	return true
@@ -1741,6 +1761,9 @@ func _options_click(point: Vector2) -> void:
 	if kind == "slider":
 		front.dragging = front.slider_id(index)
 		_drag_slider(point)
+	elif kind == "toggle":
+		front.activate_focus()
+		_cue("options")
 	elif kind == "bind":
 		front.begin_rebind()
 		_cue("options")
@@ -1769,10 +1792,12 @@ func _options_index_at(point: Vector2) -> int:
 	for index in 3:
 		if MenuLayout.contains_norm(MenuLayout.SLIDERS[index], norm):
 			return index
+	if MenuLayout.contains_norm(MenuLayout.BALL_CAM, norm):
+		return 3
 	for index in Settings.ACTION_ROWS.size():
 		var row: Dictionary = Settings.ACTION_ROWS[index]
 		if MenuLayout.contains_norm(MenuLayout.bind_rect(int(row["column"]), int(row["row"])), norm):
-			return 3 + index
+			return 4 + index
 	if MenuLayout.contains_norm(MenuLayout.RESET_BUTTON, norm):
 		return front.focus_count() - 2
 	if MenuLayout.contains_norm(MenuLayout.BACK_BUTTON, norm):
@@ -3348,6 +3373,13 @@ func _reset_kick_pose() -> void:
 	_swing_from = KickLogic.PLANT_Z + KickLogic.START_BEHIND
 	_early_swing = false
 	_swinging = false
+	cam_w = 0.0
+	cam_started = false
+	cam_skipped = false
+	cam_delay = 0.0
+	_cam_hold_on = false
+	_cam_hold = {}
+	Beds.reset_duck()
 
 
 func _step_kick_pose(delta: float) -> void:
@@ -3372,7 +3404,7 @@ func _step_kick_pose(delta: float) -> void:
 		return
 	if phase == KickLogic.Phase.RESULT and not run.practicing:
 		var celebrate := Kickers.is_make_result(logic.shanked, logic.result_text) or logic.result_text == "BONUS RING"
-		_pose = Kickers.reaction_pose(result_age, celebrate)
+		_pose = Kickers.reaction_pose(reaction_age(), celebrate)
 		return
 	if not _swinging:
 		_swinging = true
@@ -4170,20 +4202,139 @@ func _trail_tri(tool: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, ca: Color
 	tool.add_vertex(c)
 
 
+func reaction_age() -> float:
+	return maxf(result_age - cam_delay, 0.0)
+
+
+func cam_dip_alpha() -> float:
+	if not cam_started or cam_skipped or not Settings.ball_cam:
+		return 0.0
+	if logic.phase != KickLogic.Phase.RESULT:
+		return 0.0
+	var start := KickConstants.CAM_RESULT_HOLD_SEC
+	var half := KickConstants.CAM_CUT_SEC * 0.5
+	if result_age < start or result_age >= start + KickConstants.CAM_CUT_SEC:
+		return 0.0
+	var along := result_age - start
+	if along <= half:
+		return clampf(along / half, 0.0, 1.0)
+	return clampf(1.0 - (along - half) / half, 0.0, 1.0)
+
+
+func _cam_smooth(t: float) -> float:
+	var x := clampf(t, 0.0, 1.0)
+	return x * x * (3.0 - 2.0 * x)
+
+
+func _update_cam_weight() -> void:
+	if not cam_started or cam_skipped or not Settings.ball_cam or run.practicing or logic.practice_swing:
+		cam_w = 0.0
+		return
+	if logic.phase == KickLogic.Phase.FLIGHT:
+		cam_w = _cam_smooth(logic.flight_elapsed / KickConstants.CAM_EASE_IN_SEC)
+	elif logic.phase == KickLogic.Phase.RESULT:
+		var swap_at := KickConstants.CAM_RESULT_HOLD_SEC + KickConstants.CAM_CUT_SEC * 0.5
+		cam_w = 0.0 if result_age >= swap_at else 1.0
+	else:
+		cam_w = 0.0
+
+
+func _ball_cam_live() -> bool:
+	if not Settings.ball_cam or run.practicing or logic.practice_swing:
+		return false
+	if _preview_step > 0:
+		return false
+	if too_weak_age >= 0.0:
+		return false
+	return true
+
+
+func _on_kick_launched() -> void:
+	Beds.begin_flight_duck()
+	if not _ball_cam_live():
+		return
+	cam_started = true
+	cam_skipped = false
+	cam_delay = KickConstants.CAM_RESULT_HOLD_SEC + KickConstants.CAM_CUT_SEC
+	_cam_hold_on = false
+
+
+func _on_kick_result() -> void:
+	if cam_started and not cam_skipped and Settings.ball_cam and not run.practicing:
+		_cam_hold = _ball_cam_pose()
+		_cam_hold_on = true
+	else:
+		cam_delay = 0.0
+	var make := Kickers.is_make_result(logic.shanked, logic.result_text) or logic.bank_shot or logic.result_text == "BONUS RING"
+	var files_ready := not Sfx.files_of("cheer").is_empty()
+	if not run.practicing:
+		Beds.begin_result_duck(make and not logic.shanked, files_ready)
+		Sfx.play_crowd_reaction(logic.result_text, logic.shanked, logic.bank_shot, false)
+	else:
+		Beds.begin_result_duck(false, true)
+
+
+func _cam_skippable() -> bool:
+	if not cam_started or cam_skipped or not Settings.ball_cam or run.practicing:
+		return false
+	if logic.phase == KickLogic.Phase.FLIGHT:
+		return true
+	if logic.phase == KickLogic.Phase.RESULT and result_age < KickConstants.CAM_RESULT_HOLD_SEC:
+		return true
+	return false
+
+
+func _skip_ball_cam() -> void:
+	cam_skipped = true
+	cam_w = 0.0
+	cam_delay = 0.0
+	_cam_hold_on = false
+	refresh_view()
+
+
+func _ball_cam_pose() -> Dictionary:
+	var ball := _ball_position()
+	var spot := logic.start_lateral_yards
+	var post_x := 0.0
+	if _crossbar != null:
+		post_x = _crossbar.position.x
+	var chase_pos := Vector3(
+		lerpf(spot, ball.x, 0.6),
+		maxf(ball.y + KickConstants.CAM_CHASE_UP, KickConstants.CAM_CHASE_MIN_Y),
+		maxf(ball.z + KickConstants.CAM_CHASE_BACK, KickConstants.CAM_STOP_BEFORE_POSTS)
+	)
+	var ahead := Vector3(ball.x, ball.y, ball.z - 6.0)
+	var posts := Vector3(post_x, 3.0, 0.0)
+	var look: Vector3 = ahead.lerp(posts, 0.35)
+	return {"position": chase_pos, "look": look, "fov": KickConstants.CAM_CHASE_FOV}
+
+
 func _place_camera() -> void:
 	# The camera rides with the tee. It looks along the tee's line, not at the posts,
 	# so a left spot leaves the posts on the right of the screen and a right spot does the opposite.
+	# A live ball cam blends toward the chase pose. Sky, far, and the sun stay on the kicker's rig.
+	_update_cam_weight()
 	var rig := camera_rig(logic.kick_distance, logic.start_lateral_yards)
-	var at: Vector3 = rig["position"]
+	var p0: Vector3 = rig["position"]
+	var l0: Vector3 = rig["look"]
+	var f0 := float(rig["fov"])
+	var chase := _ball_cam_pose()
+	if _cam_hold_on and logic.phase == KickLogic.Phase.RESULT:
+		chase = _cam_hold
+	var chase_pos: Vector3 = chase["position"]
+	var chase_look: Vector3 = chase["look"]
+	var at := p0.lerp(chase_pos, cam_w)
+	var look := l0.lerp(chase_look, cam_w)
 	_camera.position = at
-	_camera.fov = float(rig["fov"])
-	_camera.look_at(rig["look"], Vector3.UP)
-	_camera.far = maxf(400.0, at.z + 80.0)
+	_camera.fov = lerpf(f0, float(chase["fov"]), cam_w)
+	if look.distance_squared_to(at) > 0.0025:
+		_camera.look_at(look, Vector3.UP)
+	_camera.far = maxf(400.0, p0.z + 80.0)
 	_frame_sky(rig)
 	_place_weather()
 	var sun := $Sun as DirectionalLight3D
 	if sun != null:
-		sun.directional_shadow_max_distance = maxf(160.0, at.z + 40.0)
+		sun.directional_shadow_max_distance = maxf(160.0, p0.z + 40.0)
 
 
 const YARD_PIXEL_SIZE := 0.0105

@@ -138,6 +138,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "cam1":
+		if not await _capture_cam1():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "rs1":
 		if not await _capture_rs1():
 			get_tree().quit(1)
@@ -5762,6 +5768,189 @@ func _stamp(result: String, shanked: bool, insured: bool, middle: bool, error: f
 	board.result_age = 0.4
 	board.run.awaiting_offer = false
 	board.run.phase = RunLogic.Phase.PLAYING
+
+
+func _capture_cam1() -> bool:
+	board.highlight = 1
+	board.selecting = true
+	board.front.run_mode = "standard"
+	board.confirm_kicker()
+	board.set_wind(0.0, 0.0)
+	board.force_weather(RunLogic.CLEAR)
+	if not _cam_flight(100.0, 0.0):
+		return false
+	board.logic.advance(0.2)
+	_arm_cam(false)
+	if not await _capture("cam1_launch.png"):
+		return false
+	var half: float = board.logic.flight_duration * 0.5
+	if board.logic.flight_elapsed < half:
+		board.logic.advance(half - board.logic.flight_elapsed)
+	_arm_cam(false)
+	if not await _capture("cam1_follow_mid.png"):
+		return false
+	board.logic.advance(board.logic.flight_duration)
+	board.result_age = 0.2
+	board.logic.result_text = "GOOD"
+	_arm_cam(true)
+	board._step_kick_pose(0.0)
+	if not await _capture("cam1_hold_good.png"):
+		return false
+	if not await _cam_kicker(4, 35.0, 100.0, 0.92, "cam1_soars_hold.png"):
+		return false
+	if not await _cam_kicker(5, 72.0, 100.0, 72.0 / 76.0, "cam1_barely_hold.png"):
+		return false
+	board.highlight = 1
+	board.selecting = true
+	board.confirm_kicker()
+	board.set_wind(0.0, 0.0)
+	board.force_weather(RunLogic.CLEAR)
+	if not _cam_flight(20.0, 0.0):
+		return false
+	board.logic.advance(board.logic.flight_duration * 0.85)
+	_arm_cam(false)
+	if board.logic.result_text != "SHORT":
+		print("cam1 short ", board.logic.result_text, " ", board.logic.max_range)
+		return false
+	if not await _capture("cam1_short_follow.png"):
+		return false
+	board.load_current_kick()
+	board.set_wind(0.0, 0.0)
+	board.logic.aim_degrees = 5.0
+	if not _cam_flight(100.0, 5.0):
+		return false
+	var hop: float = board.logic.flight_duration * ((board.logic.kick_distance - 1.0) / _shown_yards())
+	board.logic.advance(hop)
+	_arm_cam(false)
+	if board.logic.result_text != "DOINK":
+		print("cam1 doink ", board.logic.result_text, " offset ", board.logic.offset_yards)
+		return false
+	if not await _capture("cam1_doink_follow.png"):
+		return false
+	board.logic.advance(board.logic.flight_duration)
+	board.result_age = 0.46
+	board.logic.result_text = "GOOD"
+	_arm_cam(true)
+	if not await _capture("cam1_cut_dip.png"):
+		return false
+	board.result_age = 0.82
+	board.cam_delay = 0.52
+	board._step_kick_pose(0.0)
+	board.refresh_view()
+	if board._pose != "react_up":
+		print("cam1 reaction ", board._pose, " age ", board.reaction_age())
+		return false
+	if not await _capture("cam1_reaction_back.png"):
+		return false
+	board.run.kick_resolved = false
+	board.run.awaiting_offer = false
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.result_age = 1.32
+	board.cam_delay = 0.52
+	board.logic.result_text = "GOOD"
+	board.logic.perfect = true
+	board.settle_kick()
+	if not board.run.awaiting_offer:
+		print("cam1 offer did not open")
+		return false
+	if not await _capture("cam1_offer_after.png"):
+		return false
+	board.highlight = 1
+	board.selecting = true
+	board.confirm_kicker()
+	board.force_weather(RunLogic.MOVING)
+	board.set_wind(0.0, 0.0)
+	if not _cam_flight(80.0, 0.0):
+		return false
+	board.logic.advance(board.logic.flight_duration * 0.45)
+	_arm_cam(false)
+	if not await _capture("cam1_moving_posts.png"):
+		return false
+	board.force_weather(RunLogic.LIGHTS)
+	board.load_current_kick()
+	board.set_wind(0.0, 0.0)
+	if not _cam_flight(90.0, 0.0):
+		return false
+	board.logic.advance(board.logic.flight_duration * 0.5)
+	_arm_cam(false)
+	if not await _capture("cam1_lights_follow.png"):
+		return false
+	board.force_weather(RunLogic.SNOW)
+	board.load_current_kick()
+	board.set_wind(0.0, 0.0)
+	if not _cam_flight(90.0, 0.0):
+		return false
+	board.logic.advance(board.logic.flight_duration * 0.5)
+	_arm_cam(false)
+	if not await _capture("cam1_snow_follow.png"):
+		return false
+	board.front.run_mode = "endless"
+	board.highlight = 1
+	board.selecting = true
+	board.confirm_kicker()
+	board.run.kick_number = 37
+	board.run.set_wind(0.0, 0.0)
+	board.run.weather = RunLogic.CLEAR
+	board.load_current_kick()
+	if absf(board.logic.kick_distance - 200.0) > 0.1:
+		print("cam1 endless dist ", board.logic.kick_distance)
+		return false
+	if not _cam_flight(100.0, 0.0):
+		return false
+	board.logic.advance(board.logic.flight_duration * 0.5)
+	_arm_cam(false)
+	if not await _capture("cam1_endless_200.png"):
+		return false
+	board.front.screen = FrontEnd.Screen.OPTIONS
+	board.selecting = false
+	board.front.focus = 3
+	Settings.ball_cam = true
+	board.refresh_view()
+	if not await _capture("cam1_options_toggle.png"):
+		return false
+	return true
+
+
+func _cam_flight(power: float, aim: float) -> bool:
+	board.logic.aim_degrees = aim
+	board.logic.hold_result = board.run.posts_move() and not board.run.practicing
+	if not _lock_flight(power):
+		print("cam1 did not fly ", board.logic.phase, " ", board.logic.result_text)
+		return false
+	return true
+
+
+func _arm_cam(hold: bool) -> void:
+	board.cam_started = true
+	board.cam_skipped = false
+	board.cam_delay = KickConstants.CAM_RESULT_HOLD_SEC + KickConstants.CAM_CUT_SEC
+	if hold:
+		board._cam_hold = board._ball_cam_pose()
+		board._cam_hold_on = true
+	else:
+		board._cam_hold_on = false
+	board.refresh_view()
+
+
+func _cam_kicker(slot: int, distance: float, power: float, fraction: float, file_name: String) -> bool:
+	var kicker_id := str(Kickers.ALL[slot]["id"])
+	if kicker_id != Kickers.WALK_ON and kicker_id != Kickers.BIG_BRUCE:
+		SaveData.unlocks[kicker_id] = true
+	board.front.run_mode = "standard"
+	board.highlight = slot
+	board.selecting = true
+	board.confirm_kicker()
+	board.set_wind(0.0, 0.0)
+	board.force_weather(RunLogic.CLEAR)
+	board.logic.kick_distance = distance
+	board.logic.start_lateral_yards = 0.0
+	board.logic.hold_result = false
+	board.logic.sync_tee()
+	if not _cam_flight(power, 0.0):
+		return false
+	board.logic.advance(board.logic.flight_duration * fraction)
+	_arm_cam(false)
+	return await _capture(file_name)
 
 
 func _shown_yards() -> float:

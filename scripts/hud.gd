@@ -37,6 +37,7 @@ func _draw() -> void:
 		return
 	var logic: KickLogic = game.logic
 	var run: RunLogic = game.run
+	_draw_cam_dip()
 	_draw_weather_tint(run)
 	var on_meter := logic.phase == KickLogic.Phase.POWER or logic.phase == KickLogic.Phase.ACCURACY or logic.phase == KickLogic.Phase.FLIGHT or logic.phase == KickLogic.Phase.RESULT
 	if not run.meter_hidden(on_meter, game.meter_time):
@@ -1938,6 +1939,14 @@ func _draw_options(front: FrontEnd) -> void:
 	if art == null:
 		_text_centered("OPTIONS", 48, 32, Color.WHITE)
 	var panel := Color(0.16, 0.16, 0.18, 1.0)
+	var cam_box := MenuLayout.screen_rect(MenuLayout.BALL_CAM, window, image)
+	draw_rect(cam_box, panel)
+	var cam_label := "BALL CAM ON" if Settings.ball_cam else "BALL CAM OFF"
+	var cam_size := 16
+	while cam_size > 10 and BitmapFonts.measure_px("ui", cam_label, cam_size) > int(cam_box.size.x) - 12:
+		cam_size -= 1
+	var cam_w := BitmapFonts.measure_px("ui", cam_label, cam_size)
+	BitmapFonts.paint_px(self, "ui", cam_label, Vector2(cam_box.position.x + (cam_box.size.x - float(cam_w)) * 0.5, cam_box.position.y + (cam_box.size.y - float(cam_size)) * 0.5), cam_size, Color(0.95, 0.92, 0.84))
 	for index in 3:
 		var track: Rect2 = MenuLayout.SLIDERS[index]
 		draw_rect(MenuLayout.screen_rect(track, window, image), panel)
@@ -2015,12 +2024,24 @@ func _draw_selected_option_plate(front: FrontEnd, window: Vector2, image: Vector
 	_draw_round_outline(_focus_pixel_rect(front), window, image)
 
 
+func _draw_cam_dip() -> void:
+	if game == null:
+		return
+	var alpha := float(game.cam_dip_alpha())
+	if alpha <= 0.001:
+		return
+	var size := get_viewport_rect().size
+	draw_rect(Rect2(Vector2.ZERO, size), Color(0, 0, 0, alpha))
+
+
 func _focus_pixel_rect(front: FrontEnd) -> Rect2:
 	var index := front.focus
 	if index < 3:
 		return MenuLayout.SLIDERS[index]
-	if index < 3 + Settings.ACTION_ROWS.size():
-		var row: Dictionary = Settings.ACTION_ROWS[index - 3]
+	if index == 3:
+		return MenuLayout.BALL_CAM
+	if index < 4 + Settings.ACTION_ROWS.size():
+		var row: Dictionary = Settings.ACTION_ROWS[index - 4]
 		return MenuLayout.bind_rect(int(row["column"]), int(row["row"]))
 	if index == front.focus_count() - 2:
 		return MenuLayout.RESET_BUTTON

@@ -1,6 +1,7 @@
 # Item, kit, range, and cash audit
 
 Generated: 2026-11-14
+CAM1: The ball cam chases the kick, holds 0.40 s, dips 0.12 s, then returns for the reaction. Options has BALL CAM ON / BALL CAM OFF. The crowd ducks to 0.25 while the ball is up. Cheer, groan, and ooh files are not in the build yet, so a make swells the bed to 1.35 and a miss eases back over 1.4 s.
 RS1: No-item full-power range is Cole 75, Bruce 70, Carlos 69, Gary 65, Walk-On 55, Phil 54, Willow 50, and Vex 500. Vex uses the same range formula as everyone else. Clearance and the 88% floor are gone. Made kicks draw as BARELY, STANDARD, or SOARS. The true carry, the result, and the HUD Max stay on the real number. Vex's kit reads Out of This World Range.
 FX1: Unlock text lasts 4 seconds. Equipment Manager (still id gear_manager) puts second-style gear into normal offers while a pass is banked. The MULT chip shows the make Mult, including Sudden Death ×5. Snow and rain allocate their particles once. The Vitamin Shop takes one click. The goal-post flags are bright red.
 PK2B: Sudden Death, No Huddle, All Natural, and Training Camp join the curse pool. Sudden Death forces one attempt after every other cap change and multiplies the make Mult by 5 last. No Huddle runs one clock, 5.0s, or 4.0s when the kick is already KICK CLOCK. All Natural is the belt lock: no shop, no belt, needles ×0.70 before the 0.35 floor, and Big Game strips that slow. Training Camp speeds the needles ×1.30 after the floor for 3 makes, then pays +10 yards. No new art.

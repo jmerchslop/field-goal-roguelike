@@ -27,6 +27,7 @@ const SLIDER_NUMBERS: Array[Rect2] = [
 	Rect2(368, 432, 62, 32),
 ]
 
+const BALL_CAM := Rect2(78, 516, 360, 40)
 const RESET_BUTTON := Rect2(330, 590, 300, 56)
 const BACK_BUTTON := Rect2(650, 590, 300, 56)
 

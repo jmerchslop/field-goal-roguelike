@@ -74,6 +74,18 @@ const FLIGHT_SOAR_TIME_MULT := 1.35
 const FLIGHT_SOAR_EXTRA_SEC_MAX := 1.2
 const FLIGHT_STANDARD_POST_HEIGHT := 6.4
 
+# Ball cam. Visual only. The flight time and the result do not change.
+const CAM_EASE_IN_SEC := 0.35
+const CAM_RESULT_HOLD_SEC := 0.40
+const CAM_CUT_SEC := 0.12
+const CAM_CHASE_BACK := 7.0
+const CAM_CHASE_UP := 1.4
+const CAM_CHASE_MIN_Y := 2.2
+const CAM_STOP_BEFORE_POSTS := 4.0
+const CAM_CHASE_FOV := 50.0
+const CAM_SKIP_SPEED := 3.0
+const BALL_CAM_DEFAULT := true
+
 # --- The run --------------------------------------------------------------------
 # You start with 1 attempt. The cap starts at 3 and is never allowed past 5.
 # Nothing in this build changes the cap. It stays at 3.

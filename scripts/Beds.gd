@@ -15,6 +15,12 @@ var _music_gain := 0.0
 var _crowd_gain := 0.0
 var _music_target := 0.0
 var _crowd_target := 0.0
+var _duck := 1.0
+var _duck_target := 1.0
+var _duck_sec := 0.40
+var duck_time_scale := 1.0
+var _swell_left := -1.0
+var _after_swell_sec := 0.20
 var _logged := {}
 
 
@@ -41,8 +47,62 @@ func _process(delta: float) -> void:
 	_follow_screen()
 	_music_gain = move_toward(_music_gain, _music_target, delta / FADE_SEC)
 	_crowd_gain = move_toward(_crowd_gain, _crowd_target, delta / FADE_SEC)
+	tick_duck(delta)
 	_apply(music_player, _music_gain, music_ready)
-	_apply(crowd_player, _crowd_gain, crowd_ready)
+	_apply(crowd_player, _crowd_gain * _duck, crowd_ready)
+
+
+func tick_duck(delta: float) -> void:
+	var duck_delta := delta * maxf(duck_time_scale, 0.0)
+	if _swell_left >= 0.0:
+		_swell_left -= duck_delta
+		if _swell_left <= 0.0:
+			_swell_left = -1.0
+			set_duck(1.0, _after_swell_sec)
+	_duck = move_toward(_duck, _duck_target, duck_delta / maxf(_duck_sec, 0.001))
+
+
+func set_duck(target: float, seconds: float) -> void:
+	_duck_target = target
+	_duck_sec = maxf(seconds, 0.001)
+
+
+func duck_now() -> float:
+	return _duck
+
+
+func crowd_gain() -> float:
+	return _crowd_gain * _duck
+
+
+func bed_gain() -> float:
+	return _crowd_gain
+
+
+func begin_flight_duck() -> void:
+	_swell_left = -1.0
+	set_duck(0.25, 0.40)
+
+
+func begin_result_duck(make: bool, files_ready: bool) -> void:
+	_swell_left = -1.0
+	if make and not files_ready:
+		set_duck(1.35, 0.05)
+		_swell_left = 0.6
+		_after_swell_sec = 0.2
+		return
+	if not files_ready:
+		set_duck(1.0, 1.4)
+		return
+	set_duck(1.0, 0.8)
+
+
+func reset_duck() -> void:
+	_swell_left = -1.0
+	_duck = 1.0
+	_duck_target = 1.0
+	_duck_sec = 0.40
+	duck_time_scale = 1.0
 
 
 func note_missing(path: String, label: String) -> void:
@@ -53,6 +113,8 @@ func note_missing(path: String, label: String) -> void:
 
 
 func _follow_screen() -> void:
+	if not is_inside_tree():
+		return
 	var board = get_tree().current_scene
 	if board == null:
 		return
