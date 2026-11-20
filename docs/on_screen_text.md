@@ -732,7 +732,7 @@ No pause screen exists. Esc during a kick is not given its own pause menu. A pri
 ### `select_willow_unlock`
 - **screen:** Character select
 - **when:** Under LOCKED, while this kicker is locked. Also shown in the save-note banner if the locked card is confirmed.
-- **current:** "Make a kick with 1 attempt left (kick 5+)"
+- **current:** "MAKE A KICK WITH 1 ATTEMPT LEFT ON KICK 8 OR LATER"
 - **kind:** static
 - **source:** code
 
@@ -1551,15 +1551,15 @@ No pause screen exists. Esc during a kick is not given its own pause menu. A pri
 
 ### `result_attempt_earned`
 - **screen:** Kick result
-- **when:** Under the score line when the make earns an attempt.
-- **current:** "+1 ATTEMPT"
+- **when:** No longer drawn. A make does not add an attempt.
+- **current:** ""
 - **kind:** static
 - **source:** code
 
 ### `result_attempt_cap`
 - **screen:** Kick result
-- **when:** Under the score line when a make would earn an attempt but the cap is already full.
-- **current:** "AT CAP"
+- **when:** No longer drawn. A make does not add an attempt.
+- **current:** ""
 - **kind:** static
 - **source:** code
 

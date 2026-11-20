@@ -150,6 +150,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "pace2":
+		if not await _capture_pace2():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "rs1":
 		if not await _capture_rs1():
 			get_tree().quit(1)
@@ -5878,6 +5884,79 @@ func _capture_pace1() -> bool:
 	board.logic.phase = KickLogic.Phase.AIMING
 	print("PACE1 endless 11 row ", RunTable.table_kick("endless", 11), " dist ", board.run.distance_yards())
 	return await _capture("pace1_endless_kick11.png")
+
+
+func _capture_pace2() -> bool:
+	var path := str(SaveData.file_path)
+	var had_file := FileAccess.file_exists(path)
+	var backup := PackedByteArray()
+	if had_file:
+		backup = FileAccess.get_file_as_bytes(path)
+	var had_willow := bool(SaveData.has_unlock(Kickers.WILLOW))
+	board.highlight = 1
+	board.selecting = true
+	board.front.run_mode = "standard"
+	board.confirm_kicker()
+	board.run.tad_level = 0
+	board.run.attempts = 2
+	board.run.cash = 0
+	board.run.cash_popup = ""
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.AIMING
+	print("PACE2 start attempts ", board.run.attempts)
+	if not await _capture("pace2_start_2_attempts.png"):
+		_restore_pace2_save(had_file, path, backup, had_willow)
+		return false
+	board.run.cash = 1
+	board.run.cash_popup = "+$1"
+	board.refresh_view()
+	print("PACE2 cash popup ", BroadcastHud.payout_text(board.run.cash_popup))
+	if not await _capture("pace2_cash_popup.png"):
+		_restore_pace2_save(had_file, path, backup, had_willow)
+		return false
+	board.run.cash_popup = ""
+	board.run.cash = 20
+	board.run.shop_stock = [Vitamins.PROTEIN, Vitamins.OMEGA, Vitamins.ELECTROLYTE]
+	board.run.shop_b12_bought = false
+	board.run.awaiting_shop = true
+	board.refresh_view()
+	print("PACE2 prices ", board.run.item_price(Vitamins.PROTEIN), " ", board.run.item_price(Vitamins.OMEGA), " ", board.run.item_price(Vitamins.ELECTROLYTE), " b12 ", board.run.item_price(Vitamins.B12))
+	if not await _capture("pace2_shop1_prices.png"):
+		_restore_pace2_save(had_file, path, backup, had_willow)
+		return false
+	board.run.awaiting_shop = false
+	SaveData.kickers[Kickers.WALK_ON]["tad_unlocked"] = 8
+	SaveData.kickers[Kickers.WALK_ON]["tad_selected"] = 8
+	board.front.run_mode = "standard"
+	board.open_select()
+	board.highlight = 1
+	board.tad_picker_slot = 1
+	board.refresh_view()
+	print("PACE2 tad ", SaveData.tad_selected(Kickers.WALK_ON), " ", RunLogic.tad_name(8), " ", RunLogic.tad_summary(8))
+	if not await _capture("pace2_tad8_select.png"):
+		_restore_pace2_save(had_file, path, backup, had_willow)
+		return false
+	SaveData.unlocks[Kickers.WILLOW] = false
+	board.tad_picker_slot = -1
+	board.highlight = 6
+	board.refresh_view()
+	print("PACE2 willow ", SelectCard.unlock_line(Kickers.WILLOW))
+	var saved := await _capture("pace2_willow_locked_card.png")
+	_restore_pace2_save(had_file, path, backup, had_willow)
+	return saved
+
+
+func _restore_pace2_save(had_file: bool, path: String, backup: PackedByteArray, had_willow: bool) -> void:
+	SaveData.unlocks[Kickers.WILLOW] = had_willow
+	if had_file:
+		var file := FileAccess.open(path, FileAccess.WRITE)
+		if file != null:
+			file.store_buffer(backup)
+			file.close()
+		SaveData.load_file()
+	else:
+		SaveData.kickers[Kickers.WALK_ON]["tad_unlocked"] = 0
+		SaveData.kickers[Kickers.WALK_ON]["tad_selected"] = 0
 
 
 func _capture_cam1() -> bool:

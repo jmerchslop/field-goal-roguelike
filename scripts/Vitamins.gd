@@ -16,7 +16,7 @@ const PICKLE := "pickle_juice"
 const TART := "tart_cherry"
 const B12 := "b12_shot"
 
-const B12_PRICE := 7
+const B12_PRICE := 6
 const REROLL_START := 2
 
 const ALL: Array = [
@@ -57,11 +57,11 @@ static func piece_name(id: String) -> String:
 static func price(id: String) -> int:
 	match id:
 		PROTEIN, MAGNESIUM, PREWORKOUT:
-			return 4
-		OMEGA, VITAMIN_D, ZINC, LUTEIN, PICKLE:
 			return 5
-		ELECTROLYTE, TART:
+		OMEGA, VITAMIN_D, ZINC, LUTEIN, PICKLE:
 			return 6
+		ELECTROLYTE, TART:
+			return 7
 		B12:
 			return B12_PRICE
 	return 0

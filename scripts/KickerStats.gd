@@ -9,6 +9,8 @@ var accuracy_speed := KickConstants.ACCURACY_FALL_PER_SEC
 # Sizes PERFECT and good. 100 is ±2 / ±8. It does not change needle speed.
 var accuracy := 100.0
 var ball_speed_mult := 1.0
+# Stone × lights × TAD 7 × Training Camp, already capped. Rain reads this.
+var needle_speedup := 1.0
 var compounding := false
 var house_account := false
 var gelcap := false
@@ -83,6 +85,7 @@ func reset() -> void:
 	accuracy_speed = KickConstants.ACCURACY_FALL_PER_SEC
 	accuracy = 100.0
 	ball_speed_mult = 1.0
+	needle_speedup = 1.0
 	compounding = false
 	house_account = false
 	gelcap = false

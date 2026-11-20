@@ -714,11 +714,14 @@ func _accuracy_omega() -> float:
 
 
 # One speed for the power sweep, the red band, and the accuracy sweep.
-# power_speed already has the slow floor, Stone Toe, UNDER THE LIGHTS, and TAD 7.
-# Rain and ball speed are last and are not floored. Nothing here changes after a lock.
+# power_speed already has the slow floor and the capped speed-up product.
+# Rain fills only the room left under that ceiling. Ball speed stays outside it.
 func _kick_omega() -> float:
 	var rain := rain_scale if rain_faster else 1.0
-	return MeterGauge.omega_base() * (stats.power_speed / 100.0) * rain * stats.ball_speed_mult
+	var speedup := maxf(stats.needle_speedup, 1.0)
+	var room := MeterGauge.NEEDLE_SPEEDUP_CEILING / speedup
+	var rain_eff := minf(rain, maxf(1.0, room))
+	return MeterGauge.omega_base() * (stats.power_speed / 100.0) * rain_eff * stats.ball_speed_mult
 
 
 # Seconds of power-phase sweep from the current needle to this power.

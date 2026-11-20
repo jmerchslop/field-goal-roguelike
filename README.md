@@ -19,7 +19,7 @@ The window is 1280×720. You stand behind the kicker and look up the field. 1 ya
 - **M** uses a mulligan after a miss. Space accepts that miss instead.
 - **W** sets this kick's wind to 10 mph, blowing right. **P** takes a practice swing if you own that card and still have one this half.
 
-You begin by picking Big Bruce or The Walk-On. You start with 1 attempt and can hold 3. A make on the first try of a kick earns one, until the cap. A miss spends one and you kick that same spot again, with the same wind. No attempts left ends the run. Making kick 10 wins. The top-left line shows the kick, the distance, the score, the streak, the multiplier, and the attempt circles.
+You begin by picking Big Bruce or The Walk-On. You start with 2 attempts and can hold 3. A make does not add an attempt. A miss spends one and you kick that same spot again, with the same wind. No attempts left ends the run. Making kick 10 wins. The top-left line shows the kick, the distance, the score, the streak, the multiplier, and the attempt circles.
 
 Wind is rolled when a kick first comes up, and a miss keeps it. A flag by the posts shows Calm, Breezy, Windy, or GALE. The ball bends late, toward the way the wind blows. A tailwind adds range and a headwind takes some away. Big Bruce's ball drifts less.
 

@@ -131,7 +131,7 @@ const ALL: Array = [
 		"accuracy": 88,
 		"range_line": "50 yd",
 		"kit_line": "Synchronicity",
-		"unlock": "Make a kick with 1 attempt left (kick 5+)",
+		"unlock": "MAKE A KICK WITH 1 ATTEMPT LEFT ON KICK 8 OR LATER",
 		"color": Color(0.2, 0.35, 0.72),
 		"shape": "circle",
 		"portrait_path": "res://art/kickers/willow_portrait.png",

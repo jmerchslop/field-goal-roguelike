@@ -9,10 +9,12 @@ extends RefCounted
 # ω0 is the old default: POWER → MAX took 1.0s when power_speed was 100.
 # Every kicker shares a faster baseline. Accuracy sizes the wedges, not the needle.
 const OMEGA0 := 90.0
-const SWEEP_SEC := 0.700
+const SWEEP_SEC := 0.600
 # Item, perk, and vitamin slows multiply together, then stop at this floor.
-# Stone Toe, UNDER THE LIGHTS, rain, and ball speed are applied after it.
-const NEEDLE_SLOW_FLOOR := 0.35
+# Stone Toe, UNDER THE LIGHTS, TAD 7, Training Camp, and rain are speed-ups after it.
+const NEEDLE_SLOW_FLOOR := 0.40
+# Stone × lights × TAD 7 × Training Camp × rain never passes this. Ball speed sits outside it.
+const NEEDLE_SPEEDUP_CEILING := 1.60
 const WINDUP_SEC := 0.08
 const POWER_ANGLE := 180.0
 const MAX_ANGLE := 90.0

@@ -1,6 +1,7 @@
 # Item, kit, range, and cash audit
 
 Generated: 2026-11-14
+PACE2: The needle sweep is 0.60 s. Slows floor at 0.40. Stone, lights, TAD 7, Training Camp, and rain share a ×1.60 ceiling. A run starts with 2 attempts and a make does not add one. TAD 8 starts at 1 attempt. A make pays $1, vitamins are $5/$6/$7, and B12 is $6. Phil's shop stays free. After two offers with no range card, Standard forces one while calm range is under the kick 10 distance. Willow unlocks on kick 8 or later with 1 attempt left.
 PACE1: Standard is 10 kicks, 35 to 80. Bosses are kicks 5 and 10. Shops follow makes on 5 and 9. Refills and Second Look are kicks 1 and 6 in Standard, and every 10 kicks in Endless. The Bonus Ring is kick 7 in Standard and 17, 47, 77, 97 in Endless. Card text says each half.
 CAM1: The ball cam chases the kick, holds 0.40 s, dips 0.12 s, then returns for the reaction. Options has BALL CAM ON / BALL CAM OFF. The crowd ducks to 0.25 while the ball is up. Cheer, groan, and ooh files are not in the build yet, so a make swells the bed to 1.35 and a miss eases back over 1.4 s.
 RS1: No-item full-power range is Cole 75, Bruce 70, Carlos 69, Gary 65, Walk-On 55, Phil 54, Willow 50, and Vex 500. Vex uses the same range formula as everyone else. Clearance and the 88% floor are gone. Made kicks draw as BARELY, STANDARD, or SOARS. The true carry, the result, and the HUD Max stay on the real number. Vex's kit reads Out of This World Range.

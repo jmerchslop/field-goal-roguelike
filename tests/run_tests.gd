@@ -68,6 +68,7 @@ func _run() -> void:
 	_check_rs1()
 	_check_cam1()
 	_check_pace1()
+	_check_pace2()
 	_check_f3()
 	_check_au1()
 	_check_drive_lid_and_power_safety()
@@ -252,10 +253,10 @@ func _check_pendulum() -> void:
 	paced.advance(paced.seconds_until_error(12.0))
 	for _i in 4:
 		samples.append(paced.needle_angle)
-		paced.advance(0.2)
+		paced.advance(0.1)
 	var rates: Array[float] = []
 	for index in range(1, samples.size()):
-		rates.append((samples[index - 1] - samples[index]) / 0.2)
+		rates.append((samples[index - 1] - samples[index]) / 0.1)
 	check(absf(rates[0] - rates[1]) < 0.02 and absf(rates[1] - rates[2]) < 0.02, "right-arc angular speed stays constant %s" % str(rates))
 	check(absf(rates[0] - MeterGauge.omega_base()) < 0.05, "default accuracy sweep uses kicker_omega, rate %s" % rates[0])
 	var timeout := KickLogic.new()
@@ -379,7 +380,7 @@ func _check_clean_meter_and_accuracy_speed() -> void:
 	check(near(bruce_time, expect, 0.002), "Bruce with no items sweeps POWER to MAX in 0.700s, got %s" % bruce_time)
 	check(near(walk_time, expect, 0.002), "Walk-On with no items sweeps POWER to MAX in 0.700s, got %s" % walk_time)
 	check(near(bruce_time, walk_time, 0.002), "Bruce and Walk-On match each other")
-	check(near(MeterGauge.omega_base(), MeterGauge.OMEGA0 / 0.700), "omega_base is ω0 / 0.700")
+	check(near(MeterGauge.omega_base(), MeterGauge.OMEGA0 / 0.600), "omega_base is ω0 / 0.600")
 	check(near(MeterGauge.omega_power(100.0), MeterGauge.omega_base()), "needle speed does not read the accuracy rating")
 	var bruce_stats := KickerStats.new()
 	Kickers.apply_to(bruce_stats, Kickers.BIG_BRUCE)
@@ -696,26 +697,25 @@ func _check_run_table() -> void:
 	check(RunTable.spot_yards("wide", 1) == 6.0 and RunTable.spot_yards("wide", -1) == -6.0, "wide spot is ±6")
 	var y75 := KickConstants.UPRIGHT_Y_PX + 75.0 * KickConstants.PIXELS_PER_YARD
 	check(y75 == 585.0 and y75 < KickConstants.WINDOW_HEIGHT, "75 yd still fits under the posts")
-	check(KickConstants.LATE_EARN_RULE == false, "LATE_EARN_RULE starts false")
-	check(KickConstants.ATTEMPTS_START == 1 and KickConstants.ATTEMPT_CAP == 3 and KickConstants.ATTEMPT_CAP_MAX == 5, "attempt numbers are 1, cap 3, hard max 5")
+	check(KickConstants.ATTEMPTS_START == 2 and KickConstants.ATTEMPT_CAP == 3 and KickConstants.ATTEMPT_CAP_MAX == 5, "attempt numbers are 2, cap 3, hard max 5")
 
 
 func _check_run_start_earn_and_cap() -> void:
 	var run := RunLogic.new()
 	run.new_run()
 	check(run.kick_number == 1 and near(run.distance_yards(), 35.0), "check 1 kick 1 is 35 yd")
-	check(run.attempts == 1 and run.attempt_cap == 3, "check 1 starts with 1 attempt and a cap of 3")
+	check(run.attempts == 2 and run.attempt_cap == 3, "check 1 starts with 2 attempts and a cap of 3")
 	check(near(run.spot_yards, 0.0) and near(run.current_mult(), 1.0), "check 1 is centered with mult 1")
 	run.resolve_kick("GOOD", 0.0, false)
-	check(run.attempt_note == "+1 ATTEMPT" and run.attempts == 2, "check 2 a first make earns +1 ATTEMPT, attempts=%d" % run.attempts)
+	check(run.attempt_note == "" and run.attempts == 2, "check 2 a first make does not add an attempt, attempts=%d" % run.attempts)
 	check(run.go_to_next_kick(), "check 2 space moves on")
 	check(run.kick_number == 2 and near(run.distance_yards(), 40.0), "check 2 next is kick 2 at 40 yd")
 	check(near(run.spot_yards, 0.0), "check 2 kick 2 is still centered, so the ball is farther up the field only")
 	run.resolve_kick("GOOD", 0.0, false)
-	check(run.attempts == 3 and run.attempt_note == "+1 ATTEMPT", "check 3 kick 2 fills the third attempt")
+	check(run.attempts == 2 and run.attempt_note == "", "check 3 kick 2 still does not add an attempt")
 	check(run.go_to_next_kick(), "move to kick 3")
 	run.resolve_kick("GOOD", 0.0, false)
-	check(run.attempt_note == "AT CAP" and run.attempts == 3, "check 3 kick 3 is AT CAP and stays at 3")
+	check(run.attempt_note == "" and run.attempts == 2, "check 3 kick 3 stays at 2 attempts")
 	check(run.go_to_next_kick(), "move to kick 4")
 	check(run.kick_number == 4 and near(run.current_mult(), 1.75), "check 3 mult is 1.75 before kick 4, got %s" % run.current_mult())
 	check(near(absf(run.spot_yards), 3.0), "check 4 kick 4 starts ±3 yd off center, got %s" % run.spot_yards)
@@ -754,11 +754,14 @@ func _check_run_spots_and_attempts() -> void:
 	var over := RunLogic.new()
 	over.new_run()
 	over.resolve_kick("DOINK", 3.1, false)
-	check(over.phase == RunLogic.Phase.GAME_OVER, "check 6 missing kick 1 is game over")
+	check(over.phase == RunLogic.Phase.PLAYING and over.attempts == 1, "check 6 the first miss on kick 1 leaves the second attempt")
+	over.begin_retry()
+	over.resolve_kick("DOINK", 3.1, false)
+	check(over.phase == RunLogic.Phase.GAME_OVER, "check 6 the second miss on kick 1 is game over")
 	check(over.score == 0 and over.kicks_made == 0 and near(over.longest_make, 0.0), "check 6 stats are score 0, made 0, longest 0")
 	check(over.kick_number == 1 and not over.go_to_next_kick(), "check 6 game over does not move on")
 	over.new_run()
-	check(over.kick_number == 1 and over.attempts == 1 and over.score == 0 and over.phase == RunLogic.Phase.PLAYING, "check 6 R starts kick 1 with 1 attempt")
+	check(over.kick_number == 1 and over.attempts == 2 and over.score == 0 and over.phase == RunLogic.Phase.PLAYING, "check 6 R starts kick 1 with 2 attempts")
 
 
 func _check_run_score_and_endings() -> void:
@@ -775,7 +778,7 @@ func _check_run_score_and_endings() -> void:
 	check(middle.down_the_middle, "check 7 a dead-center make is down the middle")
 	check(middle.score_line == "35 yd × 1.00 × 2 = 70 (+5 Perfect)", "check 7 math reads '%s'" % middle.score_line)
 	check(middle.score == 75, "check 7 score is 75, got %d" % middle.score)
-	check(middle.attempt_note == "+1 ATTEMPT", "check 7 also earns an attempt")
+	check(middle.attempt_note == "" and middle.attempts == 2, "check 7 a make does not add an attempt")
 	var edge := RunLogic.new()
 	edge.new_run()
 	edge.resolve_kick("GOOD", 1.0, false)
@@ -795,7 +798,7 @@ func _check_run_score_and_endings() -> void:
 	won.resolve_kick("GOOD", 0.4, false)
 	check(won.phase == RunLogic.Phase.WIN, "making kick 10 is a win")
 	check(won.kicks_made == 1 and near(won.longest_make, 80.0), "win stats count that make, longest %s" % won.longest_make)
-	check(won.attempts == 2, "the winning make still earns an attempt")
+	check(won.attempts == 1, "the winning make does not add an attempt")
 	check(not won.go_to_next_kick() and won.kick_number == 10, "a win does not invent kick 11")
 	var last_miss := _fresh(10, 2)
 	last_miss.resolve_kick("WIDE RIGHT", 6.0, false)
@@ -814,25 +817,18 @@ func _check_run_score_and_endings() -> void:
 
 
 func _check_run_late_earn_and_spot_in_the_kick() -> void:
-	var plain := _fresh(11, 2)
-	plain.run_mode = "endless"
-	plain.late_earn_rule = true
+	var plain := _fresh(8, 2)
 	plain.resolve_kick("GOOD", 4.0, false)
-	check(plain.attempts == 2 and plain.attempt_note == "", "check 8 a normal good on kick 11 stays at 2 attempts")
-	var middle := _fresh(11, 2)
-	middle.run_mode = "endless"
-	middle.late_earn_rule = true
+	check(plain.attempts == 2 and plain.attempt_note == "", "a normal good stays at 2 attempts")
+	var middle := _fresh(8, 2)
 	middle.resolve_kick("GOOD", 0.2, false)
-	check(middle.down_the_middle and middle.attempts == 3 and middle.attempt_note == "+1 ATTEMPT", "check 8 down the middle on kick 11 goes to 3")
-	var perfect := _fresh(11, 2)
-	perfect.run_mode = "endless"
-	perfect.late_earn_rule = true
+	check(middle.down_the_middle and middle.attempts == 2 and middle.attempt_note == "", "down the middle does not add an attempt")
+	var perfect := _fresh(8, 2)
 	perfect.resolve_kick("GOOD", 4.0, true)
-	check(perfect.attempts == 3, "check 8 a perfect on kick 11 also earns")
+	check(perfect.attempts == 2, "a perfect make does not add an attempt")
 	var earlier := _fresh(10, 2)
-	earlier.late_earn_rule = true
 	earlier.resolve_kick("GOOD", 4.0, false)
-	check(earlier.attempts == 3, "kick 10 still earns on a normal good when the late rule is on")
+	check(earlier.phase == RunLogic.Phase.WIN and earlier.attempts == 2, "kick 10 wins without adding an attempt")
 	var retake := _fresh(1, 2)
 	retake.is_first_ball = false
 	retake.resolve_kick("GOOD", 0.0, true)
@@ -1125,13 +1121,14 @@ func _check_kickers_and_fixes() -> void:
 	check(near(short_kick.ball_forward_yards, short_kick.max_range) and short_kick.ball_forward_yards < 35.0, "check 7 the ball lands at max range, in front of the posts")
 	var stay := RunLogic.new()
 	stay.new_run()
+	stay.attempts = 1
 	stay.resolve_kick("SHORT", 0.0, true)
-	check(stay.phase == RunLogic.Phase.GAME_OVER and stay.kick_number == 1, "check 8 one miss on kick 1 is game over, still kick 1")
+	check(stay.phase == RunLogic.Phase.GAME_OVER and stay.kick_number == 1, "check 8 the last attempt on kick 1 is game over, still kick 1")
 	var retry := RunLogic.new()
 	retry.start_with_kicker(Kickers.WALK_ON)
 	retry.set_next_side(1)
 	retry.resolve_kick("GOOD", 0.0, false)
-	check(retry.attempts == 2 and retry.attempt_note == "+1 ATTEMPT", "check 9 making kick 1 earns an attempt")
+	check(retry.attempts == 2 and retry.attempt_note == "", "check 9 making kick 1 does not add an attempt")
 	check(retry.go_to_next_kick(), "make 1 moves to kick 2")
 	retry.resolve_kick("GOOD", 0.0, false)
 	check(retry.go_to_next_kick(), "make 2 moves to kick 3")
@@ -1140,10 +1137,10 @@ func _check_kickers_and_fixes() -> void:
 	check(retry.kick_number == 4 and near(retry.spot_yards, 3.0), "kick 4 is the right hash")
 	var saved_spot := retry.spot_yards
 	retry.resolve_kick("WIDE RIGHT", 6.0, false)
-	check(retry.kick_number == 4 and near(retry.spot_yards, saved_spot) and retry.attempts == 2, "check 9 the miss stays on kick 4 and the same spot")
+	check(retry.kick_number == 4 and near(retry.spot_yards, saved_spot) and retry.attempts == 1, "check 9 the miss stays on kick 4 and the same spot")
 	check(retry.begin_retry() and not retry.is_first_ball and near(retry.spot_yards, saved_spot), "the retry is the same kick, not a first ball")
 	retry.resolve_kick("GOOD", 0.0, false)
-	check(retry.attempt_note == "" and retry.attempts == 2 and retry.kick_number == 4, "check 9 the retry make does not award +1 ATTEMPT")
+	check(retry.attempt_note == "" and retry.attempts == 1 and retry.kick_number == 4, "check 9 the retry make does not add an attempt")
 	check(retry.go_to_next_kick() and retry.kick_number == 5, "check 9 the next kick is 5, not 6")
 
 
@@ -2210,12 +2207,12 @@ func _check_vitamin_shop() -> void:
 	fresh.new_run()
 	check(fresh.cash == 0 and str(fresh.belt[0]) == "" and str(fresh.belt[1]) == "", "a fresh run starts at $0 with an empty belt")
 	fresh.resolve_kick("GOOD", 2.0, false)
-	check(fresh.cash == 3 and fresh.cash_popup == "+$3", "a plain make pays $3")
+	check(fresh.cash == 1 and fresh.cash_popup == "+$1", "a plain make pays $1")
 	var stacked := RunLogic.new()
 	stacked.new_run()
 	stacked.kick_number = 5
 	stacked.resolve_kick("GOOD", 0.0, true)
-	check(stacked.cash == 7 and stacked.cash_popup == "+$7", "a perfect middle boss make pays $7")
+	check(stacked.cash == 5 and stacked.cash_popup == "+$5", "a perfect middle boss make pays $5")
 	var miss := RunLogic.new()
 	miss.new_run()
 	miss.attempts = 2
@@ -2224,6 +2221,7 @@ func _check_vitamin_shop() -> void:
 	check(not miss.opens_shop(), "a miss never opens the shop")
 	var early := RunLogic.new()
 	early.new_run()
+	early.attempts = 1
 	early.resolve_kick("SHORT", 0.0, false)
 	check(early.phase == RunLogic.Phase.GAME_OVER and not early.opens_shop(), "game over before kick 5 never opens a shop")
 	var again := RunLogic.new()
@@ -2258,15 +2256,15 @@ func _check_vitamin_shop() -> void:
 	check(not shop.shop_b12_bought and shop.shop_reroll_price == 2, "B12 is for sale and the first reroll costs $2")
 	check(shop.rerolls_left == held_rerolls and not shop.reroll_offer(), "shop F does not spend a loadout reroll")
 	shop.shop_stock = [Vitamins.PROTEIN, Vitamins.MAGNESIUM, Vitamins.OMEGA]
-	shop.cash = 4
-	check(shop.buy_shelf(0) and shop.cash == 0 and str(shop.belt[0]) == Vitamins.PROTEIN and str(shop.shop_stock[0]) == "", "buying a $4 vitamin fills Z and marks the shelf SOLD")
+	shop.cash = 5
+	check(shop.buy_shelf(0) and shop.cash == 0 and str(shop.belt[0]) == Vitamins.PROTEIN and str(shop.shop_stock[0]) == "", "buying a $5 vitamin fills Z and marks the shelf SOLD")
 	shop.cash = 20
 	check(shop.buy_shelf(1) and str(shop.belt[1]) == Vitamins.MAGNESIUM, "the second vitamin fills X")
 	var blocked_cash := shop.cash
 	check(not shop.buy_shelf(2) and shop.shop_note == "Belt full: sell first" and shop.cash == blocked_cash, "a full belt blocks the next buy")
 	var before_sell := shop.cash
 	check(shop.sell_belt(0) and str(shop.belt[0]) == "" and shop.cash == before_sell + 2, "Z sells Protein Shake for $2")
-	check(Vitamins.sale_price(Vitamins.PROTEIN) == 2 and Vitamins.sale_price(Vitamins.OMEGA) == 2 and Vitamins.sale_price(Vitamins.ELECTROLYTE) == 3, "sale prices are floor(price / 2)")
+	check(Vitamins.sale_price(Vitamins.PROTEIN) == 2 and Vitamins.sale_price(Vitamins.OMEGA) == 3 and Vitamins.sale_price(Vitamins.ELECTROLYTE) == 3, "sale prices are floor(price / 2)")
 	check(shop.buy_shelf(2) and str(shop.belt[0]) == Vitamins.OMEGA, "an empty belt slot can buy again")
 	var b12_was := shop.shop_b12_bought
 	var before_reroll := shop.cash
@@ -2284,7 +2282,7 @@ func _check_vitamin_shop() -> void:
 	shop.cash = 3
 	check(shop.b12_grey() and not shop.buy_b12() and shop.shop_flash == "b12" and shop.cash == 3, "B12 flashes red when it costs more than the cash on hand")
 	shop.cash = 10
-	check(shop.buy_b12() and shop.attempts == 2 and shop.shop_b12_bought and not shop.buy_b12() and shop.cash == 3, "B12 adds one attempt once, then does nothing")
+	check(shop.buy_b12() and shop.attempts == 2 and shop.shop_b12_bought and not shop.buy_b12() and shop.cash == 4, "B12 adds one attempt once, then does nothing")
 	shop.leave_shop()
 	check(not shop.awaiting_shop and shop.go_to_next_kick() and shop.kick_number == 6, "leaving the shop starts kick 6")
 	shop.kick_number = 4
@@ -2365,7 +2363,7 @@ func _check_vitamin_shop() -> void:
 	paid.use_belt(0)
 	paid.resolve_kick("GOOD", 0.0, true)
 	check(paid.score_line.find("PERFECT") < 0, "Omega-3 does not add the +5 PERFECT score bonus, got '%s'" % paid.score_line)
-	check(paid.cash == 5, "the PERFECT press and the middle still pay cash under Omega-3, got %s" % paid.cash)
+	check(paid.cash == 3, "the PERFECT press and the middle still pay cash under Omega-3, got %s" % paid.cash)
 	var rain := RunLogic.new()
 	rain.new_run()
 	rain.force_weather(RunLogic.RAIN)
@@ -2835,7 +2833,7 @@ func _check_new_kickers() -> void:
 	var gary_time := _measure_power_sweep(Kickers.GARY)
 	var vex_time := _measure_power_sweep(Kickers.VEX)
 	print("POWER_TO_MAX Phil ", phil_time, " Gary ", gary_time, " Vex ", vex_time)
-	check(near(phil_time, 0.700, 0.002) and near(gary_time, 0.700, 0.002) and near(vex_time, 0.700, 0.002), "Phil, Gary, and Vex share the 0.700s sweep")
+	check(near(phil_time, 0.600, 0.002) and near(gary_time, 0.600, 0.002) and near(vex_time, 0.600, 0.002), "Phil, Gary, and Vex share the 0.600s sweep")
 	var shop := RunLogic.new()
 	shop.start_with_kicker(Kickers.WALK_ON)
 	shop.cash = 10
@@ -3087,6 +3085,7 @@ func _check_auto_shank() -> void:
 	check(missed.phase == RunLogic.Phase.PLAYING and missed.begin_retry() and missed.kick_number == 1, "attempts left means the same kick comes back")
 	var over := RunLogic.new()
 	over.start_with_kicker(Kickers.WALK_ON)
+	over.attempts = 1
 	over.resolve_kick("WIDE LEFT", -8.0, false)
 	check(over.attempts == 0 and over.phase == RunLogic.Phase.GAME_OVER, "a shank with no attempts left is GAME OVER")
 	var walk := RunLogic.new()
@@ -3110,12 +3109,12 @@ func _check_auto_shank() -> void:
 		var accuracy: float = ratings[id]
 		check(near(stats.accuracy, accuracy), "%s accuracy stays %s" % [id, accuracy])
 		check(near(stats.perfect_band, 1.5 * accuracy / 100.0) and near(stats.good_band, 6.0 * accuracy / 100.0), "%s bands follow 1.5 / 6" % id)
-		check(near(_measure_power_sweep(id), 0.700, 0.002), "%s POWER to MAX is still 0.700s" % id)
+		check(near(_measure_power_sweep(id), 0.600, 0.002), "%s POWER to MAX is still 0.600s" % id)
 	var accuracy_time := _measure_accuracy_sweep(Kickers.WALK_ON)
 	var accuracy_expected := 90.0 / MeterGauge.omega_accuracy(120.0, 1.0)
 	print("ACCURACY_SWEEP Walk-On ", accuracy_time, " current formula ", accuracy_expected)
 	check(near(accuracy_time, accuracy_expected, 0.002), "accuracy-phase time stays on the current formula, measured %s" % accuracy_time)
-	check(near(accuracy_time, 0.700, 0.002), "the current accuracy sweep is 0.700s, not a new target")
+	check(near(accuracy_time, 0.600, 0.002), "the current accuracy sweep is 0.600s")
 
 
 func _sfx_pools(board: KickSfx) -> Array:
@@ -3569,7 +3568,7 @@ func _check_rw2() -> void:
 	check(clutched.use_belt(0), "Magnesium is on for the clutch floor check")
 	clutched.is_first_ball = false
 	clutched.prepare_kick_stats()
-	check(near(clutched.stats.power_speed, 35.0, 0.05) and near(clutched.stats.accuracy_speed, 35.0, 0.05), "clutch ×0.90 is inside the slow product, before the 0.35 floor, got %s / %s" % [clutched.stats.power_speed, clutched.stats.accuracy_speed])
+	check(near(clutched.stats.power_speed, 40.0, 0.05) and near(clutched.stats.accuracy_speed, 40.0, 0.05), "clutch ×0.90 is inside the slow product, before the 0.40 floor, got %s / %s" % [clutched.stats.power_speed, clutched.stats.accuracy_speed])
 	var made := RunLogic.new()
 	made.start_with_kicker(Kickers.WALK_ON)
 	made.is_first_ball = false
@@ -3702,11 +3701,11 @@ func _check_as1() -> void:
 	var plain := RunLogic.new()
 	plain.start_with_kicker(Kickers.WALK_ON)
 	check(near(plain.distance_yards(), 35.0) and plain.rerolls_left == 2 and near(plain.post_width(), 6.17), "TAD 0 keeps today's distance, rerolls, and posts")
-	check(plain.item_price(Vitamins.PROTEIN) == 4 and plain.shop_reroll_cost() == 2, "TAD 0 shop prices stay 4 and 2")
+	check(plain.item_price(Vitamins.PROTEIN) == 5 and plain.shop_reroll_cost() == 2, "TAD 0 shop prices stay 5 and 2")
 	var taxed := RunLogic.new()
 	taxed.start_with_kicker(Kickers.WALK_ON)
 	taxed.tad_level = 1
-	check(taxed.item_price(Vitamins.PROTEIN) == 6 and taxed.item_price(Vitamins.B12) == 11 and taxed.shop_reroll_cost() == 3, "TAD 1 rounds shop prices up by 1.50")
+	check(taxed.item_price(Vitamins.PROTEIN) == 8 and taxed.item_price(Vitamins.B12) == 9 and taxed.shop_reroll_cost() == 3, "TAD 1 rounds shop prices up by 1.50")
 	var phil := RunLogic.new()
 	phil.start_with_kicker(Kickers.PHIL)
 	phil.tad_level = 1
@@ -3818,18 +3817,18 @@ func _check_as2() -> void:
 	slowed.stats.power_speed = 10.0
 	slowed._finish_needles()
 	print("AS2 tad7 floored ", slowed.stats.power_speed)
-	check(near(slowed.stats.power_speed, 46.55, 0.02) and near(slowed.stats.accuracy_speed, slowed.stats.power_speed), "a slow stack floored at 0.35 still takes the 1.33")
+	check(near(slowed.stats.power_speed, 53.2, 0.02) and near(slowed.stats.accuracy_speed, slowed.stats.power_speed), "a slow stack floored at 0.40 still takes the 1.33")
 	var plain := RunLogic.new()
 	plain.start_with_kicker(Kickers.WALK_ON)
 	var plain_attempts := plain.attempts
 	plain.resolve_kick("GOOD", 0.0, false)
 	var denied := RunLogic.new()
 	denied.start_with_kicker(Kickers.WALK_ON)
-	denied.tad_level = 8
+	denied.open_tad(8)
 	var denied_attempts := denied.attempts
 	var denied_cap := denied.attempt_cap
 	denied.resolve_kick("GOOD", 0.0, false)
-	check(plain.attempts == plain_attempts + 1 and denied.attempts == denied_attempts and denied.attempt_cap == denied_cap and denied_attempts == 1 and denied_cap == 3, "TAD 8 skips the first-try attempt and leaves the start at 1 and the cap at 3")
+	check(plain.attempts == plain_attempts and denied.attempts == denied_attempts and denied.attempt_cap == denied_cap and denied_attempts == 1 and denied_cap == 3, "TAD 8 starts at 1 attempt and a make does not add one")
 	var bench := RunLogic.new()
 	bench.start_with_kicker(Kickers.WALK_ON)
 	bench.tad_level = 8
@@ -3940,7 +3939,7 @@ func _check_as2() -> void:
 	stacked.prepare_kick_stats()
 	check(stacked.tad_level == 10 and stacked.rerolls_left == 0 and stacked.wind_speed == wind_before + 3, "TAD 10 keeps the wind add and the reroll ban")
 	check(near(stacked.distance_yards(), 39.0) and near(stacked.post_width(), 5.92) and stacked.posts_move(), "TAD 10 keeps the longer kick, the narrower posts, and the wander")
-	check(stacked.item_price(Vitamins.PROTEIN) == 6 and (stacked.weather == RunLogic.RAIN or stacked.weather == RunLogic.SNOW or stacked.weather == RunLogic.MUD), "TAD 10 keeps the shop tax and foul weather")
+	check(stacked.item_price(Vitamins.PROTEIN) == 8 and (stacked.weather == RunLogic.RAIN or stacked.weather == RunLogic.SNOW or stacked.weather == RunLogic.MUD), "TAD 10 keeps the shop tax and foul weather")
 	check(near(stacked.stats.power_speed, 133.0, 0.01), "TAD 10 keeps the faster needles")
 	var made := stacked.attempts
 	stacked.resolve_kick("GOOD", 0.0, false)
@@ -4479,7 +4478,7 @@ func _check_pk1() -> void:
 	var power_before := slow.stats.power_speed
 	slow.weather = RunLogic.RAIN
 	slow.prepare_kick_stats()
-	check(near(slow.stats.power_speed, 35.0) and near(slow.stats.accuracy_speed, 35.0) and slow.stats.power_speed > power_before * 0.90, "Rain Dance ×0.90 is inside the slow product before the floor")
+	check(near(slow.stats.power_speed, 40.0) and near(slow.stats.accuracy_speed, 40.0) and slow.stats.power_speed > power_before * 0.90, "Rain Dance ×0.90 is inside the slow product before the floor")
 	var gang := RunLogic.new()
 	gang.start_with_kicker(Kickers.WALK_ON)
 	gang.give(Loadout.CHAIN_GANG, 1)
@@ -4674,7 +4673,7 @@ func _check_rt1() -> void:
 	var walk := KickLogic.new()
 	Kickers.apply_to(walk.stats, Kickers.WALK_ON)
 	var plain_sec := _band_seconds(walk)
-	check(plain_sec >= 0.099 and near(plain_sec, 0.10, 0.002), "the base band lasts about 0.10 s at the 0.70 s sweep, got %s" % plain_sec)
+	check(plain_sec >= 0.080 and near(plain_sec, 0.0857, 0.002), "the base band lasts about 0.086 s at the 0.60 s sweep, got %s" % plain_sec)
 	walk.stats.power_speed = 120.0
 	var stone_sec := _band_seconds(walk)
 	check(stone_sec < plain_sec - 0.01, "Stone Toe shrinks time in the band, got %s" % stone_sec)
@@ -5127,7 +5126,7 @@ func _check_m2_kickers() -> void:
 	check(not KickConstants.debug_unlock_all_kickers, "debug_unlock_all_kickers stays false")
 	check(Kickers.UNLOCKABLE.has(Kickers.COLE) and Kickers.UNLOCKABLE.has(Kickers.WILLOW) and Kickers.UNLOCKABLE.has(Kickers.CARLOS), "debug unlock covers Cole, Willow, and Carlos")
 	check(Kickers.unlock_hint(Kickers.COLE) == "Beat Standard", "Cole's locked card says Beat Standard")
-	check(Kickers.unlock_hint(Kickers.WILLOW) == "Make a kick with 1 attempt left (kick 5+)", "Willow's locked card names the clutch")
+	check(Kickers.unlock_hint(Kickers.WILLOW) == "MAKE A KICK WITH 1 ATTEMPT LEFT ON KICK 8 OR LATER", "Willow's locked card names kick 8")
 	check(Kickers.unlock_hint(Kickers.CARLOS) == "Make a 100-yard field goal", "Carlos's locked card names the 100-yard kick")
 	var records = get_root().get_node("SaveData")
 	var kept := str(records.file_path)
@@ -5171,9 +5170,9 @@ func _check_m2_kickers() -> void:
 	check(near(phil_stats.accuracy, 112.0) and near(phil_stats.ball_speed_mult, 1.0) and phil_stats.house_account, "Phil's rating, needle, and House Account are unchanged")
 	check(near(gary_stats.accuracy, 98.0) and near(gary_stats.ball_speed_mult, 1.0) and gary_stats.good_as_gold, "Gary's rating, needle, and Good As Gold are unchanged")
 	check(near(vex_stats.accuracy, 94.0) and near(vex_stats.ball_speed_mult, 1.0) and not vex_stats.clearance and near(vex_stats.saucer_mph, 11.0), "Vex's rating, needle, and saucer stay, and clearance is off")
-	check(near(_measure_power_sweep(Kickers.COLE), 0.700, 0.004), "Cole's POWER to MAX is still 0.700s")
-	check(near(_measure_power_sweep(Kickers.WILLOW), 1.400, 0.006), "Willow's Chill Ball POWER to MAX is about 1.400s")
-	check(near(_measure_power_sweep(Kickers.CARLOS), 0.700 / 1.15, 0.006), "Carlos's POWER to MAX is about 0.609s")
+	check(near(_measure_power_sweep(Kickers.COLE), 0.600, 0.004), "Cole's POWER to MAX is 0.600s")
+	check(near(_measure_power_sweep(Kickers.WILLOW), 1.200, 0.006), "Willow's Chill Ball POWER to MAX is about 1.200s")
+	check(near(_measure_power_sweep(Kickers.CARLOS), 0.600 / 1.15, 0.006), "Carlos's POWER to MAX is about 0.522s")
 	check(Kickers.field_frame(Kickers.COLE, "idle").ends_with("cole_idle_back.png"), "Cole idle uses cole_idle_back.png")
 	check(Kickers.field_frame(Kickers.COLE, "run").ends_with("cole_run.png") and Kickers.field_frame(Kickers.COLE, "plant").ends_with("cole_plant.png") and Kickers.field_frame(Kickers.COLE, "follow").ends_with("cole_follow_through.png"), "Cole run, plant, and follow-through are wired")
 	check(Kickers.field_frame(Kickers.WILLOW, "portrait").ends_with("willow_portrait.png") and Kickers.field_frame(Kickers.CARLOS, "portrait").ends_with("carlos_portrait.png"), "Willow and Carlos portraits are wired")
@@ -5248,9 +5247,9 @@ func _check_m2_kickers() -> void:
 	clutch.kick_resolved = false
 	clutch.phase = RunLogic.Phase.PLAYING
 	clutch.attempts = 1
-	clutch.kick_number = 6
+	clutch.kick_number = 8
 	clutch.resolve_kick("GOOD", 0.0, true)
-	check(Kickers.is_unlocked(Kickers.WILLOW), "a make with 1 attempt left on kick 5+ unlocks Willow")
+	check(Kickers.is_unlocked(Kickers.WILLOW), "a make with 1 attempt left on kick 8+ unlocks Willow")
 	records.unlocks[Kickers.WILLOW] = false
 	records.save_file()
 	var doomed := RunLogic.new()
@@ -5342,19 +5341,19 @@ func _check_needle_floor() -> void:
 	deep.give(Loadout.ANCHOR, 12)
 	deep.give(Loadout.PATIENT_GLOVES, 12)
 	deep.prepare_kick_stats()
-	check(near(deep.stats.power_speed, 35.0, 0.01) and near(deep.stats.accuracy_speed, 35.0, 0.01), "Anchor XII + Patient XII is 35 / 35, got %s / %s" % [deep.stats.power_speed, deep.stats.accuracy_speed])
-	check(near(_fill_seconds(deep.stats.power_speed), 2.0, 0.01), "that build fills power in about 2 seconds")
+	check(near(deep.stats.power_speed, 40.0, 0.01) and near(deep.stats.accuracy_speed, 40.0, 0.01), "Anchor XII + Patient XII is 40 / 40, got %s / %s" % [deep.stats.power_speed, deep.stats.accuracy_speed])
+	check(near(_fill_seconds(deep.stats.power_speed), 1.50, 0.01), "that build fills power in about 1.50 seconds")
 	deep.force_weather(RunLogic.LIGHTS)
 	deep.prepare_kick_stats()
-	check(near(deep.stats.power_speed, 47.25, 0.01) and near(deep.stats.accuracy_speed, 47.25, 0.01), "the same build under the lights is 47.25 / 47.25, got %s / %s" % [deep.stats.power_speed, deep.stats.accuracy_speed])
-	check(near(_fill_seconds(deep.stats.power_speed), 1.481481, 0.01), "under the lights that build fills power in about 1.48 seconds")
+	check(near(deep.stats.power_speed, 54.0, 0.01) and near(deep.stats.accuracy_speed, 54.0, 0.01), "the same build under the lights is 54 / 54, got %s / %s" % [deep.stats.power_speed, deep.stats.accuracy_speed])
+	check(near(_fill_seconds(deep.stats.power_speed), 1.1111, 0.01), "under the lights that build fills power in about 1.11 seconds")
 	var stickered := _endless_walk()
 	stickered.give(Loadout.ANCHOR, 12)
 	stickered.give(Loadout.STICKER, 12)
 	stickered.prepare_kick_stats()
 	check(near(stickered.stats.power_speed, 40.0, 0.01) and near(stickered.stats.accuracy_speed, 40.0, 0.01), "Anchor XII + Sticker XII is 40 / 40")
 	check(near(stickered.stats.drift_factor, 0.28), "Sticker XII drift is 0.28")
-	check(near(_fill_seconds(stickered.stats.power_speed), 1.75, 0.01), "Anchor XII fills power in about 1.75 seconds")
+	check(near(_fill_seconds(stickered.stats.power_speed), 1.50, 0.01), "Anchor XII fills power in about 1.50 seconds")
 	var stacked := _endless_walk()
 	stacked.give(Loadout.ANCHOR, 12)
 	stacked.give(Loadout.PATIENT_GLOVES, 12)
@@ -5362,14 +5361,14 @@ func _check_needle_floor() -> void:
 	stacked.belt[0] = Vitamins.MAGNESIUM
 	stacked.use_belt(0)
 	stacked.prepare_kick_stats()
-	check(near(stacked.stats.power_speed, 35.0, 0.01) and near(stacked.stats.accuracy_speed, 35.0, 0.01), "Anchor + Patient + Hero Ball + Magnesium floors at 35 / 35, got %s / %s" % [stacked.stats.power_speed, stacked.stats.accuracy_speed])
-	check(near(_fill_seconds(stacked.stats.power_speed), 2.0, 0.01), "the floored stack still fills power in about 2 seconds")
+	check(near(stacked.stats.power_speed, 40.0, 0.01) and near(stacked.stats.accuracy_speed, 40.0, 0.01), "Anchor + Patient + Hero Ball + Magnesium floors at 40 / 40, got %s / %s" % [stacked.stats.power_speed, stacked.stats.accuracy_speed])
+	check(near(_fill_seconds(stacked.stats.power_speed), 1.50, 0.01), "the floored stack still fills power in about 1.50 seconds")
 	var hurried := _endless_walk()
 	hurried.give(Loadout.ANCHOR, 12)
 	hurried.give(Loadout.PATIENT_GLOVES, 12)
 	hurried.give(Loadout.STONE)
 	hurried.prepare_kick_stats()
-	check(near(hurried.stats.power_speed, 42.0, 0.01) and near(hurried.stats.accuracy_speed, 42.0, 0.01), "Stone Toe applies after the floor on both needles")
+	check(near(hurried.stats.power_speed, 48.0, 0.01) and near(hurried.stats.accuracy_speed, 48.0, 0.01), "Stone Toe applies after the floor on both needles")
 	var rainy := _endless_walk()
 	rainy.give(Loadout.ANCHOR, 12)
 	rainy.give(Loadout.HERO_BALL, 1)
@@ -5379,16 +5378,16 @@ func _check_needle_floor() -> void:
 	kick.rain_faster = true
 	kick.rain_scale = 1.20
 	var rained := kick._accuracy_omega()
-	check(near(rainy.stats.power_speed, 35.0, 0.01) and near(rainy.stats.accuracy_speed, 35.0, 0.01), "Anchor XII plus Hero Ball floors both needles at 0.35")
-	check(near(rained, MeterGauge.omega_base() * 0.35 * 1.20, 0.05), "rain multiplies the floored accuracy rate and is not itself floored")
+	check(near(rainy.stats.power_speed, 40.0, 0.01) and near(rainy.stats.accuracy_speed, 40.0, 0.01), "Anchor XII plus Hero Ball floors both needles at 0.40")
+	check(near(rained, MeterGauge.omega_base() * 0.40 * 1.20, 0.05), "rain multiplies the floored accuracy rate and is not itself floored")
 	var willow := RunLogic.new()
 	willow.start_with_kicker(Kickers.WILLOW)
 	willow.run_mode = "endless"
 	willow.give(Loadout.ANCHOR, 12)
 	willow.give(Loadout.PATIENT_GLOVES, 12)
 	willow.prepare_kick_stats()
-	check(near(willow.stats.power_speed, 35.0, 0.01), "Willow's ball speed is not baked into the floored power speed")
-	check(near(MeterGauge.omega_power(willow.stats.power_speed, willow.stats.ball_speed_mult), MeterGauge.omega_base() * 0.35 * 0.50, 0.01), "ball speed applies after the floor")
+	check(near(willow.stats.power_speed, 40.0, 0.01), "Willow's ball speed is not baked into the floored power speed")
+	check(near(MeterGauge.omega_power(willow.stats.power_speed, willow.stats.ball_speed_mult), MeterGauge.omega_base() * 0.40 * 0.50, 0.01), "ball speed applies after the floor")
 	var carlos := RunLogic.new()
 	carlos.start_with_kicker(Kickers.CARLOS)
 	carlos.force_weather(RunLogic.LIGHTS)
@@ -5396,8 +5395,8 @@ func _check_needle_floor() -> void:
 	var carlos_time := MeterGauge.SWEEP_SEC / (1.35 * 1.15)
 	check(near(carlos.stats.power_speed, 135.0, 0.01), "Carlos under the lights keeps a 135 power speed")
 	check(near(MeterGauge.omega_power(carlos.stats.power_speed, carlos.stats.ball_speed_mult), MeterGauge.omega_base() * 1.35 * 1.15, 0.01), "Carlos under the lights is 1.35 times his own ball speed")
-	check(near(carlos_time, 0.4509, 0.01), "Carlos under the lights fills power in about 0.45 seconds")
-	check(MeterGauge.floored_slow(0.16) == 0.35 and MeterGauge.floored_slow(0.40) == 0.40 and MeterGauge.floored_slow(1.20) == 1.20, "the floor stops slows under 0.35 and leaves speed-ups alone")
+	check(near(carlos_time, 0.386, 0.01), "Carlos under the lights fills power in about 0.39 seconds")
+	check(MeterGauge.floored_slow(0.16) == 0.40 and MeterGauge.floored_slow(0.40) == 0.40 and MeterGauge.floored_slow(1.20) == 1.20, "the floor stops slows under 0.40 and leaves speed-ups alone")
 
 
 func _endless_walk() -> RunLogic:
@@ -6736,7 +6735,7 @@ func _check_playing_card() -> void:
 			safe = false
 			bad = line
 	check(safe, "select copy has no hyphen, apostrophe, ampersand, or parentheses, got %s" % bad)
-	check(Kickers.unlock_hint(Kickers.WILLOW).find("5") >= 0 and Kickers.unlock_hint(Kickers.CARLOS).find("100") >= 0, "stored unlock rules were not rewritten")
+	check(Kickers.unlock_hint(Kickers.WILLOW).find("8") >= 0 and Kickers.unlock_hint(Kickers.CARLOS).find("100") >= 0, "Willow's unlock names kick 8 and Carlos stays at 100")
 	check(not KickConstants.debug_unlock_all_kickers, "debug_unlock_all_kickers stays false")
 	var shell := FileAccess.get_file_as_string("res://scripts/main.gd")
 	check(shell.find("KEY_H") >= 0 and shell.find("KEY_J") >= 0 and shell.find("KEY_K") >= 0 and shell.find("KEY_L") >= 0 and shell.find("KEY_F9") >= 0, "debug H, J, K, L, and F9 stay on their keys")
@@ -7996,6 +7995,7 @@ func _check_pk2a() -> void:
 	check(boosted.vitamin_line(Vitamins.PROTEIN) == "+10.5 yd this kick", "the shop shows the Hype-boosted shake")
 	var weak := RunLogic.new()
 	weak.start_with_kicker(Kickers.WALK_ON)
+	weak.attempts = 1
 	weak.belt = [Vitamins.PROTEIN, ""]
 	var weak_kick := _tw1_kick(weak)
 	var weak_base := weak_kick.max_range_at_full_power()
@@ -8097,7 +8097,7 @@ func _check_pk2b() -> void:
 	check(death.attempt_cap == 1 and death.attempts == 1, "Sudden Death forces cap 1 and attempts 1 over Deep Bench and the bank")
 	death.kick_resolved = false
 	death.resolve_kick("GOOD", 2.0, false)
-	check(death.attempts == 1 and death.attempt_note == RunLogic.NOTE_CAP, "the first-try bonus cannot raise Sudden Death")
+	check(death.attempts == 1 and death.attempt_note == "", "a make does not raise Sudden Death")
 	check(death.score_line.find("× 5") >= 0 and death.last_points == RunLogic.points_for(death.distance_yards(), 5.0, false, false, false), "the score line and the points apply ×5 last, got %s" % death.score_line)
 	var hero_line := RunLogic.format_score_line(35.0, 1.0, true, false, false, 0.0, 1.0, 0.0, 0.0, 0.0, 5.0)
 	check(hero_line == "35 yd × (1.00 + 1.00 hero) × 5 × 2 = 700", "×5 sits after the Mult sum and before the middle double, got %s" % hero_line)
@@ -8186,7 +8186,7 @@ func _check_pk2b() -> void:
 	floored.give(Loadout.ALL_NATURAL)
 	floored.prepare_kick_stats()
 	var floor_speed := KickConstants.POWER_RISE_PER_SEC * MeterGauge.NEEDLE_SLOW_FLOOR
-	check(anchor.stats.power_speed > floor_speed and near(floored.stats.power_speed, floor_speed), "All Natural joins the slow stack and still hits the 0.35 floor")
+	check(near(anchor.stats.power_speed, floor_speed) and near(floored.stats.power_speed, floor_speed), "All Natural stays on the 0.40 floor instead of dropping through it")
 	var big := RunLogic.new()
 	big.start_with_kicker(Kickers.WALK_ON)
 	big.give(Loadout.ALL_NATURAL)
@@ -8290,6 +8290,7 @@ func _check_pk2b() -> void:
 	var locked := RunLogic.new()
 	locked.start_with_kicker(Kickers.WALK_ON)
 	locked.give(Loadout.ALL_NATURAL)
+	locked.attempts = 1
 	locked.belt = [Vitamins.PROTEIN, Vitamins.ZINC]
 	var locked_kick := _tw1_kick(locked)
 	locked_kick.kick_distance = 200.0
@@ -9034,7 +9035,7 @@ func _check_pace1() -> void:
 			gust._roll_wind()
 			check(gust.wind_speed >= lo + 3 and gust.wind_speed <= hi + 3, "PACE1 TAD 2 kick %d wind left the raised band, got %s" % [kick, gust.wind_speed])
 	check(RunLogic.tad_summary(2) == "WIND +3 MPH" and BitmapFonts.ui_allows(RunLogic.tad_summary(2)), "TAD 2 still says WIND +3 MPH")
-	check(RunLogic.tad_name(8) == "No free down" and RunLogic.tad_summary(8) == "NO FREE DOWN", "TAD 8 still says No free down")
+	check(RunLogic.tad_name(8) == "Short bench" and RunLogic.tad_summary(8) == "START WITH 1 ATTEMPT", "TAD 8 says Short bench")
 	check(near(Loadout.HOWLING_ITEM, 1.10), "Howling Wind stays 1.10")
 	var shop := RunLogic.new()
 	shop.phase = RunLogic.Phase.PLAYING
@@ -9188,4 +9189,170 @@ func _check_pace1() -> void:
 	check(endless_back.run_mode == "endless" and endless_back.kick_number == 14, "PACE1 an Endless save past kick 10 still loads")
 	records.file_path = kept
 	records.load_file()
+
+
+func _pace_sweep(run: RunLogic, rain: bool) -> float:
+	run.prepare_kick_stats()
+	var kick := KickLogic.new()
+	kick.stats = run.stats
+	kick.rain_faster = rain
+	kick.rain_scale = 1.20
+	kick.press_space()
+	kick.advance(kick.windup_left)
+	var step := 0.0002
+	var elapsed := 0.0
+	while kick.phase == KickLogic.Phase.POWER and kick.power_true < 99.95 and elapsed < 4.0:
+		kick.advance(step)
+		elapsed += step
+	return elapsed
+
+
+func _offer_has_power(cards: Array) -> bool:
+	for card in cards:
+		if Loadout.is_power_item(str(card.get("id", ""))):
+			return true
+	return false
+
+
+func _check_pace2() -> void:
+	var walk := RunLogic.new()
+	walk.start_with_kicker(Kickers.WALK_ON)
+	check(near(_pace_sweep(walk, false), 0.60, 0.01), "PACE2 Walk-On plain sweep is 0.60s")
+	walk.give(Loadout.ANCHOR, 6)
+	walk.give(Loadout.PATIENT_GLOVES, 6)
+	check(near(_pace_sweep(walk, false), 1.50, 0.01), "PACE2 Walk-On fully slowed sweep is 1.50s")
+	var lights := RunLogic.new()
+	lights.start_with_kicker(Kickers.WALK_ON)
+	lights.force_weather(RunLogic.LIGHTS)
+	check(near(_pace_sweep(lights, false), 0.44, 0.01), "PACE2 Walk-On under the lights is 0.44s")
+	var capped := RunLogic.new()
+	capped.start_with_kicker(Kickers.WALK_ON)
+	capped.give(Loadout.STONE)
+	capped.give(Loadout.TRAINING_CAMP)
+	capped.tad_level = 7
+	capped.force_weather(RunLogic.LIGHTS)
+	capped.prepare_kick_stats()
+	check(near(capped.stats.needle_speedup, 1.60), "PACE2 the speed-up product stops at 1.60")
+	check(near(_pace_sweep(capped, true), 0.37, 0.01), "PACE2 Walk-On capped with rain is 0.37s")
+	var willow := RunLogic.new()
+	willow.start_with_kicker(Kickers.WILLOW)
+	check(near(_pace_sweep(willow, false), 1.20, 0.01), "PACE2 Willow plain sweep is 1.20s")
+	willow.give(Loadout.ANCHOR, 6)
+	willow.give(Loadout.PATIENT_GLOVES, 6)
+	check(near(_pace_sweep(willow, false), 3.00, 0.01), "PACE2 Willow fully slowed sweep is 3.00s")
+	var willow_lights := RunLogic.new()
+	willow_lights.start_with_kicker(Kickers.WILLOW)
+	willow_lights.force_weather(RunLogic.LIGHTS)
+	check(near(_pace_sweep(willow_lights, false), 0.89, 0.01), "PACE2 Willow under the lights is 0.89s")
+	var carlos := RunLogic.new()
+	carlos.start_with_kicker(Kickers.CARLOS)
+	check(near(_pace_sweep(carlos, false), 0.52, 0.01), "PACE2 Carlos plain sweep is 0.52s")
+	carlos.give(Loadout.ANCHOR, 6)
+	carlos.give(Loadout.PATIENT_GLOVES, 6)
+	check(near(_pace_sweep(carlos, false), 1.30, 0.01), "PACE2 Carlos fully slowed sweep is 1.30s")
+	var carlos_lights := RunLogic.new()
+	carlos_lights.start_with_kicker(Kickers.CARLOS)
+	carlos_lights.force_weather(RunLogic.LIGHTS)
+	check(near(_pace_sweep(carlos_lights, false), 0.39, 0.01), "PACE2 Carlos under the lights is 0.39s")
+	var carlos_cap := RunLogic.new()
+	carlos_cap.start_with_kicker(Kickers.CARLOS)
+	carlos_cap.give(Loadout.STONE)
+	carlos_cap.give(Loadout.TRAINING_CAMP)
+	carlos_cap.tad_level = 7
+	carlos_cap.force_weather(RunLogic.LIGHTS)
+	check(near(_pace_sweep(carlos_cap, true), 0.33, 0.01), "PACE2 Carlos capped with rain is 0.33s")
+	check(MeterGauge.floored_slow(0.16) == 0.40 and MeterGauge.NEEDLE_SLOW_FLOOR == 0.40, "PACE2 the slow floor is 0.40")
+	var fresh := RunLogic.new()
+	fresh.new_run()
+	check(fresh.attempts == 2, "PACE2 a new run starts with 2 attempts")
+	var short := RunLogic.new()
+	short.start_with_kicker(Kickers.WALK_ON)
+	short.open_tad(8)
+	check(short.attempts == 1, "PACE2 TAD 8 starts with 1 attempt")
+	check(RunLogic.tad_summary(8) == "START WITH 1 ATTEMPT" and BitmapFonts.ui_allows(RunLogic.tad_summary(8)), "PACE2 TAD 8 summary is START WITH 1 ATTEMPT")
+	check(RunLogic.tad_name(8) == "Short bench", "PACE2 TAD 8 is named Short bench")
+	var held := RunLogic.new()
+	held.start_with_kicker(Kickers.WALK_ON)
+	var started := held.attempts
+	for n in 10:
+		held.kick_number = 4
+		held.phase = RunLogic.Phase.PLAYING
+		held.kick_resolved = false
+		held.resolve_kick("GOOD", 1.0, false)
+	check(held.attempts == started, "PACE2 ten first-try makes do not add an attempt")
+	var b12 := RunLogic.new()
+	b12.start_with_kicker(Kickers.WALK_ON)
+	b12.attempts = 1
+	b12.cash = 6
+	b12.awaiting_shop = true
+	check(b12.buy_b12() and b12.attempts == 2, "PACE2 B12 still adds one attempt")
+	var records = get_root().get_node("SaveData")
+	var had_willow := bool(records.has_unlock(Kickers.WILLOW))
+	records.unlocks[Kickers.WILLOW] = false
+	var early := RunLogic.new()
+	early.start_with_kicker(Kickers.WALK_ON)
+	early.attempts = 1
+	early.kick_number = 7
+	early.resolve_kick("GOOD", 1.0, false)
+	check(not records.has_unlock(Kickers.WILLOW), "PACE2 kick 7 with 1 attempt left does not unlock Willow")
+	var late := RunLogic.new()
+	late.start_with_kicker(Kickers.WALK_ON)
+	late.attempts = 1
+	late.kick_number = 8
+	late.resolve_kick("GOOD", 1.0, false)
+	check(records.has_unlock(Kickers.WILLOW), "PACE2 kick 8 with 1 attempt left unlocks Willow")
+	records.unlocks[Kickers.WILLOW] = had_willow
+	check(RunLogic.cash_payout(true, false, false, false) == 1, "PACE2 a plain make pays $1")
+	check(RunLogic.cash_payout(true, true, true, true) == 5, "PACE2 perfect, middle, and boss pay $5")
+	check(RunLogic.cash_payout(false, true, true, true) == 0, "PACE2 a miss pays $0")
+	check(Vitamins.price(Vitamins.PROTEIN) == 5 and Vitamins.price(Vitamins.MAGNESIUM) == 5 and Vitamins.price(Vitamins.PREWORKOUT) == 5, "PACE2 the cheap vitamins are $5")
+	check(Vitamins.price(Vitamins.OMEGA) == 6 and Vitamins.price(Vitamins.ZINC) == 6 and Vitamins.price(Vitamins.PICKLE) == 6, "PACE2 the middle vitamins are $6")
+	check(Vitamins.price(Vitamins.ELECTROLYTE) == 7 and Vitamins.price(Vitamins.TART) == 7 and Vitamins.B12_PRICE == 6, "PACE2 Electrolyte and Tart are $7 and B12 is $6")
+	var phil := RunLogic.new()
+	phil.start_with_kicker(Kickers.PHIL)
+	check(phil.item_price(Vitamins.PROTEIN) == 0 and phil.item_price(Vitamins.B12) == 0, "PACE2 Phil still gets Protein and B12 free")
+	var taxed := RunLogic.new()
+	taxed.start_with_kicker(Kickers.WALK_ON)
+	taxed.open_tad(1)
+	check(taxed.item_price(Vitamins.PROTEIN) == 8 and taxed.item_price(Vitamins.OMEGA) == 9 and taxed.item_price(Vitamins.ELECTROLYTE) == 11 and taxed.item_price(Vitamins.B12) == 9, "PACE2 TAD 1 prices are 8, 9, 11, and B12 9")
+	var forced := RunLogic.new()
+	forced.set_seed(4)
+	forced.start_with_kicker(Kickers.WILLOW)
+	forced.synchronicity_offer_done = true
+	forced.offers_without_power = 2
+	forced.roll_offer()
+	check(_offer_has_power(forced.offer) and forced.offers_without_power == 0, "PACE2 the third offer contains a power card")
+	var open_offer := RunLogic.new()
+	open_offer.set_offer_seed(4)
+	open_offer.start_with_kicker(Kickers.WILLOW)
+	open_offer.stats.range_bonus = 40.0
+	open_offer.synchronicity_offer_done = true
+	open_offer.offers_without_power = 0
+	open_offer.roll_offer()
+	var safe := RunLogic.new()
+	safe.set_offer_seed(4)
+	safe.start_with_kicker(Kickers.WILLOW)
+	safe.stats.range_bonus = 40.0
+	safe.synchronicity_offer_done = true
+	safe.offers_without_power = 2
+	safe.roll_offer()
+	var open_ids := ""
+	var safe_ids := ""
+	for card in open_offer.offer:
+		open_ids += str(card.get("id", "")) + " "
+	for card in safe.offer:
+		safe_ids += str(card.get("id", "")) + " "
+	check(safe.calm_max_range() >= 80.0 and open_ids == safe_ids, "PACE2 calm range at 80 does not force a different offer, %s vs %s range %s" % [open_ids, safe_ids, safe.calm_max_range()])
+	var endless := RunLogic.new()
+	endless.set_seed(4)
+	endless.start_with_kicker(Kickers.WALK_ON)
+	endless.run_mode = "endless"
+	endless.offers_without_power = 5
+	endless.roll_offer()
+	check(endless.offers_without_power == 5, "PACE2 Endless does not use the Standard offer counter")
+	check(SelectCard.unlock_line(Kickers.WILLOW) == "MAKE A KICK WITH 1 ATTEMPT LEFT ON KICK 8 OR LATER", "PACE2 Willow's card names kick 8")
+	check(BitmapFonts.ui_allows(SelectCard.unlock_line(Kickers.WILLOW)), "PACE2 Willow's unlock line stays in Pixel Gothic")
+	var logic := FileAccess.get_file_as_string("res://scripts/RunLogic.gd")
+	var constants := FileAccess.get_file_as_string("res://scripts/KickConstants.gd")
+	check(logic.find("earns_attempt") < 0 and logic.find("late_earn") < 0 and constants.find("LATE_EARN") < 0, "PACE2 the free-attempt rule is gone")
 

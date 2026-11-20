@@ -1150,7 +1150,7 @@ static func legal_power_items(state: Dictionary, attempt_cap: int) -> Array:
 	return found
 
 
-# Endless only calls this. One card is swapped in after the normal draw.
+# Standard and Endless both call this. One card is swapped in after the normal draw.
 static func with_power_safety(cards: Array, state: Dictionary, attempt_cap: int, rng: RandomNumberGenerator) -> Array:
 	if offer_has_power(cards) or cards.is_empty():
 		return cards

@@ -87,9 +87,9 @@ const CAM_SKIP_SPEED := 3.0
 const BALL_CAM_DEFAULT := true
 
 # --- The run --------------------------------------------------------------------
-# You start with 1 attempt. The cap starts at 3 and is never allowed past 5.
-# Nothing in this build changes the cap. It stays at 3.
-const ATTEMPTS_START := 1
+# You start with 2 attempts. The cap starts at 3 and is never allowed past 5.
+# A make does not add an attempt. B12, Deep Bench, and Electrolyte still can.
+const ATTEMPTS_START := 2
 const ATTEMPT_CAP := 3
 const ATTEMPT_CAP_MAX := 5
 
@@ -104,11 +104,6 @@ const MIDDLE_YARDS := 1.0
 const MIDDLE_MULTIPLIER := 2.0
 const BOSS_MULTIPLIER := 1.5
 const PERFECT_BONUS := 5
-
-# From kick 11 on, a first-try make earns an attempt only if this is true
-# and the kick was perfect or down the middle. It starts false.
-const LATE_EARN_RULE := false
-const LATE_EARN_FROM_KICK := 11
 
 # --- Drawing sizes -------------------------------------------------------------
 const BALL_RADIUS_PX := 11.0

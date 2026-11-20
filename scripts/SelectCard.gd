@@ -55,7 +55,7 @@ static func unlock_line(id: String) -> String:
 		Kickers.COLE:
 			return "BEAT STANDARD"
 		Kickers.WILLOW:
-			return "MAKE A KICK WITH 1 ATTEMPT LEFT ON KICK 5 OR LATER"
+			return "MAKE A KICK WITH 1 ATTEMPT LEFT ON KICK 8 OR LATER"
 		Kickers.CARLOS:
 			return "MAKE A 100 YARD FIELD GOAL"
 		_:

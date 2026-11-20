@@ -6,9 +6,6 @@ extends RefCounted
 
 enum Phase { PLAYING, GAME_OVER, WIN, FAR }
 
-const NOTE_EARNED := "+1 ATTEMPT"
-const NOTE_CAP := "AT CAP"
-
 const CLEAR := "CLEAR"
 const RAIN := "RAIN"
 const SNOW := "SNOW"
@@ -58,10 +55,10 @@ var streak := 0
 var kicks_made := 0
 var longest_make := 0.0
 var spot_yards := 0.0
-# True on every normal kick. A later retake can set this false, and then a make earns nothing.
+# True on every normal kick. A retry sets this false.
 var is_first_ball := true
-# Copied from KickConstants at the start of a run so a test can flip it.
-var late_earn_rule := KickConstants.LATE_EARN_RULE
+# Standard offers in a row with no range card. A power card resets it.
+var offers_without_power := 0
 
 var kick_resolved := false
 var last_result_made := false
@@ -223,7 +220,7 @@ func new_run() -> void:
 	kicks_made = 0
 	longest_make = 0.0
 	is_first_ball = true
-	late_earn_rule = KickConstants.LATE_EARN_RULE
+	offers_without_power = 0
 	kick_resolved = false
 	last_result_made = false
 	kicker_id = ""
@@ -317,6 +314,8 @@ func open_tad(level: int) -> void:
 	tad_level = 0 if run_mode == "endless" else clampi(level, 0, TAD_MAX)
 	if tad_active(5):
 		rerolls_left = 0
+	if tad_active(8) and kick_number <= 1:
+		attempts = mini(attempts, 1)
 	_add_tad_wind()
 	# Kick 1's weather was rolled before the ladder was applied. Foul weather has to roll again.
 	if tad_active(9):
@@ -475,7 +474,7 @@ static func tad_summary(level: int) -> String:
 		7:
 			return "NEEDLES X1.33"
 		8:
-			return "NO FREE DOWN"
+			return "START WITH 1 ATTEMPT"
 		9:
 			return "BAD WEATHER EVERY KICK"
 		10:
@@ -501,7 +500,7 @@ static func tad_name(level: int) -> String:
 		7:
 			return "Crunch time"
 		8:
-			return "No free down"
+			return "Short bench"
 		9:
 			return "Foul weather"
 		10:
@@ -527,7 +526,7 @@ static func tad_sentence(level: int) -> String:
 		7:
 			return "Needles ×1.33 on every kick."
 		8:
-			return "A first-try make does not grant an attempt."
+			return "The run starts with 1 attempt."
 		9:
 			return "Every kick is rain, snow, or mud."
 		10:
@@ -651,13 +650,6 @@ func resolve_kick(result_text: String, offset: float, perfect: bool) -> void:
 			clean_makes[kick_number] = true
 			if stats.lucky_ball:
 				lucky_stacks += 1
-		# TAD 8 turns off the first-try attempt. Deep Bench and B12 add attempts on their own.
-		if earns_attempt(kick_number, is_first_ball, perfect, down_the_middle, late_earn_rule) and not tad_active(8):
-			if attempts >= attempt_cap or has_curse(Loadout.SUDDEN_DEATH):
-				attempt_note = NOTE_CAP
-			else:
-				attempts = mini(attempt_cap, attempts + 1)
-				attempt_note = NOTE_EARNED
 		if has_curse(Loadout.TRAINING_CAMP) and camp_makes < 3:
 			camp_makes += 1
 		streak += 1
@@ -691,7 +683,7 @@ func resolve_kick(result_text: String, offset: float, perfect: bool) -> void:
 	cash_popup = "+$%d" % payout if payout > 0 else ""
 	_clear_ball_vitamins()
 	balls_kicked += 1
-	if made and attempts_before == 1 and kick_number >= 5:
+	if made and attempts_before == 1 and kick_number >= 8:
 		_try_unlock(Kickers.WILLOW)
 	if made and distance >= 100.0:
 		_try_unlock(Kickers.CARLOS)
@@ -832,7 +824,7 @@ func prepare_kick_stats() -> void:
 		if bool(dance["yards"]):
 			var dance_yards := 4.0 * Loadout.hype_on(loadout_state(), Loadout.RAIN_DANCE)
 			stats.range_bonus += _scaled_perk_yards(dance_yards)
-		# Both needles, before the 0.35 floor. Big Game strips this slow.
+		# Both needles, before the 0.40 floor. Big Game strips this slow.
 		# Hype gap-widens the 0.90. Howling does not touch this slow. Phil does only after Hype.
 		if bool(dance["slow"]):
 			var slow := 0.90
@@ -1230,9 +1222,12 @@ func roll_offer() -> void:
 		_forced_cards = []
 	else:
 		offer = Loadout.draw_offer(loadout_state(), attempt_cap, _offer_rng, [], _curse_weight())
+	if generated:
+		_maybe_standard_power_safety()
 	_consider_power_safety()
 	if generated:
 		_apply_synchronicity_offer()
+		_note_shown_offer()
 	awaiting_offer = true
 
 
@@ -1298,9 +1293,42 @@ func reroll_offer() -> bool:
 		awaiting_offer = true
 		return true
 	offer = Loadout.draw_offer(loadout_state(), attempt_cap, _offer_rng, previous, _curse_weight())
+	if not ring_offer_live:
+		_maybe_standard_power_safety()
 	_consider_power_safety()
+	if not ring_offer_live:
+		_note_shown_offer()
 	awaiting_offer = true
 	return true
+
+
+func final_distance() -> float:
+	var yards := float(RunTable.row(RunTable.count())["distance"])
+	if tad_active(3):
+		yards += 4.0
+	return yards
+
+
+func calm_max_range() -> float:
+	return stats.range_base + stats.range_per_power * 100.0 + stats.range_bonus
+
+
+func _maybe_standard_power_safety() -> void:
+	if run_mode == "endless":
+		return
+	if offers_without_power < 2 or calm_max_range() >= final_distance():
+		return
+	offer = Loadout.with_power_safety(offer, loadout_state(), attempt_cap, _offer_rng)
+
+
+func _note_shown_offer() -> void:
+	if run_mode == "endless":
+		return
+	for card in offer:
+		if Loadout.is_power_item(str(card.get("id", ""))):
+			offers_without_power = 0
+			return
+	offers_without_power += 1
 
 
 func _consider_power_safety() -> void:
@@ -1626,7 +1654,7 @@ static func ring_placement(side: int, half_gap: float, distance: float, spot: fl
 static func cash_payout(made: bool, perfect: bool, middle: bool, boss: bool) -> int:
 	if not made:
 		return 0
-	var gain := 3
+	var gain := 1
 	if perfect:
 		gain += 1
 	if middle:
@@ -1983,20 +2011,20 @@ func _walk_on_clutch() -> bool:
 
 func _finish_needles() -> void:
 	# One combined speed. Slows are already in power_speed. Walk-On clutch joins them
-	# before the 0.35 floor. Stone Toe and UNDER THE LIGHTS come after the floor.
-	# Rain and ball speed are applied later, in the shared kick omega, and are not floored.
+	# before the 0.40 floor. Stone Toe, UNDER THE LIGHTS, TAD 7, and Training Camp
+	# multiply after the floor and stop at the speed-up ceiling.
+	# Rain is capped against that product in the kick omega. Ball speed is outside the cap.
 	var base := KickConstants.POWER_RISE_PER_SEC
 	var clutch := 0.90 if _walk_on_clutch() else 1.0
 	var stone := 1.20 if has_curse(Loadout.STONE) else 1.0
 	var lights := LIGHTS_NEEDLE if lights_active() else 1.0
-	# TAD 7 sits after the 0.35 floor, with Stone Toe and UNDER THE LIGHTS.
-	# Rain and ball speed still multiply later, in the shared kick omega.
-	# Practice Swing uses this same combined speed, so the 1.33 applies there too.
-	# Lights stay off during practice because lights_active() is false.
+	# Practice Swing uses this same combined speed. Lights stay off during practice.
 	var crunch := 1.33 if tad_active(7) else 1.0
-	# Training Camp is a post-floor speed-up, so the 0.35 floor cannot swallow it.
 	var camp := 1.30 if has_curse(Loadout.TRAINING_CAMP) and camp_makes < 3 else 1.0
-	var combined := MeterGauge.needle_speed(base, stats.power_speed / base * clutch, stone, lights, 1.0, 1.0) * crunch * camp
+	var speedup := minf(stone * lights * crunch * camp, MeterGauge.NEEDLE_SPEEDUP_CEILING)
+	stats.needle_speedup = speedup
+	var slow := MeterGauge.floored_slow(stats.power_speed / base * clutch)
+	var combined := base * slow * speedup
 	stats.power_speed = combined
 	stats.accuracy_speed = combined
 
@@ -2149,6 +2177,7 @@ func export_resume() -> Dictionary:
 		"previous_weather": _previous_weather,
 		"older_weather": _older_weather,
 		"power_item_seen": power_item_seen,
+		"offers_without_power": offers_without_power,
 		"synchronicity_offer_done": synchronicity_offer_done,
 		"zinc_used": zinc_used,
 		"lucky_stacks": lucky_stacks,
@@ -2252,6 +2281,7 @@ func import_resume(data: Dictionary) -> void:
 	_previous_weather = str(data.get("previous_weather", ""))
 	_older_weather = str(data.get("older_weather", ""))
 	power_item_seen = bool(data.get("power_item_seen", false))
+	offers_without_power = int(data.get("offers_without_power", 0))
 	synchronicity_offer_done = bool(data.get("synchronicity_offer_done", false))
 	zinc_used = bool(data.get("zinc_used", false))
 	lucky_stacks = int(data.get("lucky_stacks", 0))
@@ -2384,14 +2414,6 @@ func _save_finished_run() -> void:
 	})
 	new_record_score = bool(flags.get("score", false))
 	new_record_long = bool(flags.get("longest", false))
-
-
-static func earns_attempt(kick_number_value: int, first_ball: bool, perfect: bool, middle: bool, late_rule: bool) -> bool:
-	if not first_ball:
-		return false
-	if late_rule and kick_number_value >= KickConstants.LATE_EARN_FROM_KICK:
-		return perfect or middle
-	return true
 
 
 static func points_for(distance: float, mult: float, middle: bool, boss: bool, perfect: bool) -> int:
