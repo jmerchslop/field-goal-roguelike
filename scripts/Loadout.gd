@@ -474,21 +474,21 @@ static func effect_line(id: String, rank: int) -> String:
 			if rank <= 3:
 				return "+%d rerolls" % scout
 			if rank == 4:
-				return "+3 rerolls, and one Practice Swing each quarter"
+				return "+3 rerolls, and one Practice Swing each half"
 			if rank == 5:
-				return "+4 rerolls, and one Practice Swing each quarter"
+				return "+4 rerolls, and one Practice Swing each half"
 			if rank == 6:
-				return "+5 rerolls, and two Practice Swings each quarter"
-			return "+%d rerolls, and %s Practice Swings each quarter" % [scout, _swing_word(swings)]
+				return "+5 rerolls, and two Practice Swings each half"
+			return "+%d rerolls, and %s Practice Swings each half" % [scout, _swing_word(swings)]
 		DOINK_CAP:
 			var charges := doink_charges(rank)
 			if rank == 1:
-				return "1 doink becomes Good each quarter"
+				return "1 doink becomes Good each half"
 			if rank < 6:
-				return "%d doinks become Good each quarter" % charges
+				return "%d doinks become Good each half" % charges
 			if rank == 6:
-				return "5 doinks become Good each quarter, unused carry (max 5)"
-			return "%d doinks become Good each quarter, unused carry (max %d)" % [charges, charges]
+				return "5 doinks become Good each half, unused carry (max 5)"
+			return "%d doinks become Good each half, unused carry (max %d)" % [charges, charges]
 		IRON_GRIP:
 			var wide := 10 * mini(maxi(rank, 0), 5)
 			var line := "OVERPOWER band +%d%% wide." % wide
@@ -498,9 +498,9 @@ static func effect_line(id: String, rank: int) -> String:
 		REPLAY_GLOVES:
 			var swings := replay_swings(rank)
 			if rank == 1:
-				return "1 practice swing each quarter"
+				return "1 practice swing each half"
 			if rank < 6:
-				return "%d practice swings each quarter" % swings
+				return "%d practice swings each half" % swings
 			if rank == 6:
 				return "5 practice swings, unused carry (max 5)"
 			return "%d practice swings, unused carry (max %d)" % [swings, swings]
@@ -526,7 +526,7 @@ static func effect_line(id: String, rank: int) -> String:
 			if rank <= 2:
 				return "Attempt cap +%d and attempts +%d" % [rank, rank]
 			if rank == 3:
-				return "Cap stays. +1 attempt now and each quarter if below cap"
+				return "Cap stays. +1 attempt now and each half if below cap"
 			if rank == 4:
 				return "Cap stays. Halfway to +1 extra attempt. Unused refill carries over."
 			if rank == 5:

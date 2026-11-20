@@ -2,7 +2,7 @@ class_name FrontEnd
 extends RefCounted
 
 # Title, four-tile menu, options focus, and where Trophy Room returns.
-# The 20-kick season is unchanged. Endless overtime is not implemented.
+# Standard is 10 kicks. Endless keeps going.
 
 enum Screen { TITLE, MAIN, SELECT, OPTIONS, RECORDS, PLAY }
 

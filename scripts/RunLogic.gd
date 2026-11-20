@@ -1,7 +1,7 @@
 class_name RunLogic
 extends RefCounted
 
-# The rules of one run: 20 kicks, attempts, and score.
+# The rules of one run: 10 Standard kicks, attempts, and score.
 # No drawing. main.gd asks this object what to show.
 
 enum Phase { PLAYING, GAME_OVER, WIN, FAR }
@@ -46,8 +46,7 @@ const SQUEEZE_HALF := 2.585
 const DEBUG_SPOTS: Array = [-6.0, -3.0, 0.0, 3.0, 6.0]
 
 var phase: Phase = Phase.PLAYING
-# "standard" is the 20-kick season. "endless" is stored for a later prompt.
-# This prompt still ends the run after kick 20 either way.
+# "standard" is the 10-kick season. "endless" keeps the old distance curve.
 var run_mode := "standard"
 var kick_number := 1
 var attempts := KickConstants.ATTEMPTS_START
@@ -119,7 +118,7 @@ var awaiting_mulligan := false
 var mulligans_left := 0
 var mulligan_used_this_kick := false
 var rerolls_left := 1
-# Second Look. 0 or 1. Set to 1 at the start of each 5-kick block. Does not stack.
+# Second Look. One banked free reroll at each half, or every 10 Endless kicks. Stacks.
 var second_look_bank := 0
 # Standard difficulty for this run. 0 is today's game. Endless stays 0.
 var tad_level := 0
@@ -136,7 +135,7 @@ var weather := CLEAR
 var weather_forced := false
 # Endless boss name kept for that kick number, including a shop preview.
 var endless_bosses := {}
-# Standard kicks 5, 10, 15, and 20. Rolled once at new_run, no repeats.
+# Standard kicks 5 and 10. Rolled once at new_run.
 var standard_bosses := {}
 var kick10_boss := ""
 var _forced_cards: Array = []
@@ -294,7 +293,7 @@ func new_run() -> void:
 	_insurance_spent = false
 	attempt_cap = stats.attempt_cap
 	_reset_vitamins()
-	_refill_quarter()
+	_refill_block()
 	_place_spot()
 	_roll_wind()
 	_roll_standard_bosses()
@@ -605,8 +604,7 @@ func can_advance() -> bool:
 	return kick_number < RunTable.count()
 
 
-# R is allowed when the run is over. A miss on kick 20 with attempts left is also over:
-# there is no kick 21, and it is not a win.
+# R is allowed when the run is over. A miss on kick 10 with attempts left stays on kick 10.
 func accepts_restart() -> bool:
 	return phase == Phase.GAME_OVER or phase == Phase.WIN or phase == Phase.FAR
 
@@ -735,7 +733,7 @@ func go_to_next_kick() -> bool:
 	_place_spot()
 	_roll_wind()
 	_roll_weather()
-	_refill_quarter()
+	_refill_block()
 	return true
 
 
@@ -1068,7 +1066,7 @@ static func weather_kick_flags(weather_name: String, cut: int) -> Dictionary:
 
 
 static func is_standard_boss_slot(kick: int) -> bool:
-	return kick == 5 or kick == 10 or kick == 15 or kick == 20
+	return kick == 5 or kick == 10
 
 
 static func boss_weather(_kick: int) -> String:
@@ -1077,13 +1075,13 @@ static func boss_weather(_kick: int) -> String:
 
 
 static func weather_pool(kick: int) -> Array:
-	if kick <= 4:
+	if kick <= 3:
 		return [CLEAR]
-	if kick >= 6 and kick <= 8:
+	if kick == 4 or kick == 6:
 		return [CLEAR, RAIN]
-	if kick == 9:
+	if kick == 7:
 		return [CLEAR, RAIN, SNOW]
-	if (kick >= 11 and kick <= 14) or (kick >= 16 and kick <= 19):
+	if kick >= 8 and kick <= 10:
 		return [RAIN, SNOW, MUD, THIN_AIR]
 	return [CLEAR]
 
@@ -1112,15 +1110,15 @@ static func roll_weather_name(kick: int, previous: String, older: String, rng: R
 
 static func _weighted_weather(kick: int, rng: RandomNumberGenerator) -> String:
 	var roll := rng.randf()
-	if kick >= 6 and kick <= 8:
+	if kick == 4 or kick == 6:
 		return RAIN if roll < 0.30 else CLEAR
-	if kick == 9:
+	if kick == 7:
 		if roll < 0.30:
 			return RAIN
 		if roll < 0.50:
 			return SNOW
 		return CLEAR
-	if (kick >= 11 and kick <= 14) or (kick >= 16 and kick <= 19):
+	if kick >= 8 and kick <= 10:
 		var names := [RAIN, SNOW, MUD, THIN_AIR]
 		var index := int(roll * 4.0)
 		if index > 3:
@@ -1318,7 +1316,7 @@ func opens_shop() -> bool:
 		return false
 	if run_mode == "endless":
 		return kick_number > 0 and kick_number % 5 == 0
-	return kick_number == 5 or kick_number == 10 or kick_number == 15
+	return kick_number == 5 or kick_number == 9
 
 
 func follow_offer() -> String:
@@ -1338,12 +1336,8 @@ func next_boss_line() -> String:
 		if target == 0:
 			return ""
 		return "Next boss: %s" % _boss_label(_endless_boss(target))
-	if kick_number == 5:
+	if kick_number == 5 or kick_number == 9:
 		return "Next boss: %s" % _boss_label(str(standard_bosses.get(10, "")))
-	if kick_number == 10:
-		return "Next boss: %s" % _boss_label(str(standard_bosses.get(15, "")))
-	if kick_number == 15:
-		return "Next boss: %s" % _boss_label(str(standard_bosses.get(20, "")))
 	return ""
 
 
@@ -1644,8 +1638,8 @@ static func cash_payout(made: bool, perfect: bool, middle: bool, boss: bool) -> 
 
 func scheduled_ring() -> bool:
 	if run_mode == "endless":
-		return kick_number == 17 or kick_number == 47 or kick_number == 97 or kick_number == 147
-	return run_mode == "standard" and kick_number == 13
+		return kick_number == 17 or kick_number == 47 or kick_number == 77 or kick_number == 97
+	return run_mode == "standard" and kick_number == 7
 
 
 func _ring_armed() -> bool:
@@ -2038,11 +2032,18 @@ func _close_offer() -> void:
 	offer = []
 
 
-func _refill_quarter() -> void:
-	# Kicks 1–5, 6–10, 11–15, and so on. Each block adds one. Unused ones carry.
-	if (kick_number - 1) % 5 == 0 and _perk_rank(Loadout.SECOND_LOOK) > 0 and not tad_active(5):
+func is_block_start(kick: int = -1) -> bool:
+	var n := kick_number if kick < 0 else kick
+	if run_mode == "endless":
+		return n > 0 and (n - 1) % 10 == 0
+	return n == 1 or n == 6
+
+
+func _refill_block() -> void:
+	# Two Standard halves, and an Endless block every 10 kicks. Unused charges carry.
+	if is_block_start() and _perk_rank(Loadout.SECOND_LOOK) > 0 and not tad_active(5):
 		second_look_bank += 1
-	if kick_number == 1 or kick_number == 6 or kick_number == 11 or kick_number == 16:
+	if is_block_start():
 		mulligans_left = 0
 		if stats.doink_carry:
 			insurance_left = stats.doink_per_quarter + mini(maxi(insurance_left, 0), stats.doink_per_quarter)
@@ -2093,7 +2094,7 @@ func _note_trophies(made: bool, distance: float) -> void:
 
 
 func _quarter_was_clean() -> bool:
-	if kick_number != 5 and kick_number != 10 and kick_number != 15 and kick_number != 20:
+	if kick_number != 5 and kick_number != 10:
 		return false
 	var start := kick_number - 4
 	for n in range(start, kick_number + 1):
@@ -2194,8 +2195,18 @@ func export_resume() -> Dictionary:
 
 
 func import_resume(data: Dictionary) -> void:
+	var saved_mode := str(data.get("mode", "standard"))
+	var saved_kick := int(data.get("kick_number", 1))
+	if saved_mode != "endless" and saved_kick > RunTable.count():
+		print("PACE1 dropped old 20-kick save")
+		var records = _records()
+		if records != null:
+			records.clear_run_slot("standard")
+		new_run()
+		kicker_id = ""
+		return
 	new_run()
-	run_mode = str(data.get("mode", "standard"))
+	run_mode = saved_mode
 	kicker_id = str(data.get("kicker_id", ""))
 	cleats_id = str(data.get("cleats_id", ""))
 	cleats_rank = int(data.get("cleats_rank", 0))
@@ -2274,11 +2285,13 @@ func import_resume(data: Dictionary) -> void:
 	ring_offer_pending = bool(data.get("ring_offer", false))
 	kick10_boss = str(data.get("kick10_boss", ""))
 	var saved_bosses: Array = _dict_list(data.get("standard_bosses", []))
-	if saved_bosses.size() >= 4:
+	if saved_bosses.size() > 0:
 		standard_bosses = {}
 		for pair in saved_bosses:
 			standard_bosses[int(pair.get("kick", 0))] = str(pair.get("name", ""))
 		kick10_boss = str(standard_bosses.get(10, kick10_boss))
+	if run_mode != "endless" and not _boss_keys_current():
+		_roll_standard_bosses()
 	var place := str(data.get("place", "tee"))
 	var legacy_gm_offer := bool(data.get("gm_offer", false))
 	if place == "offer" and legacy_gm_offer:
@@ -2577,7 +2590,7 @@ func _apply_ball_vitamins() -> void:
 
 func _reroll_zinc() -> void:
 	zinc_used = true
-	var info: Dictionary = RunTable.row(kick_number)
+	var info: Dictionary = RunTable.row(RunTable.table_kick(run_mode, kick_number))
 	var lo := int(info["wind_min"])
 	var hi := int(info["wind_max"])
 	wind_speed = _wind_rng.randi_range(lo, hi)
@@ -2652,16 +2665,20 @@ func lights_active() -> bool:
 
 
 func _roll_standard_bosses() -> void:
-	# Kicks 5, 10, and 15 take three of the early five, without replacement.
-	# Kick 20 is its own 50/50. _kick10_rng does not move the weather sequence.
+	# Kick 5 takes one of the early five. Kick 10 is Big Game or Moving Posts.
+	# _kick10_rng does not move the weather sequence.
 	standard_bosses = {}
 	var early: Array[String] = [ICED, SQUEEZE, MONSOON, LIGHTS, CLOCK]
-	for slot in [5, 10, 15]:
-		var index := _kick10_rng.randi_range(0, early.size() - 1)
-		standard_bosses[slot] = early[index]
-		early.remove_at(index)
-	standard_bosses[20] = BIG_GAME if _kick10_rng.randf() < 0.5 else MOVING
+	var index := _kick10_rng.randi_range(0, early.size() - 1)
+	standard_bosses[5] = early[index]
+	standard_bosses[10] = BIG_GAME if _kick10_rng.randf() < 0.5 else MOVING
 	kick10_boss = str(standard_bosses[10])
+
+
+func _boss_keys_current() -> bool:
+	if standard_bosses.size() != 2:
+		return false
+	return standard_bosses.has(5) and standard_bosses.has(10)
 
 
 func _boss_rows(book: Dictionary) -> Array:

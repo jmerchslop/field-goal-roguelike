@@ -67,6 +67,7 @@ func _run() -> void:
 	_check_fx1()
 	_check_rs1()
 	_check_cam1()
+	_check_pace1()
 	_check_f3()
 	_check_au1()
 	_check_drive_lid_and_power_safety()
@@ -128,6 +129,14 @@ func _release_sfx() -> void:
 			player.stop()
 			player.stream = null
 	sfx._streams.clear()
+	var beds = get_root().get_node_or_null("Beds")
+	if beds != null:
+		if beds.music_player != null:
+			beds.music_player.stop()
+			beds.music_player.stream = null
+		if beds.crowd_player != null:
+			beds.crowd_player.stop()
+			beds.crowd_player.stream = null
 
 
 func check(ok: bool, label: String) -> void:
@@ -669,25 +678,19 @@ func _check_run() -> void:
 
 
 func _check_run_table() -> void:
-	check(RunTable.count() == 20, "the run has 20 kicks")
-	var distances: Array = [35, 38, 41, 44, 48, 45, 50, 53, 56, 60, 54, 59, 62, 65, 68, 60, 65, 69, 72, 75]
-	var bosses: Array = [5, 10, 15, 20]
-	for n in range(1, 21):
+	check(RunTable.count() == 10, "the run has 10 kicks")
+	var distances: Array = [35, 40, 45, 50, 54, 58, 63, 68, 74, 80]
+	var spots: Array = ["center", "center", "center", "hash", "hash", "hash", "hash", "wide", "wide", "wide"]
+	var winds: Array = [[3, 3], [3, 6], [3, 8], [5, 10], [6, 11], [8, 13], [9, 15], [10, 16], [11, 17], [12, 18]]
+	for n in range(1, 11):
 		var row: Dictionary = RunTable.row(n)
+		var band: Array = winds[n - 1]
 		check(int(row["kick"]) == n, "table kick number %d" % n)
 		check(near(float(row["distance"]), float(distances[n - 1])), "kick %d distance" % n)
-		var spot := "center"
-		if n >= 4 and n <= 10:
-			spot = "hash"
-		elif n >= 11:
-			spot = "wide"
-		check(str(row["spot"]) == spot, "kick %d spot is %s" % [n, spot])
-		var boss := bosses.has(n)
+		check(str(row["spot"]) == str(spots[n - 1]), "kick %d spot is %s" % [n, spots[n - 1]])
+		var boss := n == 5 or n == 10
 		check((str(row["conditions"]) == "boss") == boss, "kick %d boss flag" % n)
-		check(float(row["wind_min"]) <= float(row["wind_max"]), "kick %d wind range is ordered" % n)
-	check(near(float(RunTable.row(1)["wind_min"]), 0.0) and near(float(RunTable.row(1)["wind_max"]), 0.0), "kick 1 wind is 0–0")
-	check(near(float(RunTable.row(4)["wind_max"]), 5.0), "kick 4 wind max is 5")
-	check(near(float(RunTable.row(20)["wind_min"]), 25.0) and near(float(RunTable.row(20)["wind_max"]), 35.0), "kick 20 wind is 25–35")
+		check(near(float(row["wind_min"]), float(band[0])) and near(float(row["wind_max"]), float(band[1])), "kick %d wind is %s-%s" % [n, band[0], band[1]])
 	check(RunTable.spot_yards("center", 1) == 0.0, "center spot is 0")
 	check(RunTable.spot_yards("hash", 1) == 3.0 and RunTable.spot_yards("hash", -1) == -3.0, "hash spot is ±3")
 	check(RunTable.spot_yards("wide", 1) == 6.0 and RunTable.spot_yards("wide", -1) == -6.0, "wide spot is ±6")
@@ -706,7 +709,7 @@ func _check_run_start_earn_and_cap() -> void:
 	run.resolve_kick("GOOD", 0.0, false)
 	check(run.attempt_note == "+1 ATTEMPT" and run.attempts == 2, "check 2 a first make earns +1 ATTEMPT, attempts=%d" % run.attempts)
 	check(run.go_to_next_kick(), "check 2 space moves on")
-	check(run.kick_number == 2 and near(run.distance_yards(), 38.0), "check 2 next is kick 2 at 38 yd")
+	check(run.kick_number == 2 and near(run.distance_yards(), 40.0), "check 2 next is kick 2 at 40 yd")
 	check(near(run.spot_yards, 0.0), "check 2 kick 2 is still centered, so the ball is farther up the field only")
 	run.resolve_kick("GOOD", 0.0, false)
 	check(run.attempts == 3 and run.attempt_note == "+1 ATTEMPT", "check 3 kick 2 fills the third attempt")
@@ -785,22 +788,22 @@ func _check_run_score_and_endings() -> void:
 	boss.streak = 0
 	boss.resolve_kick("GOOD", 4.0, false)
 	check(boss.is_boss(), "kick 5 is a boss kick")
-	check(boss.score == 72 and boss.score_line == "48 yd × 1.00 × 1.5 = 72", "boss math reads '%s'" % boss.score_line)
+	check(boss.score == 81 and boss.score_line == "54 yd × 1.00 × 1.5 = 81", "boss math reads '%s'" % boss.score_line)
 	var stacked := RunLogic.points_for(75.0, 1.0, true, true, false)
 	check(stacked == 225, "middle and boss stack: 75 × 2 × 1.5 = 225, got %d" % stacked)
-	var won := _fresh(20, 1)
+	var won := _fresh(10, 1)
 	won.resolve_kick("GOOD", 0.4, false)
-	check(won.phase == RunLogic.Phase.WIN, "making kick 20 is a win")
-	check(won.kicks_made == 1 and near(won.longest_make, 75.0), "win stats count that make, longest %s" % won.longest_make)
+	check(won.phase == RunLogic.Phase.WIN, "making kick 10 is a win")
+	check(won.kicks_made == 1 and near(won.longest_make, 80.0), "win stats count that make, longest %s" % won.longest_make)
 	check(won.attempts == 2, "the winning make still earns an attempt")
-	check(not won.go_to_next_kick() and won.kick_number == 20, "a win does not invent kick 21")
-	var last_miss := _fresh(20, 2)
+	check(not won.go_to_next_kick() and won.kick_number == 10, "a win does not invent kick 11")
+	var last_miss := _fresh(10, 2)
 	last_miss.resolve_kick("WIDE RIGHT", 6.0, false)
-	check(last_miss.phase == RunLogic.Phase.PLAYING and last_miss.attempts == 1, "a miss on kick 20 with an attempt left is not game over")
-	check(not last_miss.go_to_next_kick() and last_miss.kick_number == 20 and last_miss.phase == RunLogic.Phase.PLAYING, "a miss on kick 20 stays on kick 20 for a retry")
-	var last_out := _fresh(20, 1)
+	check(last_miss.phase == RunLogic.Phase.PLAYING and last_miss.attempts == 1, "a miss on kick 10 with an attempt left is not game over")
+	check(not last_miss.go_to_next_kick() and last_miss.kick_number == 10 and last_miss.phase == RunLogic.Phase.PLAYING, "a miss on kick 10 stays on kick 10 for a retry")
+	var last_out := _fresh(10, 1)
 	last_out.resolve_kick("SHORT", 0.0, false)
-	check(last_out.phase == RunLogic.Phase.GAME_OVER, "running out on kick 20 is game over, not a next kick")
+	check(last_out.phase == RunLogic.Phase.GAME_OVER, "running out on kick 10 is game over, not a next kick")
 	var streak_run := RunLogic.new()
 	streak_run.new_run()
 	streak_run.resolve_kick("GOOD", 2.0, false)
@@ -812,14 +815,17 @@ func _check_run_score_and_endings() -> void:
 
 func _check_run_late_earn_and_spot_in_the_kick() -> void:
 	var plain := _fresh(11, 2)
+	plain.run_mode = "endless"
 	plain.late_earn_rule = true
 	plain.resolve_kick("GOOD", 4.0, false)
 	check(plain.attempts == 2 and plain.attempt_note == "", "check 8 a normal good on kick 11 stays at 2 attempts")
 	var middle := _fresh(11, 2)
+	middle.run_mode = "endless"
 	middle.late_earn_rule = true
 	middle.resolve_kick("GOOD", 0.2, false)
 	check(middle.down_the_middle and middle.attempts == 3 and middle.attempt_note == "+1 ATTEMPT", "check 8 down the middle on kick 11 goes to 3")
 	var perfect := _fresh(11, 2)
+	perfect.run_mode = "endless"
 	perfect.late_earn_rule = true
 	perfect.resolve_kick("GOOD", 4.0, true)
 	check(perfect.attempts == 3, "check 8 a perfect on kick 11 also earns")
@@ -1247,8 +1253,11 @@ func _check_wind_and_pool() -> void:
 	calm.set_seed(3)
 	calm.new_run()
 	for kick_n in [1, 2, 3]:
-		check(calm.kick_number == kick_n and calm.wind_speed == 0 and RunLogic.wind_name(calm.wind_speed) == "Calm", "check 4 kick %d is Calm" % kick_n)
-		check(RunLogic.wind_flag_kind(calm.wind_speed) == "none", "check 4 kick %d has no flag" % kick_n)
+		var band: Dictionary = RunTable.row(kick_n)
+		check(calm.kick_number == kick_n and calm.wind_speed >= int(band["wind_min"]) and calm.wind_speed <= int(band["wind_max"]), "check 4 kick %d wind stays in the table" % kick_n)
+		if kick_n == 1:
+			check(calm.wind_speed == 3 and RunLogic.wind_name(calm.wind_speed) == "Breezy", "check 4 kick 1 is 3 mph Breezy")
+			check(RunLogic.wind_flag_kind(calm.wind_speed) != "none", "check 4 kick 1 has a flag")
 		calm.resolve_kick("GOOD", 0.0, false)
 		calm.go_to_next_kick()
 	calm.apply_debug_wind()
@@ -1376,20 +1385,22 @@ func _check_wind_and_pool() -> void:
 
 
 func _check_weather_and_bosses() -> void:
-	check(RunLogic.is_standard_boss_slot(5) and RunLogic.is_standard_boss_slot(10) and RunLogic.is_standard_boss_slot(15) and RunLogic.is_standard_boss_slot(20), "Standard bosses stay on kicks 5, 10, 15, and 20")
-	check(not RunLogic.is_standard_boss_slot(1) and not RunLogic.is_standard_boss_slot(11) and not RunLogic.is_standard_boss_slot(16), "other Standard kicks are not boss slots")
-	check(RunLogic.weather_pool(1) == [RunLogic.CLEAR] and RunLogic.weather_pool(4) == [RunLogic.CLEAR], "kicks 1 through 4 are always clear")
-	check(RunLogic.weather_pool(11).size() == 4 and RunLogic.weather_pool(11).has(RunLogic.CLEAR) == false, "kicks 11 through 14 are never clear")
+	check(RunLogic.is_standard_boss_slot(5) and RunLogic.is_standard_boss_slot(10) and not RunLogic.is_standard_boss_slot(15) and not RunLogic.is_standard_boss_slot(20), "Standard bosses stay on kicks 5 and 10")
+	check(not RunLogic.is_standard_boss_slot(1) and not RunLogic.is_standard_boss_slot(4) and not RunLogic.is_standard_boss_slot(9) and not RunLogic.is_standard_boss_slot(11), "other Standard kicks are not boss slots")
+	check(RunLogic.weather_pool(1) == [RunLogic.CLEAR] and RunLogic.weather_pool(2) == [RunLogic.CLEAR] and RunLogic.weather_pool(3) == [RunLogic.CLEAR], "kicks 1 through 3 are always clear")
+	check(RunLogic.weather_pool(4) == [RunLogic.CLEAR, RunLogic.RAIN] and RunLogic.weather_pool(6) == [RunLogic.CLEAR, RunLogic.RAIN], "kicks 4 and 6 are clear or rain")
+	check(RunLogic.weather_pool(7) == [RunLogic.CLEAR, RunLogic.RAIN, RunLogic.SNOW], "kick 7 is clear, rain, or snow")
+	check(RunLogic.weather_pool(8).size() == 4 and RunLogic.weather_pool(8).has(RunLogic.CLEAR) == false and RunLogic.weather_pool(9).size() == 4, "kicks 8 and 9 are never clear")
 	var blocked := 0
 	var samples := 0
 	while samples < 40:
 		var rng := RandomNumberGenerator.new()
 		rng.seed = samples + 1
-		var name := RunLogic.roll_weather_name(12, RunLogic.RAIN, RunLogic.RAIN, rng)
+		var name := RunLogic.roll_weather_name(8, RunLogic.RAIN, RunLogic.RAIN, rng)
 		if name == RunLogic.RAIN:
 			blocked += 1
 		samples += 1
-	check(blocked == 0, "check a rain streak does not become a third rain on kick 12")
+	check(blocked == 0, "check a rain streak does not become a third rain on kick 8")
 	var only := RunLogic.roll_weather_name(3, RunLogic.CLEAR, RunLogic.CLEAR, RandomNumberGenerator.new())
 	check(only == RunLogic.CLEAR, "when clear is the only legal weather, the repeat is allowed")
 	var early := RunLogic.new()
@@ -1569,8 +1580,8 @@ func _check_ui_copy() -> void:
 	check(hud.find("Nothing left to pick —") < 0 and hud.find("Space accepts the miss") < 0 and hud.find("Reroll: %d left") < 0, "the old offer and mulligan lines are gone")
 	check(Loadout.effect_line(Loadout.PINPOINT, 1) == "Perfect +2, Good +3", "Pinpoint I says Perfect and Good")
 	check(Loadout.effect_line(Loadout.SCOUT_LID, 1) == "+1 reroll" and Loadout.effect_line(Loadout.SCOUT_LID, 2) == "+2 rerolls", "Scout Lid 1 is singular and 2 is plural")
-	check(Loadout.effect_line(Loadout.REPLAY_GLOVES, 1) == "1 practice swing each quarter" and Loadout.effect_line(Loadout.REPLAY_GLOVES, 2) == "2 practice swings each quarter", "Replay Gloves says each quarter")
-	check(Loadout.effect_line(Loadout.DOINK_CAP, 1) == "1 doink becomes Good each quarter", "Doink Cap I says a doink becomes Good")
+	check(Loadout.effect_line(Loadout.REPLAY_GLOVES, 1) == "1 practice swing each half" and Loadout.effect_line(Loadout.REPLAY_GLOVES, 2) == "2 practice swings each half", "Replay Gloves says each half")
+	check(Loadout.effect_line(Loadout.DOINK_CAP, 1) == "1 doink becomes Good each half", "Doink Cap I says a doink becomes Good")
 	check(Loadout.effect_line(Loadout.IRON_GRIP, 1) == "OVERPOWER band +10% wide.", "Iron Grip I widens the OVERPOWER band")
 	check(Loadout.effect_line(Loadout.IRON_GRIP, 3) == "OVERPOWER band +30% wide.", "Iron Grip III widens the band and does not mention noise")
 	check(Loadout.effect_line(Loadout.TIGHT, 1) == "Down: Perfect and Good -2. Up: +1.0 Mult", "Tight Window keeps +1.0 Mult and says Good")
@@ -1737,6 +1748,7 @@ func _check_curses_and_rarity() -> void:
 	howl.give(Loadout.CANNON, 1)
 	howl.give(Loadout.HOWLING)
 	check(near(howl.stats.range_bonus, 6.0 * 1.10), "Howling Wind makes Cannon Cleats 10% stronger")
+	howl.set_wind(0.0, 0.0)
 	check(howl.shown_wind_speed() == 0, "calm wind stays calm under Howling Wind")
 	howl.set_wind(10.0, 90.0)
 	check(howl.shown_wind_speed() == 15, "Howling Wind shows 15 mph when the saved wind is 10")
@@ -1826,7 +1838,8 @@ func _check_curses_and_rarity() -> void:
 	check(records.has_trophy("sixty_club"), "a 60 yard make earns Sixty Club")
 	var record := RunLogic.new()
 	record.new_run()
-	record.kick_number = 18
+	records.trophies["record_breaker"] = false
+	record.kick_number = 9
 	record.resolve_kick("GOOD", 2.0, false)
 	check(records.has_trophy("record_breaker"), "a 69 yard make earns Record Breaker")
 	var quarter := RunLogic.new()
@@ -1859,10 +1872,11 @@ func _check_curses_and_rarity() -> void:
 	check(records.has_trophy("hot_hand"), "a streak of 10 earns Hot Hand")
 	var season := RunLogic.new()
 	season.new_run()
-	season.kick_number = 20
+	records.trophies["season_complete"] = false
+	season.kick_number = 10
 	season.attempts = 3
 	season.resolve_kick("GOOD", 2.0, false)
-	check(season.phase == RunLogic.Phase.WIN and records.has_trophy("season_complete"), "making kick 20 earns Season Complete")
+	check(season.phase == RunLogic.Phase.WIN and records.has_trophy("season_complete"), "making kick 10 earns Season Complete")
 	records.middles = 9
 	var bull := RunLogic.new()
 	bull.new_run()
@@ -2035,7 +2049,7 @@ func _check_rank_caps_and_range() -> void:
 	check(bench.attempt_cap == 5 and bench.attempts == 5 and bench.stats.bench_spare, "Deep Bench III adds an attempt without raising the cap")
 	bench.attempts = 3
 	bench.kick_number = 6
-	bench._refill_quarter()
+	bench._refill_block()
 	check(bench.attempts == 4, "Deep Bench III grants an attempt at the next quarter when below cap")
 	var visor := RunLogic.new()
 	visor.new_run()
@@ -2078,13 +2092,13 @@ func _check_rank_caps_and_range() -> void:
 	check(doink.stats.doink_per_quarter == 5 and not doink.stats.doink_carry and doink.insurance_left == 5, "Doink Cap V is 5 charges and does not carry")
 	doink.insurance_left = 2
 	doink.kick_number = 6
-	doink._refill_quarter()
+	doink._refill_block()
 	check(doink.insurance_left == 5, "Doink Cap V refills to 5 and drops unused charges")
 	doink.give(Loadout.DOINK_CAP, 6)
 	check(doink.stats.doink_carry and doink.stats.doink_per_quarter == 5, "Doink Cap VI keeps 5 charges and carries unused ones")
 	doink.insurance_left = 2
-	doink.kick_number = 11
-	doink._refill_quarter()
+	doink.kick_number = 6
+	doink._refill_block()
 	check(doink.insurance_left == 7, "unused Doink charges carry, stored up to 5, on top of the new 5")
 	var replay := RunLogic.new()
 	replay.new_run()
@@ -2093,7 +2107,7 @@ func _check_rank_caps_and_range() -> void:
 	replay.give(Loadout.REPLAY_GLOVES, 6)
 	replay.practice_left = 3
 	replay.kick_number = 6
-	replay._refill_quarter()
+	replay._refill_block()
 	check(replay.stats.practice_carry and replay.practice_left == 8, "Replay Gloves VI carries unused swings, stored up to 5")
 	var wraps := RunLogic.new()
 	wraps.new_run()
@@ -2117,7 +2131,7 @@ func _check_rank_caps_and_range() -> void:
 	drill.kick_number = 5
 	drill.resolve_kick("GOOD", 2.0, false)
 	check(near(drill.stats.drill_mult, 0.5), "Two-Minute Drill I is +0.5 Mult")
-	check(drill.last_points == 108, "boss points include +0.5 on top of ×1.5, got %s" % drill.last_points)
+	check(drill.last_points == 122, "boss points include +0.5 on top of ×1.5, got %s" % drill.last_points)
 	check(drill.score_line.find("drill") >= 0 and drill.score_line.find("1.5") >= 0, "the score line shows the drill bonus, got '%s'" % drill.score_line)
 	drill.kick_resolved = false
 	drill.phase = RunLogic.Phase.PLAYING
@@ -2142,21 +2156,21 @@ func _check_rank_caps_and_range() -> void:
 	var full := _maxed_loadout()
 	var empty_offer: Array = Loadout.draw_offer(full.loadout_state(), full.attempt_cap, RandomNumberGenerator.new())
 	check(empty_offer.is_empty(), "a maxed loadout draws zero cards")
-	full.kick_number = 19
+	full.kick_number = 4
 	full.resolve_kick("GOOD", 2.0, false)
 	full.roll_offer()
 	check(full.awaiting_offer and full.offer.is_empty(), "an empty offer still waits for Skip")
 	check(not full.pick_card(0) and not full.pick_card(1) and not full.pick_card(2), "keys 1, 2, and 3 do nothing when no cards are showing")
-	check(full.awaiting_offer and full.kick_number == 19, "the empty offer does not advance on 1, 2, or 3")
+	check(full.awaiting_offer and full.kick_number == 4, "the empty offer does not advance on 1, 2, or 3")
 	var before_score := full.score
 	check(full.skip_offer() and full.score == before_score and not full.awaiting_offer, "Skip on an empty offer takes nothing and continues")
-	check(full.go_to_next_kick() and full.kick_number == 20, "Skip after kick 19 reaches kick 20")
+	check(full.go_to_next_kick() and full.kick_number == 5, "Skip after kick 4 reaches kick 5")
 	var one := _maxed_loadout()
 	one.cleats_rank = 5
 	one.rebuild_stats()
 	var one_cards: Array = Loadout.draw_offer(one.loadout_state(), one.attempt_cap, RandomNumberGenerator.new())
 	check(one_cards.size() == 1 and str(one_cards[0].get("id", "")) == Loadout.CANNON and int(one_cards[0].get("rank", 0)) == 6, "one legal card is still offered")
-	one.kick_number = 19
+	one.kick_number = 4
 	one.phase = RunLogic.Phase.PLAYING
 	one.roll_offer()
 	check(one.offer.size() == 1 and one.awaiting_offer, "a one-card offer stays open")
@@ -2219,9 +2233,9 @@ func _check_vitamin_shop() -> void:
 	saved.start_with_kicker(Kickers.WALK_ON)
 	saved.cash = 40
 	saved.belt[0] = Vitamins.PROTEIN
-	saved.kick_number = 20
+	saved.kick_number = 10
 	saved.resolve_kick("GOOD", 2.0, false)
-	check(saved.phase == RunLogic.Phase.WIN and not saved.opens_shop(), "making kick 20 does not open a shop")
+	check(saved.phase == RunLogic.Phase.WIN and not saved.opens_shop(), "making kick 10 does not open a shop")
 	var records = get_root().get_node("SaveData")
 	records.file_path = "user://fg_shop_test.cfg"
 	records.reset_save()
@@ -2273,16 +2287,24 @@ func _check_vitamin_shop() -> void:
 	check(shop.buy_b12() and shop.attempts == 2 and shop.shop_b12_bought and not shop.buy_b12() and shop.cash == 3, "B12 adds one attempt once, then does nothing")
 	shop.leave_shop()
 	check(not shop.awaiting_shop and shop.go_to_next_kick() and shop.kick_number == 6, "leaving the shop starts kick 6")
-	shop.kick_number = 10
+	shop.kick_number = 4
+	shop.phase = RunLogic.Phase.PLAYING
+	shop.kick_resolved = false
 	shop.resolve_kick("GOOD", 2.0, false)
 	shop.follow_offer()
-	check(shop.awaiting_shop and shop.next_boss_line() == "Next boss: " + shop._boss_label(str(shop.standard_bosses[15])) and shop.shop_reroll_price == 2, "the kick 10 shop names the rolled kick 15 boss and reroll starts at $2 again")
+	check(not shop.awaiting_shop, "kick 4 does not open a shop")
+	shop.kick_number = 9
+	shop.phase = RunLogic.Phase.PLAYING
+	shop.kick_resolved = false
+	shop.resolve_kick("GOOD", 2.0, false)
+	shop.follow_offer()
+	check(shop.awaiting_shop and shop.next_boss_line() == "Next boss: " + shop._boss_label(str(shop.standard_bosses[10])) and shop.shop_reroll_price == 2, "the kick 9 shop names the rolled kick 10 boss and reroll starts at $2 again")
 	shop.leave_shop()
-	shop.go_to_next_kick()
-	shop.kick_number = 15
+	shop.kick_number = 10
+	shop.phase = RunLogic.Phase.PLAYING
+	shop.kick_resolved = false
 	shop.resolve_kick("GOOD", 2.0, false)
-	shop.follow_offer()
-	check(shop.next_boss_line() == "Next boss: " + shop._boss_label(str(shop.standard_bosses[20])), "the kick 15 shop names the rolled kick 20 boss")
+	check(shop.phase == RunLogic.Phase.WIN and not shop.opens_shop(), "making kick 10 wins and does not open a shop")
 	var protein := RunLogic.new()
 	protein.new_run()
 	protein.attempts = 3
@@ -2382,7 +2404,7 @@ func _check_vitamin_shop() -> void:
 	zinc.belt[0] = Vitamins.ZINC
 	zinc.belt[1] = Vitamins.ZINC
 	check(zinc.use_belt(0) and str(zinc.belt[0]) == "", "Zinc on a normal kick is consumed")
-	check(zinc.wind_speed >= 3 and zinc.wind_speed <= 8, "Zinc rerolls kick 6 wind inside 3 to 8, got %s" % zinc.wind_speed)
+	check(zinc.wind_speed >= 8 and zinc.wind_speed <= 13, "Zinc rerolls kick 6 wind inside 8 to 13, got %s" % zinc.wind_speed)
 	check(zinc.weather == RunLogic.CLEAR or zinc.weather == RunLogic.RAIN, "Zinc rerolls a non-boss weather from that kick's table")
 	var kept_wind := zinc.wind_speed
 	var kept_weather := zinc.weather
@@ -2399,7 +2421,7 @@ func _check_vitamin_shop() -> void:
 	boss_zinc.set_wind(99.0, 10.0)
 	boss_zinc.belt[0] = Vitamins.ZINC
 	check(boss_zinc.use_belt(0), "Zinc is used on the boss")
-	check(boss_zinc.weather == RunLogic.ICED and boss_zinc.wind_speed >= 0 and boss_zinc.wind_speed <= 5, "a boss keeps Iced and only the wind rerolls")
+	check(boss_zinc.weather == RunLogic.ICED and boss_zinc.wind_speed >= 6 and boss_zinc.wind_speed <= 11, "a boss keeps Iced and only the wind rerolls")
 	var lutein := RunLogic.new()
 	lutein.new_run()
 	lutein.give(Loadout.WIND_VISOR, 3)
@@ -2552,7 +2574,7 @@ func _check_menus() -> void:
 	season.kick_number = 20
 	season.attempts = 2
 	season.resolve_kick("GOOD", 0.0, true)
-	check(season.phase == RunLogic.Phase.PLAYING and RunTable.count() == 20, "Endless kick 20 keeps playing; Standard's table is still 20 kicks")
+	check(season.phase == RunLogic.Phase.PLAYING and RunTable.count() == 10, "Endless kick 20 keeps playing; Standard's table is 10 kicks")
 	var trophy := FrontEnd.new()
 	trophy.confirm_title()
 	trophy.menu_index = 2
@@ -2623,15 +2645,13 @@ func _check_endless_and_farm() -> void:
 	var standard := RunLogic.new()
 	check(near(standard.distance_yards(), 35.0) and not standard.is_boss(), "Standard kick 1 is still 35 yards")
 	standard.kick_number = 5
-	check(standard.is_boss() and near(standard.distance_yards(), 48.0), "Standard kick 5 is still the 48-yard boss")
+	check(standard.is_boss() and near(standard.distance_yards(), 54.0), "Standard kick 5 is the 54-yard boss")
+	standard.kick_number = 6
+	check(not standard.is_boss() and near(standard.distance_yards(), 58.0), "Standard kick 6 is not a boss")
 	standard.kick_number = 10
-	check(standard.is_boss(), "Standard kick 10 is still a boss")
-	standard.kick_number = 15
-	check(standard.is_boss(), "Standard kick 15 is still a boss")
-	standard.kick_number = 20
 	standard.attempts = 3
 	standard.resolve_kick("GOOD", 0.0, true)
-	check(standard.phase == RunLogic.Phase.WIN and near(standard.distance_yards(), 75.0), "Standard kick 20 is still a WIN at 75 yards")
+	check(standard.phase == RunLogic.Phase.WIN and near(standard.distance_yards(), 80.0), "Standard kick 10 is a WIN at 80 yards")
 	check(Loadout.max_rank(Loadout.CANNON) == 6 and Loadout.max_rank(Loadout.HERO_BALL) == 3, "Standard caps stay equipment VI and perk III")
 	var capped := RunLogic.new()
 	capped.give(Loadout.CANNON, 6)
@@ -2879,7 +2899,7 @@ func _check_new_kickers() -> void:
 	check(converted.lucky_stacks == 0 and near(converted.stats.range_bonus, 6.0), "a converted retry does not stack Lucky Ball")
 	var clean := RunLogic.new()
 	clean.start_with_kicker(Kickers.WALK_ON)
-	for n in range(1, 21):
+	for n in range(1, 11):
 		clean.kick_number = n
 		clean.kick_resolved = false
 		clean.phase = RunLogic.Phase.PLAYING
@@ -2892,7 +2912,7 @@ func _check_new_kickers() -> void:
 	dirty.resolve_kick("SHORT", 0.0, false)
 	dirty.begin_retry()
 	dirty.resolve_kick("GOOD", 0.0, false)
-	for n in range(2, 21):
+	for n in range(2, 11):
 		dirty.kick_number = n
 		dirty.kick_resolved = false
 		dirty.phase = RunLogic.Phase.PLAYING
@@ -3593,7 +3613,7 @@ func _check_rw2() -> void:
 	var standard_make := RunLogic.new()
 	standard_make.start_with_kicker(Kickers.WALK_ON)
 	standard_make.run_mode = "standard"
-	standard_make.kick_number = 20
+	standard_make.kick_number = 10
 	standard_make.resolve_kick("GOOD", 0.0, false)
 	check(not records.has_unlock(Kickers.VEX), "a Standard make does not unlock Vex")
 	var long_make := RunLogic.new()
@@ -3707,8 +3727,8 @@ func _check_as1() -> void:
 	long.start_with_kicker(Kickers.WALK_ON)
 	long.tad_level = 3
 	check(near(long.distance_yards(), 39.0), "TAD 3 makes kick 1 39 yards")
-	long.kick_number = 20
-	check(near(long.distance_yards(), 79.0) and near(long.post_width(), 6.17), "TAD 3 lengthens kick 20 and leaves the posts")
+	long.kick_number = 10
+	check(near(long.distance_yards(), 84.0) and near(long.post_width(), 6.17), "TAD 3 lengthens kick 10 and leaves the posts")
 	long.tad_level = 4
 	check(near(long.post_width(), 5.92) and near(long.post_half_gap(), 2.96), "TAD 4 narrows a normal goal by 0.25")
 	long.weather = RunLogic.SQUEEZE
@@ -3721,7 +3741,7 @@ func _check_as1() -> void:
 	dry.give(Loadout.SECOND_LOOK, 1)
 	check(dry.rerolls_left == 0 and dry.second_look_bank == 0, "Scout Lid and Second Look grant no offer rerolls at TAD 5")
 	dry.kick_number = 6
-	dry._refill_quarter()
+	dry._refill_block()
 	check(dry.second_look_bank == 0, "a new block does not bank a Second Look reroll at TAD 5")
 	dry.awaiting_offer = true
 	dry.offer = [{"id": Loadout.HOT_STREAK, "rank": 1}]
@@ -3907,11 +3927,11 @@ func _check_as2() -> void:
 		final.set_seed(seed + 70)
 		final.new_run()
 		final.tad_level = 10
-		var name := str(final.standard_bosses[20])
+		var name := str(final.standard_bosses[10])
 		finals[name] = true
-		check(name == RunLogic.BIG_GAME or name == RunLogic.MOVING, "kick 20 is still Big Game or Moving Posts, got %s" % name)
-		check(final.posts_move(), "TAD 10 moves the posts on kick 20 either way")
-	print("AS2 kick 20 names ", finals.keys())
+		check(name == RunLogic.BIG_GAME or name == RunLogic.MOVING, "kick 10 is Big Game or Moving Posts, got %s" % name)
+		check(final.posts_move(), "TAD 10 moves the posts on kick 10 either way")
+	print("AS2 kick 10 names ", finals.keys())
 	var stacked := RunLogic.new()
 	stacked.set_seed(4)
 	stacked.start_with_kicker(Kickers.WALK_ON)
@@ -4517,19 +4537,27 @@ func _check_pk1() -> void:
 	look.give(Loadout.SECOND_LOOK, 1)
 	check(look.second_look_bank == 1, "picking Second Look banks one free reroll")
 	look.second_look_bank = 0
-	for block_start in [1, 6, 11]:
+	for block_start in [1, 6]:
 		look.kick_number = block_start
-		look._refill_quarter()
-	check(look.second_look_bank == 3, "15 unspent kicks bank 3 free rerolls")
+		look._refill_block()
+	check(look.second_look_bank == 2, "two halves bank 2 free rerolls")
 	look.kick_number = 5
 	var stacked := look.second_look_bank
-	look._refill_quarter()
+	look._refill_block()
 	check(look.second_look_bank == stacked, "the offer after kick 5 does not add another free reroll")
-	look.kick_number = 21
-	look._refill_quarter()
-	check(look.second_look_bank == stacked + 1, "kick 21 adds one more free reroll")
-	look.second_look_bank = 1
 	look.kick_number = 11
+	look._refill_block()
+	check(look.second_look_bank == stacked, "standard kick 11 does not add a free reroll")
+	look.run_mode = "endless"
+	look.kick_number = 11
+	look._refill_block()
+	check(look.second_look_bank == stacked + 1, "endless kick 11 adds one more free reroll")
+	look.kick_number = 21
+	look._refill_block()
+	check(look.second_look_bank == stacked + 2, "endless kick 21 adds one more free reroll")
+	look.run_mode = "standard"
+	look.second_look_bank = 1
+	look.kick_number = 7
 	look.awaiting_offer = true
 	look.offer = Loadout.draw_offer(look.loadout_state(), look.attempt_cap, look._offer_rng)
 	check(look.free_reroll_ready(), "a banked free reroll is the next offer reroll")
@@ -4580,59 +4608,56 @@ func _check_boss2() -> void:
 		var run := RunLogic.new()
 		run.set_seed(1000 + sample)
 		run.new_run()
-		var names: Array[String] = []
-		var unique := {}
-		for slot in [5, 10, 15]:
-			var boss := str(run.standard_bosses[slot])
-			names.append(boss)
-			unique[boss] = true
-			check(early.has(boss), "kick %s rolled %s, which is not an early boss" % [slot, boss])
-			check(boss != RunLogic.BIG_GAME and boss != RunLogic.MOVING, "a final boss appeared before kick 20")
-			seen_early[boss] = true
-		var final_boss := str(run.standard_bosses[20])
-		names.append(final_boss)
-		check(finals.has(final_boss), "kick 20 rolled %s" % final_boss)
+		var early_boss := str(run.standard_bosses[5])
+		var final_boss := str(run.standard_bosses[10])
+		check(early.has(early_boss), "kick 5 rolled %s, which is not an early boss" % early_boss)
+		check(finals.has(final_boss), "kick 10 rolled %s" % final_boss)
+		check(run.standard_bosses.size() == 2, "a standard run keeps two boss slots")
+		seen_early[early_boss] = true
 		seen_final[final_boss] = true
-		check(unique.size() == 3, "kicks 5, 10, and 15 repeated a boss: %s" % str(names))
 		var again := RunLogic.new()
 		again.set_seed(1000 + sample)
 		again.new_run()
-		check(str(again.standard_bosses[5]) == names[0] and str(again.standard_bosses[20]) == final_boss, "the same seed rolls the same lineup")
-		print("MF1 lineup %d seed %d: 5=%s 10=%s 15=%s 20=%s" % [sample + 1, 1000 + sample, names[0], names[1], names[2], names[3]])
-	for name in early:
-		check(seen_early.has(name), "20 Standard runs never rolled early boss %s" % name)
-	for name in finals:
-		check(seen_final.has(name), "20 Standard runs never rolled final %s" % name)
+		check(str(again.standard_bosses[5]) == early_boss and str(again.standard_bosses[10]) == final_boss, "the same seed rolls the same lineup")
+		print("PACE1 lineup %d seed %d: 5=%s 10=%s" % [sample + 1, 1000 + sample, early_boss, final_boss])
 	var final_big := 0
+	seen_early = {}
+	seen_final = {}
 	for sample in 200:
 		var run := RunLogic.new()
 		run.set_seed(5000 + sample)
 		run.new_run()
-		for slot in [5, 10, 15]:
-			var boss := str(run.standard_bosses[slot])
-			check(early.has(boss), "a larger sample put %s on kick %s" % [boss, slot])
-		check(finals.has(str(run.standard_bosses[20])), "a larger sample put a non-final on kick 20")
-		if str(run.standard_bosses[20]) == RunLogic.BIG_GAME:
+		var early_boss := str(run.standard_bosses[5])
+		var final_boss := str(run.standard_bosses[10])
+		check(early.has(early_boss), "a larger sample put %s on kick 5" % early_boss)
+		check(finals.has(final_boss), "a larger sample put a non-final on kick 10")
+		seen_early[early_boss] = true
+		seen_final[final_boss] = true
+		if final_boss == RunLogic.BIG_GAME:
 			final_big += 1
 		run.kick_number = 10
 		var before := str(run.standard_bosses[10])
 		run._roll_weather()
 		run._roll_weather()
 		check(run.weather == before and str(run.standard_bosses[10]) == before, "arriving at the kick does not re-roll the boss")
-	check(final_big > 60 and final_big < 140, "kick 20 is a 50/50, Big Game showed %s times in 200" % final_big)
+	for name in early:
+		check(seen_early.has(name), "200 Standard runs never rolled early boss %s" % name)
+	for name in finals:
+		check(seen_final.has(name), "200 Standard runs never rolled final %s" % name)
+	check(final_big > 60 and final_big < 140, "kick 10 is a 50/50, Big Game showed %s times in 200" % final_big)
 	var saved := RunLogic.new()
 	saved.set_seed(42)
 	saved.new_run()
 	var snap: Dictionary = saved.standard_bosses.duplicate()
 	var resumed := RunLogic.new()
 	resumed.import_resume(saved.export_resume())
-	check(str(resumed.standard_bosses[5]) == str(snap[5]) and str(resumed.standard_bosses[10]) == str(snap[10]) and str(resumed.standard_bosses[15]) == str(snap[15]) and str(resumed.standard_bosses[20]) == str(snap[20]), "a mid-run resume keeps the four bosses")
+	check(str(resumed.standard_bosses[5]) == str(snap[5]) and str(resumed.standard_bosses[10]) == str(snap[10]) and resumed.standard_bosses.size() == 2, "a mid-run resume keeps the two bosses")
 	var forced := RunLogic.new()
 	forced.set_seed(7)
 	forced.new_run()
 	var lineup: Dictionary = forced.standard_bosses.duplicate()
 	forced.force_weather(RunLogic.LIGHTS)
-	check(forced.weather == RunLogic.LIGHTS and str(forced.standard_bosses[5]) == str(lineup[5]) and str(forced.standard_bosses[20]) == str(lineup[20]), "Shift+9 forces the kick and does not rewrite the lineup")
+	check(forced.weather == RunLogic.LIGHTS and str(forced.standard_bosses[5]) == str(lineup[5]) and str(forced.standard_bosses[10]) == str(lineup[10]), "Shift+9 forces the kick and does not rewrite the lineup")
 	var endless := RunLogic.new()
 	endless.set_seed(9)
 	endless.new_run()
@@ -5160,10 +5185,11 @@ func _check_m2_kickers() -> void:
 	deal.phase = RunLogic.Phase.PLAYING
 	check(deal.wants_upgrade() and deal.follow_offer() == "next" and not deal.awaiting_shop, "Cole still gets the loadout path and skips the shop after kick 5")
 	check(deal.belt[0] == "" and deal.belt[1] == "", "Cole's belt stays empty")
-	deal.kick_number = 10
-	check(deal.follow_offer() == "next", "Cole skips the shop after kick 10")
-	deal.kick_number = 15
-	check(deal.follow_offer() == "next", "Cole skips the shop after kick 15")
+	deal.kick_number = 9
+	check(deal.follow_offer() == "next", "Cole skips the shop after kick 9")
+	deal.kick_number = 4
+	check(deal.follow_offer() == "next", "Cole skips the shop on a kick that has none")
+	deal.kick_number = 8
 	deal.kick_resolved = false
 	deal.attempts = 3
 	deal.streak = 0
@@ -5258,7 +5284,7 @@ func _check_m2_kickers() -> void:
 	check(passed.distance_yards() > 75.0 and passed.phase == RunLogic.Phase.GAME_OVER and not Kickers.is_unlocked(Kickers.COLE), "Endless past 75 yards does not unlock Cole")
 	var season := RunLogic.new()
 	season.start_with_kicker(Kickers.WALK_ON)
-	season.kick_number = 20
+	season.kick_number = 10
 	season.resolve_kick("GOOD", 0.0, false)
 	check(season.phase == RunLogic.Phase.WIN and Kickers.is_unlocked(Kickers.COLE), "beating Standard unlocks Cole")
 	var numero := KickLogic.new()
@@ -5401,9 +5427,9 @@ func _check_honest_cards_and_bench() -> void:
 	check(Loadout.effect_line(Loadout.WIND_VISOR, 6).find("70%") >= 0 and Loadout.effect_line(Loadout.WIND_VISOR, 12).find("full flight") >= 0, "Wind Visor VI is 70% and XII is the full path")
 	check(Loadout.effect_line(Loadout.ICE_CAGE, 6) == "Immune to Iced. The OVERPOWER band shrink is halved. The needles ×0.90. Perfect +2, good +4.", "Ice Cage VI lists the full package")
 	check(Loadout.effect_line(Loadout.ICE_CAGE, 12) == "Immune to Iced. The OVERPOWER band shrink is halved. The needles ×0.90. Perfect +5, good +10.", "Ice Cage XII lists the grown bands")
-	check(Loadout.effect_line(Loadout.SCOUT_LID, 7) == "+6 rerolls, and two Practice Swings each quarter", "Scout Lid VII says +6 rerolls and two swings")
-	check(Loadout.effect_line(Loadout.DOINK_CAP, 7) == "7 doinks become Good each quarter, unused carry (max 7)", "Doink Cap VII carries 7")
-	check(Loadout.effect_line(Loadout.DOINK_CAP, 12) == "12 doinks become Good each quarter, unused carry (max 12)", "Doink Cap XII carries 12")
+	check(Loadout.effect_line(Loadout.SCOUT_LID, 7) == "+6 rerolls, and two Practice Swings each half", "Scout Lid VII says +6 rerolls and two swings")
+	check(Loadout.effect_line(Loadout.DOINK_CAP, 7) == "7 doinks become Good each half, unused carry (max 7)", "Doink Cap VII carries 7")
+	check(Loadout.effect_line(Loadout.DOINK_CAP, 12) == "12 doinks become Good each half, unused carry (max 12)", "Doink Cap XII carries 12")
 	check(Loadout.effect_line(Loadout.REPLAY_GLOVES, 7) == "7 practice swings, unused carry (max 7)", "Replay Gloves VII carries 7")
 	check(Loadout.effect_line(Loadout.WEATHER_WRAPS, 7) == "Penalties ignored, +8 yd unless Clear", "Weather Wraps VII says +8")
 	check(Loadout.effect_line(Loadout.WEATHER_WRAPS, 12) == "Penalties ignored, +18 yd unless Clear", "Weather Wraps XII says +18")
@@ -5437,10 +5463,10 @@ func _check_honest_cards_and_bench() -> void:
 	bench.give(Loadout.DEEP_BENCH, 6)
 	check(bench.attempt_cap == 7 and bench.attempts == held_attempts + 2 and near(bench.bench_bank, 0.0), "Deep Bench VI pays the leftover half as another attempt")
 	bench.attempts = bench.attempt_cap - 1
-	var before_quarter := bench.attempts
-	bench.kick_number = 6
-	bench._refill_quarter()
-	check(bench.attempts == before_quarter + 1, "the quarter spare is still +1 when below cap")
+	var before_half := bench.attempts
+	bench.kick_number = 11
+	bench._refill_block()
+	check(bench.attempts == before_half + 1, "the half spare is still +1 when below cap")
 	var walk := RunLogic.new()
 	walk.start_with_kicker(Kickers.WALK_ON)
 	var kick := KickLogic.new()
@@ -5589,10 +5615,10 @@ func _check_willow_offer_and_endless_shops() -> void:
 	var standard := RunLogic.new()
 	standard.phase = RunLogic.Phase.PLAYING
 	standard.last_result_made = true
-	for kick in [5, 10, 15]:
+	for kick in [5, 9]:
 		standard.kick_number = kick
 		check(standard.opens_shop(), "Standard still opens the shop on kick %s" % kick)
-	for kick in [4, 6, 16, 20, 25, 30]:
+	for kick in [4, 6, 7, 8, 10]:
 		standard.kick_number = kick
 		check(not standard.opens_shop(), "Standard does not open a shop on kick %s" % kick)
 	var endless := RunLogic.new()
@@ -5795,8 +5821,9 @@ func _check_result_stamps() -> void:
 
 
 func _check_broadcast_hud() -> void:
-	check(BroadcastHud.kick_title(1, false) == "KICK 1 OF 20", "a standard kick reads KICK n OF 20")
-	check(BroadcastHud.kick_title(8, true) == "KICK 8" and BroadcastHud.kick_title(8, true).find("OF 20") < 0, "endless drops OF 20")
+	check(BroadcastHud.kick_title(1, false) == "KICK 1 OF 10", "a standard kick reads KICK n OF 10")
+	check(BroadcastHud.kick_title(3, false) == "KICK 3 OF 10", "kick 3 reads KICK 3 OF 10")
+	check(BroadcastHud.kick_title(8, true) == "KICK 8" and BroadcastHud.kick_title(8, true).find("OF") < 0, "endless drops the of count")
 	check(BroadcastHud.yards_text(35.0) == "35 YD", "the big yard figure is the required distance")
 	check(BroadcastHud.aim_text(0.0) == "AIM 0.0", "a straight aim has no side letter")
 	check(BroadcastHud.aim_text(-1.25) == "AIM L 1.3" or BroadcastHud.aim_text(-1.2) == "AIM L 1.2", "aim left is L and has no degree sign")
@@ -6198,7 +6225,7 @@ func _check_pause_saves() -> void:
 	records.file_path = "user://fg_pause_test.cfg"
 	records.clear_run_slot("standard")
 	records.clear_run_slot("endless")
-	var standard_slot := {"kicker_id": Kickers.BIG_BRUCE, "kick_number": 12, "distance": 52, "mode": "standard", "place": "tee", "attempts": 3, "weather": "CLEAR", "wind_speed": 4}
+	var standard_slot := {"kicker_id": Kickers.BIG_BRUCE, "kick_number": 8, "distance": 68, "mode": "standard", "place": "tee", "attempts": 3, "weather": "CLEAR", "wind_speed": 4}
 	var endless_slot := {"kicker_id": Kickers.WILLOW, "kick_number": 8, "distance": 40, "mode": "endless", "place": "tee"}
 	records.write_run_slot("standard", standard_slot)
 	records.write_run_slot("endless", endless_slot)
@@ -6218,9 +6245,9 @@ func _check_pause_saves() -> void:
 	check(game.front.gate == "choose" and not game.selecting, "a saved Standard run opens Continue / New Run instead of character select")
 	game.front.gate = "confirm"
 	game._start_new_run()
-	check(game.selecting and game.front.came_from_gate and int(records.run_slot("standard").get("kick_number", 0)) == 12, "Start New Run reaches character select and keeps the old slot")
+	check(game.selecting and game.front.came_from_gate and int(records.run_slot("standard").get("kick_number", 0)) == 8, "Start New Run reaches character select and keeps the old slot")
 	game._leave_character_select()
-	check(game.front.gate == "choose" and not game.selecting and int(records.run_slot("standard").get("kick_number", 0)) == 12, "Esc from character select returns to Continue / New Run with the old save")
+	check(game.front.gate == "choose" and not game.selecting and int(records.run_slot("standard").get("kick_number", 0)) == 8, "Esc from character select returns to Continue / New Run with the old save")
 	game.highlight = 1
 	game._taking_pictures = false
 	game.confirm_kicker()
@@ -6265,7 +6292,7 @@ func _check_pause_saves() -> void:
 	game.run._run_saved = false
 	game.run.kick_resolved = false
 	game.run.run_mode = "standard"
-	game.run.kick_number = 20
+	game.run.kick_number = 10
 	game.run.attempts = 2
 	game.run.resolve_kick("GOOD", 0.0, false)
 	check(game.run.phase == RunLogic.Phase.WIN and not records.has_run_slot("standard"), "a Standard WIN clears that mode's Continue slot")
@@ -7012,16 +7039,16 @@ func _check_boss1() -> void:
 	check(pool.size() == 7, "the Endless boss pool has 7 names")
 	for boss_name in [RunLogic.ICED, RunLogic.SQUEEZE, RunLogic.MONSOON, RunLogic.BIG_GAME, RunLogic.LIGHTS, RunLogic.CLOCK, RunLogic.MOVING]:
 		check(pool.has(boss_name), "Endless pool is missing %s" % boss_name)
-	check(RunLogic.is_standard_boss_slot(5) and RunLogic.is_standard_boss_slot(20) and not RunLogic.is_standard_boss_slot(11), "Standard boss slots stay 5, 10, 15, and 20")
+	check(RunLogic.is_standard_boss_slot(5) and RunLogic.is_standard_boss_slot(10) and not RunLogic.is_standard_boss_slot(15) and not RunLogic.is_standard_boss_slot(11), "Standard boss slots stay 5 and 10")
 	var standard := RunLogic.new()
 	standard.set_seed(4)
 	standard.new_run()
 	standard.kick_number = 5
 	check(standard.next_boss_line() == "Next boss: " + standard._boss_label(str(standard.standard_bosses[10])), "the kick 5 preview matches the rolled kick 10 boss")
+	standard.kick_number = 9
+	check(standard.next_boss_line() == "Next boss: " + standard._boss_label(str(standard.standard_bosses[10])), "the kick 9 preview matches the rolled kick 10 boss")
 	standard.kick_number = 10
-	check(standard.next_boss_line() == "Next boss: " + standard._boss_label(str(standard.standard_bosses[15])), "the kick 10 preview matches the rolled kick 15 boss")
-	standard.kick_number = 15
-	check(standard.next_boss_line() == "Next boss: " + standard._boss_label(str(standard.standard_bosses[20])), "the kick 15 preview matches the rolled kick 20 boss")
+	check(standard.next_boss_line() == "", "kick 10 does not preview another boss")
 	var labeled := RunLogic.new()
 	labeled.run_mode = "endless"
 	labeled.endless_bosses[10] = RunLogic.CLOCK
@@ -7456,21 +7483,21 @@ func _check_bonus_ring() -> void:
 	check(shell.find("KEY_B") >= 0 and shell.find("KEY_H") >= 0 and shell.find("KEY_J") >= 0, "debug B was added and H and J stayed")
 	check(not KickConstants.debug_unlock_all_kickers, "debug_unlock_all_kickers stays false")
 	var standard := RunLogic.new()
-	for kick in range(1, 21):
+	for kick in range(1, 11):
 		standard.kick_number = kick
-		var boss := kick == 5 or kick == 10 or kick == 15 or kick == 20
-		var expect := kick == 13
+		var boss := kick == 5 or kick == 10
+		var expect := kick == 7
 		check(standard.ring_showing() == expect, "standard kick %s ring" % kick)
 		check(not (boss and standard.ring_showing()), "a boss kick has no ring")
 	var endless := RunLogic.new()
 	endless.run_mode = "endless"
-	for kick in [16, 17, 18, 46, 47, 48, 96, 97, 98, 146, 147, 148, 10, 20]:
+	for kick in [16, 17, 18, 46, 47, 48, 76, 77, 78, 96, 97, 98, 10, 20]:
 		endless.kick_number = kick
-		var want: bool = kick == 17 or kick == 47 or kick == 97 or kick == 147
+		var want: bool = kick == 17 or kick == 47 or kick == 77 or kick == 97
 		check(endless.ring_showing() == want, "endless kick %s ring" % kick)
 		check(not (endless.is_boss() and endless.ring_showing()), "an endless boss has no ring")
 	var practice := RunLogic.new()
-	practice.kick_number = 13
+	practice.kick_number = 7
 	practice.practicing = true
 	check(not practice.ring_showing(), "practice swing hides the ring")
 	var debug_boss := RunLogic.new()
@@ -7493,7 +7520,7 @@ func _check_bonus_ring() -> void:
 					var inner := absf(float(place["x"])) - RunLogic.ring_outer_yards() * 0.5
 					check(inner > half + 0.07, "ring overlaps the upright at %s yd spot %s" % [distance, spot])
 	var hit := RunLogic.new()
-	hit.kick_number = 13
+	hit.kick_number = 7
 	hit.spot_yards = 0.0
 	hit.attempts = 3
 	hit.streak = 4
@@ -7523,7 +7550,7 @@ func _check_bonus_ring() -> void:
 	check(hit.attempts == 2, "a ring hit spends an attempt")
 	check(hit.streak == 0 and is_equal_approx(hit.showtime_mult, 1.0), "a ring hit resets the streak")
 	check(hit.cash == 7 and hit.score == 20, "a ring hit pays no make cash")
-	check(not hit.last_result_made and not bool(hit.clean_makes.get(13, false)), "a ring hit is not a clean make")
+	check(not hit.last_result_made and not bool(hit.clean_makes.get(7, false)), "a ring hit is not a clean make")
 	check(not hit.is_first_ball, "a ring hit spends the first ball")
 	check(hit.phase == RunLogic.Phase.PLAYING and hit.ring_offer_pending, "a ring hit with attempts left opens the bonus path")
 	check(not hit.ring_showing(), "the ring is gone after it is collected")
@@ -7535,17 +7562,17 @@ func _check_bonus_ring() -> void:
 	hit.begin_retry()
 	check(not hit.ring_showing() and hit.ring_side() == kept, "the retry keeps the side and hides the ring")
 	var spent := RunLogic.new()
-	spent.kick_number = 13
+	spent.kick_number = 7
 	spent.resolve_kick("GOOD", 0.0, false)
 	check(not spent.ring_showing(), "making the kick without the ring spends it")
 	var last := RunLogic.new()
-	last.kick_number = 13
+	last.kick_number = 7
 	last.attempts = 1
 	last.resolve_kick("BONUS RING", 6.0, false)
 	check(last.phase == RunLogic.Phase.GAME_OVER and not last.ring_offer_pending, "the last attempt ends the run with no bonus offer")
 	check(not last.open_ring_offer(), "a finished run does not open the bonus offer")
 	var full := RunLogic.new()
-	full.kick_number = 13
+	full.kick_number = 7
 	full.cleats_id = Loadout.CANNON
 	full.cleats_rank = 6
 	full.helmet_id = Loadout.WIND_VISOR
@@ -7560,7 +7587,7 @@ func _check_bonus_ring() -> void:
 		check(not owned and int(card.get("rank", 0)) == 1, "the second-pair card is a new style at rank I")
 	var doubled := RunLogic.new()
 	doubled.run_mode = "standard"
-	doubled.kick_number = 13
+	doubled.kick_number = 7
 	doubled.cleats_id = Loadout.CANNON
 	doubled.cleats_rank = 6
 	doubled.cleats2_id = Loadout.PINPOINT
@@ -7578,7 +7605,7 @@ func _check_bonus_ring() -> void:
 	check(not doubled.open_ring_offer() and doubled.ring_offer_skipped, "standard with two styles in every type skips the ring offer")
 	var fourth := RunLogic.new()
 	fourth.run_mode = "endless"
-	fourth.kick_number = 147
+	fourth.kick_number = 97
 	fourth.cleats_id = Loadout.CANNON
 	fourth.cleats_rank = 1
 	fourth.cleats2_id = Loadout.PINPOINT
@@ -7598,7 +7625,7 @@ func _check_bonus_ring() -> void:
 		check(int(card.get("rank", 0)) > 1, "the fourth ring does not offer a third style")
 		check(str(card.get("kind", "")) == Loadout.EQUIPMENT, "the fourth ring stays equipment")
 	var helmeted := RunLogic.new()
-	helmeted.kick_number = 13
+	helmeted.kick_number = 7
 	helmeted.give(Loadout.DRIVE_LID, 1)
 	helmeted.attempts = 3
 	helmeted.resolve_kick("BONUS RING", 6.0, false)
@@ -7664,7 +7691,7 @@ func _check_ring_flight_live() -> void:
 	var game = packed.instantiate()
 	get_root().add_child(game)
 	game._taking_pictures = true
-	game.run.kick_number = 13
+	game.run.kick_number = 7
 	game.run.arm_debug_ring()
 	game.load_current_kick()
 	check(game._ring.visible, "the ring is on screen before the kick")
@@ -7995,15 +8022,19 @@ func _check_pk2a() -> void:
 	var passed := RunLogic.new()
 	passed.start_with_kicker(Kickers.WALK_ON)
 	passed.give(Loadout.GEAR_MANAGER, 1)
+	passed.set_wind(0.0, 0.0)
 	var passed_kick := _tw1_kick(passed)
 	var bare_pass := RunLogic.new()
 	bare_pass.start_with_kicker(Kickers.WALK_ON)
+	bare_pass.set_wind(0.0, 0.0)
 	var bare_kick := _tw1_kick(bare_pass)
 	check(near(float(passed.too_weak_report(passed_kick)["best_case"]), float(bare_pass.too_weak_report(bare_kick)["best_case"])), "a banked Gear Manager pass adds no yards")
+	again.set_wind(0.0, 0.0)
 	var parked_kick := _tw1_kick(again)
 	var scout_only := RunLogic.new()
 	scout_only.start_with_kicker(Kickers.WALK_ON)
 	scout_only.give(Loadout.SCOUT_LID, 1)
+	scout_only.set_wind(0.0, 0.0)
 	var scout_kick := _tw1_kick(scout_only)
 	check(near(float(again.too_weak_report(parked_kick)["base"]), float(scout_only.too_weak_report(scout_kick)["base"])), "a benched Drive Lid is not in the TOO WEAK base")
 	var cycle := RunLogic.new()
@@ -8197,10 +8228,13 @@ func _check_pk2b() -> void:
 	camp.kick_resolved = false
 	camp.resolve_kick("GOOD", 0.0, false)
 	check(camp.camp_makes == 1, "a retry make counts")
-	camp.kick_number = 10
+	camp.kick_number = 5
+	camp.phase = RunLogic.Phase.PLAYING
 	camp.kick_resolved = false
 	camp.resolve_kick("GOOD", 0.0, false)
 	check(camp.camp_makes == 2, "a boss make counts")
+	camp.kick_number = 9
+	camp.phase = RunLogic.Phase.PLAYING
 	camp.kick_resolved = false
 	camp.resolve_kick("GOOD", 0.0, false)
 	check(camp.camp_makes == 3, "the third make finishes camp")
@@ -8265,11 +8299,14 @@ func _check_pk2b() -> void:
 	early.start_with_kicker(Kickers.WALK_ON)
 	early.give(Loadout.TRAINING_CAMP)
 	early.camp_makes = 1
+	early.set_wind(0.0, 0.0)
+	camp_base.set_wind(0.0, 0.0)
 	var early_kick := _tw1_kick(early)
 	var done := RunLogic.new()
 	done.start_with_kicker(Kickers.WALK_ON)
 	done.give(Loadout.TRAINING_CAMP)
 	done.camp_makes = 3
+	done.set_wind(0.0, 0.0)
 	var done_kick := _tw1_kick(done)
 	check(near(float(early.too_weak_report(early_kick)["base"]), float(camp_base.too_weak_report(_tw1_kick(camp_base))["base"])), "Training Camp's +10 does not count early")
 	check(near(float(done.too_weak_report(done_kick)["base"]), float(early.too_weak_report(early_kick)["base"]) + 10.0), "the earned +10 is in the TOO WEAK base")
@@ -8895,4 +8932,260 @@ func _check_cam1_live() -> void:
 			check(str(watched["text"]) == "DOINK", "the post aim is a doink, got %s" % watched["text"])
 	options.ball_cam = kept_cam
 	game.free()
+
+
+func _check_pace1() -> void:
+	var distances: Array = [35, 40, 45, 50, 54, 58, 63, 68, 74, 80]
+	var spots: Array = ["center", "center", "center", "hash", "hash", "hash", "hash", "wide", "wide", "wide"]
+	var winds: Array = [[3, 3], [3, 6], [3, 8], [5, 10], [6, 11], [8, 13], [9, 15], [10, 16], [11, 17], [12, 18]]
+	check(RunTable.count() == 10, "PACE1 count is 10")
+	for n in range(1, 11):
+		var row: Dictionary = RunTable.row(n)
+		var band: Array = winds[n - 1]
+		check(near(float(row["distance"]), float(distances[n - 1])), "PACE1 kick %d distance" % n)
+		check(str(row["spot"]) == str(spots[n - 1]), "PACE1 kick %d spot" % n)
+		check(near(float(row["wind_min"]), float(band[0])) and near(float(row["wind_max"]), float(band[1])), "PACE1 kick %d wind" % n)
+		var boss := n == 5 or n == 10
+		check((str(row["conditions"]) == "boss") == boss, "PACE1 kick %d boss flag" % n)
+		check(RunLogic.is_standard_boss_slot(n) == boss, "PACE1 boss slot %d" % n)
+	check(not RunLogic.is_standard_boss_slot(4) and not RunLogic.is_standard_boss_slot(9) and not RunLogic.is_standard_boss_slot(11), "PACE1 has no extra boss slots")
+	var early: Array[String] = [RunLogic.ICED, RunLogic.SQUEEZE, RunLogic.MONSOON, RunLogic.LIGHTS, RunLogic.CLOCK]
+	var finals: Array[String] = [RunLogic.BIG_GAME, RunLogic.MOVING]
+	var saw_early := {}
+	var saw_final := {}
+	var big_game := 0
+	for sample in 200:
+		var rolled := RunLogic.new()
+		rolled.set_seed(8000 + sample)
+		rolled.new_run()
+		var first := str(rolled.standard_bosses[5])
+		var last := str(rolled.standard_bosses[10])
+		check(early.has(first), "PACE1 kick 5 left the early five, got %s" % first)
+		check(finals.has(last), "PACE1 kick 10 left the finals, got %s" % last)
+		check(rolled.standard_bosses.size() == 2 and str(rolled.kick10_boss) == last, "PACE1 kick10_boss is the kick 10 boss")
+		saw_early[first] = true
+		saw_final[last] = true
+		if last == RunLogic.BIG_GAME:
+			big_game += 1
+		var again := RunLogic.new()
+		again.set_seed(8000 + sample)
+		again.new_run()
+		check(str(again.standard_bosses[5]) == first and str(again.standard_bosses[10]) == last, "PACE1 same seed keeps the bosses")
+	for name in early:
+		check(saw_early.has(name), "PACE1 200 seeds missed early boss %s" % name)
+	for name in finals:
+		check(saw_final.has(name), "PACE1 200 seeds missed final %s" % name)
+	check(big_game > 60 and big_game < 140, "PACE1 kick 10 Big Game count is %s" % big_game)
+	for kick in [1, 2, 3]:
+		var clear_rng := RandomNumberGenerator.new()
+		clear_rng.seed = kick
+		check(RunLogic.roll_weather_name(kick, "", "", clear_rng) == RunLogic.CLEAR, "PACE1 kick %d stays clear" % kick)
+	var rain4 := 0
+	var rain6 := 0
+	var rain7 := 0
+	var snow7 := 0
+	for sample in 500:
+		var rng4 := RandomNumberGenerator.new()
+		rng4.seed = 4000 + sample
+		if RunLogic.roll_weather_name(4, "", "", rng4) == RunLogic.RAIN:
+			rain4 += 1
+		var rng6 := RandomNumberGenerator.new()
+		rng6.seed = 6000 + sample
+		if RunLogic.roll_weather_name(6, "", "", rng6) == RunLogic.RAIN:
+			rain6 += 1
+		var rng7 := RandomNumberGenerator.new()
+		rng7.seed = 7000 + sample
+		var name7 := RunLogic.roll_weather_name(7, "", "", rng7)
+		check(name7 == RunLogic.CLEAR or name7 == RunLogic.RAIN or name7 == RunLogic.SNOW, "PACE1 kick 7 left its pool, got %s" % name7)
+		if name7 == RunLogic.RAIN:
+			rain7 += 1
+		if name7 == RunLogic.SNOW:
+			snow7 += 1
+		for kick in [8, 9]:
+			var rng := RandomNumberGenerator.new()
+			rng.seed = kick * 10000 + sample
+			var foul := RunLogic.roll_weather_name(kick, "", "", rng)
+			check(RunLogic.weather_pool(kick).has(foul) and foul != RunLogic.CLEAR, "PACE1 kick %d left the foul pool, got %s" % [kick, foul])
+	check(rain4 > 110 and rain4 < 200, "PACE1 kick 4 rain is about 30 percent, got %s" % rain4)
+	check(rain6 > 110 and rain6 < 200, "PACE1 kick 6 rain is about 30 percent, got %s" % rain6)
+	check(rain7 > 110 and rain7 < 200 and snow7 > 60 and snow7 < 140, "PACE1 kick 7 rain/snow counts are %s / %s" % [rain7, snow7])
+	for sample in 40:
+		var gust := RunLogic.new()
+		gust.set_seed(sample + 3)
+		gust.kick_number = 1
+		gust.tad_level = 0
+		gust._roll_wind()
+		check(gust.wind_speed == 3, "PACE1 kick 1 wind is 3, got %s" % gust.wind_speed)
+		gust.tad_level = 2
+		gust._roll_wind()
+		check(gust.wind_speed == 6, "PACE1 TAD 2 kick 1 wind is 6, got %s" % gust.wind_speed)
+	for kick in range(1, 11):
+		var row: Dictionary = RunTable.row(kick)
+		var lo := int(row["wind_min"])
+		var hi := int(row["wind_max"])
+		for sample in 12:
+			var gust := RunLogic.new()
+			gust.set_seed(sample + kick * 17)
+			gust.kick_number = kick
+			gust.tad_level = 0
+			gust._roll_wind()
+			check(gust.wind_speed >= lo and gust.wind_speed <= hi, "PACE1 kick %d wind left %d-%d, got %s" % [kick, lo, hi, gust.wind_speed])
+			gust.tad_level = 2
+			gust._roll_wind()
+			check(gust.wind_speed >= lo + 3 and gust.wind_speed <= hi + 3, "PACE1 TAD 2 kick %d wind left the raised band, got %s" % [kick, gust.wind_speed])
+	check(RunLogic.tad_summary(2) == "WIND +3 MPH" and BitmapFonts.ui_allows(RunLogic.tad_summary(2)), "TAD 2 still says WIND +3 MPH")
+	check(RunLogic.tad_name(8) == "No free down" and RunLogic.tad_summary(8) == "NO FREE DOWN", "TAD 8 still says No free down")
+	check(near(Loadout.HOWLING_ITEM, 1.10), "Howling Wind stays 1.10")
+	var shop := RunLogic.new()
+	shop.phase = RunLogic.Phase.PLAYING
+	shop.last_result_made = true
+	for kick in [5, 9]:
+		shop.kick_number = kick
+		check(shop.opens_shop(), "PACE1 standard shop on kick %s" % kick)
+	for kick in [1, 4, 6, 7, 8, 10]:
+		shop.kick_number = kick
+		check(not shop.opens_shop(), "PACE1 standard shop stays closed on kick %s" % kick)
+	shop.run_mode = "endless"
+	for kick in [5, 10, 15]:
+		shop.kick_number = kick
+		check(shop.opens_shop(), "PACE1 endless shop on kick %s" % kick)
+	for kick in [4, 6, 9, 11]:
+		shop.kick_number = kick
+		check(not shop.opens_shop(), "PACE1 endless shop stays closed on kick %s" % kick)
+	var blocks := RunLogic.new()
+	for kick in range(1, 11):
+		check(blocks.is_block_start(kick) == (kick == 1 or kick == 6), "PACE1 standard block %d" % kick)
+	blocks.run_mode = "endless"
+	for kick in [1, 11, 21, 31]:
+		check(blocks.is_block_start(kick), "PACE1 endless block %d" % kick)
+	for kick in [6, 10, 12, 16, 20, 30]:
+		check(not blocks.is_block_start(kick), "PACE1 endless non-block %d" % kick)
+	var bench := RunLogic.new()
+	bench.new_run()
+	bench.give(Loadout.DEEP_BENCH, 3)
+	bench.attempts = bench.attempt_cap - 1
+	var before_bench := bench.attempts
+	bench.kick_number = 6
+	bench._refill_block()
+	check(bench.attempts == before_bench + 1, "PACE1 Deep Bench III adds one at kick 6")
+	var look := RunLogic.new()
+	look.new_run()
+	look.give(Loadout.SECOND_LOOK, 1)
+	look.second_look_bank = 0
+	look.kick_number = 1
+	look._refill_block()
+	look.kick_number = 6
+	look._refill_block()
+	check(look.second_look_bank == 2, "PACE1 Second Look banks at kicks 1 and 6")
+	var ring := RunLogic.new()
+	for kick in range(1, 11):
+		ring.kick_number = kick
+		check(ring.scheduled_ring() == (kick == 7), "PACE1 standard ring on kick %d" % kick)
+	ring.run_mode = "endless"
+	for kick in [17, 47, 77, 97]:
+		ring.kick_number = kick
+		check(ring.scheduled_ring(), "PACE1 endless ring on kick %d" % kick)
+	for kick in [7, 13, 27, 147]:
+		ring.kick_number = kick
+		check(not ring.scheduled_ring(), "PACE1 endless ring stays off on kick %d" % kick)
+	var cycle: Array = [7, 8, 9, 10, 7, 8, 9, 10]
+	for offset in range(8):
+		check(RunTable.table_kick("endless", 11 + offset) == int(cycle[offset]), "PACE1 endless table kick %d" % (11 + offset))
+	check(near(RunTable.endless_distance(30), 165.0), "PACE1 endless distance at kick 30 is unchanged")
+	var sim := RunLogic.new()
+	sim.start_with_kicker(Kickers.WALK_ON)
+	sim.run_mode = "endless"
+	var steps := 0
+	while sim.kick_number < 30 and steps < 40:
+		sim.phase = RunLogic.Phase.PLAYING
+		sim.kick_resolved = false
+		sim.attempts = 3
+		var mapped := RunTable.table_kick("endless", sim.kick_number)
+		sim.resolve_kick("GOOD", 1.0, false)
+		check(sim.phase == RunLogic.Phase.PLAYING and near(sim.distance_yards(), RunTable.endless_distance(sim.kick_number)), "PACE1 endless sim kick %d" % sim.kick_number)
+		if sim.kick_number > 10:
+			check(mapped >= 7 and mapped <= 10, "PACE1 endless kick %d reads row %d" % [sim.kick_number, mapped])
+		check(sim.go_to_next_kick(), "PACE1 endless sim advances from kick %d" % (sim.kick_number - 1))
+		steps += 1
+	check(sim.kick_number == 30 and steps == 29, "PACE1 endless sim reaches kick 30")
+	var records = get_root().get_node("SaveData")
+	records.trophies["season_complete"] = false
+	records.trophies["perfect_quarter"] = false
+	var finale := RunLogic.new()
+	finale.start_with_kicker(Kickers.WALK_ON)
+	finale.attempts = 2
+	finale.kick_number = 10
+	finale.resolve_kick("WIDE LEFT", 4.0, false)
+	check(finale.phase == RunLogic.Phase.PLAYING and finale.kick_number == 10 and finale.attempts == 1, "PACE1 a miss on kick 10 retries kick 10")
+	check(finale.begin_retry(), "PACE1 the kick 10 retry starts")
+	finale.resolve_kick("GOOD", 1.0, false)
+	check(finale.phase == RunLogic.Phase.WIN and records.has_trophy("season_complete"), "PACE1 making kick 10 wins and awards Season Complete")
+	check(records.trophy_condition("season_complete") == "Make kick 10", "Season Complete says Make kick 10")
+	check(records.trophy_condition("perfect_quarter") == "Make all 5 kicks of a half on the first ball", "Perfect Quarter names a half")
+	var second := RunLogic.new()
+	second.new_run()
+	for n in range(6, 11):
+		second.kick_number = n
+		second.kick_resolved = false
+		second.phase = RunLogic.Phase.PLAYING
+		second.is_first_ball = true
+		second.attempts = 3
+		second.resolve_kick("GOOD", 1.0, false)
+	check(records.has_trophy("perfect_quarter"), "PACE1 kicks 6 through 10 earn Perfect Quarter")
+	check(BroadcastHud.kick_title(3, false) == "KICK 3 OF 10", "PACE1 kick title is KICK 3 OF 10")
+	check(BitmapFonts.ui_allows(BroadcastHud.kick_title(3, false)) and BitmapFonts.ui_allows(BroadcastHud.kick_title(10, false)), "PACE1 kick titles stay in Pixel Gothic")
+	for rank in [1, 3, 7, 12]:
+		for id in [Loadout.SCOUT_LID, Loadout.DOINK_CAP, Loadout.REPLAY_GLOVES, Loadout.DEEP_BENCH]:
+			var line := Loadout.effect_line(id, rank)
+			check(line.find("quarter") < 0 and line.find("!") < 0, "PACE1 card text dropped quarter, got %s" % line)
+	check(Loadout.effect_line(Loadout.DEEP_BENCH, 3) == "Cap stays. +1 attempt now and each half if below cap", "Deep Bench III says each half")
+	var allowed := ["practice_per_quarter", "doink_per_quarter", "perfect_quarter", "_quarter_was_clean", "mulligans_per_quarter", "Perfect Quarter"]
+	var folder := DirAccess.open("res://scripts")
+	folder.list_dir_begin()
+	var file_name := folder.get_next()
+	while file_name != "":
+		if file_name.ends_with(".gd"):
+			var script_text := FileAccess.get_file_as_string("res://scripts/%s" % file_name)
+			var line_no := 1
+			for script_line in script_text.split("\n"):
+				if str(script_line).to_lower().find("quarter") >= 0:
+					var stripped := str(script_line)
+					for token in allowed:
+						stripped = stripped.replace(token, "")
+					check(stripped.to_lower().find("quarter") < 0, "%s:%d still says quarter on screen: %s" % [file_name, line_no, str(script_line).strip_edges()])
+				line_no += 1
+		file_name = folder.get_next()
+	var kept := str(records.file_path)
+	records.file_path = "user://fg_pace1.cfg"
+	records.reset_save()
+	records.write_run_slot("standard", {"mode": "standard", "kicker_id": Kickers.WALK_ON, "kick_number": 14})
+	check(not records.has_run_slot("standard"), "PACE1 an old standard save at kick 14 is dropped")
+	var dropped := RunLogic.new()
+	dropped.import_resume({"mode": "standard", "kick_number": 14, "kicker_id": Kickers.WALK_ON})
+	check(dropped.kicker_id == "" and dropped.kick_number == 1, "PACE1 import drops a kick 14 standard save")
+	var mixed := RunLogic.new()
+	mixed.start_with_kicker(Kickers.WALK_ON)
+	mixed.kick_number = 4
+	var payload: Dictionary = mixed.export_resume()
+	var old_bosses: Array = [
+		{"kick": 5, "name": RunLogic.ICED},
+		{"kick": 10, "name": RunLogic.BIG_GAME},
+		{"kick": 15, "name": RunLogic.SQUEEZE},
+		{"kick": 20, "name": RunLogic.MOVING},
+	]
+	payload["standard_bosses"] = old_bosses
+	var rerolled := RunLogic.new()
+	rerolled.import_resume(payload)
+	check(rerolled.kick_number == 4 and rerolled.standard_bosses.size() == 2 and rerolled.standard_bosses.has(5) and rerolled.standard_bosses.has(10), "PACE1 a kick 4 save with old boss keys re-rolls to 5 and 10")
+	check(not rerolled.standard_bosses.has(15) and not rerolled.standard_bosses.has(20), "PACE1 the re-roll drops kicks 15 and 20")
+	check(early.has(str(rerolled.standard_bosses[5])) and finals.has(str(rerolled.standard_bosses[10])), "PACE1 the re-rolled bosses stay in their pools")
+	var endless_save := RunLogic.new()
+	endless_save.start_with_kicker(Kickers.WALK_ON)
+	endless_save.run_mode = "endless"
+	endless_save.kick_number = 14
+	var endless_back := RunLogic.new()
+	endless_back.import_resume(endless_save.export_resume())
+	check(endless_back.run_mode == "endless" and endless_back.kick_number == 14, "PACE1 an Endless save past kick 10 still loads")
+	records.file_path = kept
+	records.load_file()
 

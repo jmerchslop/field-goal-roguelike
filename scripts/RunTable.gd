@@ -1,7 +1,7 @@
 class_name RunTable
 extends RefCounted
 
-# The 20 kicks in a run. Each row's wind min and max are rolled when that kick begins.
+# The 10 kicks in a Standard run. Each row's wind min and max already include +3 mph.
 # Spot is where the ball starts: center, hash (3 yd off), or wide (6 yd off).
 
 const SPOT_CENTER := "center"
@@ -11,26 +11,16 @@ const CLEAR := "clear"
 const BOSS := "boss"
 
 const KICKS: Array = [
-	{"kick": 1, "distance": 35.0, "spot": SPOT_CENTER, "wind_min": 0.0, "wind_max": 0.0, "conditions": CLEAR},
-	{"kick": 2, "distance": 38.0, "spot": SPOT_CENTER, "wind_min": 0.0, "wind_max": 0.0, "conditions": CLEAR},
-	{"kick": 3, "distance": 41.0, "spot": SPOT_CENTER, "wind_min": 0.0, "wind_max": 0.0, "conditions": CLEAR},
-	{"kick": 4, "distance": 44.0, "spot": SPOT_HASH, "wind_min": 0.0, "wind_max": 5.0, "conditions": CLEAR},
-	{"kick": 5, "distance": 48.0, "spot": SPOT_HASH, "wind_min": 0.0, "wind_max": 5.0, "conditions": BOSS},
-	{"kick": 6, "distance": 45.0, "spot": SPOT_HASH, "wind_min": 3.0, "wind_max": 8.0, "conditions": CLEAR},
-	{"kick": 7, "distance": 50.0, "spot": SPOT_HASH, "wind_min": 5.0, "wind_max": 10.0, "conditions": CLEAR},
-	{"kick": 8, "distance": 53.0, "spot": SPOT_HASH, "wind_min": 5.0, "wind_max": 12.0, "conditions": CLEAR},
-	{"kick": 9, "distance": 56.0, "spot": SPOT_HASH, "wind_min": 8.0, "wind_max": 14.0, "conditions": CLEAR},
-	{"kick": 10, "distance": 60.0, "spot": SPOT_HASH, "wind_min": 10.0, "wind_max": 15.0, "conditions": BOSS},
-	{"kick": 11, "distance": 54.0, "spot": SPOT_WIDE, "wind_min": 10.0, "wind_max": 16.0, "conditions": CLEAR},
-	{"kick": 12, "distance": 59.0, "spot": SPOT_WIDE, "wind_min": 10.0, "wind_max": 18.0, "conditions": CLEAR},
-	{"kick": 13, "distance": 62.0, "spot": SPOT_WIDE, "wind_min": 12.0, "wind_max": 20.0, "conditions": CLEAR},
-	{"kick": 14, "distance": 65.0, "spot": SPOT_WIDE, "wind_min": 12.0, "wind_max": 22.0, "conditions": CLEAR},
-	{"kick": 15, "distance": 68.0, "spot": SPOT_WIDE, "wind_min": 15.0, "wind_max": 22.0, "conditions": BOSS},
-	{"kick": 16, "distance": 60.0, "spot": SPOT_WIDE, "wind_min": 15.0, "wind_max": 25.0, "conditions": CLEAR},
-	{"kick": 17, "distance": 65.0, "spot": SPOT_WIDE, "wind_min": 15.0, "wind_max": 28.0, "conditions": CLEAR},
-	{"kick": 18, "distance": 69.0, "spot": SPOT_WIDE, "wind_min": 18.0, "wind_max": 30.0, "conditions": CLEAR},
-	{"kick": 19, "distance": 72.0, "spot": SPOT_WIDE, "wind_min": 20.0, "wind_max": 30.0, "conditions": CLEAR},
-	{"kick": 20, "distance": 75.0, "spot": SPOT_WIDE, "wind_min": 25.0, "wind_max": 35.0, "conditions": BOSS},
+	{"kick": 1, "distance": 35.0, "spot": SPOT_CENTER, "wind_min": 3.0, "wind_max": 3.0, "conditions": CLEAR},
+	{"kick": 2, "distance": 40.0, "spot": SPOT_CENTER, "wind_min": 3.0, "wind_max": 6.0, "conditions": CLEAR},
+	{"kick": 3, "distance": 45.0, "spot": SPOT_CENTER, "wind_min": 3.0, "wind_max": 8.0, "conditions": CLEAR},
+	{"kick": 4, "distance": 50.0, "spot": SPOT_HASH, "wind_min": 5.0, "wind_max": 10.0, "conditions": CLEAR},
+	{"kick": 5, "distance": 54.0, "spot": SPOT_HASH, "wind_min": 6.0, "wind_max": 11.0, "conditions": BOSS},
+	{"kick": 6, "distance": 58.0, "spot": SPOT_HASH, "wind_min": 8.0, "wind_max": 13.0, "conditions": CLEAR},
+	{"kick": 7, "distance": 63.0, "spot": SPOT_HASH, "wind_min": 9.0, "wind_max": 15.0, "conditions": CLEAR},
+	{"kick": 8, "distance": 68.0, "spot": SPOT_WIDE, "wind_min": 10.0, "wind_max": 16.0, "conditions": CLEAR},
+	{"kick": 9, "distance": 74.0, "spot": SPOT_WIDE, "wind_min": 11.0, "wind_max": 17.0, "conditions": CLEAR},
+	{"kick": 10, "distance": 80.0, "spot": SPOT_WIDE, "wind_min": 12.0, "wind_max": 18.0, "conditions": BOSS},
 ]
 
 
@@ -42,11 +32,10 @@ static func endless_distance(kick_number: int) -> float:
 	return minf(1000.0, 20.0 + float(kick_number - 1) * 5.0)
 
 
-# Endless kicks 1–20 use that Standard row's wind and spot.
-# Kicks 21+ use Standard 16–19, cycling.
+# Endless kicks 1–10 use that Standard row. Kicks 11+ cycle rows 7–10.
 static func table_kick(mode: String, kick_number: int) -> int:
-	if mode == "endless" and kick_number > 20:
-		return 16 + ((kick_number - 21) % 4)
+	if mode == "endless" and kick_number > 10:
+		return 7 + ((kick_number - 11) % 4)
 	return clampi(kick_number, 1, count())
 
 

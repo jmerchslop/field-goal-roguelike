@@ -144,6 +144,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "pace1":
+		if not await _capture_pace1():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "rs1":
 		if not await _capture_rs1():
 			get_tree().quit(1)
@@ -5768,6 +5774,110 @@ func _stamp(result: String, shanked: bool, insured: bool, middle: bool, error: f
 	board.result_age = 0.4
 	board.run.awaiting_offer = false
 	board.run.phase = RunLogic.Phase.PLAYING
+
+
+func _capture_pace1() -> bool:
+	board.highlight = 1
+	board.selecting = true
+	board.front.run_mode = "standard"
+	board.confirm_kicker()
+	board.run.tad_level = 0
+	board.run.kick_number = 1
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.kick_resolved = false
+	board.run.spot_yards = 0.0
+	board.run.weather = RunLogic.CLEAR
+	board.run.set_wind(3.0, 90.0)
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.AIMING
+	print("PACE1 kick 1 ", board.run.distance_yards(), " wind ", board.run.wind_speed, " ", BroadcastHud.kick_title(board.run.kick_number, false))
+	if not await _capture("pace1_kick1.png"):
+		return false
+	board.run.kick_number = 5
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.kick_resolved = false
+	board.run.spot_yards = 3.0
+	board.run.weather = str(board.run.standard_bosses[5])
+	board.run.set_wind(8.0, 90.0)
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.AIMING
+	print("PACE1 kick 5 ", board.run.weather, " ", board.run.distance_yards())
+	if not await _capture("pace1_kick5_boss.png"):
+		return false
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.kick_resolved = false
+	board.run.attempts = 2
+	board.run.resolve_kick("GOOD", 2.0, false)
+	board.run.follow_offer()
+	board.refresh_view()
+	print("PACE1 shop 5 ", board.run.next_boss_line())
+	if not await _capture("pace1_shop_after5.png"):
+		return false
+	board.run.leave_shop()
+	board.run.awaiting_shop = false
+	board.run.kick_number = 7
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.kick_resolved = false
+	board.run.weather = RunLogic.CLEAR
+	board.run.spot_yards = -3.0
+	board.run.set_wind(11.0, 0.0)
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.AIMING
+	print("PACE1 kick 7 ring ", board.run.ring_showing())
+	if not await _capture("pace1_kick7_ring.png"):
+		return false
+	board.run.kick_number = 9
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.kick_resolved = false
+	board.run.weather = RunLogic.MUD
+	board.run.spot_yards = 6.0
+	board.run.set_wind(14.0, 180.0)
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.AIMING
+	print("PACE1 kick 9 ", board.run.weather, " spot ", board.run.spot_yards)
+	if not await _capture("pace1_kick9_wide_weather.png"):
+		return false
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.kick_resolved = false
+	board.run.attempts = 2
+	board.run.resolve_kick("GOOD", 2.0, false)
+	board.run.follow_offer()
+	board.refresh_view()
+	print("PACE1 shop 9 ", board.run.next_boss_line())
+	if not await _capture("pace1_shop_after9.png"):
+		return false
+	board.run.leave_shop()
+	board.run.awaiting_shop = false
+	board.run.kick_number = 10
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.kick_resolved = false
+	board.run.weather = str(board.run.standard_bosses[10])
+	board.run.spot_yards = -6.0
+	board.run.set_wind(15.0, 45.0)
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.AIMING
+	print("PACE1 kick 10 ", board.run.weather, " ", board.run.distance_yards())
+	if not await _capture("pace1_kick10_finals.png"):
+		return false
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.kick_resolved = false
+	board.run.attempts = 2
+	board.run.resolve_kick("GOOD", 1.0, false)
+	board.refresh_view()
+	print("PACE1 win ", board.run.phase)
+	if not await _capture("pace1_win.png"):
+		return false
+	board.run.run_mode = "endless"
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.kick_number = 11
+	board.run.kick_resolved = false
+	board.run.weather = RunLogic.RAIN
+	board.run.spot_yards = RunTable.spot_yards(str(RunTable.row(RunTable.table_kick("endless", 11))["spot"]), 1)
+	board.run.set_wind(12.0, 90.0)
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.AIMING
+	print("PACE1 endless 11 row ", RunTable.table_kick("endless", 11), " dist ", board.run.distance_yards())
+	return await _capture("pace1_endless_kick11.png")
 
 
 func _capture_cam1() -> bool:

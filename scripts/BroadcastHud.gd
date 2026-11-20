@@ -11,7 +11,7 @@ static func is_safe(text: String) -> bool:
 static func kick_title(number: int, endless: bool) -> String:
 	if endless:
 		return "KICK %d" % number
-	return "KICK %d OF 20" % number
+	return "KICK %d OF %d" % [number, RunTable.count()]
 
 
 static func yards_text(distance: float) -> String:

@@ -126,7 +126,12 @@ func reset_save() -> void:
 
 
 func has_run_slot(mode: String) -> bool:
-	return str(run_slot(mode).get("kicker_id", "")) != ""
+	var data := run_slot(mode)
+	if mode == "standard" and int(data.get("kick_number", 0)) > RunTable.count() and str(data.get("kicker_id", "")) != "":
+		print("PACE1 dropped old 20-kick save")
+		clear_run_slot("standard")
+		return false
+	return str(data.get("kicker_id", "")) != ""
 
 
 func run_slot(mode: String) -> Dictionary:
@@ -334,11 +339,11 @@ static func trophy_condition(id: String) -> String:
 		"record_breaker":
 			return "Make a 69+ yard kick"
 		"perfect_quarter":
-			return "Make all 5 kicks of a quarter on the first ball"
+			return "Make all 5 kicks of a half on the first ball"
 		"hot_hand":
 			return "Reach a streak of 10"
 		"season_complete":
-			return "Make kick 20"
+			return "Make kick 10"
 		"bullseye_collector":
 			return "10 lifetime down-the-middle makes"
 	return ""

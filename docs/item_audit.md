@@ -1,6 +1,7 @@
 # Item, kit, range, and cash audit
 
 Generated: 2026-11-14
+PACE1: Standard is 10 kicks, 35 to 80. Bosses are kicks 5 and 10. Shops follow makes on 5 and 9. Refills and Second Look are kicks 1 and 6 in Standard, and every 10 kicks in Endless. The Bonus Ring is kick 7 in Standard and 17, 47, 77, 97 in Endless. Card text says each half.
 CAM1: The ball cam chases the kick, holds 0.40 s, dips 0.12 s, then returns for the reaction. Options has BALL CAM ON / BALL CAM OFF. The crowd ducks to 0.25 while the ball is up. Cheer, groan, and ooh files are not in the build yet, so a make swells the bed to 1.35 and a miss eases back over 1.4 s.
 RS1: No-item full-power range is Cole 75, Bruce 70, Carlos 69, Gary 65, Walk-On 55, Phil 54, Willow 50, and Vex 500. Vex uses the same range formula as everyone else. Clearance and the 88% floor are gone. Made kicks draw as BARELY, STANDARD, or SOARS. The true carry, the result, and the HUD Max stay on the real number. Vex's kit reads Out of This World Range.
 FX1: Unlock text lasts 4 seconds. Equipment Manager (still id gear_manager) puts second-style gear into normal offers while a pass is banked. The MULT chip shows the make Mult, including Sudden Death ×5. Snow and rain allocate their particles once. The Vitamin Shop takes one click. The goal-post flags are bright red.
@@ -286,7 +287,7 @@ Rank XII and XIII–XXIV: +11 rerolls and five practice swings a quarter.
 - **id:** `deep_bench`
 - **slot:** perk
 - **rank cap:** Standard III, Endless VI
-- **card text:** I–II `"Attempt cap +{rank} and attempts +{rank}"`. III `"Cap stays. +1 attempt now and each quarter if below cap"`. IV `"Cap stays. Halfway to +1 extra attempt. Spare stays."`. V `"+1 attempt cap and +1 attempt now. Spare stays."`. VI `"+1 more attempt cap and +1 attempt now. Spare stays."`.
+- **card text:** I–II `"Attempt cap +{rank} and attempts +{rank}"`. III `"Cap stays. +1 attempt now and each half if below cap"`. IV `"Cap stays. Halfway to +1 extra attempt. Spare stays."`. V `"+1 attempt cap and +1 attempt now. Spare stays."`. VI `"+1 more attempt cap and +1 attempt now. Spare stays."`.
 - **actual effect:** `Loadout.apply` raises the cap by `min(rank, 2)` only, and sets the spare from rank III. Ranks IV–VI add cap through `give`'s bank: rank IV adds 0.5 toward an extra cap, rank V grants one cap and one attempt, rank VI grants one more. A save that stores `bench_extra_cap` keeps those grants on rebuild.
 - **match:** yes, ranks I–VI
 
@@ -593,11 +594,11 @@ Boss weather is the condition name. Wind still comes from the kick table. Retrie
 
 | Boss | Where | What the code changes | Items |
 | --- | --- | --- | --- |
-| Iced | Standard kick 5. Endless pool. | Meter hides the way the Iced curse does, unless Ice Cage or Ice Veins is on. | Ice Cage blocks the hide. No needle multiplier. |
-| The Squeeze | Standard kick 10, 50/50 with UNDER THE LIGHTS. Endless pool. | Posts are 5.17 yards wide. | Narrow Posts does not stack a second shrink. No needle multiplier. |
-| Monsoon | Standard kick 15. Endless pool. | Rain and mud together. Weather Wraps rank III ignores both. | Vitamin D clears plain rain, snow, and mud, not the Monsoon extras. |
-| Big Game | Standard kick 20 only, 50/50 with MOVING POSTS. Endless pool. | Meter-help is stripped. The combined needle speed, bands, and the OVERPOWER width are copied back to the bare kicker. The base band, the +4, and the 25% accuracy-band shrink stay. Vitamins then join the slow product and the 0.35 floor. Stone Toe's ×1.20 applies to both needles after that floor. Tight Window's −2 bands are applied again. Range gear is kept. | Anchor, Patient Gloves, Hero Ball's needle slow, Ice Cage's band adds, Iron Grip widening, Iron Grip yards, and Ice Cage's 12.5% shrink are off. Magnesium still slows. |
-| UNDER THE LIGHTS | Standard kick 10, the other half of the roll, stored at `new_run` so the kick 5 shop matches. Endless pool. | Both needles ×1.35 after the 0.35 slow floor, and after Stone Toe. Rain still multiplies accuracy omega after that. Posts stay 6.17. Wind is the kick 10 table (10–15 mph in Standard). No rain, snow, or mud from the boss itself. The beams are visual only. Practice Swing does not get the ×1.35. | Meter-help items stay on. Two-Minute Drill still adds its boss Mult. The ×1.35 is not floored. |
+| Iced | Standard kick 5, one of the early five. Endless pool. | Meter hides the way the Iced curse does, unless Ice Cage or Ice Veins is on. | Ice Cage blocks the hide. No needle multiplier. |
+| The Squeeze | Standard kick 5, one of the early five. Endless pool. | Posts are 5.17 yards wide. | Narrow Posts does not stack a second shrink. No needle multiplier. |
+| Monsoon | Standard kick 5, one of the early five. Endless pool. | Rain and mud together. Weather Wraps rank III ignores both. | Vitamin D clears plain rain, snow, and mud, not the Monsoon extras. |
+| Big Game | Standard kick 10, 50/50 with Moving Posts. Endless pool. | Meter-help is stripped. The combined needle speed, bands, and the OVERPOWER width are copied back to the bare kicker. The base band, the +4, and the 25% accuracy-band shrink stay. Vitamins then join the slow product and the 0.35 floor. Stone Toe's ×1.20 applies to both needles after that floor. Tight Window's −2 bands are applied again. Range gear is kept. | Anchor, Patient Gloves, Hero Ball's needle slow, Ice Cage's band adds, Iron Grip widening, Iron Grip yards, and Ice Cage's 12.5% shrink are off. Magnesium still slows. |
+| UNDER THE LIGHTS | Standard kick 5, one of the early five. Endless pool. | Both needles ×1.35 after the 0.35 slow floor, and after Stone Toe. Rain still multiplies accuracy omega after that. Posts stay 6.17. Wind is the kick 5 table (6–11 mph in Standard). No rain, snow, or mud from the boss itself. The beams are visual only. Practice Swing does not get the ×1.35. | Meter-help items stay on. Two-Minute Drill still adds its boss Mult. The ×1.35 is not floored. |
 
 The kick 10 roll uses its own generator, so it does not shift the weather sequence. Debug Shift+9 forces UNDER THE LIGHTS until the kick is left. Shift+6 is still The Squeeze.
 

@@ -1960,35 +1960,35 @@ No pause screen exists. Esc during a kick is not given its own pause menu. A pri
 ### `offer_effect_scout_lid_4`
 - **screen:** Loadout offer
 - **when:** Scout Lid rank IV. Same words on the loadout-rail tooltip; that copy is listed again below.
-- **current:** "+3 rerolls, and one Practice Swing a quarter"
+- **current:** "+3 rerolls, and one Practice Swing a half"
 - **kind:** static
 - **source:** code
 
 ### `offer_effect_scout_lid_5`
 - **screen:** Loadout offer
 - **when:** Scout Lid rank V. Same words on the loadout-rail tooltip; that copy is listed again below.
-- **current:** "+4 rerolls, and one Practice Swing a quarter"
+- **current:** "+4 rerolls, and one Practice Swing a half"
 - **kind:** static
 - **source:** code
 
 ### `offer_effect_scout_lid_6`
 - **screen:** Loadout offer
 - **when:** Scout Lid rank VI and above. Same words on the loadout-rail tooltip; that copy is listed again below.
-- **current:** "+5 rerolls, and two Practice Swings a quarter"
+- **current:** "+5 rerolls, and two Practice Swings a half"
 - **kind:** static
 - **source:** code
 
 ### `offer_effect_doink_cap_low`
 - **screen:** Loadout offer
 - **when:** Doink Cap ranks I through V. Same words on the loadout-rail tooltip; that copy is listed again below.
-- **current:** "{count} doink-to-good a quarter"
+- **current:** "{count} doink-to-good a half"
 - **kind:** template
 - **source:** code
 
 ### `offer_effect_doink_cap_6`
 - **screen:** Loadout offer
 - **when:** Doink Cap rank VI and above. Same words on the loadout-rail tooltip; that copy is listed again below.
-- **current:** "5 doink-to-good a quarter, unused carry (max 5)"
+- **current:** "5 doink-to-good a half, unused carry (max 5)"
 - **kind:** static
 - **source:** code
 
@@ -2030,7 +2030,7 @@ No pause screen exists. Esc during a kick is not given its own pause menu. A pri
 ### `offer_effect_replay_low`
 - **screen:** Loadout offer
 - **when:** Replay Gloves ranks I through V. The word stays singular. Same words on the loadout-rail tooltip; that copy is listed again below.
-- **current:** "{count} practice swing a quarter"
+- **current:** "{count} practice swing a half"
 - **kind:** template
 - **source:** code
 
@@ -2100,7 +2100,7 @@ No pause screen exists. Esc during a kick is not given its own pause menu. A pri
 ### `offer_effect_deep_bench_high`
 - **screen:** Loadout offer
 - **when:** Deep Bench rank III and above. Same words on the loadout-rail tooltip; that copy is listed again below.
-- **current:** "Cap stays. +1 attempt now and each quarter if below cap"
+- **current:** "Cap stays. +1 attempt now and each half if below cap"
 - **kind:** static
 - **source:** code
 
@@ -2613,35 +2613,35 @@ No pause screen exists. Esc during a kick is not given its own pause menu. A pri
 ### `tooltip_effect_scout_lid_4`
 - **screen:** Loadout rail tooltip
 - **when:** Rail tooltip. Scout Lid rank IV.
-- **current:** "+3 rerolls, and one Practice Swing a quarter"
+- **current:** "+3 rerolls, and one Practice Swing a half"
 - **kind:** static
 - **source:** code
 
 ### `tooltip_effect_scout_lid_5`
 - **screen:** Loadout rail tooltip
 - **when:** Rail tooltip. Scout Lid rank V.
-- **current:** "+4 rerolls, and one Practice Swing a quarter"
+- **current:** "+4 rerolls, and one Practice Swing a half"
 - **kind:** static
 - **source:** code
 
 ### `tooltip_effect_scout_lid_6`
 - **screen:** Loadout rail tooltip
 - **when:** Rail tooltip. Scout Lid rank VI and above.
-- **current:** "+5 rerolls, and two Practice Swings a quarter"
+- **current:** "+5 rerolls, and two Practice Swings a half"
 - **kind:** static
 - **source:** code
 
 ### `tooltip_effect_doink_cap_low`
 - **screen:** Loadout rail tooltip
 - **when:** Rail tooltip. Doink Cap ranks I through V.
-- **current:** "{count} doink-to-good a quarter"
+- **current:** "{count} doink-to-good a half"
 - **kind:** template
 - **source:** code
 
 ### `tooltip_effect_doink_cap_6`
 - **screen:** Loadout rail tooltip
 - **when:** Rail tooltip. Doink Cap rank VI and above.
-- **current:** "5 doink-to-good a quarter, unused carry (max 5)"
+- **current:** "5 doink-to-good a half, unused carry (max 5)"
 - **kind:** static
 - **source:** code
 
@@ -2683,7 +2683,7 @@ No pause screen exists. Esc during a kick is not given its own pause menu. A pri
 ### `tooltip_effect_replay_low`
 - **screen:** Loadout rail tooltip
 - **when:** Rail tooltip. Replay Gloves ranks I through V. The word stays singular.
-- **current:** "{count} practice swing a quarter"
+- **current:** "{count} practice swing a half"
 - **kind:** template
 - **source:** code
 
@@ -2753,7 +2753,7 @@ No pause screen exists. Esc during a kick is not given its own pause menu. A pri
 ### `tooltip_effect_deep_bench_high`
 - **screen:** Loadout rail tooltip
 - **when:** Rail tooltip. Deep Bench rank III and above.
-- **current:** "Cap stays. +1 attempt now and each quarter if below cap"
+- **current:** "Cap stays. +1 attempt now and each half if below cap"
 - **kind:** static
 - **source:** code
 
@@ -2950,28 +2950,28 @@ No pause screen exists. Esc during a kick is not given its own pause menu. A pri
 
 ### `shop_next_boss_squeeze`
 - **screen:** Vitamin Shop
-- **when:** On the shop info plate after kick 5 in Standard.
+- **when:** Endless shop preview when the next boss is The Squeeze. A Standard shop no longer names the kick 5 boss.
 - **current:** "Next boss: The Squeeze"
 - **kind:** static
 - **source:** code
 
 ### `shop_next_boss_monsoon`
 - **screen:** Vitamin Shop
-- **when:** On the shop info plate after kick 10 in Standard.
+- **when:** Endless shop preview when the next boss is Monsoon. Standard shops after kicks 5 and 9 name the kick 10 boss instead.
 - **current:** "Next boss: Monsoon"
 - **kind:** static
 - **source:** code
 
 ### `shop_next_boss_big_game`
 - **screen:** Vitamin Shop
-- **when:** On the shop info plate after kick 15 in Standard.
+- **when:** On the shop info plate after Standard kicks 5 and 9 when kick 10 rolled Big Game.
 - **current:** "Next boss: Big Game"
 - **kind:** static
 - **source:** code
 
 ### `shop_next_boss_endless`
 - **screen:** Vitamin Shop
-- **when:** On the shop info plate in Endless after kick 5 (boss at 10) or after kicks 10 and 15 (boss at 20). {boss_name} is Iced, The Squeeze, Monsoon, or Big Game. Other shop visits leave this line blank.
+- **when:** On the shop info plate in Endless after kick 5 (boss at 10) or after kicks 10 and 15 (boss at 20). {boss_name} is any Endless boss. Other shop visits leave this line blank.
 - **current:** "Next boss: {boss_name}"
 - **kind:** template
 - **source:** code
@@ -3548,7 +3548,7 @@ No pause screen exists. Esc during a kick is not given its own pause menu. A pri
 ### `records_trophy_perfect_quarter_condition`
 - **screen:** Trophy Room
 - **when:** Condition under the trophy, earned or locked.
-- **current:** "Make all 5 kicks of a quarter on the first ball"
+- **current:** "Make all 5 kicks of a half on the first ball"
 - **kind:** static
 - **source:** code
 
@@ -3576,7 +3576,7 @@ No pause screen exists. Esc during a kick is not given its own pause menu. A pri
 ### `records_trophy_season_complete_condition`
 - **screen:** Trophy Room
 - **when:** Condition under the trophy, earned or locked.
-- **current:** "Make kick 20"
+- **current:** "Make kick 10"
 - **kind:** static
 - **source:** code
 
@@ -3605,7 +3605,7 @@ No pause screen exists. Esc during a kick is not given its own pause menu. A pri
 
 ### `end_win`
 - **screen:** End of run
-- **when:** Title when Standard kick 20 is made.
+- **when:** Title when Standard kick 10 is made.
 - **current:** "WIN"
 - **kind:** static
 - **source:** code
