@@ -432,7 +432,6 @@ func too_weak_report(kick: KickLogic, blocked: bool = false) -> Dictionary:
 		and not awaiting_offer
 		and not awaiting_shop
 		and not awaiting_mulligan
-		and not awaiting_rung
 		and not curse_prompt
 		and not ring_offer_pending
 	)

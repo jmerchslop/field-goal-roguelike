@@ -1218,7 +1218,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if run.awaiting_rung and Settings.pressed_event(event, "skip"):
 		_pick_rung(0)
 		return
-	if run.awaiting_rung and Settings.pressed_event(event, "confirm"):
+	if run.awaiting_rung and logic.phase == KickLogic.Phase.AIMING and Settings.pressed_event(event, "confirm"):
 		_pick_rung(run.rung_highlight)
 		return
 	if run.awaiting_rung and Settings.pressed_event(event, "offer_reroll"):
@@ -1330,8 +1330,15 @@ func _confirm_kick() -> void:
 		_finish_resolved_kick()
 		refresh_view()
 		return
-	if run.awaiting_offer or run.awaiting_rung:
+	if run.awaiting_offer:
 		return
+	if run.awaiting_rung and logic.phase == KickLogic.Phase.AIMING:
+		if run.pick_rung(run.rung_highlight, logic):
+			logic.kick_distance = run.distance_yards()
+			logic.sync_tee()
+			consider_too_weak()
+		if run.awaiting_rung or too_weak_age >= 0.0:
+			return
 	if run.phase != RunLogic.Phase.PLAYING:
 		return
 	if logic.phase == KickLogic.Phase.RESULT:
@@ -1405,7 +1412,7 @@ func clock_digit() -> int:
 
 func tick_kick_clock(delta: float) -> void:
 	# TOO WEAK holds whichever clock is up, Kick Clock or No Huddle.
-	if too_weak_age >= 0.0 or run.awaiting_rung:
+	if too_weak_age >= 0.0:
 		return
 	if _twist_blocked() or run.practicing or not _twist_armed or _clock_done:
 		return

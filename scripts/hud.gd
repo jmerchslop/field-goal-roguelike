@@ -1154,10 +1154,10 @@ func _draw_offer(run: RunLogic) -> void:
 		_draw_wrapped(run.lived_effect_line(id, rank), Rect2(rect.position + Vector2(12, 112), Vector2(width - 24, 90)), 15)
 	if not run.forced_offer_live:
 		if run.free_reroll_ready():
-			_text_centered("Free rerolls %d. %s rerolls. %s skips." % [run.second_look_bank, Settings.key_sentence("offer_reroll"), Settings.key_sentence("skip")], 640.0, 18, KickConstants.COLOR_TEXT)
+			_text_centered("Free rerolls %d. %s rerolls. %s skips." % [run.second_look_bank, Settings.key_sentence("offer_reroll"), Settings.key_sentence("skip")], 592.0, 18, KickConstants.COLOR_TEXT)
 		else:
-			_text_centered("Rerolls left: %d. %s rerolls. %s skips." % [run.rerolls_left, Settings.key_sentence("offer_reroll"), Settings.key_sentence("skip")], 640.0, 18, KickConstants.COLOR_TEXT)
-		_text_centered("Skip takes nothing.", 666.0, 16, KickConstants.COLOR_TEXT)
+			_text_centered("Rerolls left: %d. %s rerolls. %s skips." % [run.rerolls_left, Settings.key_sentence("offer_reroll"), Settings.key_sentence("skip")], 592.0, 18, KickConstants.COLOR_TEXT)
+		_text_centered("Skip takes nothing.", 618.0, 16, KickConstants.COLOR_TEXT)
 
 
 func _wrap_lines(text: String, width: float, size: int) -> PackedStringArray:
