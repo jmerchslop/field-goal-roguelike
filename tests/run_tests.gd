@@ -80,6 +80,7 @@ func _run() -> void:
 	_check_clean1()
 	_check_mtr1()
 	_check_sk1()
+	_check_sk2()
 	_check_drive_lid_and_power_safety()
 	_check_m2_kickers()
 	_check_honest_cards_and_bench()
@@ -6327,6 +6328,8 @@ func _check_pause_saves() -> void:
 	game.run.wind_direction = 90.0
 	game.run.attempts = 2
 	game.load_current_kick()
+	if game.run.awaiting_rung:
+		game._pick_rung(0)
 	var saved_attempts: int = game.run.attempts
 	game.logic.press_space()
 	if game.logic.windup_left > 0.0:
@@ -10125,7 +10128,7 @@ func _check_luck1() -> void:
 	var ball := str(Kickers.get_def(Kickers.GARY)["ball_description"])
 	check(ball == "Each first-try make adds 4%. The bonus caps at +24%. A miss resets it.", "Gary's Lucky Ball text is the 4% cap")
 	var gary_lines := Kickers.rundown_lines(Kickers.GARY, true)
-	check(gary_lines.has("Luck 3. A doink has an 18 percent chance to count as Good."), "Gary's rundown names luck 3")
+	check(gary_lines.has("Luck 3. A doink has an 18 percent chance to count as Good. LONG OR SAFE shows up on 32.5 percent of kicks."), "Gary's rundown names luck 3")
 	check(gary_lines.has(ball), "Gary's rundown uses the 4% Lucky Ball sentence")
 	var walk_lines := Kickers.rundown_lines(Kickers.WALK_ON, true)
 	check(walk_lines.has("Luck 2."), "Walk-On's rundown names luck 2")
@@ -10583,14 +10586,14 @@ func _check_sk1() -> void:
 	_sk1_good(broken)
 	broken.phase = RunLogic.Phase.PLAYING
 	broken.kick_resolved = false
-	check(broken.special_for_kick() == "", "kick 3 is not on fire after two makes")
+	check(broken.special_for_kick() != SpecialKicks.ON_FIRE, "kick 3 is not on fire after two makes")
 	broken.resolve_kick("SHORT", 1.0, false)
 	check(broken.heat == 0, "a miss clears heat")
 	check(broken.begin_retry(), "the miss stays on this kick for the retry")
 	broken.phase = RunLogic.Phase.PLAYING
 	broken.kick_resolved = false
 	broken.resolve_kick("GOOD", 0.0, false)
-	check(broken.heat == 1 and broken.special_for_kick() == "", "make, make, miss, make never lights a kick")
+	check(broken.heat == 1 and broken.special_for_kick() != SpecialKicks.ON_FIRE, "make, make, miss, make never lights a kick")
 	var lucky := _sk1_fresh()
 	lucky.phase = RunLogic.Phase.PLAYING
 	lucky.resolve_kick("GOOD", 0.0, false)
@@ -10619,7 +10622,9 @@ func _check_sk1() -> void:
 	check(practice.heat == 2 and practice.special_for_kick() == "", "practice does not change heat and is not a special")
 	var gate := _sk1_fresh()
 	gate.set_heat_for_test(3)
-	for blocked in [1, 5, 7, 10]:
+	gate.kick_number = 1
+	check(gate.special_for_kick() != SpecialKicks.ON_FIRE, "kick 1 is not on fire")
+	for blocked in [5, 7, 10]:
 		gate.kick_number = blocked
 		check(gate.special_for_kick() == "", "Standard kick %s is not on fire" % blocked)
 	gate.kick_number = 4
@@ -10747,6 +10752,361 @@ func _sk1_walk(seed_value: int, with_special: bool) -> Array:
 		found.append(run.wind_speed)
 		found.append(run.post_shift_yards())
 		found.append(str(run.weather))
+		run.phase = RunLogic.Phase.PLAYING
+		run.roll_offer()
+		var ids := ""
+		for card in run.offer:
+			ids += str(card.get("id", "")) + ":"
+		found.append(ids)
+		if not run.go_to_next_kick():
+			break
+	return found
+
+
+func _check_sk2() -> void:
+	var gothic := ["LONG OR SAFE", "SAFE  54 YD", "LONG  60 YD  2X MULT", "BOMB  66 YD  BONUS GEAR", "OUT OF RANGE", "BOMB BONUS", "LONG +6 YD", "BOMB +12 YD"]
+	for word in gothic:
+		check(BitmapFonts.ui_allows(str(word)) and str(word).find("!") < 0 and str(word).find("%") < 0, "SK2 text %s" % word)
+	var lines := ["The normal kick.", "Make it and this kick's Mult is doubled.", "Make it and get a second gear pick."]
+	for line in lines:
+		check(str(line).find("!") < 0 and str(line).find("%") < 0, "SK2 line %s" % line)
+	var sample := _sk1_fresh()
+	sample.distance_override = 54.0
+	check(sample.rung_card_title("safe") == "SAFE  54 YD", "SAFE card reads SAFE  54 YD")
+	check(sample.rung_card_title("long") == "LONG  60 YD  2X MULT", "LONG card reads LONG  60 YD  2X MULT")
+	check(sample.rung_card_title("bomb") == "BOMB  66 YD  BONUS GEAR", "BOMB card reads BOMB  66 YD  BONUS GEAR")
+	check(sample.rung_card_line("safe") == "The normal kick.", "SAFE line")
+	check(sample.rung_card_line("long") == "Make it and this kick's Mult is doubled.", "LONG line")
+	check(sample.rung_card_line("bomb") == "Make it and get a second gear pick.", "BOMB line")
+	var yards := _sk1_fresh()
+	yards.kick_number = 9
+	yards.rungs[9] = "long"
+	check(is_equal_approx(yards.distance_yards(), 80.0), "Standard kick 9 LONG is 80")
+	yards.rungs[9] = "bomb"
+	check(is_equal_approx(yards.distance_yards(), 86.0), "Standard kick 9 BOMB is 86")
+	yards.run_mode = "endless"
+	yards.kick_number = 99
+	yards.rungs = {}
+	yards.rungs[99] = "bomb"
+	check(is_equal_approx(yards.distance_yards(), 991.0), "Endless kick 99 BOMB is 991, got %s" % yards.distance_yards())
+	yards.distance_override = 995.0
+	check(is_equal_approx(yards.distance_yards(), 1000.0), "a fake 995 plus 12 clamps to 1000")
+	var reach := _sk2_kick_probe()
+	var saw_long := false
+	var saw_bomb_out := false
+	var weak_from_rung := 0
+	for number in range(1, 10):
+		reach.kick_number = number
+		if reach.is_boss() or reach.scheduled_ring():
+			continue
+		reach.rungs.erase(number)
+		reach.awaiting_rung = true
+		var long_out := reach.rung_blocked("long", reach_kick(reach))
+		var bomb_out := reach.rung_blocked("bomb", reach_kick(reach))
+		if not long_out:
+			saw_long = true
+			check(reach.pick_rung(1, reach_kick(reach)), "LONG can be picked on kick %s" % number)
+			var body := reach_kick(reach)
+			body.kick_distance = reach.distance_yards()
+			var report := reach.too_weak_report(body, false)
+			if bool(report["too_weak"]):
+				weak_from_rung += 1
+			reach.rungs.erase(number)
+		if bomb_out:
+			saw_bomb_out = true
+			reach.awaiting_rung = true
+			check(not reach.pick_rung(2, reach_kick(reach)), "OUT OF RANGE BOMB cannot be picked on kick %s" % number)
+			check(not reach.rungs.has(number), "a refused BOMB is not locked")
+			check(reach.pick_rung(0, reach_kick(reach)), "SAFE stays pickable on kick %s" % number)
+	check(saw_long and saw_bomb_out and weak_from_rung == 0, "a reachable LONG never makes the kick TOO WEAK, and an unreachable BOMB stays locked out")
+	var safe_score := _sk1_fresh()
+	safe_score.kick_number = 9
+	safe_score.rungs[9] = "safe"
+	safe_score.phase = RunLogic.Phase.PLAYING
+	safe_score.kick_resolved = false
+	var safe_preview := safe_score.kick_mult_preview()
+	safe_score.resolve_kick("GOOD", 0.0, false)
+	var long_score := _sk1_fresh()
+	long_score.kick_number = 9
+	long_score.rungs[9] = "long"
+	long_score.phase = RunLogic.Phase.PLAYING
+	long_score.kick_resolved = false
+	var long_preview := long_score.kick_mult_preview()
+	long_score.resolve_kick("GOOD", 0.0, false)
+	check(is_equal_approx(long_preview, safe_preview * KickConstants.LONG_MULT), "the MULT chip doubles on LONG")
+	check(long_score.last_points == RunLogic.points_for(long_score.distance_yards(), long_preview, false, false), "the LONG score uses the doubled MULT chip")
+	check(long_score.score_line.find("×2 LONG") >= 0, "the score line prints ×2 LONG")
+	var scaled := float(safe_score.last_points) * KickConstants.LONG_MULT * long_score.distance_yards() / safe_score.distance_yards()
+	check(long_score.last_points == RunLogic.round_whole(scaled), "LONG points are the SAFE points times 2 and the longer distance")
+	var ring := _sk1_fresh()
+	ring.kick_number = 4
+	ring.rungs[4] = "long"
+	ring.ring_factor = 8.0
+	ring.phase = RunLogic.Phase.PLAYING
+	ring.kick_resolved = false
+	ring.resolve_kick("GOOD", 0.0, false, true)
+	check(is_equal_approx(ring.ring_factor, 8.0), "a LONG ring hit at x8 stays x8")
+	var sudden := _sk1_fresh()
+	sudden.give(Loadout.SUDDEN_DEATH)
+	sudden.kick_number = 3
+	sudden.rungs[3] = "long"
+	sudden.phase = RunLogic.Phase.PLAYING
+	sudden.kick_resolved = false
+	check(is_equal_approx(sudden.kick_mult_preview(), 10.0), "Sudden Death and LONG make x10")
+	sudden.resolve_kick("GOOD", 0.0, false)
+	check(sudden.score_line.find("× 5") >= 0 and sudden.score_line.find("×2 LONG") >= 0, "the score line shows both x5 and x2 LONG")
+	check(sudden.go_to_next_kick(), "the LONG make advances")
+	check(is_equal_approx(sudden.kick_mult_preview(), sudden.current_mult() * RunLogic.SUDDEN_DEATH_MULT), "the next kick keeps Sudden Death and drops the x2")
+	var bomb_mult := _sk1_fresh()
+	bomb_mult.kick_number = 2
+	bomb_mult.rungs[2] = "bomb"
+	var plain_mult := _sk1_fresh()
+	plain_mult.kick_number = 2
+	check(is_equal_approx(bomb_mult.kick_mult_preview(), plain_mult.kick_mult_preview()), "BOMB does not take LONG's x2")
+	var paid := _sk1_fresh()
+	paid.kick_number = 2
+	paid.rungs[2] = "long"
+	paid.phase = RunLogic.Phase.PLAYING
+	paid.kick_resolved = false
+	paid.resolve_kick("GOOD", 0.0, false)
+	var unpaid := _sk1_fresh()
+	unpaid.kick_number = 2
+	unpaid.phase = RunLogic.Phase.PLAYING
+	unpaid.kick_resolved = false
+	unpaid.resolve_kick("GOOD", 0.0, false)
+	check(paid.cash == unpaid.cash, "LONG cash is the normal payout")
+	var retry := _sk1_fresh()
+	retry.kick_number = 3
+	retry.rungs[3] = "long"
+	var retry_yards := retry.distance_yards()
+	retry.phase = RunLogic.Phase.PLAYING
+	retry.kick_resolved = false
+	retry.resolve_kick("SHORT", 1.0, false)
+	check(retry.begin_retry(), "the LONG miss retries")
+	check(str(retry.rungs[3]) == "long" and is_equal_approx(retry.distance_yards(), retry_yards), "the retry keeps the LONG distance")
+	var choice := _sk1_fresh()
+	choice.kick_number = 3
+	choice.special_kicks[3] = SpecialKicks.LONG_OR_SAFE
+	choice.awaiting_rung = true
+	var choice_kick := reach_kick(choice)
+	check(choice.confirm_rung(choice_kick) and str(choice.rungs[3]) == "safe", "confirm picks the highlighted SAFE card")
+	var skip_run := _sk1_fresh()
+	skip_run.kick_number = 3
+	skip_run.awaiting_rung = true
+	check(skip_run.skip_rung(reach_kick(skip_run)) and str(skip_run.rungs[3]) == "safe", "skip picks SAFE")
+	var mid := _sk1_fresh()
+	mid.kick_number = 4
+	mid.special_kicks[4] = SpecialKicks.LONG_OR_SAFE
+	mid.awaiting_rung = true
+	var mid_data := mid.export_resume()
+	check(str(mid_data.get("place", "")) == "rung", "a mid-choice save is place rung")
+	var reopened := RunLogic.new()
+	reopened.import_resume(mid_data)
+	check(reopened.awaiting_rung and not reopened.rungs.has(4) and str(reopened.special_kicks.get(4, "")) == SpecialKicks.LONG_OR_SAFE, "reload reopens the choice")
+	check(reopened.pick_rung(1, reach_kick(reopened)), "LONG can be picked after reload")
+	var kept := RunLogic.new()
+	kept.import_resume(reopened.export_resume())
+	check(str(kept.rungs.get(4, "")) == "long" and is_equal_approx(kept.distance_yards(), 56.0) and not kept.awaiting_rung, "reload after the pick keeps LONG")
+	var bonus := _sk1_fresh()
+	bonus.kick_number = 2
+	bonus.rungs[2] = "bomb"
+	bonus.phase = RunLogic.Phase.PLAYING
+	bonus.kick_resolved = false
+	var safety := bonus.offers_without_power
+	bonus.resolve_kick("GOOD", 0.0, false)
+	check(bonus.bomb_bonus_pending and bonus.open_bomb_offer(), "a BOMB make opens the bonus")
+	check(bonus.bomb_offer_live and bonus.offer.size() == 3, "BOMB BONUS deals 3 cards")
+	var gear_only := true
+	for card in bonus.offer:
+		if str(card.get("kind", "")) != Loadout.EQUIPMENT:
+			gear_only = false
+	check(gear_only, "BOMB BONUS is equipment only")
+	check(bonus.offers_without_power == safety, "the bonus does not move the power-safety counter")
+	bonus.rerolls_left = 2
+	check(bonus.reroll_offer() and bonus.offers_without_power == safety, "a bonus reroll stays off the power-safety counter")
+	var still_gear := true
+	for card in bonus.offer:
+		if str(card.get("kind", "")) != Loadout.EQUIPMENT:
+			still_gear = false
+	check(still_gear and bonus.skip_offer() and not bonus.awaiting_offer, "the bonus can be skipped")
+	var lucky_run := _sk1_fresh()
+	lucky_run.stats.luck = 10
+	lucky_run.set_seed(3)
+	var saw_lucky := false
+	for _try in 40:
+		lucky_run.bomb_bonus_pending = true
+		lucky_run.phase = RunLogic.Phase.PLAYING
+		if not lucky_run.open_bomb_offer():
+			continue
+		for card in lucky_run.offer:
+			if bool(card.get("lucky", false)):
+				saw_lucky = true
+		lucky_run.skip_offer()
+	check(saw_lucky, "a LUCKY bump can show on BOMB BONUS")
+	var full := _sk1_fresh()
+	full.cleats_id = str(Loadout.CLEAT_IDS[0])
+	full.cleats_rank = Loadout.max_rank(full.cleats_id, "standard")
+	full.helmet_id = str(Loadout.HELMET_IDS[0])
+	full.helmet_rank = Loadout.max_rank(full.helmet_id, "standard")
+	full.gloves_id = str(Loadout.GLOVE_IDS[0])
+	full.gloves_rank = Loadout.max_rank(full.gloves_id, "standard")
+	full.bomb_bonus_pending = true
+	full.phase = RunLogic.Phase.PLAYING
+	check(not full.open_bomb_offer() and not full.awaiting_offer, "no legal equipment skips the bonus")
+	var sixth := _sk1_fresh()
+	sixth.set_offer_seed(11)
+	sixth.kick_number = 6
+	sixth.rungs[6] = "bomb"
+	sixth.phase = RunLogic.Phase.PLAYING
+	sixth.kick_resolved = false
+	sixth.resolve_kick("GOOD", 0.0, false)
+	check(sixth.bomb_bonus_pending and sixth.forced_curse_due() and sixth.open_forced_curse_offer(), "kick 6 opens the forced curse first")
+	check(sixth.forced_offer_live and not sixth.bomb_offer_live and sixth.pick_card(0), "the forced curse is picked before the bonus")
+	sixth.roll_offer()
+	check(sixth.awaiting_offer and not sixth.bomb_offer_live and sixth.bomb_bonus_pending, "the normal offer is still next")
+	check(sixth.pick_card(0) and sixth.open_bomb_offer() and sixth.bomb_offer_live, "the bonus follows the normal offer")
+	var sixth_gear := true
+	for card in sixth.offer:
+		if str(card.get("kind", "")) != Loadout.EQUIPMENT:
+			sixth_gear = false
+	check(sixth_gear, "the kick 6 bonus is equipment only")
+	var won := _sk1_fresh()
+	won.kick_number = 10
+	won.rungs[10] = "bomb"
+	won.phase = RunLogic.Phase.PLAYING
+	won.kick_resolved = false
+	won.resolve_kick("GOOD", 0.0, false)
+	check(won.phase == RunLogic.Phase.WIN and not won.bomb_bonus_pending and not won.open_bomb_offer(), "a winning make has no bonus")
+	var quiet := _sk2_walk(42, false)
+	var loud := _sk2_walk(42, true)
+	check(quiet == loud, "the special roll leaves wind, dice, inner ring, and offers alone")
+	var fire := _sk1_fresh()
+	fire.set_seed(7)
+	fire.kick_number = 4
+	fire.set_heat_for_test(3)
+	var fire_probe := RandomNumberGenerator.new()
+	fire_probe.seed = 7 + 6421
+	check(fire.special_for_kick() == SpecialKicks.ON_FIRE, "fire still wins the kick")
+	check(is_equal_approx(fire._special_rng.randf(), fire_probe.randf()), "fire does not draw the special rng")
+	var practice := _sk1_fresh()
+	practice.set_seed(5)
+	practice.practicing = true
+	practice.kick_number = 3
+	var practice_probe := RandomNumberGenerator.new()
+	practice_probe.seed = 5 + 6421
+	check(practice.special_for_kick() == "" and not practice.special_kicks.has(3), "practice does not roll")
+	check(is_equal_approx(practice._special_rng.randf(), practice_probe.randf()), "practice does not draw the special rng")
+	var boss := _sk1_fresh()
+	boss.set_seed(8)
+	boss.kick_number = 5
+	var boss_probe := RandomNumberGenerator.new()
+	boss_probe.seed = 8 + 6421
+	check(boss.special_for_kick() == "", "a boss does not roll")
+	boss.kick_number = 7
+	check(boss.special_for_kick() == "", "a Bonus Ring kick does not roll")
+	check(is_equal_approx(boss._special_rng.randf(), boss_probe.randf()), "boss and ring kicks do not draw the special rng")
+	var zero := _sk2_rate(0)
+	var three := _sk2_rate(3)
+	var ten := _sk2_rate(10)
+	var gary := RunLogic.new()
+	gary.start_with_kicker(Kickers.GARY)
+	check(gary.luck() == 3, "Gary starts at luck 3")
+	gary.give(Loadout.DOINK_CAP, 3)
+	check(gary.luck() == 4 and is_equal_approx(gary.special_chance(), 0.35), "Gary with Doink Cap III rolls at 0.35")
+	var four := _sk2_rate_on(gary)
+	print("SK2 rates luck0 %.4f luck3 %.4f luck4 %.4f luck10 %.4f pairs %d kick1 %d" % [zero["rate"], three["rate"], four["rate"], ten["rate"], int(zero["pairs"]), int(zero["kick1"])])
+	check(absf(float(zero["rate"]) - 0.25) <= 0.02, "luck 0 rolls near 25 percent, got %s" % zero["rate"])
+	check(absf(float(three["rate"]) - 0.325) <= 0.02, "luck 3 rolls near 32.5 percent, got %s" % three["rate"])
+	check(absf(float(ten["rate"]) - 0.50) <= 0.02, "luck 10 rolls near 50 percent, got %s" % ten["rate"])
+	check(absf(float(four["rate"]) - 0.35) <= 0.02, "luck 4 rolls near 35 percent, got %s" % four["rate"])
+	check(int(zero["pairs"]) > 0 and int(zero["kick1"]) > 0, "LONG OR SAFE can be back to back and can land on kick 1")
+	check(int(zero["blocked"]) == 0 and int(zero["overs"]) == 0, "bosses, rings, and twist budget stay clean")
+	var spoken := _sk1_fresh()
+	spoken.set_seed(4)
+	spoken.stats.luck = 3
+	spoken.kick_number = 3
+	var spoken_before := spoken.special_lines
+	spoken.special_for_kick()
+	spoken.special_for_kick()
+	check(spoken.special_lines == spoken_before + 1, "a rolled kick prints one SPECIAL line")
+	if spoken.awaiting_rung:
+		var rung_before := spoken.rung_lines
+		check(spoken.pick_rung(1, reach_kick(spoken)), "the spoken kick can take LONG")
+		spoken.pick_rung(0, reach_kick(spoken))
+		check(spoken.rung_lines == rung_before + 1, "a pick prints one RUNG line")
+
+
+func reach_kick(run: RunLogic) -> KickLogic:
+	var kick := KickLogic.new()
+	kick.stats = run.stats
+	kick.phase = KickLogic.Phase.AIMING
+	kick.kick_distance = run.distance_yards()
+	return kick
+
+
+func _sk2_kick_probe() -> RunLogic:
+	return _sk1_fresh()
+
+
+func _sk2_rate(luck_points: int) -> Dictionary:
+	var run := _sk1_fresh()
+	run.stats.luck = luck_points
+	return _sk2_rate_on(run)
+
+
+func _sk2_rate_on(run: RunLogic) -> Dictionary:
+	var hits := 0
+	var eligible := 0
+	var pairs := 0
+	var kick1 := 0
+	var blocked := 0
+	var overs := 0
+	for seed_value in 2000:
+		run.set_seed(seed_value + 1)
+		run.special_kicks = {}
+		run.rungs = {}
+		run.awaiting_rung = false
+		run.heat = 0
+		var prev := false
+		for kick in range(1, 11):
+			run.kick_number = kick
+			var allowed := run._roll_allowed()
+			var id := run.special_for_kick()
+			if run.twist_count() > 2:
+				overs += 1
+			if not allowed or id == SpecialKicks.ON_FIRE:
+				if id != "" and id != SpecialKicks.ON_FIRE:
+					blocked += 1
+				if id == SpecialKicks.ON_FIRE and allowed:
+					blocked += 1
+				continue
+			eligible += 1
+			var hit := id == SpecialKicks.LONG_OR_SAFE
+			if hit:
+				hits += 1
+				if kick == 1:
+					kick1 += 1
+			if hit and prev:
+				pairs += 1
+			prev = hit
+	var rate := 0.0
+	if eligible > 0:
+		rate = float(hits) / float(eligible)
+	return {"rate": rate, "pairs": pairs, "kick1": kick1, "blocked": blocked, "overs": overs, "eligible": eligible}
+
+
+func _sk2_walk(seed_value: int, with_special: bool) -> Array:
+	var run := _sk1_fresh()
+	run.set_seed(seed_value)
+	run.set_offer_seed(seed_value)
+	var found: Array = []
+	for _step in 8:
+		if with_special:
+			run.special_for_kick()
+		found.append(run.wind_speed)
+		found.append(run.post_shift_yards())
+		found.append(str(run.weather))
+		found.append(run.inner_ring_side())
 		run.phase = RunLogic.Phase.PLAYING
 		run.roll_offer()
 		var ids := ""

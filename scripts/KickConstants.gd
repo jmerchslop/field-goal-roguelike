@@ -110,6 +110,13 @@ const FIRE_HEAT := 3
 const FIRE_RING_SCALE := 1.5
 const FIRE_RING_CASH := 2
 
+# LONG OR SAFE. Placeholders until Box Score locks the numbers.
+const SPECIAL_ROLL_CHANCE := 0.25
+const LUCK_SPECIAL_PCT_PER_POINT := 0.025
+const LONG_YARDS := 6.0
+const BOMB_YARDS := 12.0
+const LONG_MULT := 2.0
+
 # Score: distance × ((1 + 0.25 × streak) × ring factor + flat bonuses).
 # Then ×1.5 on a boss kick, +5 if perfect. The inner ring caps at ×8.
 const STREAK_MULT_STEP := 0.25

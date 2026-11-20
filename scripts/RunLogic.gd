@@ -182,6 +182,13 @@ var heat := 0
 var last_special := ""
 var rolled_specials_used := {}
 var special_lines := 0
+var rungs := {}
+var awaiting_rung := false
+var rung_highlight := 0
+var bomb_bonus_pending := false
+var bomb_offer_live := false
+var rung_lines := 0
+var distance_override := -1.0
 var _previous_weather := ""
 var _older_weather := ""
 var _insurance_spent := false
@@ -276,6 +283,13 @@ func new_run() -> void:
 	heat = 0
 	last_special = ""
 	rolled_specials_used = {}
+	rungs = {}
+	awaiting_rung = false
+	rung_highlight = 0
+	bomb_bonus_pending = false
+	bomb_offer_live = false
+	rung_lines = 0
+	distance_override = -1.0
 	ring_offer_pending = false
 	ring_offer_skipped = false
 	gm_passes = 0
@@ -324,12 +338,27 @@ func new_run() -> void:
 
 
 func distance_yards() -> float:
+	return rung_yards(str(rungs.get(kick_number, "")))
+
+
+func _base_yards() -> float:
+	if distance_override >= 0.0:
+		return distance_override
 	if run_mode == "endless":
 		return RunTable.endless_distance(kick_number)
 	var yards := float(RunTable.row(kick_number)["distance"])
 	if tad_active(3):
 		yards += 4.0
 	return yards
+
+
+func rung_yards(name: String) -> float:
+	var yards := _base_yards()
+	if name == "long":
+		yards += KickConstants.LONG_YARDS
+	elif name == "bomb":
+		yards += KickConstants.BOMB_YARDS
+	return minf(yards, 1000.0)
 
 
 func tad_active(level: int) -> bool:
@@ -403,6 +432,7 @@ func too_weak_report(kick: KickLogic, blocked: bool = false) -> Dictionary:
 		and not awaiting_offer
 		and not awaiting_shop
 		and not awaiting_mulligan
+		and not awaiting_rung
 		and not curse_prompt
 		and not ring_offer_pending
 	)
@@ -479,44 +509,67 @@ func special_for_kick() -> String:
 	if practicing:
 		return ""
 	if special_kicks.has(kick_number):
-		return str(special_kicks[kick_number])
+		var stored := str(special_kicks[kick_number])
+		_sync_rung_choice(stored)
+		return stored
 	var id := ""
 	if SpecialKicks.eligible(self) and heat >= KickConstants.FIRE_HEAT:
 		id = SpecialKicks.ON_FIRE
-	special_kicks[kick_number] = id
-	if id != "":
+		special_kicks[kick_number] = id
 		last_special = id
-	var shown := id if id != "" else "none"
-	print("SPECIAL kick %d -> %s heat %d" % [kick_number, shown, heat])
-	special_lines += 1
+		print("SPECIAL kick %d -> %s heat %d" % [kick_number, id, heat])
+		special_lines += 1
+	elif _roll_allowed():
+		id = _roll_special()
+		special_kicks[kick_number] = id
+		special_lines += 1
+	else:
+		special_kicks[kick_number] = ""
+		print("SPECIAL kick %d -> none heat %d" % [kick_number, heat])
+		special_lines += 1
+	_sync_rung_choice(id)
 	if OS.is_debug_build():
 		assert(twist_count() <= 2)
 	return id
 
 
-# Future rolled specials land here. SK1 does not call it, so the rng stays put.
+# Flat independent roll. No cap, no back-to-back skip, no shuffle bag, no pity timer.
 func _roll_special() -> String:
-	var block := _special_block()
-	if bool(rolled_specials_used.get(block, false)):
-		return ""
-	var rolled: Array[String] = []
-	for kind in SpecialKicks.KINDS.keys():
-		var id := str(kind)
-		if str(SpecialKicks.KINDS[kind]) != "rolled" or id == last_special:
-			continue
-		rolled.append(id)
-	if rolled.is_empty():
-		return ""
-	var pick := rolled[_special_rng.randi() % rolled.size()]
-	rolled_specials_used[block] = true
-	last_special = pick
+	var chance := special_chance()
+	var roll := _special_rng.randf()
+	var pick := ""
+	if roll < chance:
+		pick = SpecialKicks.LONG_OR_SAFE
+	var shown := pick if pick != "" else "none"
+	print("SPECIAL kick %d -> %s roll %.2f vs %s luck %d" % [kick_number, shown, roll, _chance_text(chance), luck()])
 	return pick
 
 
-func _special_block() -> int:
-	if run_mode == "endless":
-		return int((kick_number - 1) / 5)
-	return 1 if kick_number <= 5 else 2
+func special_chance() -> float:
+	return clampf(KickConstants.SPECIAL_ROLL_CHANCE + KickConstants.LUCK_SPECIAL_PCT_PER_POINT * float(luck()), 0.0, 1.0)
+
+
+func _roll_allowed() -> bool:
+	if practicing or is_boss():
+		return false
+	if scheduled_ring() or ring_showing():
+		return false
+	return true
+
+
+func _sync_rung_choice(id: String) -> void:
+	if id == SpecialKicks.LONG_OR_SAFE and not rungs.has(kick_number):
+		awaiting_rung = true
+		rung_highlight = 0
+	else:
+		awaiting_rung = false
+
+
+func _chance_text(value: float) -> String:
+	var thousandths := int(roundf(value * 1000.0))
+	if thousandths % 10 == 0:
+		return "%.2f" % value
+	return "%.3f" % value
 
 
 func twist_count() -> int:
@@ -676,6 +729,8 @@ func kick_mult_preview() -> float:
 	var mult := current_mult() + storm_bonus() + hero_bonus() + curse_bonus() + drill_bonus() + pre + gel
 	if has_curse(Loadout.SUDDEN_DEATH):
 		mult *= SUDDEN_DEATH_MULT
+	if str(rungs.get(kick_number, "")) == "long":
+		mult *= KickConstants.LONG_MULT
 	return mult
 
 
@@ -757,9 +812,13 @@ func resolve_kick(result_text: String, _offset: float, perfect: bool, ring_hit: 
 		if has_curse(Loadout.SUDDEN_DEATH):
 			sudden = SUDDEN_DEATH_MULT
 			mult *= sudden
+		var long_factor := 1.0
+		if str(rungs.get(kick_number, "")) == "long":
+			long_factor = KickConstants.LONG_MULT
+			mult *= long_factor
 		last_points = points_for(distance, mult, boss, score_perfect)
 		score += last_points
-		score_line = format_score_line(distance, base_mult, boss, score_perfect, storm, hero, curse_add, drill, pre + gel, sudden, ring_factor)
+		score_line = format_score_line(distance, base_mult, boss, score_perfect, storm, hero, curse_add, drill, pre + gel, sudden, ring_factor, long_factor)
 		kicks_made += 1
 		if distance > longest_make:
 			longest_make = distance
@@ -779,6 +838,8 @@ func resolve_kick(result_text: String, _offset: float, perfect: bool, ring_hit: 
 			phase = Phase.FAR
 		elif run_mode != "endless" and kick_number >= RunTable.count():
 			phase = Phase.WIN
+		if str(rungs.get(kick_number, "")) == "bomb" and phase == Phase.PLAYING:
+			bomb_bonus_pending = true
 		if _ring_armed():
 			_spend_ring()
 		_note_trophies(true, distance)
@@ -835,6 +896,9 @@ func go_to_next_kick() -> bool:
 	awaiting_offer = false
 	ring_offer_pending = false
 	ring_offer_live = false
+	bomb_offer_live = false
+	bomb_bonus_pending = false
+	awaiting_rung = false
 	awaiting_mulligan = false
 	awaiting_shop = false
 	offer = []
@@ -861,6 +925,9 @@ func begin_retry() -> bool:
 	awaiting_offer = false
 	ring_offer_pending = false
 	ring_offer_live = false
+	bomb_offer_live = false
+	bomb_bonus_pending = false
+	awaiting_rung = false
 	offer = []
 	attempt_note = ""
 	score_line = ""
@@ -1354,6 +1421,7 @@ func pick_card(index: int) -> bool:
 	var from_ring := ring_offer_live
 	_close_offer()
 	ring_offer_live = false
+	bomb_offer_live = false
 	forced_offer_live = false
 	var slot := str(card.get("slot", ""))
 	var picked := str(card.get("id", ""))
@@ -1378,6 +1446,7 @@ func skip_offer() -> bool:
 		return false
 	_close_offer()
 	ring_offer_live = false
+	bomb_offer_live = false
 	return true
 
 
@@ -1403,6 +1472,11 @@ func reroll_offer() -> bool:
 	else:
 		rerolls_left -= 1
 	var previous: Array = offer.duplicate(true)
+	if bomb_offer_live:
+		offer = _bomb_cards()
+		_apply_luck_gear()
+		awaiting_offer = true
+		return true
 	if ring_offer_live:
 		var redraw := Loadout.draw_ring_offer(loadout_state(), _offer_rng)
 		if not redraw.is_empty():
@@ -1979,6 +2053,95 @@ func open_ring_offer() -> bool:
 	return true
 
 
+func open_bomb_offer() -> bool:
+	if not bomb_bonus_pending:
+		return false
+	bomb_bonus_pending = false
+	if phase != Phase.PLAYING:
+		return false
+	var cards := _bomb_cards()
+	if cards.is_empty():
+		return false
+	offer = cards
+	_apply_luck_gear()
+	awaiting_offer = true
+	bomb_offer_live = true
+	return true
+
+
+func _bomb_cards() -> Array:
+	var bag: Array = []
+	for card in Loadout.legal_equipment(loadout_state()):
+		bag.append(card)
+	var cards: Array = []
+	while cards.size() < 3 and not bag.is_empty():
+		var index := _special_rng.randi() % bag.size()
+		cards.append(bag[index])
+		bag.remove_at(index)
+	return cards
+
+
+func pick_rung(index: int, kick: KickLogic) -> bool:
+	if not awaiting_rung or index < 0 or index > 2:
+		return false
+	var names: Array = ["safe", "long", "bomb"]
+	var name := str(names[index])
+	if rung_blocked(name, kick):
+		return false
+	rungs[kick_number] = name
+	awaiting_rung = false
+	print("RUNG kick %d -> %s %s yd" % [kick_number, name, KickLogic.format_number(distance_yards())])
+	rung_lines += 1
+	return true
+
+
+func confirm_rung(kick: KickLogic) -> bool:
+	return pick_rung(rung_highlight, kick)
+
+
+func skip_rung(kick: KickLogic) -> bool:
+	return pick_rung(0, kick)
+
+
+func rung_blocked(name: String, kick: KickLogic) -> bool:
+	if name != "long" and name != "bomb":
+		return false
+	var yards := rung_yards(name)
+	if kick == null:
+		return false
+	var saved := kick.kick_distance
+	kick.kick_distance = yards
+	var report := too_weak_report(kick, true)
+	kick.kick_distance = saved
+	return yards > float(report["best_case"])
+
+
+func rung_card_title(name: String) -> String:
+	var shown := KickLogic.format_number(rung_yards(name))
+	if name == "long":
+		return "LONG  %s YD  2X MULT" % shown
+	if name == "bomb":
+		return "BOMB  %s YD  BONUS GEAR" % shown
+	return "SAFE  %s YD" % shown
+
+
+func rung_card_line(name: String) -> String:
+	if name == "long":
+		return "Make it and this kick's Mult is doubled."
+	if name == "bomb":
+		return "Make it and get a second gear pick."
+	return "The normal kick."
+
+
+func rung_tag() -> String:
+	var name := str(rungs.get(kick_number, ""))
+	if name == "long":
+		return "LONG +%d YD" % int(round(KickConstants.LONG_YARDS))
+	if name == "bomb":
+		return "BOMB +%d YD" % int(round(KickConstants.BOMB_YARDS))
+	return ""
+
+
 func _spend_ring() -> void:
 	ring_spent[kick_number] = true
 
@@ -2328,10 +2491,14 @@ func export_resume() -> Dictionary:
 		place = "shop"
 	elif awaiting_offer and forced_offer_live:
 		place = "forced"
+	elif awaiting_offer and bomb_offer_live:
+		place = "bomb"
 	elif awaiting_offer and not last_result_made:
 		place = "ring"
 	elif awaiting_offer:
 		place = "offer"
+	elif awaiting_rung:
+		place = "rung"
 	var bosses: Array = []
 	for kick in endless_bosses.keys():
 		bosses.append({"kick": int(kick), "name": str(endless_bosses[kick])})
@@ -2410,6 +2577,8 @@ func export_resume() -> Dictionary:
 		"ring_sides": _side_rows(),
 		"post_shifts": _shift_rows(),
 		"special_kicks": _special_rows(),
+		"rungs": _rung_rows(),
+		"bomb_bonus_pending": bomb_bonus_pending,
 		"heat": heat,
 		"last_special": last_special,
 		"rolled_specials_used": _rolled_rows(),
@@ -2537,6 +2706,10 @@ func import_resume(data: Dictionary) -> void:
 	special_kicks = {}
 	for pair in _dict_list(data.get("special_kicks", [])):
 		special_kicks[int(pair.get("kick", 0))] = str(pair.get("id", ""))
+	rungs = {}
+	for pair in _dict_list(data.get("rungs", [])):
+		rungs[int(pair.get("kick", 0))] = str(pair.get("rung", ""))
+	bomb_bonus_pending = bool(data.get("bomb_bonus_pending", false))
 	rolled_specials_used = {}
 	for pair in _dict_list(data.get("rolled_specials_used", [])):
 		rolled_specials_used[int(pair.get("block", 0))] = true
@@ -2581,6 +2754,19 @@ func import_resume(data: Dictionary) -> void:
 		ring_offer_pending = false
 		ring_offer_live = true
 		offer = _dict_list(data.get("offer", []))
+	elif place == "bomb":
+		awaiting_offer = true
+		kick_resolved = true
+		last_result_made = true
+		bomb_offer_live = true
+		bomb_bonus_pending = false
+		offer = _dict_list(data.get("offer", []))
+	elif place == "rung":
+		awaiting_rung = true
+		rung_highlight = 0
+		kick_resolved = false
+		awaiting_offer = false
+		offer = []
 	elif place == "shop":
 		awaiting_shop = true
 		kick_resolved = true
@@ -2591,6 +2777,16 @@ func import_resume(data: Dictionary) -> void:
 		awaiting_shop = false
 		kick_resolved = false
 		offer = []
+	if (
+		not awaiting_rung
+		and not awaiting_offer
+		and not awaiting_shop
+		and phase == Phase.PLAYING
+		and str(special_kicks.get(kick_number, "")) == SpecialKicks.LONG_OR_SAFE
+		and not rungs.has(kick_number)
+	):
+		awaiting_rung = true
+		rung_highlight = 0
 
 
 func _dict_list(value) -> Array:
@@ -2621,6 +2817,13 @@ func _special_rows() -> Array:
 	var rows: Array = []
 	for kick in special_kicks.keys():
 		rows.append({"kick": int(kick), "id": str(special_kicks[kick])})
+	return rows
+
+
+func _rung_rows() -> Array:
+	var rows: Array = []
+	for kick in rungs.keys():
+		rows.append({"kick": int(kick), "rung": str(rungs[kick])})
 	return rows
 
 
@@ -2693,7 +2896,7 @@ static func raw_points(distance: float, mult: float, boss: bool, perfect: bool) 
 	return total
 
 
-static func format_score_line(distance: float, mult: float, boss: bool, perfect: bool, storm: float = 0.0, hero: float = 0.0, curse_add: float = 0.0, drill: float = 0.0, pre: float = 0.0, sudden: float = 1.0, ring_factor: float = 1.0) -> String:
+static func format_score_line(distance: float, mult: float, boss: bool, perfect: bool, storm: float = 0.0, hero: float = 0.0, curse_add: float = 0.0, drill: float = 0.0, pre: float = 0.0, sudden: float = 1.0, ring_factor: float = 1.0, long_factor: float = 1.0) -> String:
 	var factor := 1.0
 	if ring_factor > 1.001:
 		factor = ring_factor
@@ -2719,6 +2922,9 @@ static func format_score_line(distance: float, mult: float, boss: bool, perfect:
 	if sudden > 1.001:
 		product *= sudden
 		text += " × 5"
+	if long_factor > 1.001:
+		product *= long_factor
+		text += " ×2 LONG"
 	if boss:
 		product *= KickConstants.BOSS_MULTIPLIER
 		text += " × 1.5"

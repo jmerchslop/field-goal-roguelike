@@ -1,12 +1,14 @@
 class_name SpecialKicks
 extends RefCounted
 
-# Shared special-kick rules. ON FIRE is earned. Rolled specials can plug in later.
+# Shared special-kick rules. ON FIRE is earned. LONG OR SAFE is rolled.
 
 const ON_FIRE := "on_fire"
+const LONG_OR_SAFE := "long_or_safe"
 
 const KINDS := {
 	ON_FIRE: "triggered",
+	LONG_OR_SAFE: "rolled",
 }
 
 

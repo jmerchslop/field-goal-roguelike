@@ -6,6 +6,8 @@ Generated: 2026-11-09
 **Painted:** 56
 **Template:** 80
 
+SK2: a LONG OR SAFE kick asks before the snap. The title is `LONG OR SAFE`. The cards read `SAFE  N YD` ("The normal kick."), `LONG  N YD  2X MULT` ("Make it and this kick's Mult is doubled."), and `BOMB  N YD  BONUS GEAR` ("Make it and get a second gear pick."). A rung past the best reach is grey and reads `OUT OF RANGE`. The kick bug adds `LONG +6 YD` or `BOMB +12 YD`. A LONG make scores `×2 LONG`. The bonus gear screen is titled `BOMB BONUS`. Gary's rundown adds "LONG OR SAFE shows up on 32.5 percent of kicks."
+
 CLEAN1: Wind Visor says `Wind ×0.90`, `×0.85`, or `×0.80`. Hush Gloves says `Wind -N mph`. Pickle Juice says `Drift ×0.5 this kick`. High-Air says `tailwind gain ×1.5`. Anchor says `Power needle ×`. Patient says `Accuracy needle ×`. Ice Cage, Rain Dance, Magnesium, All Natural, and Training Camp say `both needles`. Bruce's ball says `Drift ×1.10`. Electrolyte under Sudden Death is grey and labeled `Sudden Death`.
 
 LUCK1: the kicker plate and the select card show `LUCK N` (gold above 0, grey at 0). A lucky doink stamps `LUCKY`. A lucky equipment card shows a gold `LUCKY` tag and is one rank higher. Doink Cap adds ` +N luck` at ranks III, VI, IX, and XII. Gary's Lucky Ball reads "Each first-try make adds 4%. The bonus caps at +24%. A miss resets it."

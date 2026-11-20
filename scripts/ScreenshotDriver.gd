@@ -204,6 +204,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "sk2":
+		if not await _capture_sk2():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "rs1":
 		if not await _capture_rs1():
 			get_tree().quit(1)
@@ -6079,6 +6085,105 @@ func _capture_sk1() -> bool:
 	board.result_age = 0.4
 	print("SK1 cash ", board.run.cash_popup)
 	return await _capture("sk1_ring_hit_cash.png")
+
+
+func _capture_sk2() -> bool:
+	board.highlight = 1
+	board.selecting = true
+	board.front.run_mode = "standard"
+	board.confirm_kicker()
+	board.run.tad_level = 0
+	if not _sk2_choice(3):
+		return false
+	print("SK2 choice ", board.run.rung_card_title("safe"), " | ", board.run.rung_card_title("long"), " | ", board.run.rung_card_title("bomb"))
+	if not await _capture("sk2_choice_safe_highlighted.png"):
+		return false
+	if not _sk2_choice(4):
+		return false
+	if not board.run.rung_blocked("bomb", board.logic):
+		if not _sk2_choice(9):
+			return false
+	print("SK2 out ", board.run.rung_blocked("long", board.logic), " ", board.run.rung_blocked("bomb", board.logic), " best ", board.run.too_weak_report(board.logic, true)["best_case"])
+	if not await _capture("sk2_out_of_range.png"):
+		return false
+	if not _sk2_choice(3):
+		return false
+	board._pick_rung(1)
+	if str(board.run.rungs.get(3, "")) != "long":
+		print("SK2 did not lock LONG")
+		return false
+	board.logic.phase = KickLogic.Phase.AIMING
+	board.refresh_view()
+	print("SK2 long bug ", board.run.rung_tag(), " ", board.run.distance_yards(), " mult ", board.run.kick_mult_preview())
+	if not await _capture("sk2_long_bug_and_mult.png"):
+		return false
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.kick_resolved = false
+	board.run.resolve_kick("GOOD", 0.0, false)
+	board.logic.phase = KickLogic.Phase.RESULT
+	board.logic.result_text = "GOOD"
+	board.logic.perfect = false
+	board.logic.inner_ring_hit = false
+	board.logic.lucky_save = false
+	board.logic.insured = false
+	board.result_age = 0.4
+	board.refresh_view()
+	print("SK2 score ", board.run.score_line)
+	if not await _capture("sk2_long_score_line.png"):
+		return false
+	if not _sk2_choice(2):
+		return false
+	board.run.rungs[2] = "bomb"
+	board.run.awaiting_rung = false
+	board.logic.kick_distance = board.run.distance_yards()
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.kick_resolved = false
+	board.run.resolve_kick("GOOD", 0.0, false)
+	if not board.run.open_bomb_offer():
+		print("SK2 bonus did not open")
+		return false
+	board.refresh_view()
+	print("SK2 bonus cards ", board.run.offer.size())
+	if not await _capture("sk2_bomb_bonus_offer.png"):
+		return false
+	if not _sk2_choice(2):
+		return false
+	board._pick_rung(1)
+	if str(board.run.rungs.get(2, "")) != "long":
+		print("SK2 retry setup missed LONG")
+		return false
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.kick_resolved = false
+	board.run.resolve_kick("SHORT", 2.0, false)
+	if not board.run.begin_retry():
+		print("SK2 retry refused")
+		return false
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.AIMING
+	board.refresh_view()
+	print("SK2 retry ", board.run.rung_tag(), " ", board.run.distance_yards(), " awaiting ", board.run.awaiting_rung)
+	return await _capture("sk2_retry_keeps_rung.png")
+
+
+func _sk2_choice(kick: int) -> bool:
+	board.run.kick_number = kick
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.kick_resolved = false
+	board.run.awaiting_offer = false
+	board.run.awaiting_shop = false
+	board.run.bomb_offer_live = false
+	board.run.bomb_bonus_pending = false
+	board.run.offer = []
+	board.run.rungs.erase(kick)
+	board.run.special_kicks[kick] = SpecialKicks.LONG_OR_SAFE
+	board.run.awaiting_rung = false
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.AIMING
+	board.refresh_view()
+	if not board.run.awaiting_rung:
+		print("SK2 choice stayed closed on kick ", kick)
+		return false
+	return true
 
 
 func _capture_mtr1() -> bool:

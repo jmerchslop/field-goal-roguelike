@@ -49,6 +49,8 @@ func _draw() -> void:
 		_draw_result(logic, run)
 	if run.awaiting_mulligan:
 		_draw_mulligan()
+	elif run.awaiting_rung:
+		_draw_rung_choice(run)
 	elif run.awaiting_offer:
 		_draw_offer(run)
 	elif run.phase == RunLogic.Phase.GAME_OVER or run.phase == RunLogic.Phase.WIN or run.phase == RunLogic.Phase.FAR:
@@ -341,6 +343,8 @@ func _draw_kick_bug(logic: KickLogic, run: RunLogic) -> void:
 		extra += 16
 	if run.on_fire():
 		extra += 16
+	if run.rung_tag() != "":
+		extra += 16
 	var bug := Rect2(868, 10, 398, 74 + extra)
 	_steel_panel(bug)
 	var cream := Color(0.93, 0.91, 0.84)
@@ -391,6 +395,9 @@ func _draw_kick_bug(logic: KickLogic, run: RunLogic) -> void:
 		row_y += 16
 	if run.on_fire():
 		_pg("ON FIRE", Vector2(bug.position.x + 8, row_y), 12, Color(1.0, 0.55, 0.1))
+		row_y += 16
+	if run.rung_tag() != "":
+		_pg(run.rung_tag(), Vector2(bug.position.x + 8, row_y), 12, Color(0.95, 0.78, 0.28))
 
 
 func _draw_score_bug(run: RunLogic) -> void:
@@ -406,6 +413,8 @@ func _draw_score_bug(run: RunLogic) -> void:
 	if run.post_shift_yards() != 0:
 		extra += 16
 	if run.on_fire():
+		extra += 16
+	if run.rung_tag() != "":
 		extra += 16
 	var bug := Rect2(868, 18 + 74 + extra, 398, 70)
 	_steel_panel(bug)
@@ -1070,6 +1079,45 @@ func _draw_mulligan() -> void:
 	_text_centered("M retakes this kick. %s accepts the miss." % Settings.key_sentence("confirm"), box.position.y + 140.0, 22, KickConstants.COLOR_TEXT)
 
 
+func _draw_rung_choice(run: RunLogic) -> void:
+	card_rects = []
+	var logic: KickLogic = game.logic
+	_pg_centered("LONG OR SAFE", 248.0, 22, KickConstants.COLOR_ATTEMPT)
+	var names: Array = ["safe", "long", "bomb"]
+	var width := 220.0
+	var gap := 12.0
+	var total := float(names.size()) * width + float(names.size() - 1) * gap
+	var meter_left := KickConstants.WINDOW_WIDTH - 16.0 - 420.0
+	var left := 260.0
+	if left + total > meter_left - 16.0:
+		left = maxf(16.0, meter_left - 16.0 - total)
+	for i in names.size():
+		var rect := Rect2(left + float(i) * (width + gap), 318.0, width, 210.0)
+		card_rects.append(rect)
+		var name := str(names[i])
+		var blocked := run.rung_blocked(name, logic)
+		var border := Color(0.35, 0.55, 0.62)
+		if blocked:
+			border = Color(0.28, 0.30, 0.32)
+		elif i == run.rung_highlight:
+			border = Color(0.95, 0.78, 0.22)
+		draw_rect(rect, Color(0.05, 0.08, 0.1, 0.94))
+		var thickness := 6.0 if i == run.rung_highlight and not blocked else 3.0
+		draw_rect(rect, border, false, thickness)
+		var title := run.rung_card_title(name)
+		var title_color := Color(0.45, 0.47, 0.50) if blocked else KickConstants.COLOR_ATTEMPT
+		var size := 15
+		while size > 10 and BitmapFonts.measure_px("ui", title, size) > int(width) - 16:
+			size -= 1
+		var title_w := BitmapFonts.measure_px("ui", title, size)
+		_pg(title, rect.position + Vector2((width - float(title_w)) * 0.5, 48.0), size, title_color)
+		if blocked:
+			var out_w := BitmapFonts.measure_px("ui", "OUT OF RANGE", 14)
+			_pg("OUT OF RANGE", rect.position + Vector2((width - float(out_w)) * 0.5, 110.0), 14, Color(0.45, 0.47, 0.50))
+		else:
+			_draw_wrapped(run.rung_card_line(name), Rect2(rect.position + Vector2(12, 100), Vector2(width - 24, 90)), 15)
+
+
 func _draw_offer(run: RunLogic) -> void:
 	card_rects = []
 	var count := run.offer.size()
@@ -1085,6 +1133,8 @@ func _draw_offer(run: RunLogic) -> void:
 	if run.forced_offer_live:
 		_pg_centered("FORCED CURSE", 248.0, 22, KickConstants.COLOR_ATTEMPT)
 		_text_centered("Pick one. This one can't be skipped.", 286.0, 18, KickConstants.COLOR_TEXT)
+	elif run.bomb_offer_live:
+		_pg_centered("BOMB BONUS", 248.0, 22, KickConstants.COLOR_ATTEMPT)
 	for i in count:
 		var rect := Rect2(left + float(i) * (width + gap), 318.0, width, 210.0)
 		card_rects.append(rect)

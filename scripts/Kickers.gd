@@ -317,7 +317,7 @@ static func rundown_lines(id: String, unlocked: bool, tad_cap: int = -1, tad_pic
 	if stats.lucky_ball:
 		lines.append("Each first-try make adds 4%. The bonus caps at +24%. A miss resets it.")
 	if id == GARY:
-		lines.append("Luck 3. A doink has an 18 percent chance to count as Good.")
+		lines.append("Luck 3. A doink has an 18 percent chance to count as Good. LONG OR SAFE shows up on 32.5 percent of kicks.")
 	elif id == WALK_ON:
 		lines.append("Luck 2.")
 	if stats.saucer_mph > 0.0:

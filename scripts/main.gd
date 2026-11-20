@@ -360,6 +360,8 @@ func settle_kick() -> void:
 
 
 func _finish_resolved_kick() -> void:
+	if run.phase != RunLogic.Phase.PLAYING:
+		run.bomb_bonus_pending = false
 	if run.ring_offer_pending:
 		if run.open_ring_offer():
 			_remember_run()
@@ -422,7 +424,22 @@ func _choose_card(index: int) -> void:
 		_remember_run()
 		refresh_view()
 		return
+	if run.open_bomb_offer():
+		_remember_run()
+		refresh_view()
+		return
 	_after_cards()
+
+
+func _pick_rung(index: int) -> void:
+	if not run.pick_rung(index, logic):
+		refresh_view()
+		return
+	logic.kick_distance = run.distance_yards()
+	logic.sync_tee()
+	consider_too_weak()
+	_remember_run()
+	refresh_view()
 
 
 func _after_cards() -> void:
@@ -1136,6 +1153,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		if mouse.pressed and mouse.button_index == MOUSE_BUTTON_LEFT:
 			if run.awaiting_shop:
 				_shop_click(mouse.position)
+			elif run.awaiting_rung:
+				_pick_rung(_hud.card_index_at(mouse.position))
 			elif run.awaiting_offer:
 				_choose_card(_hud.card_index_at(mouse.position))
 		return
@@ -1187,6 +1206,23 @@ func _unhandled_input(event: InputEvent) -> void:
 	if run.awaiting_shop:
 		_shop_input(event)
 		return
+	if run.awaiting_rung and Settings.pressed_event(event, "choose_1"):
+		_pick_rung(0)
+		return
+	if run.awaiting_rung and Settings.pressed_event(event, "choose_2"):
+		_pick_rung(1)
+		return
+	if run.awaiting_rung and Settings.pressed_event(event, "choose_3"):
+		_pick_rung(2)
+		return
+	if run.awaiting_rung and Settings.pressed_event(event, "skip"):
+		_pick_rung(0)
+		return
+	if run.awaiting_rung and Settings.pressed_event(event, "confirm"):
+		_pick_rung(run.rung_highlight)
+		return
+	if run.awaiting_rung and Settings.pressed_event(event, "offer_reroll"):
+		return
 	if run.awaiting_offer and Settings.pressed_event(event, "choose_1"):
 		_choose_card(0)
 		return
@@ -1199,6 +1235,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	if run.awaiting_offer and Settings.pressed_event(event, "skip"):
 		if run.skip_offer():
 			_cue("offer")
+			if run.open_bomb_offer():
+				_remember_run()
+				refresh_view()
+				return
 			_after_cards()
 		return
 	if run.awaiting_offer and Settings.pressed_event(event, "offer_reroll"):
@@ -1254,7 +1294,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		consider_too_weak()
 		refresh_view()
 		return
-	if Settings.pressed_event(event, "practice") and logic.phase == KickLogic.Phase.AIMING and not run.awaiting_offer and not run.awaiting_mulligan:
+	if Settings.pressed_event(event, "practice") and logic.phase == KickLogic.Phase.AIMING and not run.awaiting_offer and not run.awaiting_mulligan and not run.awaiting_rung:
 		if run.start_practice():
 			_apply_conditions()
 			refresh_view()
@@ -1290,7 +1330,7 @@ func _confirm_kick() -> void:
 		_finish_resolved_kick()
 		refresh_view()
 		return
-	if run.awaiting_offer:
+	if run.awaiting_offer or run.awaiting_rung:
 		return
 	if run.phase != RunLogic.Phase.PLAYING:
 		return
@@ -1365,7 +1405,7 @@ func clock_digit() -> int:
 
 func tick_kick_clock(delta: float) -> void:
 	# TOO WEAK holds whichever clock is up, Kick Clock or No Huddle.
-	if too_weak_age >= 0.0:
+	if too_weak_age >= 0.0 or run.awaiting_rung:
 		return
 	if _twist_blocked() or run.practicing or not _twist_armed or _clock_done:
 		return
