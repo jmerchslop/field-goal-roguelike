@@ -38,7 +38,7 @@ var hero_mult := 0.0
 var curse_mult := 0.0
 var drift_factor := 1.0
 var angle_scale := 1.0
-var guide_factor := 1.0
+var ring_radius_bonus := 0.0
 var shelter_factor := 1.0
 var hush_mph := 0.0
 var visor_resist := 0.0
@@ -111,7 +111,7 @@ func reset() -> void:
 	curse_mult = 0.0
 	drift_factor = 1.0
 	angle_scale = 1.0
-	guide_factor = 1.0
+	ring_radius_bonus = 0.0
 	shelter_factor = 1.0
 	hush_mph = 0.0
 	visor_resist = 0.0

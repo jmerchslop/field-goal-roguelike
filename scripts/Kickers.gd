@@ -105,11 +105,11 @@ const ALL: Array = [
 	{
 		"id": COLE,
 		"name": "Cole Lang",
-		"lore": "The brand wants the middle of the posts, not a bottle on the belt.",
+		"lore": "The brand wants the ring, not a bottle on the belt.",
 		"excels": "Brand Deal. Loadout offers stay. The Vitamin Shop does not.",
 		"downside": "No vitamins and no B12. The belt stays empty.",
 		"ball_name": "Showtime",
-		"ball_description": "A down-the-middle make doubles stored Mult, and that kick scores with the doubled Mult.",
+		"ball_description": "A miss halves the stored ring Mult instead of clearing it.",
 		"ball_type": "standard",
 		"accuracy": 120,
 		"range_line": "75 yd",
@@ -319,7 +319,7 @@ static func rundown_lines(id: String, unlocked: bool, tad_cap: int = -1, tad_pic
 	if stats.brand_deal:
 		lines.append("Loadout offers stay. The Vitamin Shop does not.")
 	if stats.showtime:
-		lines.append("A down-the-middle make doubles the stored Mult.")
+		lines.append("A miss halves the ring Mult instead of resetting it.")
 	if stats.synchronicity:
 		lines.append("The first loadout offer includes a range item.")
 	if stats.numero_dos:
@@ -391,7 +391,7 @@ static func aliases(id: String) -> Array:
 
 
 static func is_make_result(shanked: bool, result: String) -> bool:
-	# GOOD covers PERFECT, DOWN THE MIDDLE, BANK SHOT, and INSURED.
+	# GOOD covers PERFECT, INNER RING, BANK SHOT, and INSURED.
 	# A doink that stays a miss, a shank, and the wide / short calls do not.
 	return not shanked and result == "GOOD"
 

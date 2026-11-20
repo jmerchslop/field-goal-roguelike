@@ -23,20 +23,17 @@ static func words(shanked: bool, result: String, bank: bool, insured: bool, perf
 	if insured:
 		return PackedStringArray(["INSURED"])
 	if middle and perfect:
-		return PackedStringArray(["DOWN THE MIDDLE", "PERFECT"])
+		return PackedStringArray(["INNER RING", "PERFECT"])
 	if middle:
-		return PackedStringArray(["DOWN THE MIDDLE"])
+		return PackedStringArray(["INNER RING"])
 	if perfect:
 		return PackedStringArray(["PERFECT"])
 	return PackedStringArray(["GOOD"])
 
 
 static func primary_lines(word: String) -> PackedStringArray:
-	if word == "WIDE LEFT" or word == "WIDE RIGHT" or word == "DOWN THE MIDDLE" or word == "BANK SHOT" or word == "BONUS RING":
-		var parts := word.split(" ")
-		if word == "DOWN THE MIDDLE":
-			return PackedStringArray(["DOWN THE", "MIDDLE"])
-		return PackedStringArray(parts)
+	if word == "WIDE LEFT" or word == "WIDE RIGHT" or word == "INNER RING" or word == "BANK SHOT" or word == "BONUS RING":
+		return PackedStringArray(word.split(" "))
 	return PackedStringArray([word])
 
 

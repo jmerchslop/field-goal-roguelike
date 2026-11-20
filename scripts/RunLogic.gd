@@ -63,7 +63,7 @@ var offers_without_power := 0
 var kick_resolved := false
 var last_result_made := false
 var kicker_id := ""
-var down_the_middle := false
+var ring_factor := 1.0
 var attempt_note := ""
 var score_line := ""
 var last_points := 0
@@ -92,6 +92,7 @@ var clean_makes := {}
 var ring_spent := {}
 # -1 left, +1 right. Chosen once per kick and kept for retries.
 var ring_sides := {}
+var inner_ring_sides := {}
 var ring_debug := {}
 var ring_offer_pending := false
 var ring_offer_skipped := false
@@ -146,7 +147,7 @@ var cash := 0
 var cash_popup := ""
 var unlock_toast := ""
 var lucky_stacks := 0
-var showtime_mult := 1.0
+var pending_ring_hit := false
 var synchronicity_offer_done := false
 var belt: Array = ["", ""]
 var active_vitamins := {}
@@ -226,7 +227,7 @@ func new_run() -> void:
 	kick_resolved = false
 	last_result_made = false
 	kicker_id = ""
-	down_the_middle = false
+	ring_factor = 1.0
 	attempt_note = ""
 	score_line = ""
 	last_points = 0
@@ -252,6 +253,7 @@ func new_run() -> void:
 	clean_makes = {}
 	ring_spent = {}
 	ring_sides = {}
+	inner_ring_sides = {}
 	ring_debug = {}
 	ring_offer_pending = false
 	ring_offer_skipped = false
@@ -264,7 +266,6 @@ func new_run() -> void:
 	pk2_grants = []
 	camp_makes = 0
 	lucky_stacks = 0
-	showtime_mult = 1.0
 	synchronicity_offer_done = false
 	unlock_toast = ""
 	trophy_name = ""
@@ -553,7 +554,7 @@ func is_boss() -> bool:
 
 # The multiplier for the kick you are on, from the streak before this kick.
 func current_mult() -> float:
-	return (1.0 + stats.streak_step * float(streak)) * showtime_mult
+	return (1.0 + stats.streak_step * float(streak)) * ring_factor
 
 
 # The Mult a plain make scores with. Landing bonuses stay out of this number.
@@ -612,7 +613,7 @@ func accepts_restart() -> bool:
 	return phase == Phase.GAME_OVER or phase == Phase.WIN or phase == Phase.FAR
 
 
-func resolve_kick(result_text: String, offset: float, perfect: bool) -> void:
+func resolve_kick(result_text: String, _offset: float, perfect: bool, ring_hit: bool = false) -> void:
 	if practicing or kick_resolved or phase != Phase.PLAYING:
 		return
 	kick_resolved = true
@@ -621,7 +622,8 @@ func resolve_kick(result_text: String, offset: float, perfect: bool) -> void:
 	last_result_made = made
 	var distance := distance_yards()
 	var boss := is_boss()
-	down_the_middle = absf(offset) <= KickConstants.MIDDLE_YARDS
+	if made and ring_hit:
+		ring_factor = minf(ring_factor * 2.0, KickConstants.RING_FACTOR_CAP)
 	attempt_note = ""
 	score_line = ""
 	last_points = 0
@@ -633,8 +635,6 @@ func resolve_kick(result_text: String, offset: float, perfect: bool) -> void:
 		if stats.gelcap and _belt_vitamin_active():
 			gel = 0.5
 		var base_mult := current_mult()
-		if stats.showtime and down_the_middle:
-			base_mult *= 2.0
 		var storm := storm_bonus()
 		var hero := hero_bonus()
 		var curse_add := curse_bonus()
@@ -644,9 +644,9 @@ func resolve_kick(result_text: String, offset: float, perfect: bool) -> void:
 		if has_curse(Loadout.SUDDEN_DEATH):
 			sudden = SUDDEN_DEATH_MULT
 			mult *= sudden
-		last_points = points_for(distance, mult, down_the_middle, boss, score_perfect)
+		last_points = points_for(distance, mult, boss, score_perfect)
 		score += last_points
-		score_line = format_score_line(distance, base_mult, down_the_middle, boss, score_perfect, storm, hero, curse_add, drill, pre + gel, sudden)
+		score_line = format_score_line(distance, base_mult, boss, score_perfect, storm, hero, curse_add, drill, pre + gel, sudden, ring_factor)
 		kicks_made += 1
 		if distance > longest_make:
 			longest_make = distance
@@ -659,9 +659,7 @@ func resolve_kick(result_text: String, offset: float, perfect: bool) -> void:
 		streak += 1
 		if streak > best_streak:
 			best_streak = streak
-		if stats.showtime and down_the_middle:
-			showtime_mult *= 2.0
-		if down_the_middle:
+		if ring_hit:
 			middles_this_run += 1
 		if run_mode == "endless" and distance >= 1000.0:
 			phase = Phase.FAR
@@ -674,7 +672,10 @@ func resolve_kick(result_text: String, offset: float, perfect: bool) -> void:
 		if result_text == "BONUS RING":
 			_spend_ring()
 		streak = 0
-		showtime_mult = 1.0
+		if stats.showtime:
+			ring_factor = maxf(1.0, ring_factor / 2.0)
+		else:
+			ring_factor = 1.0
 		is_first_ball = false
 		lucky_stacks = 0
 		if _vitamin_count(Vitamins.ELECTROLYTE) == 0:
@@ -682,7 +683,7 @@ func resolve_kick(result_text: String, offset: float, perfect: bool) -> void:
 			if attempts <= 0:
 				attempts = 0
 				phase = Phase.GAME_OVER
-	var payout := cash_payout(made, perfect, down_the_middle, boss)
+	var payout := cash_payout(made, perfect, ring_hit, boss)
 	cash += payout
 	cash_popup = "+$%d" % payout if payout > 0 else ""
 	_clear_ball_vitamins()
@@ -709,7 +710,6 @@ func go_to_next_kick() -> bool:
 	is_first_ball = true
 	kick_resolved = false
 	last_result_made = false
-	down_the_middle = false
 	attempt_note = ""
 	score_line = ""
 	last_points = 0
@@ -745,7 +745,6 @@ func begin_retry() -> bool:
 	offer = []
 	attempt_note = ""
 	score_line = ""
-	down_the_middle = false
 	return true
 
 
@@ -1165,11 +1164,12 @@ func can_mulligan(result_text: String) -> bool:
 	return result_text != "GOOD" and mulligans_left > 0 and not mulligan_used_this_kick and phase == Phase.PLAYING
 
 
-func begin_mulligan(result_text: String, offset: float, perfect: bool) -> void:
+func begin_mulligan(result_text: String, offset: float, perfect: bool, ring_hit: bool = false) -> void:
 	awaiting_mulligan = true
 	pending_result = result_text
 	pending_offset = offset
 	pending_perfect = perfect
+	pending_ring_hit = ring_hit
 
 
 func use_mulligan() -> bool:
@@ -1187,7 +1187,7 @@ func accept_pending_miss() -> void:
 	if not awaiting_mulligan:
 		return
 	awaiting_mulligan = false
-	resolve_kick(pending_result, pending_offset, pending_perfect)
+	resolve_kick(pending_result, pending_offset, pending_perfect, pending_ring_hit)
 
 
 func can_practice() -> bool:
@@ -1656,14 +1656,14 @@ static func ring_placement(side: int, half_gap: float, distance: float, spot: fl
 	return {"x": sign * low, "pulled": true, "blocked": false}
 
 
-static func cash_payout(made: bool, perfect: bool, middle: bool, boss: bool) -> int:
+static func cash_payout(made: bool, perfect: bool, ring_hit: bool, boss: bool) -> int:
 	if not made:
 		return 0
 	var gain := 1
 	if perfect:
 		gain += 1
-	if middle:
-		gain += 1
+	if ring_hit:
+		gain += 2
 	if boss:
 		gain += 2
 	return gain
@@ -1703,6 +1703,29 @@ func arm_debug_ring() -> bool:
 func ring_side() -> int:
 	_ensure_ring_side()
 	return int(ring_sides.get(kick_number, 1))
+
+
+func inner_ring_side() -> int:
+	if ring_showing():
+		return -ring_side()
+	_ensure_inner_side()
+	return int(inner_ring_sides.get(kick_number, 1))
+
+
+func _ensure_inner_side() -> void:
+	if inner_ring_sides.has(kick_number):
+		return
+	inner_ring_sides[kick_number] = -1 if _rng.randi_range(0, 1) == 0 else 1
+
+
+func inner_ring_place(half_gap: float) -> Dictionary:
+	var side := inner_ring_side()
+	var bonus := 0.0
+	if stats != null:
+		bonus = stats.ring_radius_bonus
+	var radius := minf(KickConstants.INNER_RING_RADIUS + bonus, KickConstants.INNER_RING_MAX_RADIUS)
+	var x_rel := float(side) * (half_gap - KickConstants.INNER_RING_INSET)
+	return {"x_rel": x_rel, "radius": radius, "side": side}
 
 
 func _ensure_ring_side() -> void:
@@ -2224,7 +2247,8 @@ func export_resume() -> Dictionary:
 		"synchronicity_offer_done": synchronicity_offer_done,
 		"zinc_used": zinc_used,
 		"lucky_stacks": lucky_stacks,
-		"showtime_mult": showtime_mult,
+		"ring_factor": ring_factor,
+		"inner_ring_sides": _inner_side_rows(),
 		"balls_kicked": balls_kicked,
 		"middles_this_run": middles_this_run,
 		"best_streak": best_streak,
@@ -2329,7 +2353,12 @@ func import_resume(data: Dictionary) -> void:
 	synchronicity_offer_done = bool(data.get("synchronicity_offer_done", false))
 	zinc_used = bool(data.get("zinc_used", false))
 	lucky_stacks = int(data.get("lucky_stacks", 0))
-	showtime_mult = float(data.get("showtime_mult", 1.0))
+	if data.has("ring_factor"):
+		ring_factor = float(data.get("ring_factor", 1.0))
+	elif data.has("showtime_mult"):
+		ring_factor = float(data.get("showtime_mult", 1.0))
+	else:
+		ring_factor = 1.0
 	balls_kicked = int(data.get("balls_kicked", 0))
 	middles_this_run = int(data.get("middles_this_run", 0))
 	best_streak = int(data.get("best_streak", 0))
@@ -2356,6 +2385,9 @@ func import_resume(data: Dictionary) -> void:
 	ring_sides = {}
 	for pair in _dict_list(data.get("ring_sides", [])):
 		ring_sides[int(pair.get("kick", 0))] = int(pair.get("side", 1))
+	inner_ring_sides = {}
+	for pair in _dict_list(data.get("inner_ring_sides", [])):
+		inner_ring_sides[int(pair.get("kick", 0))] = int(pair.get("side", 1))
 	ring_offer_pending = bool(data.get("ring_offer", false))
 	kick10_boss = str(data.get("kick10_boss", ""))
 	var saved_bosses: Array = _dict_list(data.get("standard_bosses", []))
@@ -2433,6 +2465,13 @@ func _side_rows() -> Array:
 	return rows
 
 
+func _inner_side_rows() -> Array:
+	var rows: Array = []
+	for kick in inner_ring_sides.keys():
+		rows.append({"kick": int(kick), "side": int(inner_ring_sides[kick])})
+	return rows
+
+
 func _string_list(value) -> Array:
 	var rows: Array = []
 	if value is Array:
@@ -2467,14 +2506,12 @@ func _save_finished_run() -> void:
 	new_record_long = bool(flags.get("longest", false))
 
 
-static func points_for(distance: float, mult: float, middle: bool, boss: bool, perfect: bool) -> int:
-	return round_whole(raw_points(distance, mult, middle, boss, perfect))
+static func points_for(distance: float, mult: float, boss: bool, perfect: bool) -> int:
+	return round_whole(raw_points(distance, mult, boss, perfect))
 
 
-static func raw_points(distance: float, mult: float, middle: bool, boss: bool, perfect: bool) -> float:
+static func raw_points(distance: float, mult: float, boss: bool, perfect: bool) -> float:
 	var total := distance * mult
-	if middle:
-		total *= KickConstants.MIDDLE_MULTIPLIER
 	if boss:
 		total *= KickConstants.BOSS_MULTIPLIER
 	if perfect:
@@ -2482,11 +2519,18 @@ static func raw_points(distance: float, mult: float, middle: bool, boss: bool, p
 	return total
 
 
-static func format_score_line(distance: float, mult: float, middle: bool, boss: bool, perfect: bool, storm: float = 0.0, hero: float = 0.0, curse_add: float = 0.0, drill: float = 0.0, pre: float = 0.0, sudden: float = 1.0) -> String:
+static func format_score_line(distance: float, mult: float, boss: bool, perfect: bool, storm: float = 0.0, hero: float = 0.0, curse_add: float = 0.0, drill: float = 0.0, pre: float = 0.0, sudden: float = 1.0, ring_factor: float = 1.0) -> String:
+	var factor := 1.0
+	if ring_factor > 1.001:
+		factor = ring_factor
+	var streak_mult := mult if factor <= 1.001 else mult / factor
 	var product := distance * (mult + storm + hero + curse_add + drill + pre)
-	var text := "%s yd × %s" % [_whole(distance), _two_decimals(mult)]
+	var core := _two_decimals(streak_mult)
+	if factor > 1.001:
+		core += " × %d ring" % int(round(factor))
+	var text := "%s yd × %s" % [_whole(distance), core]
 	if storm > 0.001 or hero > 0.001 or curse_add > 0.001 or drill > 0.001 or pre > 0.001:
-		text = "%s yd × (%s" % [_whole(distance), _two_decimals(mult)]
+		text = "%s yd × (%s" % [_whole(distance), core]
 		if storm > 0.001:
 			text += " + %s wind" % _two_decimals(storm)
 		if hero > 0.001:
@@ -2501,9 +2545,6 @@ static func format_score_line(distance: float, mult: float, middle: bool, boss: 
 	if sudden > 1.001:
 		product *= sudden
 		text += " × 5"
-	if middle:
-		product *= KickConstants.MIDDLE_MULTIPLIER
-		text += " × 2"
 	if boss:
 		product *= KickConstants.BOSS_MULTIPLIER
 		text += " × 1.5"

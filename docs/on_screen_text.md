@@ -683,7 +683,7 @@ No pause screen exists. Esc during a kick is not given its own pause menu. A pri
 ### `select_cole_ball_text`
 - **screen:** Character select
 - **when:** Ball description under the ball name, only while this kicker is unlocked.
-- **current:** "A down-the-middle make doubles stored Mult, and that kick scores with the doubled Mult."
+- **current:** "A miss halves the stored ring Mult instead of clearing it."
 - **kind:** static
 - **source:** code
 
@@ -1502,8 +1502,8 @@ No pause screen exists. Esc during a kick is not given its own pause menu. A pri
 
 ### `result_down_the_middle`
 - **screen:** Kick result
-- **when:** Result banner when a GOOD kick is also down the middle.
-- **current:** "DOWN THE MIDDLE!"
+- **when:** Result banner when a GOOD kick goes through the inner ring.
+- **current:** "INNER RING"
 - **kind:** static
 - **source:** code
 
@@ -1544,7 +1544,7 @@ No pause screen exists. Esc during a kick is not given its own pause menu. A pri
 
 ### `result_score_line`
 - **screen:** Kick result
-- **when:** Under the result word on a make. Optional pieces, in this order, are inserted only when they apply: " + {storm} wind", " + {hero} hero", " + {curse} curse", " + {drill} drill", " + {pre} pre", then a closing parenthesis, then " × 2" for down the middle, " × 1.5" for a boss, and " (+5 PERFECT)" for a perfect kick. {pre} also covers the Gelcap bonus.
+- **when:** Under the result word on a make. Optional pieces, in this order, are inserted only when they apply: " × {n} ring" after the streak mult when the ring factor is above 1, " + {storm} wind", " + {hero} hero", " + {curse} curse", " + {drill} drill", " + {pre} pre", then a closing parenthesis, then " × 5" for Sudden Death, " × 1.5" for a boss, and " (+5 Perfect)" for a perfect kick. {pre} also covers the Gelcap bonus.
 - **current:** "{yards} yd × {mult} = {points}"
 - **kind:** template
 - **source:** code
@@ -3604,7 +3604,7 @@ No pause screen exists. Esc during a kick is not given its own pause menu. A pri
 ### `records_trophy_bullseye_collector_condition`
 - **screen:** Trophy Room
 - **when:** Condition under the trophy, earned or locked.
-- **current:** "10 lifetime down-the-middle makes"
+- **current:** "10 lifetime inner ring hits"
 - **kind:** static
 - **source:** code
 
@@ -4024,7 +4024,7 @@ These strings were searched for and are not shown to a player. They are not in t
 ### `kicker_cole_lore_not_drawn`
 - **screen:** Not drawn
 - **when:** Stored on the kicker. No screen draws lore.
-- **current:** "The brand wants the middle of the posts, not a bottle on the belt."
+- **current:** "The brand wants the ring, not a bottle on the belt."
 - **kind:** static
 - **source:** code
 

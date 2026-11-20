@@ -411,9 +411,16 @@ func _draw_score_bug(run: RunLogic) -> void:
 		else:
 			var shown := str(cell["value"])
 			var px := 22
-			if str(cell["label"]) == "MULT":
+			var ring_tag := ""
+			if str(cell["label"]) == "MULT" and run.ring_factor > 1.001:
+				ring_tag = "RING X%d" % int(round(run.ring_factor))
+				px = mini(_mult_px(shown), 16)
+			elif str(cell["label"]) == "MULT":
 				px = _mult_px(shown)
-			_pg(shown, rect.position + Vector2(6, 22), px, cream)
+			var value_y := 16.0 if ring_tag != "" else 22.0
+			_pg(shown, rect.position + Vector2(6, value_y), px, cream)
+			if ring_tag != "":
+				_pg(ring_tag, rect.position + Vector2(6, 40), 11, Color(0.35, 0.90, 1.00))
 		x += float(cell["w"]) + 4.0
 
 
@@ -1100,7 +1107,7 @@ func _draw_attempt_pips(run: RunLogic, origin_x: float, origin_y: float) -> void
 
 func _draw_result(logic: KickLogic, run: RunLogic) -> void:
 	# Screen-space stamp. The field distance does not change its size.
-	var middle := logic.result_text == "GOOD" and absf(logic.offset_yards) <= KickConstants.MIDDLE_YARDS
+	var middle := logic.inner_ring_hit
 	var lines := ResultStamp.words(logic.shanked, logic.result_text, logic.bank_shot, logic.insured, logic.perfect, middle)
 	var main_lines: PackedStringArray = ResultStamp.primary_lines(lines[0])
 	var accuracy := ResultStamp.accuracy_line(logic.shanked, logic.perfect, logic.accuracy_error, logic.stats.perfect_band, logic.stats.good_band)

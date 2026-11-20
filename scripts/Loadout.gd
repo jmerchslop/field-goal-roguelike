@@ -122,8 +122,8 @@ static func high_air_yards(rank: int) -> int:
 	return _late_yards(rank, 2, _AIR_LATE)
 
 
-static func guide_factor(rank: int) -> float:
-	return 0.50 - 0.02 * float(effect_rank(rank) - 1)
+static func guide_ring_yards(rank: int) -> float:
+	return 0.04 * float(mini(effect_rank(rank), 12))
 
 
 static func anchor_factor(rank: int) -> float:
@@ -507,7 +507,7 @@ static func effect_line(id: String, rank: int) -> String:
 		HIGH_AIR:
 			return "+%d yd, tailwind range ×1.5" % high_air_yards(rank)
 		GUIDE_GLOVES:
-			return _with_late_yards("Good locks: hook ×%s" % _two_decimals(guide_factor(rank)), rank)
+			return _with_late_yards("Inner ring +%s yd" % _two_decimals(guide_ring_yards(rank)), rank)
 		PATIENT_GLOVES:
 			return _with_late_yards("Both needles ×%s" % _two_decimals(patient_factor(rank)), rank)
 		HUSH_GLOVES:
@@ -1285,11 +1285,7 @@ static func _apply_piece(stats: KickerStats, item_id: String, item_rank: int, it
 		acc["range"] = float(acc["range"]) + float(high_air_yards(item_rank))
 		stats.thin_air = true
 	elif item_id == GUIDE_GLOVES:
-		var guide := _scale_factor(guide_factor(item_rank), howling, item_scale)
-		if is_equal_approx(stats.guide_factor, 1.0):
-			stats.guide_factor = guide
-		else:
-			stats.guide_factor *= guide
+		stats.ring_radius_bonus += guide_ring_yards(item_rank) * item_scale
 		acc["range"] = float(acc["range"]) + float(late_flat_yards(item_rank))
 	elif item_id == PATIENT_GLOVES:
 		acc["needle"] = float(acc["needle"]) * _scale_factor(patient_factor(item_rank), howling, item_scale)

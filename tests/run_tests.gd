@@ -70,6 +70,7 @@ func _run() -> void:
 	_check_pace1()
 	_check_pace2()
 	_check_pace3()
+	_check_ring1a()
 	_check_f3()
 	_check_au1()
 	_check_drive_lid_and_power_safety()
@@ -766,35 +767,36 @@ func _check_run_spots_and_attempts() -> void:
 
 
 func _check_run_score_and_endings() -> void:
-	var line := RunLogic.format_score_line(56.0, 1.5, true, false, true)
-	check(line == "56 yd × 1.50 × 2 = 168 (+5 Perfect)", "score line reads '%s'" % line)
-	check(RunLogic.points_for(56.0, 1.5, true, false, true) == 173, "that line is worth 168 + 5 = 173")
-	check(RunLogic.points_for(35.0, 1.25, false, false, false) == 44, "35 × 1.25 = 43.75 rounds to 44")
-	check(RunLogic.points_for(38.0, 1.25, false, false, false) == 48, "38 × 1.25 = 47.5 rounds to 48")
-	check(RunLogic.points_for(48.0, 1.0, false, true, false) == 72, "boss ×1.5: 48 × 1.5 = 72")
-	check(RunLogic.points_for(35.0, 1.0, false, false, true) == 40, "+5 PERFECT on a plain 35 is 40")
+	var line := RunLogic.format_score_line(56.0, 3.0, false, true, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 2.0)
+	check(line == "56 yd × 1.50 × 2 ring = 168 (+5 Perfect)", "score line reads '%s'" % line)
+	check(RunLogic.points_for(56.0, 3.0, false, true) == 173, "that line is worth 168 + 5 = 173")
+	check(RunLogic.points_for(35.0, 1.25, false, false) == 44, "35 × 1.25 = 43.75 rounds to 44")
+	check(RunLogic.points_for(38.0, 1.25, false, false) == 48, "38 × 1.25 = 47.5 rounds to 48")
+	check(RunLogic.points_for(48.0, 1.0, true, false) == 72, "boss ×1.5: 48 × 1.5 = 72")
+	check(RunLogic.points_for(35.0, 1.0, false, true) == 40, "+5 PERFECT on a plain 35 is 40")
 	var middle := RunLogic.new()
 	middle.new_run()
-	middle.resolve_kick("GOOD", 0.0, true)
-	check(middle.down_the_middle, "check 7 a dead-center make is down the middle")
-	check(middle.score_line == "35 yd × 1.00 × 2 = 70 (+5 Perfect)", "check 7 math reads '%s'" % middle.score_line)
+	middle.resolve_kick("GOOD", 0.0, true, true)
+	check(is_equal_approx(middle.ring_factor, 2.0), "check 7 a ring hit doubles the stored factor")
+	check(middle.score_line == "35 yd × 1.00 × 2 ring = 70 (+5 Perfect)", "check 7 math reads '%s'" % middle.score_line)
 	check(middle.score == 75, "check 7 score is 75, got %d" % middle.score)
 	check(middle.attempt_note == "" and middle.attempts == 2, "check 7 a make does not add an attempt")
 	var edge := RunLogic.new()
 	edge.new_run()
-	edge.resolve_kick("GOOD", 1.0, false)
-	check(edge.down_the_middle and edge.score == 70, "offset of exactly 1 yd is still down the middle")
+	edge.resolve_kick("GOOD", 0.0, false, false)
+	check(is_equal_approx(edge.ring_factor, 1.0) and edge.score == 35, "a centered make without a ring hit is not doubled, score %d" % edge.score)
 	edge = RunLogic.new()
 	edge.new_run()
-	edge.resolve_kick("GOOD", 1.01, false)
-	check(not edge.down_the_middle and edge.score == 35, "offset just past 1 yd is not doubled, score %d" % edge.score)
+	edge.ring_factor = 2.0
+	edge.resolve_kick("GOOD", 4.0, false, false)
+	check(is_equal_approx(edge.ring_factor, 2.0) and edge.score == 70, "a make outside the ring keeps the factor, score %d" % edge.score)
 	var boss := _fresh(5, 1)
 	boss.streak = 0
 	boss.resolve_kick("GOOD", 4.0, false)
 	check(boss.is_boss(), "kick 5 is a boss kick")
 	check(boss.score == 81 and boss.score_line == "54 yd × 1.00 × 1.5 = 81", "boss math reads '%s'" % boss.score_line)
-	var stacked := RunLogic.points_for(75.0, 1.0, true, true, false)
-	check(stacked == 225, "middle and boss stack: 75 × 2 × 1.5 = 225, got %d" % stacked)
+	var stacked := RunLogic.points_for(75.0, 2.0, true, false)
+	check(stacked == 225, "ring ×2 and boss stack: 75 × 2 × 1.5 = 225, got %d" % stacked)
 	var won := _fresh(10, 1)
 	won.resolve_kick("GOOD", 0.4, false)
 	check(won.phase == RunLogic.Phase.WIN, "making kick 10 is a win")
@@ -822,8 +824,8 @@ func _check_run_late_earn_and_spot_in_the_kick() -> void:
 	plain.resolve_kick("GOOD", 4.0, false)
 	check(plain.attempts == 2 and plain.attempt_note == "", "a normal good stays at 2 attempts")
 	var middle := _fresh(8, 2)
-	middle.resolve_kick("GOOD", 0.2, false)
-	check(middle.down_the_middle and middle.attempts == 2 and middle.attempt_note == "", "down the middle does not add an attempt")
+	middle.resolve_kick("GOOD", 0.2, false, true)
+	check(is_equal_approx(middle.ring_factor, 2.0) and middle.attempts == 2 and middle.attempt_note == "", "an inner ring hit does not add an attempt")
 	var perfect := _fresh(8, 2)
 	perfect.resolve_kick("GOOD", 4.0, true)
 	check(perfect.attempts == 2, "a perfect make does not add an attempt")
@@ -833,7 +835,7 @@ func _check_run_late_earn_and_spot_in_the_kick() -> void:
 	var retake := _fresh(1, 2)
 	retake.is_first_ball = false
 	retake.resolve_kick("GOOD", 0.0, true)
-	check(retake.attempts == 2 and retake.score == 75 and retake.streak == 1, "a make that is not the first ball scores, but earns no attempt")
+	check(retake.attempts == 2 and retake.score == 40 and retake.streak == 1, "a make that is not the first ball scores, but earns no attempt")
 	var hash_kick := KickLogic.new()
 	hash_kick.kick_distance = 44.0
 	hash_kick.start_lateral_yards = 3.0
@@ -851,8 +853,8 @@ func _check_run_late_earn_and_spot_in_the_kick() -> void:
 	wired.new_run()
 	var center := _kick_power_accuracy(80.0, 0.0)
 	wired.resolve_kick(center.result_text, center.offset_yards, center.perfect)
-	check(center.result_text == "GOOD" and center.perfect and wired.down_the_middle, "a real centered kick is a perfect make down the middle")
-	check(wired.score == 75 and wired.attempts == 2, "the run scores that kick and earns the attempt")
+	check(center.result_text == "GOOD" and center.perfect and is_equal_approx(wired.ring_factor, 1.0), "a real centered kick is perfect and is not an inner ring hit")
+	check(wired.score == 40 and wired.attempts == 2, "the run scores that kick and earns the attempt")
 
 
 func _fresh(kick_number: int, attempt_count: int) -> RunLogic:
@@ -870,7 +872,6 @@ func _fresh(kick_number: int, attempt_count: int) -> RunLogic:
 	run.longest_make = 0.0
 	run.attempt_note = ""
 	run.score_line = ""
-	run.down_the_middle = false
 	return run
 
 
@@ -1611,7 +1612,7 @@ func _check_ui_copy() -> void:
 		if body.find("uppercase") >= 0:
 			uppercase_flag = true
 	check(not uppercase_flag, "no default-font Label or theme forces uppercase")
-	var scored := RunLogic.format_score_line(35.0, 1.0, false, false, true)
+	var scored := RunLogic.format_score_line(35.0, 1.0, false, true)
 	check(scored.ends_with("(+5 Perfect)") and scored.find("(+5 PERFECT)") < 0, "the score line says Perfect, got %s" % scored)
 	for line in SelectCard.every_line():
 		check(BitmapFonts.ui_allows(line), "select copy stays in Pixel Gothic, got %s" % line)
@@ -1625,7 +1626,7 @@ func _check_ui_copy() -> void:
 	])
 	for sample in broadcast:
 		check(BitmapFonts.ui_allows(str(sample)), "broadcast copy stays in Pixel Gothic, got %s" % sample)
-	var stamps: PackedStringArray = PackedStringArray(["GOOD", "DOINK", "SHORT", "WIDE LEFT", "WIDE RIGHT", "BANK SHOT", "INSURED", "DOWN THE MIDDLE", "PERFECT", "SHANK", "BONUS RING", "PAUSE", "POWER 100", "ACCURACY PERFECT", "ACCURACY GOOD", "ACCURACY BAD"])
+	var stamps: PackedStringArray = PackedStringArray(["GOOD", "DOINK", "SHORT", "WIDE LEFT", "WIDE RIGHT", "BANK SHOT", "INSURED", "INNER RING", "PERFECT", "SHANK", "BONUS RING", "PAUSE", "POWER 100", "ACCURACY PERFECT", "ACCURACY GOOD", "ACCURACY BAD"])
 	for stamp in stamps:
 		var callout := stamp == "POWER 100" or stamp.begins_with("ACCURACY")
 		if callout:
@@ -1878,8 +1879,8 @@ func _check_curses_and_rarity() -> void:
 	records.middles = 9
 	var bull := RunLogic.new()
 	bull.new_run()
-	bull.resolve_kick("GOOD", 0.0, false)
-	check(records.has_trophy("bullseye_collector"), "the 10th down-the-middle make earns Bullseye Collector")
+	bull.resolve_kick("GOOD", 0.0, false, true)
+	check(records.has_trophy("bullseye_collector"), "the 10th inner ring hit earns Bullseye Collector")
 	records.file_path = "user://save.cfg"
 	records.load_file()
 
@@ -2212,8 +2213,8 @@ func _check_vitamin_shop() -> void:
 	var stacked := RunLogic.new()
 	stacked.new_run()
 	stacked.kick_number = 5
-	stacked.resolve_kick("GOOD", 0.0, true)
-	check(stacked.cash == 5 and stacked.cash_popup == "+$5", "a perfect middle boss make pays $5")
+	stacked.resolve_kick("GOOD", 0.0, true, true)
+	check(stacked.cash == 6 and stacked.cash_popup == "+$6", "a perfect ring-hit boss make pays $6")
 	var miss := RunLogic.new()
 	miss.new_run()
 	miss.attempts = 2
@@ -2344,7 +2345,7 @@ func _check_vitamin_shop() -> void:
 	pre.use_belt(0)
 	pre.resolve_kick("GOOD", 2.0, false)
 	check(pre.score_line.find("0.50 pre") >= 0, "Pre-Workout shows +0.5 in the score math, got '%s'" % pre.score_line)
-	check(pre.last_points == RunLogic.points_for(35.0, 1.5, false, false, false), "the +0.5 is added before the rest of the score")
+	check(pre.last_points == RunLogic.points_for(35.0, 1.5, false, false), "the +0.5 is added before the rest of the score")
 	var omega := KickLogic.new()
 	omega.stats.omega = true
 	omega.stats.good_band = 8.0
@@ -2364,7 +2365,7 @@ func _check_vitamin_shop() -> void:
 	paid.use_belt(0)
 	paid.resolve_kick("GOOD", 0.0, true)
 	check(paid.score_line.find("PERFECT") < 0, "Omega-3 does not add the +5 PERFECT score bonus, got '%s'" % paid.score_line)
-	check(paid.cash == 3, "the PERFECT press and the middle still pay cash under Omega-3, got %s" % paid.cash)
+	check(paid.cash == 2, "the PERFECT press still pays cash under Omega-3, got %s" % paid.cash)
 	var rain := RunLogic.new()
 	rain.new_run()
 	rain.force_weather(RunLogic.RAIN)
@@ -5193,19 +5194,20 @@ func _check_m2_kickers() -> void:
 	deal.kick_resolved = false
 	deal.attempts = 3
 	deal.streak = 0
-	deal.showtime_mult = 1.0
+	deal.ring_factor = 1.0
 	var yards := deal.distance_yards()
-	deal.resolve_kick("GOOD", 0.0, false)
-	check(deal.showtime_mult == 2.0 and deal.last_points == RunLogic.points_for(yards, 2.0, true, deal.is_boss(), false), "a down-the-middle make doubles Mult and that kick pays the doubled amount")
+	deal.resolve_kick("GOOD", 0.0, false, true)
+	check(is_equal_approx(deal.ring_factor, 2.0) and deal.last_points == RunLogic.points_for(yards, 2.0, deal.is_boss(), false), "a ring hit doubles Mult and that kick pays the doubled amount")
 	deal.kick_resolved = false
 	deal.phase = RunLogic.Phase.PLAYING
-	deal.resolve_kick("GOOD", 3.0, false)
-	check(deal.showtime_mult == 2.0, "a make that is not down the middle does not double Mult")
+	deal.resolve_kick("GOOD", 3.0, false, false)
+	check(is_equal_approx(deal.ring_factor, 2.0), "a make that misses the ring does not double Mult")
 	deal.kick_resolved = false
 	deal.phase = RunLogic.Phase.PLAYING
 	deal.attempts = 2
-	deal.resolve_kick("SHORT", 0.0, false)
-	check(deal.streak == 0 and deal.showtime_mult == 1.0, "a miss resets Showtime's stored Mult with the streak")
+	deal.ring_factor = 8.0
+	deal.resolve_kick("SHORT", 0.0, false, false)
+	check(deal.streak == 0 and is_equal_approx(deal.ring_factor, 4.0), "Cole's miss halves the ring Mult")
 	var willow := RunLogic.new()
 	willow.start_with_kicker(Kickers.WILLOW)
 	willow.kick_number = 5
@@ -5793,10 +5795,11 @@ func _check_result_stamps() -> void:
 	var saved := ResultStamp.words(false, "GOOD", false, true, true, true)
 	check(saved.size() == 1 and saved[0] == "INSURED", "an insured doink is only INSURED")
 	var both := ResultStamp.words(false, "GOOD", false, false, true, true)
-	check(both.size() == 2 and both[0] == "DOWN THE MIDDLE" and both[1] == "PERFECT", "a perfect middle make stacks PERFECT under DOWN THE MIDDLE")
-	check(ResultStamp.words(false, "GOOD", false, false, true, false)[0] == "PERFECT", "a perfect make that is not centered stamps PERFECT")
+	check(both.size() == 2 and both[0] == "INNER RING" and both[1] == "PERFECT", "a perfect ring hit stacks PERFECT under INNER RING")
+	check(ResultStamp.words(false, "GOOD", false, false, true, false)[0] == "PERFECT", "a perfect make that misses the ring stamps PERFECT")
 	check(ResultStamp.words(false, "GOOD", false, false, false, false)[0] == "GOOD", "any other make stamps GOOD")
-	for word in ["PERFECT", "DOWN THE MIDDLE", "BANK SHOT", "INSURED", "GOOD", "SHANK"]:
+	check(ResultStamp.primary_lines("INNER RING")[0] == "INNER" and ResultStamp.primary_lines("INNER RING")[1] == "RING", "INNER RING splits onto two lines")
+	for word in ["PERFECT", "INNER RING", "BANK SHOT", "INSURED", "GOOD", "SHANK"]:
 		check(word.find("!") < 0, "stamp words have no exclamation point")
 	check(ResultStamp.power_line(true, 0.0, 0.0) == "POWER 100" and ResultStamp.accuracy_line(true, false, 15.0, 1.5, 6.0) == "", "a shank line is only POWER 100")
 	check(ResultStamp.power_line(false, 50.0, 80.0) == "POWER 80", "Farm Strength shows the effective power")
@@ -6078,25 +6081,33 @@ func _check_new_styles() -> void:
 	bare.force_weather(RunLogic.BIG_GAME)
 	bare.prepare_kick_stats()
 	check(near(bare.stats.angle_scale, 0.90), "Big Game keeps True Lid")
+	var bare_gloves := RunLogic.new()
+	bare_gloves.start_with_kicker(Kickers.WALK_ON)
+	var owned_gloves := RunLogic.new()
+	owned_gloves.start_with_kicker(Kickers.WALK_ON)
+	owned_gloves.give(Loadout.GUIDE_GLOVES, 1)
 	var plain := _hook_of(1.0, 4.0)
 	var guided := _hook_of(1.0, 4.0)
-	guided.stats.guide_factor = 0.50
+	plain.stats = bare_gloves.stats
+	guided.stats = owned_gloves.stats
 	_press_error(guided, 4.0)
 	_press_error(plain, 4.0)
 	check(guided.result_text == "GOOD" and plain.result_text == "GOOD", "a GOOD lock still scores GOOD with Guide Gloves")
-	check(absf(guided.final_angle_degrees) < absf(plain.final_angle_degrees) - 0.1, "Guide Gloves I reduces a GOOD hook")
+	check(near(guided.final_angle_degrees, plain.final_angle_degrees), "Guide Gloves leave a GOOD hook unchanged")
 	var bad_plain := _hook_of(1.0, 10.0)
 	var bad_guide := _hook_of(1.0, 10.0)
-	bad_guide.stats.guide_factor = 0.50
+	bad_plain.stats = bare_gloves.stats
+	bad_guide.stats = owned_gloves.stats
 	_press_error(bad_plain, 10.0)
 	_press_error(bad_guide, 10.0)
-	check(near(bad_plain.final_angle_degrees, bad_guide.final_angle_degrees), "Guide Gloves leaves a BAD lock alone")
+	check(near(bad_plain.final_angle_degrees, bad_guide.final_angle_degrees), "Guide Gloves leave a BAD lock unchanged")
 	var perfect_plain := _hook_of(1.0, 0.4)
 	var perfect_guide := _hook_of(1.0, 0.4)
-	perfect_guide.stats.guide_factor = 0.50
+	perfect_plain.stats = bare_gloves.stats
+	perfect_guide.stats = owned_gloves.stats
 	_press_error(perfect_plain, 0.4)
 	_press_error(perfect_guide, 0.4)
-	check(perfect_plain.perfect and perfect_guide.perfect and near(perfect_plain.final_angle_degrees, perfect_guide.final_angle_degrees), "Guide Gloves leaves a PERFECT lock alone")
+	check(perfect_plain.perfect and perfect_guide.perfect and near(perfect_plain.final_angle_degrees, perfect_guide.final_angle_degrees), "Guide Gloves leave a PERFECT lock unchanged")
 	var patient := RunLogic.new()
 	patient.start_with_kicker(Kickers.WALK_ON)
 	patient.give(Loadout.PATIENT_GLOVES, 1)
@@ -6192,7 +6203,9 @@ func _check_six_icons() -> void:
 	check(Loadout.effect_line(Loadout.DRIVE_LID, 1) == "+4 yd", "Drive Lid card text is unchanged")
 	check(Loadout.effect_line(Loadout.TRUE_LID, 1) == "Hook ×0.90", "True Lid card text is unchanged")
 	check(Loadout.effect_line(Loadout.SHELTER_LID, 1) == "Headwind loss ×0.90", "Shelter Lid I reads x0.90")
-	check(Loadout.effect_line(Loadout.GUIDE_GLOVES, 1).begins_with("Good locks: hook"), "Guide Gloves says Good locks")
+	check(Loadout.effect_line(Loadout.GUIDE_GLOVES, 1) == "Inner ring +0.04 yd", "Guide Gloves I says Inner ring +0.04 yd")
+	check(Loadout.effect_line(Loadout.GUIDE_GLOVES, 3) == "Inner ring +0.12 yd", "Guide Gloves III says Inner ring +0.12 yd")
+	check(Loadout.effect_line(Loadout.GUIDE_GLOVES, 14) == "Inner ring +0.48 yd and +2 yd", "Guide Gloves XIV says Inner ring +0.48 yd and +2 yd")
 	check(Loadout.effect_line(Loadout.PATIENT_GLOVES, 1).begins_with("Both needles"), "Patient Gloves names both needles")
 	check(Loadout.effect_line(Loadout.HUSH_GLOVES, 1) == "First 1 mph of wind ignored", "Hush Gloves card text is unchanged")
 	check(Loadout.is_power_item(Loadout.DRIVE_LID) and not Loadout.is_power_item(Loadout.TRUE_LID), "Drive Lid stays a power item and True Lid does not")
@@ -7526,7 +7539,7 @@ func _check_bonus_ring() -> void:
 	hit.streak = 4
 	hit.score = 20
 	hit.cash = 7
-	hit.showtime_mult = 2.0
+	hit.ring_factor = 2.0
 	var placed: Dictionary = hit.ring_place(62.0, 0.0, hit.post_half_gap(), 12.0)
 	var center := float(placed["x"])
 	var wide := "WIDE LEFT" if center < 0.0 else "WIDE RIGHT"
@@ -7545,10 +7558,10 @@ func _check_bonus_ring() -> void:
 	hit.streak = 4
 	hit.score = 20
 	hit.cash = 7
-	hit.showtime_mult = 2.0
+	hit.ring_factor = 2.0
 	hit.resolve_kick("BONUS RING", center, true)
 	check(hit.attempts == 2, "a ring hit spends an attempt")
-	check(hit.streak == 0 and is_equal_approx(hit.showtime_mult, 1.0), "a ring hit resets the streak")
+	check(hit.streak == 0 and is_equal_approx(hit.ring_factor, 1.0), "a bonus ring collect resets the streak and the ring factor")
 	check(hit.cash == 7 and hit.score == 20, "a ring hit pays no make cash")
 	check(not hit.last_result_made and not bool(hit.clean_makes.get(7, false)), "a ring hit is not a clean make")
 	check(not hit.is_first_ball, "a ring hit spends the first ball")
@@ -8099,9 +8112,9 @@ func _check_pk2b() -> void:
 	death.kick_resolved = false
 	death.resolve_kick("GOOD", 2.0, false)
 	check(death.attempts == 1 and death.attempt_note == "", "a make does not raise Sudden Death")
-	check(death.score_line.find("× 5") >= 0 and death.last_points == RunLogic.points_for(death.distance_yards(), 5.0, false, false, false), "the score line and the points apply ×5 last, got %s" % death.score_line)
-	var hero_line := RunLogic.format_score_line(35.0, 1.0, true, false, false, 0.0, 1.0, 0.0, 0.0, 0.0, 5.0)
-	check(hero_line == "35 yd × (1.00 + 1.00 hero) × 5 × 2 = 700", "×5 sits after the Mult sum and before the middle double, got %s" % hero_line)
+	check(death.score_line.find("× 5") >= 0 and death.last_points == RunLogic.points_for(death.distance_yards(), 5.0, false, false), "the score line and the points apply ×5 last, got %s" % death.score_line)
+	var hero_line := RunLogic.format_score_line(35.0, 1.0, false, false, 0.0, 1.0, 0.0, 0.0, 0.0, 5.0)
+	check(hero_line == "35 yd × (1.00 + 1.00 hero) × 5 = 350", "×5 sits after the Mult sum, got %s" % hero_line)
 	var missed := RunLogic.new()
 	missed.start_with_kicker(Kickers.WALK_ON)
 	missed.give(Loadout.SUDDEN_DEATH)
@@ -8488,7 +8501,7 @@ func _check_fx1() -> void:
 	sudden.prepare_kick_stats()
 	check(near(sudden.current_mult(), 1.5) and near(sudden.kick_mult_preview(), 7.5), "Sudden Death turns 1.50 into 7.50")
 	_fx1_score(sudden, 2.0)
-	var old_line := RunLogic.format_score_line(35.0, 1.0, false, false, true)
+	var old_line := RunLogic.format_score_line(35.0, 1.0, false, true)
 	check(old_line == "35 yd × 1.00 = 35 (+5 Perfect)", "the score line text is unchanged")
 	check(RunLogic.SUDDEN_DEATH_MULT == 5.0, "Sudden Death is still ×5")
 
@@ -8663,9 +8676,8 @@ func _check_rs1() -> void:
 	var t12 := KickLogic.flight_time_seconds(35.0 + 12.0)
 	check(soars.flight_duration <= KickConstants.FLIGHT_SOAR_TIME_MULT * t12 + 0.001 and soars.flight_duration <= t12 + KickConstants.FLIGHT_SOAR_EXTRA_SEC_MAX + 0.001, "a soar is at most 1.35 times, and at most 1.2 seconds longer than, the top standard flight")
 	var reference := KickLogic.classify(soars.travel_yards, soars.kick_distance, soars.offset_yards)
-	var middle := absf(soars.offset_yards) <= KickConstants.MIDDLE_YARDS
-	var scored := RunLogic.points_for(soars.kick_distance, 1.0, middle, false, soars.perfect)
-	var visual := RunLogic.points_for(soars.shown_travel_yards, 1.0, middle, false, soars.perfect)
+	var scored := RunLogic.points_for(soars.kick_distance, 1.0, false, soars.perfect)
+	var visual := RunLogic.points_for(soars.shown_travel_yards, 1.0, false, soars.perfect)
 	check(soars.result_text == reference and scored != visual, "the soar keeps the real result and score, got %s offset %s" % [soars.result_text, soars.offset_yards])
 	var plate := BroadcastHud.kit_text(Kickers.VEX)
 	check(BitmapFonts.ui_allows(plate) and plate.find("!") < 0 and plate.find("&") < 0, "the Vex plate is Pixel Gothic")
@@ -9309,7 +9321,7 @@ func _check_pace2() -> void:
 	check(records.has_unlock(Kickers.WILLOW), "PACE2 kick 8 with 1 attempt left unlocks Willow")
 	records.unlocks[Kickers.WILLOW] = had_willow
 	check(RunLogic.cash_payout(true, false, false, false) == 1, "PACE2 a plain make pays $1")
-	check(RunLogic.cash_payout(true, true, true, true) == 5, "PACE2 perfect, middle, and boss pay $5")
+	check(RunLogic.cash_payout(true, true, true, true) == 6, "PACE2 perfect, ring hit, and boss pay $6")
 	check(RunLogic.cash_payout(false, true, true, true) == 0, "PACE2 a miss pays $0")
 	check(Vitamins.price(Vitamins.PROTEIN) == 5 and Vitamins.price(Vitamins.MAGNESIUM) == 5 and Vitamins.price(Vitamins.PREWORKOUT) == 5, "PACE2 the cheap vitamins are $5")
 	check(Vitamins.price(Vitamins.OMEGA) == 6 and Vitamins.price(Vitamins.ZINC) == 6 and Vitamins.price(Vitamins.PICKLE) == 6, "PACE2 the middle vitamins are $6")
@@ -9480,4 +9492,195 @@ func _check_pace3() -> void:
 	game._finish_resolved_kick()
 	check(game.run.forced_offer_live and game.run.offer.size() == 3 and game.run.kick_number == 6, "PACE3 the kick scene opens the forced panel")
 	game.free()
+
+
+func _check_ring1a() -> void:
+	var placed := RunLogic.new()
+	placed.new_run()
+	placed.inner_ring_sides[1] = 1
+	var right: Dictionary = placed.inner_ring_place(placed.post_half_gap())
+	check(near(float(right["x_rel"]), 2.08) and near(float(right["radius"]), 0.50) and int(right["side"]) == 1, "the default inner ring sits at +2.08 with radius 0.50")
+	placed.inner_ring_sides[1] = -1
+	var left: Dictionary = placed.inner_ring_place(placed.post_half_gap())
+	check(near(float(left["x_rel"]), -2.08) and int(left["side"]) == -1, "the default inner ring can sit at -2.08")
+	placed.force_weather(RunLogic.SQUEEZE)
+	var squeezed: Dictionary = placed.inner_ring_place(placed.post_half_gap())
+	check(near(absf(float(squeezed["x_rel"])), 1.585), "Squeeze puts the inner ring at ±1.585, got %s" % squeezed["x_rel"])
+	placed.weather = RunLogic.CLEAR
+	placed.tad_level = 4
+	var tad_place: Dictionary = placed.inner_ring_place(placed.post_half_gap())
+	check(near(absf(float(tad_place["x_rel"])), placed.post_width() * 0.5 - 1.0), "TAD 4 puts the inner ring at post_width/2 - 1")
+	placed.tad_level = 0
+	placed.kick_number = 7
+	var bonus_side := placed.ring_side()
+	check(placed.inner_ring_side() == -bonus_side, "a Bonus Ring kick puts the inner ring on the other upright")
+	var kept := placed.inner_ring_side()
+	placed.kick_resolved = true
+	placed.last_result_made = false
+	placed.phase = RunLogic.Phase.PLAYING
+	check(placed.begin_retry() and placed.inner_ring_side() == kept, "a retry keeps the inner ring side")
+	placed.kick_number = 1
+	placed.inner_ring_sides[1] = 1
+	var stored := placed.inner_ring_side()
+	placed.kick_resolved = true
+	placed.last_result_made = false
+	check(placed.begin_retry() and placed.inner_ring_side() == stored, "a retry keeps a normal kick's inner side")
+	var ball := KickLogic.new()
+	ball.inner_ring_armed = true
+	ball.inner_ring_x = 2.08
+	ball.inner_ring_radius = 0.50
+	ball.result_text = "GOOD"
+	ball.offset_yards = 2.08
+	ball.note_inner_ring(0.0)
+	check(ball.inner_ring_hit, "an offset on the ring center is a hit")
+	ball.offset_yards = 2.57
+	ball.note_inner_ring(0.0)
+	check(ball.inner_ring_hit, "center + 0.49 is still a hit")
+	ball.offset_yards = 1.59
+	ball.note_inner_ring(0.0)
+	check(ball.inner_ring_hit, "center - 0.49 is still a hit")
+	ball.offset_yards = 2.59
+	ball.note_inner_ring(0.0)
+	check(not ball.inner_ring_hit, "center + 0.51 is not a hit")
+	ball.offset_yards = 1.57
+	ball.note_inner_ring(0.0)
+	check(not ball.inner_ring_hit, "center - 0.51 is not a hit")
+	ball.offset_yards = 2.08
+	ball.bank_shot = true
+	ball.note_inner_ring(0.0)
+	check(not ball.inner_ring_hit, "a bank shot inside the ring is not a hit")
+	ball.bank_shot = false
+	ball.insured = true
+	ball.note_inner_ring(0.0)
+	check(not ball.inner_ring_hit, "an insured doink inside the ring is not a hit")
+	ball.insured = false
+	ball.offset_yards = 5.08
+	ball.note_inner_ring(3.0)
+	check(ball.inner_ring_hit, "a Moving Posts make through the ring at the crossing center is a hit")
+	var chain := RunLogic.new()
+	chain.new_run()
+	chain.attempts = 5
+	chain.attempt_cap = 5
+	for expected in [2.0, 4.0, 8.0, 8.0]:
+		chain.kick_resolved = false
+		chain.phase = RunLogic.Phase.PLAYING
+		chain.resolve_kick("GOOD", 2.08, false, true)
+		check(is_equal_approx(chain.ring_factor, expected), "ring hits climb to %s, got %s" % [expected, chain.ring_factor])
+	chain.kick_resolved = false
+	chain.phase = RunLogic.Phase.PLAYING
+	chain.resolve_kick("GOOD", 4.0, false, false)
+	check(is_equal_approx(chain.ring_factor, 8.0), "a make outside the ring keeps ×8")
+	chain.kick_resolved = false
+	chain.phase = RunLogic.Phase.PLAYING
+	chain.attempts = 2
+	chain.resolve_kick("SHORT", 0.0, false, false)
+	check(is_equal_approx(chain.ring_factor, 1.0), "a miss resets the ring factor")
+	var cole := RunLogic.new()
+	cole.start_with_kicker(Kickers.COLE)
+	cole.ring_factor = 8.0
+	cole.attempts = 2
+	cole.resolve_kick("SHORT", 0.0, false, false)
+	check(is_equal_approx(cole.ring_factor, 4.0), "Cole's miss halves ×8 to ×4")
+	cole.kick_resolved = false
+	cole.phase = RunLogic.Phase.PLAYING
+	cole.ring_factor = 1.0
+	cole.attempts = 2
+	cole.resolve_kick("WIDE LEFT", 4.0, false, false)
+	check(is_equal_approx(cole.ring_factor, 1.0), "Cole's miss from ×1 stays at ×1")
+	var practice := RunLogic.new()
+	practice.new_run()
+	practice.ring_factor = 4.0
+	practice.practicing = true
+	practice.resolve_kick("GOOD", 2.08, false, true)
+	check(is_equal_approx(practice.ring_factor, 4.0) and not practice.kick_resolved, "a Practice Swing through the ring does not change the factor")
+	var mulligan := RunLogic.new()
+	mulligan.new_run()
+	mulligan.mulligans_left = 1
+	mulligan.ring_factor = 2.0
+	mulligan.begin_mulligan("WIDE LEFT", 4.0, false, false)
+	check(mulligan.use_mulligan(), "the mulligan retake starts")
+	mulligan.kick_resolved = false
+	mulligan.phase = RunLogic.Phase.PLAYING
+	mulligan.resolve_kick("GOOD", 2.08, false, true)
+	check(is_equal_approx(mulligan.ring_factor, 4.0) and mulligan.middles_this_run == 1, "a mulligan retake that hits counts once")
+	var worst := RunLogic.new()
+	worst.new_run()
+	worst.kick_number = 10
+	worst.streak = 9
+	worst.perks = [
+		{"id": Loadout.HOT_STREAK, "rank": 3},
+		{"id": Loadout.STORM_CHASER, "rank": 3},
+		{"id": Loadout.HERO_BALL, "rank": 3},
+		{"id": Loadout.TWO_MINUTE, "rank": 3},
+	]
+	worst.curse_ids = [Loadout.SHANKY, Loadout.TIGHT, Loadout.SUDDEN_DEATH]
+	worst.active_vitamins[Vitamins.PREWORKOUT] = 1
+	worst.prepare_kick_stats()
+	worst.set_wind(18.0, 90.0)
+	worst.ring_factor = 1.0
+	check(near(worst.kick_mult_preview(), 134.0), "the worst stack is Mult 134 at ×1, got %s" % worst.kick_mult_preview())
+	worst.ring_factor = 8.0
+	check(near(worst.kick_mult_preview(), 484.0), "the worst stack is Mult 484 at ×8, got %s" % worst.kick_mult_preview())
+	worst.kick_resolved = false
+	worst.phase = RunLogic.Phase.PLAYING
+	worst.attempts = 2
+	worst.resolve_kick("GOOD", 4.0, true, false)
+	check(worst.last_points == 58085, "×8 on that stack scores 58,085, got %d" % worst.last_points)
+	check(RunLogic.points_for(40.0, 2.0, false, false) == 80, "a plain ×2 hit on 40 yd scores 80")
+	var plain_line := RunLogic.format_score_line(40.0, 2.0, false, false, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 2.0)
+	check(plain_line == "40 yd × 1.00 × 2 ring = 80", "the plain ring line reads '%s'" % plain_line)
+	var sample := RunLogic.format_score_line(63.0, 7.0, true, false, 0.5, 0.0, 0.0, 0.0, 0.0, 1.0, 4.0)
+	check(sample == "63 yd × (1.75 × 4 ring + 0.50 wind) × 1.5 = 708.75", "the ring score line reads '%s'" % sample)
+	var once := RunLogic.new()
+	once.new_run()
+	once.resolve_kick("GOOD", 2.08, false, true)
+	check(once.score == 70 and once.score_line.find("× 2 ring") >= 0 and once.score_line.find("× 2 ring × 2") < 0, "a ring hit does not apply a second ×2, got %s" % once.score_line)
+	var constants := FileAccess.get_file_as_string("res://scripts/KickConstants.gd")
+	check(constants.find("MIDDLE_YARDS") < 0 and constants.find("MIDDLE_MULTIPLIER") < 0, "MIDDLE_YARDS and MIDDLE_MULTIPLIER are gone")
+	check(RunLogic.cash_payout(true, false, true, false) == 3, "a ring hit with no perfect or boss pays $3")
+	check(RunLogic.cash_payout(true, true, true, true) == 6, "perfect, ring hit, and boss pay $6")
+	var chip := RunLogic.new()
+	chip.new_run()
+	chip.ring_factor = 4.0
+	check(near(chip.kick_mult_preview(), 4.0), "the MULT chip preview includes the ring factor")
+	check(BitmapFonts.ui_allows("RING X2") and BitmapFonts.ui_allows("RING X4") and BitmapFonts.ui_allows("RING X8"), "RING X4 passes Pixel Gothic")
+	var gloves := RunLogic.new()
+	gloves.start_with_kicker(Kickers.WALK_ON)
+	gloves.give(Loadout.GUIDE_GLOVES, 1)
+	var rank_one: Dictionary = gloves.inner_ring_place(gloves.post_half_gap())
+	check(near(float(rank_one["radius"]), 0.54), "Guide Gloves I makes the radius 0.54, got %s" % rank_one["radius"])
+	gloves.run_mode = "endless"
+	gloves.gloves_rank = 12
+	gloves.rebuild_stats()
+	var rank_twelve: Dictionary = gloves.inner_ring_place(gloves.post_half_gap())
+	check(near(float(rank_twelve["radius"]), 0.98), "Guide Gloves XII makes the radius 0.98, got %s" % rank_twelve["radius"])
+	gloves.gloves2_id = Loadout.GUIDE_GLOVES
+	gloves.gloves2_rank = 12
+	gloves.rebuild_stats()
+	var paired: Dictionary = gloves.inner_ring_place(gloves.post_half_gap())
+	check(near(float(paired["radius"]), 0.98), "two Guide Gloves pairs stay capped at 0.98")
+	var phil := RunLogic.new()
+	phil.start_with_kicker(Kickers.PHIL)
+	phil.run_mode = "endless"
+	phil.gloves_id = Loadout.GUIDE_GLOVES
+	phil.gloves_rank = 12
+	phil.rebuild_stats()
+	var phil_place: Dictionary = phil.inner_ring_place(phil.post_half_gap())
+	check(near(float(phil_place["radius"]), 0.98), "Phil's scaled Guide Gloves stay capped at 0.98, got %s" % phil_place["radius"])
+	var saved := RunLogic.new()
+	saved.new_run()
+	saved.ring_factor = 4.0
+	saved.inner_ring_sides[3] = -1
+	var loaded := RunLogic.new()
+	loaded.import_resume(saved.export_resume())
+	check(is_equal_approx(loaded.ring_factor, 4.0) and int(loaded.inner_ring_sides.get(3, 0)) == -1, "ring_factor and inner_ring_sides round-trip")
+	var legacy: Dictionary = saved.export_resume()
+	legacy.erase("ring_factor")
+	legacy["showtime_mult"] = 4.0
+	var old := RunLogic.new()
+	old.import_resume(legacy)
+	check(is_equal_approx(old.ring_factor, 4.0), "an old showtime_mult of 4 loads as ring_factor 4")
+	var records_script = load("res://scripts/SaveData.gd")
+	check(records_script.trophy_condition("bullseye_collector") == "10 lifetime inner ring hits", "Bullseye Collector names inner ring hits")
+	check(str(Kickers.get_def(Kickers.COLE)["ball_description"]) == "A miss halves the stored ring Mult instead of clearing it.", "Cole's ball text is the ring miss")
 

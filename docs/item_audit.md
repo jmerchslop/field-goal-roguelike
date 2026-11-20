@@ -1,6 +1,7 @@
 # Item, kit, range, and cash audit
 
 Generated: 2026-11-14
+RING1A: DOWN THE MIDDLE is gone. Every kick has a cyan inner ring, radius 0.50, centered 1 yard inside one upright. A make through it doubles the stored ring factor before that kick scores, up to ×8. A miss resets it. Cole's Showtime halves it instead. A hit pays +$2. Guide Gloves widen the ring and no longer change the hook.
 PACE3: After a make on Standard kick 6, or Endless kick 11, one unskippable curse offer appears, then the normal offer. Sudden Death and All Natural stay out of that panel. It cannot be rerolled. Tart Cherry can still remove the pick.
 PACE2: The needle sweep is 0.60 s. Slows floor at 0.40. Stone, lights, TAD 7, Training Camp, and rain share a ×1.60 ceiling. A run starts with 2 attempts and a make does not add one. TAD 8 starts at 1 attempt. A make pays $1, vitamins are $5/$6/$7, and B12 is $6. Phil's shop stays free. After two offers with no range card, Standard forces one while calm range is under the kick 10 distance. Willow unlocks on kick 8 or later with 1 attempt left.
 PACE1: Standard is 10 kicks, 35 to 80. Bosses are kicks 5 and 10. Shops follow makes on 5 and 9. Refills and Second Look are kicks 1 and 6 in Standard, and every 10 kicks in Endless. The Bonus Ring is kick 7 in Standard and 17, 47, 77, 97 in Endless. Card text says each half.
@@ -249,9 +250,9 @@ Rank XII and XIII–XXIV: +11 rerolls and five practice swings a quarter.
 - **id:** `guide_gloves`
 - **slot:** gloves
 - **rank cap:** Standard VI, Endless XXIV
-- **soft cap:** from XIII. The hook factor stays 0.28.
-- **card text:** `"GOOD locks: hook ×{0.50 − 0.02 × (effect_rank − 1)}"`. Rank I is ×0.50. Rank VI is ×0.40. Rank XII–XXIV is ×0.28.
-- **actual effect:** `guide_factor` is that exact hundredth. A good-band miss uses it to shrink the hook. No other glove writes it.
+- **soft cap:** from XIII. The ring bonus stays +0.48 yd. Late range keeps growing.
+- **card text:** `"Inner ring +{0.04 × effect_rank} yd"`. Rank I is +0.04 yd. Rank III is +0.12 yd. Rank XII is +0.48 yd. Rank XIV is +0.48 yd and +2 yd.
+- **actual effect:** `guide_ring_yards` adds to `ring_radius_bonus`, times item scale. The radius caps at 0.98. The hook is unchanged.
 - **match:** yes, ranks I–XXIV
 
 ### Patient Gloves
@@ -526,7 +527,7 @@ Cole's ball multiplier is 1.00 in `Kickers.apply_to`. It is not 0.90. Carlos is 
 - **Kit text:** `"Brand Deal. Loadout offers stay. The Vitamin Shop does not."`
 - **actual effect:** `follow_offer` skips the shop. The loadout offer still runs. Full power is `16 + 0.59 × 100` = 75 yards. `ball_speed_mult` is 1.00.
 - **match:** yes
-- **Ball:** `"Showtime"`. A down-the-middle make doubles the Mult used for that score and doubles the stored Showtime factor afterward. A miss sets the stored factor back to 1.
+- **Ball:** `"Showtime"`. A miss halves the stored ring Mult instead of clearing it. The doubling itself is the inner ring, and every kicker has it.
 - **match:** yes
 
 ### Willow Reed
@@ -584,7 +585,7 @@ Vex, no items, 100% power: 500 yards at any kick distance. A 35-yard make is dra
 
 Cash starts at 0. It is not written into the save.
 
-`cash_payout` pays 0 on a miss, including a Bonus Ring collect. A make pays 3, plus 1 if perfect, plus 1 if down the middle, plus 2 if it was a boss. Those stack. Omega-3 can suppress the +5 perfect score bonus and still leave the perfect dollar. Gary's Good As Gold makes a good-band lock count as perfect for that dollar.
+`cash_payout` pays 0 on a miss, including a Bonus Ring collect. A make pays $1, plus 1 if perfect, plus 2 if it went through the inner ring, plus 2 if it was a boss. Those stack. Omega-3 can suppress the +5 perfect score bonus and still leave the perfect dollar. Gary's Good As Gold makes a good-band lock count as perfect for that dollar.
 
 Standard shops open after a make on kick 5, 10, or 15. Endless shops open after a make on every kick number divisible by 5 (5, 10, 15, 20, 25, and so on). Cole's Brand Deal skips the shop. The loadout offer still happens.
 

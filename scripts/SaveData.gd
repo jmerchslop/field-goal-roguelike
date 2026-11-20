@@ -345,7 +345,7 @@ static func trophy_condition(id: String) -> String:
 		"season_complete":
 			return "Make kick 10"
 		"bullseye_collector":
-			return "10 lifetime down-the-middle makes"
+			return "10 lifetime inner ring hits"
 	return ""
 
 

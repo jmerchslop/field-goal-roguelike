@@ -97,11 +97,13 @@ const ATTEMPT_CAP_MAX := 5
 const HASH_OFFSET_YARDS := 3.0
 const WIDE_OFFSET_YARDS := 6.0
 
-# Score: distance × (1 + 0.25 × streak before this kick).
-# Then ×2 inside 1 yard of the middle, ×1.5 on a boss kick, +5 if perfect.
+# Score: distance × ((1 + 0.25 × streak) × ring factor + flat bonuses).
+# Then ×1.5 on a boss kick, +5 if perfect. The inner ring caps at ×8.
 const STREAK_MULT_STEP := 0.25
-const MIDDLE_YARDS := 1.0
-const MIDDLE_MULTIPLIER := 2.0
+const INNER_RING_RADIUS := 0.50
+const INNER_RING_INSET := 1.0
+const INNER_RING_MAX_RADIUS := 0.98
+const RING_FACTOR_CAP := 8.0
 const BOSS_MULTIPLIER := 1.5
 const PERFECT_BONUS := 5
 

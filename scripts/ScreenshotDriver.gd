@@ -162,6 +162,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "ring1a":
+		if not await _capture_ring1a():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "rs1":
 		if not await _capture_rs1():
 			get_tree().quit(1)
@@ -5782,6 +5788,7 @@ func _stamp(result: String, shanked: bool, insured: bool, middle: bool, error: f
 	board.logic.accuracy_error = error
 	board.logic.power = power
 	board.logic.offset_yards = 0.0 if middle else offset
+	board.logic.inner_ring_hit = middle
 	board.logic.stats = board.run.stats
 	board.result_age = 0.4
 	board.run.awaiting_offer = false
@@ -5950,6 +5957,99 @@ func _capture_pace2() -> bool:
 	var saved := await _capture("pace2_willow_locked_card.png")
 	_restore_pace2_save(had_file, path, backup, had_willow)
 	return saved
+
+
+func _capture_ring1a() -> bool:
+	board.highlight = 1
+	board.selecting = true
+	board.front.run_mode = "standard"
+	board.confirm_kicker()
+	board.run.kick_number = 1
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.kick_resolved = false
+	board.run.inner_ring_sides[1] = -1
+	board.run.set_wind(0.0, 0.0)
+	board.run.weather = RunLogic.CLEAR
+	board.run._place_spot()
+	board.load_current_kick()
+	board.refresh_view()
+	if not await _capture("ring1a_aim_left.png"):
+		return false
+	board.run.inner_ring_sides[1] = 1
+	board.refresh_view()
+	if not await _capture("ring1a_aim_right.png"):
+		return false
+	board.logic.phase = KickLogic.Phase.RESULT
+	board.logic.result_text = "GOOD"
+	board.logic.inner_ring_hit = true
+	board.logic.perfect = false
+	board.logic.shanked = false
+	board.logic.bank_shot = false
+	board.logic.insured = false
+	board.result_age = 0.4
+	board.refresh_view()
+	if not await _capture("ring1a_hit_stamp.png"):
+		return false
+	board.logic.phase = KickLogic.Phase.AIMING
+	board.logic.inner_ring_hit = false
+	board.run.ring_factor = 4.0
+	board.refresh_view()
+	if not await _capture("ring1a_chip_x4.png"):
+		return false
+	board.run.start_with_kicker(Kickers.COLE)
+	board.run.run_mode = "standard"
+	board.run.ring_factor = 8.0
+	board.run.kick_resolved = false
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.attempts = 2
+	board.run.resolve_kick("SHORT", 4.0, false, false)
+	print("RING1A Cole miss factor ", board.run.ring_factor)
+	board.run.kick_resolved = false
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.logic.phase = KickLogic.Phase.AIMING
+	board.refresh_view()
+	if not await _capture("ring1a_cole_miss_half.png"):
+		return false
+	board.highlight = 1
+	board.selecting = true
+	board.front.run_mode = "standard"
+	board.confirm_kicker()
+	board.run.kick_number = 7
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.kick_resolved = false
+	board.run.ring_factor = 1.0
+	board.run.set_wind(0.0, 0.0)
+	board.run.weather = RunLogic.CLEAR
+	board.run._place_spot()
+	board.load_current_kick()
+	board.refresh_view()
+	if not await _capture("ring1a_with_bonus_ring.png"):
+		return false
+	board.run.kick_number = 1
+	board.run.force_weather(RunLogic.SQUEEZE)
+	board.load_current_kick()
+	board.refresh_view()
+	if not await _capture("ring1a_squeeze.png"):
+		return false
+	board.run.weather = RunLogic.CLEAR
+	board.run.run_mode = "endless"
+	board.run.gloves_id = Loadout.GUIDE_GLOVES
+	board.run.gloves_rank = 12
+	board.run.rebuild_stats()
+	board.load_current_kick()
+	board.refresh_view()
+	print("RING1A guide radius ", board.logic.inner_ring_radius)
+	if not await _capture("ring1a_guide_xii.png"):
+		return false
+	board.run.gloves_id = ""
+	board.run.gloves_rank = 0
+	board.run.rebuild_stats()
+	board.run.force_weather(RunLogic.MOVING)
+	board._twist_armed = true
+	board._twist_time = 1.0
+	board.load_current_kick()
+	board.refresh_view()
+	return await _capture("ring1a_moving_posts.png")
 
 
 func _capture_pace3() -> bool:

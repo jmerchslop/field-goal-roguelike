@@ -77,6 +77,8 @@ var _stands: Node3D
 var _floods: Node3D
 var _ring: Sprite3D
 var _ring_pop := -1.0
+var _inner_ring: Sprite3D
+var _inner_pop := -1.0
 var glare_time := 0.0
 var _beams: Node3D
 var _beam_mat: ShaderMaterial
@@ -338,11 +340,11 @@ func settle_kick() -> void:
 		load_current_kick()
 		return
 	if run.can_mulligan(logic.result_text):
-		run.begin_mulligan(logic.result_text, logic.offset_yards, logic.perfect)
+		run.begin_mulligan(logic.result_text, logic.offset_yards, logic.perfect, logic.inner_ring_hit)
 		return
 	if logic.insured:
 		run.consume_insurance()
-	run.resolve_kick(logic.result_text, logic.offset_yards, logic.perfect)
+	run.resolve_kick(logic.result_text, logic.offset_yards, logic.perfect, logic.inner_ring_hit)
 	_cash_time = 0.0
 	_finish_resolved_kick()
 
@@ -2675,6 +2677,22 @@ func _build_ring() -> void:
 	paint.albedo_texture = tex
 	_ring.material_override = paint
 	_world.add_child(_ring)
+	_inner_ring = Sprite3D.new()
+	_inner_ring.name = "InnerRing"
+	_inner_ring.texture = tex
+	_inner_ring.billboard = BaseMaterial3D.BILLBOARD_FIXED_Y
+	_inner_ring.transparent = true
+	_inner_ring.alpha_cut = SpriteBase3D.ALPHA_CUT_DISABLED
+	_inner_ring.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	_inner_ring.pixel_size = RING_PIXEL
+	_inner_ring.centered = true
+	_inner_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_inner_ring.visible = false
+	_inner_ring.modulate = Color(0.35, 0.90, 1.00)
+	var cyan := paint.duplicate() as StandardMaterial3D
+	cyan.vertex_color_use_as_albedo = true
+	_inner_ring.material_override = cyan
+	_world.add_child(_inner_ring)
 
 
 func _place_ring() -> void:
@@ -2703,6 +2721,42 @@ func _place_ring() -> void:
 	if logic.result_text == "BONUS RING" and arrived and _ring_pop < 0.0:
 		_ring_pop = 0.0
 	_ring.visible = true
+
+
+func _inner_ring_phase() -> bool:
+	if run.practicing:
+		return false
+	var phase := logic.phase
+	return phase == KickLogic.Phase.AIMING or phase == KickLogic.Phase.POWER or phase == KickLogic.Phase.ACCURACY or phase == KickLogic.Phase.FLIGHT or phase == KickLogic.Phase.RESULT
+
+
+func _place_inner_ring() -> void:
+	if _inner_ring == null:
+		return
+	if not _inner_ring_phase():
+		_inner_ring.visible = false
+		logic.inner_ring_armed = false
+		return
+	var slide := RunLogic.post_slide(_twist_time) if _posts_sliding() else 0.0
+	var place: Dictionary = run.inner_ring_place(run.post_half_gap())
+	var radius := float(place["radius"])
+	var x_rel := float(place["x_rel"])
+	logic.inner_ring_armed = true
+	logic.inner_ring_x = x_rel
+	logic.inner_ring_radius = radius
+	_inner_ring.pixel_size = RING_PIXEL * (2.0 * radius / 3.0)
+	_inner_ring.position = Vector3(slide + x_rel, RING_CENTER_Y, 0.0)
+	if logic.phase == KickLogic.Phase.AIMING:
+		_inner_pop = -1.0
+		_inner_ring.scale = Vector3.ONE
+		_inner_ring.modulate = Color(0.35, 0.90, 1.00)
+	var arrived := logic.reached_uprights and logic.ball_forward_yards + 0.05 >= logic.kick_distance
+	if logic.inner_ring_hit and arrived and _inner_pop < 0.0 and logic.phase == KickLogic.Phase.RESULT:
+		_inner_pop = 0.0
+	if _inner_pop >= RING_POP_SEC:
+		_inner_ring.visible = false
+		return
+	_inner_ring.visible = true
 
 
 func lights_roof_y() -> float:
@@ -3128,15 +3182,25 @@ func _pool_mesh(half_x: float, half_z: float) -> ArrayMesh:
 
 
 func _tick_ring(delta: float) -> void:
-	if _ring == null or _ring_pop < 0.0 or _ring_pop >= RING_POP_SEC:
+	_tick_one_ring(_ring, delta, false)
+	_tick_one_ring(_inner_ring, delta, true)
+
+
+func _tick_one_ring(sprite: Sprite3D, delta: float, inner: bool) -> void:
+	var age := _inner_pop if inner else _ring_pop
+	if sprite == null or age < 0.0 or age >= RING_POP_SEC:
 		return
-	_ring_pop += delta
-	var t := clampf(_ring_pop / RING_POP_SEC, 0.0, 1.0)
+	age += delta
+	if inner:
+		_inner_pop = age
+	else:
+		_ring_pop = age
+	var t := clampf(age / RING_POP_SEC, 0.0, 1.0)
 	var grown := lerpf(1.0, 1.2, t)
-	_ring.scale = Vector3(grown, grown, 1.0)
-	_ring.modulate.a = 1.0 - t
+	sprite.scale = Vector3(grown, grown, 1.0)
+	sprite.modulate.a = 1.0 - t
 	if t >= 1.0:
-		_ring.visible = false
+		sprite.visible = false
 
 
 func _build_ribbons() -> void:
@@ -3368,6 +3432,7 @@ func _place_world() -> void:
 	_apply_post_slide()
 	_place_ribbons()
 	_place_ring()
+	_place_inner_ring()
 	_place_kicker(tee)
 	_place_arrow(tee)
 	_sample_trail()

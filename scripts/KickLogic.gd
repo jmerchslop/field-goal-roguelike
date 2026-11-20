@@ -96,6 +96,11 @@ var shown_travel_yards := 0.0
 var shanked := false
 var ring_active := false
 var ring_center := 0.0
+var inner_ring_x := 0.0
+var inner_ring_radius := KickConstants.INNER_RING_RADIUS
+var inner_ring_armed := false
+var inner_ring_hit := false
+var inner_post_center := 0.0
 
 # Where the ball is right now. Height is 0 on the ground and 1 at mid-flight.
 var ball_forward_yards := 0.0
@@ -231,6 +236,8 @@ func reset_kick() -> void:
 	result_text = ""
 	ring_active = false
 	ring_center = 0.0
+	inner_ring_hit = false
+	inner_ring_armed = false
 	perfect = false
 	bank_shot = false
 	insured = false
@@ -465,10 +472,7 @@ func _good_edge_hook(error_value: float) -> float:
 		error = 0.0
 	if absf(error) <= stats.perfect_band:
 		return 0.0
-	var flight := error
-	if absf(error) <= stats.good_band:
-		flight *= stats.guide_factor
-	return -flight * KickConstants.ACCURACY_DEG_PER_ERROR * angle_scale
+	return -error * KickConstants.ACCURACY_DEG_PER_ERROR * angle_scale
 
 
 static func preview_forward(distance_yards: float) -> float:
@@ -560,6 +564,16 @@ func _apply_arrival(judged: Dictionary, _center: float, _half: float) -> void:
 	if ring_active and not shanked and reached_uprights and (result_text == "WIDE LEFT" or result_text == "WIDE RIGHT"):
 		if absf(offset_yards - ring_center) <= 1.5:
 			result_text = "BONUS RING"
+	note_inner_ring(_center)
+
+
+func note_inner_ring(post_center: float) -> void:
+	inner_post_center = post_center
+	if not inner_ring_armed:
+		inner_ring_hit = false
+		return
+	var rel := offset_yards - post_center
+	inner_ring_hit = result_text == "GOOD" and not bank_shot and not insured and absf(rel - inner_ring_x) <= inner_ring_radius
 
 
 static func judge(max_range_yards: float, distance_yards: float, offset: float, _ball_type: String, half_gap: float = -1.0) -> Dictionary:
@@ -921,8 +935,6 @@ func _lock_accuracy(value: float) -> void:
 	var flight_error := accuracy_error
 	if perfect:
 		_note_meter_popup("PERFECT")
-	if not perfect and absf(accuracy_error) <= good_width:
-		flight_error *= stats.guide_factor
 	var hook := 0.0 if perfect else -flight_error * per_unit
 	final_angle_degrees = aim_degrees + hook
 	var ranged := power_for_range(minf(power, KickConstants.METER_MAX), stats.power_floor)
