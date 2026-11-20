@@ -222,6 +222,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "ui4b":
+		if not await _capture_ui4b():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "ui4":
 		if not await _capture_ui4():
 			get_tree().quit(1)
@@ -6322,6 +6328,7 @@ func _ui4_boot() -> void:
 
 
 func _ui4_show(cards: Array, mode: String) -> void:
+	board.run.special_kicks[board.run.kick_number] = ""
 	board.run.offer = cards
 	board.run.awaiting_offer = true
 	board.run.awaiting_rung = false
@@ -6329,6 +6336,92 @@ func _ui4_show(cards: Array, mode: String) -> void:
 	board.run.bomb_offer_live = mode == "bomb"
 	board.run.ring_offer_live = mode == "ring"
 	board.clear_offer_hover()
+
+
+func _ui4b_hide_art(hide: bool) -> void:
+	var folder := ProjectSettings.globalize_path("res://art/ui/offer")
+	var names: Array[String] = ["offer_card_equipment.png", "offer_card_perk.png", "offer_card_curse.png", "offer_card_bonus.png", "offer_card_hover.png", "offer_panel.png"]
+	for file_name in names:
+		var live := folder.path_join(file_name)
+		var parked := live + ".hidden"
+		if hide:
+			DirAccess.rename_absolute(live, parked)
+		else:
+			DirAccess.rename_absolute(parked, live)
+	if board._hud != null:
+		board._hud.clear_offer_art()
+
+
+func _capture_ui4b() -> bool:
+	_ui4_boot()
+	var cleats := _ui4_card(Loadout.PINPOINT, Loadout.CLEATS)
+	var helmet := _ui4_card(Loadout.WIND_VISOR, Loadout.HELMET)
+	var gloves := _ui4_card(Loadout.IRON_GRIP, Loadout.GLOVES)
+	var perk := _ui4_card(Loadout.HERO_BALL, Loadout.PERK)
+	var curse := _ui4_card(Loadout.ICED, Loadout.CURSE)
+	var lucky := _ui4_card(Loadout.PINPOINT, Loadout.CLEATS, true)
+	_ui4_show([cleats, helmet, gloves], "")
+	if not await _capture("ui4b_offer_3_equipment.png"):
+		return false
+	_ui4_show([perk, curse, cleats], "")
+	if not await _capture("ui4b_offer_mixed_perk_curse.png"):
+		return false
+	_ui4_show([cleats, helmet, gloves], "")
+	board.set_offer_hover(1, true)
+	if not await _capture("ui4b_offer_hover.png"):
+		return false
+	_ui4_show([lucky, perk, curse], "")
+	if not await _capture("ui4b_offer_lucky.png"):
+		return false
+	_ui4_show([cleats], "")
+	if not await _capture("ui4b_offer_1_card.png"):
+		return false
+	_ui4_show([cleats, perk], "")
+	if not await _capture("ui4b_offer_2_cards.png"):
+		return false
+	_ui4_show([curse, _ui4_card(Loadout.SHANKY, Loadout.CURSE), _ui4_card(Loadout.HEAVY, Loadout.CURSE)], "forced")
+	if not await _capture("ui4b_forced_curse.png"):
+		return false
+	_ui4_show([cleats, helmet, gloves], "ring")
+	if not await _capture("ui4b_bonus_ring.png"):
+		return false
+	_ui4_show([cleats, helmet, gloves], "bomb")
+	if not await _capture("ui4b_bomb_bonus.png"):
+		return false
+	_ui4_boot()
+	var split := false
+	for kick_number in range(1, 16):
+		board.run.kick_number = kick_number
+		board.load_current_kick()
+		if not board.run.rung_blocked("long", board.logic) and board.run.rung_blocked("bomb", board.logic):
+			split = true
+			break
+	print("UI4B rung kick ", board.run.kick_number, " split ", split)
+	board.run.special_kicks[board.run.kick_number] = SpecialKicks.LONG_OR_SAFE
+	board.run.awaiting_offer = false
+	board.run.awaiting_rung = true
+	board.run.rung_highlight = 0
+	board.clear_offer_hover()
+	if not await _capture("ui4b_long_or_safe.png"):
+		return false
+	_ui4_boot()
+	board.run.give(Loadout.GEAR_MANAGER)
+	_ui4_show([cleats, helmet, gloves], "")
+	if not await _capture("ui4b_gear_manager.png"):
+		return false
+	_ui4_show([cleats, helmet, gloves], "")
+	_ui4b_hide_art(true)
+	if not await _capture("ui4b_fallback_no_art.png"):
+		_ui4b_hide_art(false)
+		return false
+	_ui4b_hide_art(false)
+	_ui4_show([cleats, helmet, gloves], "")
+	DisplayServer.window_set_size(Vector2i(1920, 1080))
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var wide: bool = await _capture("ui4b_window_1920x1080.png")
+	DisplayServer.window_set_size(Vector2i(1280, 720))
+	return wide
 
 
 func _capture_ui4() -> bool:

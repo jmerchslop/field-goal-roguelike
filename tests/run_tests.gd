@@ -4640,7 +4640,7 @@ func _check_pk1() -> void:
 	look.second_look_bank = 1
 	check(look.free_reroll_ready(), "the offer shows a banked free reroll")
 	var hud_source := FileAccess.get_file_as_string("res://scripts/hud.gd")
-	check(hud_source.find("_center_default(\"Free rerolls %d") >= 0 and hud_source.find("free_reroll_ready") >= 0, "the offer uses a default-font Free rerolls count")
+	check(hud_source.find("_center_offer(\"Free rerolls %d") >= 0 and hud_source.find("free_reroll_ready") >= 0, "the offer uses a default-font Free rerolls count")
 	look.streak = 7
 	var saved := look.export_resume()
 	var resumed := RunLogic.new()
@@ -11495,7 +11495,7 @@ func _check_ui4() -> void:
 	var panel4: Rect2 = script.pick_panel_rect(4, 0.0)
 	var shifted: Rect2 = script.pick_panel_rect(4, 180.0)
 	check(is_equal_approx(panel3.position.y, 172.0) and is_equal_approx(panel4.position.y, 172.0), "3 and 4 card panels start at y 172 when the score bug is clear, 3 %s, 4 %s" % [panel3, panel4])
-	check(is_equal_approx(shifted.position.y, 186.0), "a 4 card panel that meets the score bug starts at y 186, got %s" % shifted)
+	check(is_equal_approx(shifted.position.y, 186.0) and is_equal_approx(shifted.end.y, 600.0), "a 4 card panel that meets the score bug runs y 186 to 600, got %s" % shifted)
 	var hud = script.new()
 	var longest_title := ""
 	var longest_width := 0.0
@@ -11513,7 +11513,7 @@ func _check_ui4() -> void:
 	for id in ids:
 		var rank := Loadout.max_rank(str(id))
 		var title := Loadout.card_title(str(id), rank)
-		var width := font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, 18).x
+		var width := font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x
 		if width > longest_width:
 			longest_width = width
 			longest_title = title
@@ -11526,31 +11526,56 @@ func _check_ui4() -> void:
 				titles_fit = false
 		var run := RunLogic.new()
 		var effect := run.lived_effect_line(str(id), rank)
-		var effect_width := font.get_string_size(effect, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x
+		var effect_width := font.get_string_size(effect, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
 		if effect_width > longest_effect_width:
 			longest_effect_width = effect_width
 			longest_effect = effect
 		var wrapped: Dictionary = hud.offer_effect_lines(effect)
-		if float(wrapped["height"]) > 116.0:
+		if int(wrapped["size"]) != 12 or (wrapped["lines"] as PackedStringArray).size() > 5 or float(wrapped["height"]) > 90.0:
 			effects_fit = false
 	check(titles_fit, "the longest card title fits the name banner: %s" % longest_title)
 	check(effects_fit, "the longest effect fits the text well: %s" % longest_effect)
 	var offer_dir := "res://art/ui/offer"
-	check(not ResourceLoader.exists(offer_dir + "/offer_card_equipment.png"), "the offer art is not in the repo yet")
-	check(hud.offer_texture("offer_card_equipment.png") == null and hud.offer_texture("offer_panel.png") == null, "a missing offer file draws the code look")
-	var image := Image.create(464, 648, false, Image.FORMAT_RGBA8)
-	image.fill(Color(0.2, 0.45, 0.7, 1))
-	var folder := ProjectSettings.globalize_path(offer_dir)
-	DirAccess.make_dir_recursive_absolute(folder)
-	var saved := image.save_png(folder.path_join("offer_card_equipment.png"))
-	check(saved == OK, "the placeholder offer card was written")
+	var sums := {
+		"offer_card_equipment.png": "bb45b6bb5365e370f0d93d4d58d21e42",
+		"offer_card_perk.png": "b6dca23a700b1c4c37f8cffdb1dec881",
+		"offer_card_curse.png": "8b28164c92feeedf154e146cdc3ab335",
+		"offer_card_bonus.png": "97f3590f810b584df0ee63d96242503f",
+		"offer_card_hover.png": "fdb0b26bef2b21b1cc2667aa0f2e2c0f",
+		"offer_panel.png": "a15a2bc54f55469fbf9f12521270f924",
+	}
+	var art_ok := true
+	for file_name in sums.keys():
+		var path := offer_dir.path_join(str(file_name))
+		if not FileAccess.file_exists(path) or FileAccess.get_md5(path) != str(sums[file_name]):
+			art_ok = false
+		hud.clear_offer_art()
+		var art: Texture2D = hud.offer_texture(str(file_name))
+		if art == null:
+			art_ok = false
+		elif str(file_name) == "offer_panel.png":
+			if art.get_width() != 96 or art.get_height() != 96:
+				art_ok = false
+		elif art.get_width() != 464 or art.get_height() != 648:
+			art_ok = false
+	check(art_ok, "the six offer files are present and match the pack")
 	hud.clear_offer_art()
-	var texture: Texture2D = hud.offer_texture("offer_card_equipment.png")
+	var shown: Texture2D = hud.offer_texture("offer_card_equipment.png")
 	var drawn: Rect2 = script.pick_row_rects(1)[0]
-	check(texture != null and texture.get_width() == 464 and texture.get_height() == 648 and drawn.size == Vector2(232, 324), "a 464 by 648 offer card is drawn at 232 by 324")
-	DirAccess.remove_absolute(folder.path_join("offer_card_equipment.png"))
+	check(shown != null and shown.get_width() == 464 and shown.get_height() == 648 and drawn.size == Vector2(232, 324), "a 464 by 648 offer card is drawn at 232 by 324")
+	var folder := ProjectSettings.globalize_path(offer_dir)
+	var hidden := folder.path_join("offer_card_perk.png")
+	var parked := hidden + ".hidden"
+	DirAccess.rename_absolute(hidden, parked)
 	hud.clear_offer_art()
-	check(hud.offer_texture("offer_card_equipment.png") == null, "deleting the placeholder returns to the code look")
+	check(hud.offer_texture("offer_card_perk.png") == null, "a hidden offer file falls back to the code look")
+	DirAccess.rename_absolute(parked, hidden)
+	hud.clear_offer_art()
+	check(hud.offer_texture("offer_card_perk.png") != null, "restoring the offer file loads it again")
+	var rung_body := FileAccess.get_file_as_string("res://scripts/hud.gd")
+	var rung_start := rung_body.find("func _draw_rung_choice")
+	var rung_stop := rung_body.find("func _draw_offer")
+	check(rung_body.substr(rung_start, rung_stop - rung_start).find("_draw_offer_footer") < 0, "LONG OR SAFE draws no reroll footer")
 	hud.free()
 
 
@@ -11611,6 +11636,11 @@ func _check_ui4_live() -> void:
 	motion.position = hud.card_rects[2].position + Vector2(30, 30)
 	game._unhandled_input(motion)
 	check(game.run.rung_highlight == 1 and game.offer_hover != 2, "hover skips a blocked rung")
+	var held_rung := int(game.run.rung_highlight)
+	game._unhandled_input(_key_event(KEY_R))
+	check(game.run.awaiting_rung and game.run.rung_highlight == held_rung, "R does nothing on LONG OR SAFE")
+	game._unhandled_input(_key_event(KEY_S))
+	check(not game.run.awaiting_rung and str(game.run.rungs.get(game.run.kick_number, "")) == "safe", "S on LONG OR SAFE picks SAFE")
 	game._taking_pictures = true
 	game.run.special_kicks[game.run.kick_number] = ""
 	game.run.awaiting_rung = false

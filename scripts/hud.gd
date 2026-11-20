@@ -1502,6 +1502,7 @@ static func pick_panel_rect(count: int, score_bottom: float = 0.0) -> Rect2:
 	var panel := Rect2(left - 24.0, 172.0, right - left + 48.0, 428.0)
 	if count >= 4 and panel.position.y <= score_bottom:
 		panel.position.y = 186.0
+		panel.size.y = 600.0 - panel.position.y
 	return panel
 
 
@@ -1524,6 +1525,9 @@ func offer_texture(file_name: String) -> Texture2D:
 		return _offer_tex[file_name]
 	var path := "res://art/ui/offer/%s" % file_name
 	var texture: Texture2D = null
+	if not FileAccess.file_exists(path):
+		_offer_tex[file_name] = null
+		return null
 	if ResourceLoader.exists(path) and FileAccess.file_exists(path + ".import"):
 		texture = load(path) as Texture2D
 	elif FileAccess.file_exists(path):
@@ -1538,7 +1542,7 @@ func offer_name_lines(title: String) -> Dictionary:
 	var font := ThemeDB.fallback_font
 	if font == null:
 		return {"size": 12, "lines": PackedStringArray([title])}
-	var size := 18
+	var size := 15
 	while size > 12:
 		if font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x <= 200.0:
 			return {"size": size, "lines": PackedStringArray([title])}
@@ -1549,12 +1553,13 @@ func offer_name_lines(title: String) -> Dictionary:
 
 
 func offer_effect_lines(text: String) -> Dictionary:
-	var size := 15
-	var lines := _wrap_lines(text, 200.0, size)
+	var size := 12
+	var lines := _wrap_lines(text, 184.0, size)
 	if lines.size() > 5:
-		size = 13
-		lines = _wrap_lines(text, 200.0, 13)
-	return {"size": size, "lines": lines, "height": float(lines.size()) * (float(size) + 4.0)}
+		size = 11
+		lines = _wrap_lines(text, 184.0, 11)
+		print("UI4B effect dropped to 11 px: ", text)
+	return {"size": size, "lines": lines, "height": float(lines.size()) * 18.0}
 
 
 func _offer_panel_style() -> StyleBoxTexture:
@@ -1569,6 +1574,8 @@ func _offer_panel_style() -> StyleBoxTexture:
 	style.texture_margin_right = 24
 	style.texture_margin_top = 24
 	style.texture_margin_bottom = 24
+	style.axis_stretch_horizontal = StyleBoxTexture.AXIS_STRETCH_MODE_STRETCH
+	style.axis_stretch_vertical = StyleBoxTexture.AXIS_STRETCH_MODE_STRETCH
 	_offer_panel_box = style
 	return style
 
@@ -1611,35 +1618,41 @@ func _offer_kind(run: RunLogic, slot: String) -> String:
 	return "equipment"
 
 
-func _offer_slot_color(slot: String) -> Color:
-	if slot == Loadout.PERK:
-		return Color(0.55, 0.42, 0.95)
+func _offer_border(kind: String, slot: String) -> Color:
+	if kind == "bonus":
+		return Color("f4ce6e")
 	return _slot_color(slot)
 
 
-func _offer_border(kind: String, slot: String) -> Color:
-	if kind == "bonus":
-		return OFFER_GOLD
-	return _offer_slot_color(slot)
+func _offer_baseline(center_y: float, size: int) -> float:
+	var font := ThemeDB.fallback_font
+	if font == null:
+		return center_y
+	return center_y + (font.get_ascent(size) - font.get_descent(size)) * 0.5
 
 
-func _center_default(text: String, baseline: float, size: int, color: Color) -> void:
+func _offer_text(at: Vector2, text: String, size: int, color: Color) -> void:
+	_text(at + Vector2(1, 1), text, size, Color("08080a"))
+	_text(at, text, size, color)
+
+
+func _center_offer(text: String, center_y: float, size: int, color: Color) -> void:
 	var font := ThemeDB.fallback_font
 	if font == null:
 		return
 	var width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
-	_text(Vector2(640.0 - width * 0.5, baseline), text, size, color)
+	_offer_text(Vector2(640.0 - width * 0.5, _offer_baseline(center_y, size)), text, size, color)
 
 
 func _draw_offer_footer(run: RunLogic) -> void:
 	if run.forced_offer_live:
-		_center_default("Pick one. This one can't be skipped.", 552.0, 18, KickConstants.COLOR_TEXT)
+		_center_offer("Pick one. This one can't be skipped.", 556.0, 18, Color("e6e2da"))
 		return
 	if run.free_reroll_ready():
-		_center_default("Free rerolls %d. %s rerolls. %s skips." % [run.second_look_bank, Settings.key_sentence("offer_reroll"), Settings.key_sentence("skip")], 552.0, 18, KickConstants.COLOR_TEXT)
+		_center_offer("Free rerolls %d. %s rerolls. %s skips." % [run.second_look_bank, Settings.key_sentence("offer_reroll"), Settings.key_sentence("skip")], 556.0, 14, Color("e6e2da"))
 	else:
-		_center_default("Rerolls left: %d. %s rerolls. %s skips." % [run.rerolls_left, Settings.key_sentence("offer_reroll"), Settings.key_sentence("skip")], 552.0, 18, KickConstants.COLOR_TEXT)
-	_center_default("Skip takes nothing.", 576.0, 16, KickConstants.COLOR_TEXT)
+		_center_offer("Rerolls left: %d. %s rerolls. %s skips." % [run.rerolls_left, Settings.key_sentence("offer_reroll"), Settings.key_sentence("skip")], 556.0, 14, Color("e6e2da"))
+	_center_offer("Skip takes nothing.", 578.0, 12, Color("aaa6a0"))
 
 
 func _draw_offer_name(banner: Rect2, title: String, color: Color) -> void:
@@ -1654,24 +1667,37 @@ func _draw_offer_name(banner: Rect2, title: String, color: Color) -> void:
 	var y := banner.position.y + maxf(0.0, (banner.size.y - block) * 0.5) + float(size)
 	for line in lines:
 		var width := font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
-		_text(Vector2(banner.position.x + (banner.size.x - width) * 0.5, y), line, size, color)
+		_offer_text(Vector2(banner.position.x + (banner.size.x - width) * 0.5, y), line, size, color)
 		y += step
 
 
-func _draw_rung_yards(window: Rect2, yards: int, fade: float) -> void:
+func _draw_offer_body(text: String, origin: Vector2, fade: float) -> void:
+	var laid: Dictionary = offer_effect_lines(text)
+	var size := int(laid["size"])
+	var font := ThemeDB.fallback_font
+	if font == null:
+		return
+	var color := Color("dedad2")
+	color.a = fade
+	var y := origin.y + font.get_ascent(size)
+	for line in laid["lines"]:
+		_offer_text(Vector2(origin.x, y), str(line), size, color)
+		y += 18.0
+
+
+func _draw_rung_yards(card: Rect2, yards: int, fade: float) -> void:
 	var text := str(yards)
-	var size := 72
+	var size := 40
 	while size > 16 and BitmapFonts.measure_px("callout", text, size) > 88:
-		size -= 2
+		size -= 1
 	var num_w := BitmapFonts.measure_px("callout", text, size)
-	var yd_w := BitmapFonts.measure_px("ui", "YD", 14)
-	var block := float(size) + 18.0
-	var top := window.position.y + maxf(0.0, (window.size.y - block) * 0.5)
-	var gold := OFFER_GOLD
-	gold.a = fade
-	BitmapFonts.paint_px(self, "callout", text, Vector2(window.position.x + (window.size.x - float(num_w)) * 0.5, top), size, gold)
-	var cream := Color(0.93, 0.91, 0.84, fade)
-	_pg("YD", Vector2(window.position.x + (window.size.x - float(yd_w)) * 0.5, top + float(size) + 2.0), 14, cream)
+	var yd_w := BitmapFonts.measure_px("ui", "YD", 13)
+	var cream := Color("f0ece4")
+	cream.a = fade
+	var yd := Color("bebab4")
+	yd.a = fade
+	BitmapFonts.paint_px(self, "callout", text, card.position + Vector2(116.0 - float(num_w) * 0.5, 84.0 - float(size) * 0.5), size, cream)
+	_pg("YD", card.position + Vector2(116.0 - float(yd_w) * 0.5, 116.0 - 6.5), 13, yd)
 
 
 func _draw_pick_shell(rect: Rect2, kind: String, slot: String, fade: float, lifted: bool) -> void:
@@ -1712,7 +1738,7 @@ func _draw_rung_choice(run: RunLogic) -> void:
 		elif game.offer_hover != lift_index:
 			game.set_offer_hover(lift_index)
 	_draw_pick_panel(run, names.size())
-	_pg_centered("LONG OR SAFE", 182.0, 22, KickConstants.COLOR_ATTEMPT)
+	_pg_centered("LONG OR SAFE", 182.0, 22, Color("f4ce6e"))
 	var bases := pick_row_rects(names.size())
 	for i in names.size():
 		var lift := 0.0
@@ -1725,18 +1751,16 @@ func _draw_rung_choice(run: RunLogic) -> void:
 		var fade := 0.45 if blocked else 1.0
 		_draw_pick_shell(rect, "bonus", "bonus", fade, absf(lift) > 0.5 and not blocked)
 		var ribbon := str(i + 1) + " " + name.to_upper()
-		var ink := Color(0.45, 0.47, 0.50, fade) if blocked else Color(OFFER_GOLD.r, OFFER_GOLD.g, OFFER_GOLD.b, fade)
-		_pg(ribbon, rect.position + Vector2(12, 14), 14, ink)
-		_draw_rung_yards(Rect2(rect.position + Vector2(68, 42), Vector2(96, 96)), int(round(run.rung_yards(name))), fade)
-		var title_color := Color(0.45, 0.47, 0.50, fade) if blocked else Color(KickConstants.COLOR_ATTEMPT.r, KickConstants.COLOR_ATTEMPT.g, KickConstants.COLOR_ATTEMPT.b, fade)
+		var ink := Color(0.45, 0.47, 0.50, fade) if blocked else Color("f4ce6e", fade)
+		_pg(ribbon, rect.position + Vector2(18, 15), 14, ink)
+		_draw_rung_yards(rect, int(round(run.rung_yards(name))), fade)
+		var title_color := Color(0.45, 0.47, 0.50, fade) if blocked else Color("f2eee6", fade)
 		_draw_offer_name(Rect2(rect.position + Vector2(10, 148), Vector2(212, 36)), run.rung_card_title(name), title_color)
-		var well := Rect2(rect.position + Vector2(16, 194), Vector2(200, 116))
 		if blocked:
 			var out_w := BitmapFonts.measure_px("ui", "OUT OF RANGE", 14)
-			_pg("OUT OF RANGE", Vector2(well.position.x + (well.size.x - float(out_w)) * 0.5, well.position.y + 28.0), 14, Color(0.45, 0.47, 0.50, fade))
+			_pg("OUT OF RANGE", rect.position + Vector2(116.0 - float(out_w) * 0.5, 206.0), 14, Color(0.45, 0.47, 0.50, fade))
 		else:
-			_draw_wrapped(run.rung_card_line(name), Rect2(well.position + Vector2(0, 16), well.size), 15)
-	_draw_offer_footer(run)
+			_draw_offer_body(run.rung_card_line(name), rect.position + Vector2(24, 206), fade)
 
 
 func _draw_offer(run: RunLogic) -> void:
@@ -1749,7 +1773,8 @@ func _draw_offer(run: RunLogic) -> void:
 		_draw_offer_footer(run)
 		return
 	_draw_pick_panel(run, count)
-	_pg_centered(_offer_title(run), 182.0, 22, KickConstants.COLOR_ATTEMPT)
+	_pg_centered(_offer_title(run), 182.0, 22, Color("f4ce6e"))
+	_draw_offer_footer(run)
 	var bases := pick_row_rects(count)
 	for i in count:
 		var lift := 0.0
@@ -1762,18 +1787,28 @@ func _draw_offer(run: RunLogic) -> void:
 		var rank := int(card.get("rank", 1))
 		var slot := str(card.get("slot", ""))
 		var kind := _offer_kind(run, slot)
+		var framed := offer_texture("offer_card_%s.png" % kind) != null
 		_draw_pick_shell(rect, kind, slot, 1.0, absf(lift) > 0.5)
-		var label := Loadout.type_label(slot).to_upper()
-		var slot_ink := _offer_slot_color(slot)
-		_pg("%d %s" % [i + 1, label], rect.position + Vector2(12, 14), 14, slot_ink)
+		var slot_ink := _slot_color(slot)
+		_pg("%d %s" % [i + 1, Loadout.type_label(slot).to_upper()], rect.position + Vector2(18, 15), 14, slot_ink)
 		if bool(card.get("lucky", false)):
-			var lucky_w := BitmapFonts.measure_px("ui", "LUCKY", 14)
-			_pg("LUCKY", rect.position + Vector2(220.0 - float(lucky_w), 14), 14, OFFER_GOLD)
-		_draw_slot_icon(id, rank, slot, Rect2(rect.position + Vector2(68, 42), Vector2(96, 96)), true)
-		_draw_offer_name(Rect2(rect.position + Vector2(10, 148), Vector2(212, 36)), Loadout.card_title(id, rank), KickConstants.COLOR_ATTEMPT)
-		var effect: Dictionary = offer_effect_lines(run.lived_effect_line(id, rank))
-		_draw_wrapped(run.lived_effect_line(id, rank), Rect2(rect.position + Vector2(16, 194 + 16), Vector2(200, 116)), int(effect["size"]))
-	_draw_offer_footer(run)
+			var lucky_w := BitmapFonts.measure_px("ui", "LUCKY", 13)
+			_pg("LUCKY", rect.position + Vector2(214.0 - float(lucky_w), 15.5), 13, Color("f4ce6e"))
+		var window := Rect2(rect.position + Vector2(68, 42), Vector2(96, 96))
+		if framed:
+			var icon := _icon(Loadout.sprite_path(id))
+			var saved := texture_filter
+			texture_filter = TEXTURE_FILTER_NEAREST
+			if icon != null:
+				_draw_fit(icon, Rect2(rect.position + Vector2(72, 46), Vector2(88, 88)))
+			texture_filter = saved
+			if kind == "equipment":
+				draw_rect(window, slot_ink, false, 1.0)
+			_draw_offer_chip(window, id, rank, slot_ink)
+		else:
+			_draw_slot_icon(id, rank, slot, window, true)
+		_draw_offer_name(Rect2(rect.position + Vector2(10, 148), Vector2(212, 36)), Loadout.card_title(id, rank), Color("f2eee6"))
+		_draw_offer_body(run.lived_effect_line(id, rank), rect.position + Vector2(24, 206), 1.0)
 
 
 func _wrap_lines(text: String, width: float, size: int) -> PackedStringArray:
@@ -2068,6 +2103,29 @@ func _draw_loadout_rail(run: RunLogic) -> void:
 		var benched := bool(entry.get("second", false)) and not run.gm_live() and run.gm_second_slots.has(str(entry["slot"]))
 		var emphasized := slot_is_emphasized(i, hover_slot, pinned_slot) and not benched
 		_draw_slot_icon(str(entry["id"]), int(entry["rank"]), str(entry["slot"]), rect, true, emphasized, benched)
+
+
+func _draw_offer_chip(window: Rect2, id: String, rank: int, outline: Color) -> void:
+	var badge := Loadout.rank_badge(id, rank)
+	if badge == "":
+		return
+	var mode := "standard"
+	if game != null and game.run != null:
+		mode = game.run.run_mode
+	var is_max := rank == Loadout.max_rank(id, mode)
+	var font := 10
+	var text_w := BitmapFonts.measure_px("ui", badge, font)
+	var chip := Vector2(16, 16)
+	if badge.length() > 1:
+		chip.x = maxf(16.0, float(text_w + 6))
+	var at := window.end - Vector2(2, 2) - chip
+	var plate := Rect2(at, chip)
+	draw_rect(plate, Color("1e1e22"))
+	draw_rect(plate, outline, false, 1.0)
+	var numeral := Color("f0ece4")
+	if is_max:
+		numeral = rank_numeral_color(true, false)
+	BitmapFonts.paint_px(self, "ui", badge, Vector2(plate.position.x + (plate.size.x - float(text_w)) * 0.5, plate.position.y + (plate.size.y - float(font)) * 0.5), font, numeral)
 
 
 func _draw_slot_icon(id: String, rank: int, slot: String, rect: Rect2, show_badge: bool, emphasized: bool = false, dim: bool = false, fade_scale: float = 1.0) -> void:
