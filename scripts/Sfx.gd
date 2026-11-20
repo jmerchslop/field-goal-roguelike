@@ -46,6 +46,7 @@ var _streams: Dictionary = {}
 var _players: Dictionary = {}
 var _air: AudioStreamPlayer
 var _crowd_logged := {}
+var last_length := 0.0
 
 
 func _ready() -> void:
@@ -226,6 +227,7 @@ func play_pool(pool: String) -> String:
 		player.pitch_scale = 1.0
 		player.play()
 		play_calls += 1
+		last_length = float(stream.get_length())
 	played.append({"pool": pool, "file": path.get_file()})
 	return path.get_file()
 
@@ -250,6 +252,7 @@ static func crowd_pick(result: String, shanked: bool, bank: bool, practice: bool
 
 
 func play_crowd_reaction(result: String, shanked: bool, bank: bool, practice: bool) -> String:
+	last_length = 0.0
 	var pick := crowd_pick(result, shanked, bank, practice)
 	if pick == "":
 		return ""

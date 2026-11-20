@@ -4332,6 +4332,8 @@ func _ball_cam_live() -> bool:
 
 func _on_kick_launched() -> void:
 	Beds.begin_flight_duck()
+	if _ball_cam_live():
+		Beds.begin_cam_music_duck()
 	if not _ball_cam_live():
 		return
 	cam_started = true
@@ -4350,7 +4352,9 @@ func _on_kick_result() -> void:
 	var files_ready := not Sfx.files_of("cheer").is_empty()
 	if not run.practicing:
 		Beds.begin_result_duck(make and not logic.shanked, files_ready)
+		var cam_live := cam_started and not cam_skipped and Settings.ball_cam
 		Sfx.play_crowd_reaction(logic.result_text, logic.shanked, logic.bank_shot, false)
+		Beds.note_crowd_reaction(cam_live, Sfx.last_length)
 	else:
 		Beds.begin_result_duck(false, true)
 
@@ -4370,6 +4374,7 @@ func _skip_ball_cam() -> void:
 	cam_w = 0.0
 	cam_delay = 0.0
 	_cam_hold_on = false
+	Beds.release_music_duck()
 	refresh_view()
 
 

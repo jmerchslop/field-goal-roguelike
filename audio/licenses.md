@@ -11,3 +11,12 @@ The five files in `res://audio/sfx/` are Creative Commons 0 (CC0 1.0, public dom
 | crowdooh1.ogg | 264499 | Crowd Ooohs and Ahhhs in Excitement | noah0189 | https://freesound.org/people/noah0189/sounds/264499/ | CC0 1.0 | 6.044–7.504 (event 3: isolated rising “ooh”). Mono source, dual-mono stereo. | 5 ms fade-in, 0.20 s fade-out. No extra pitch glide (source already rises). 1.50 s including a 40 ms zero pad. |
 
 A light 40 Hz high-pass was applied to all five.
+
+## Field music
+
+Both loops were made by Foley for this project. They are 48 kHz stereo Ogg Vorbis and are cut to loop seamlessly from the end back to the start. They play on the Music bus.
+
+| File | Tempo | Loudness | Length | Role |
+|---|---|---|---|---|
+| gameplay_kick_a.ogg | 108 BPM | about −18 LUFS | 35.6 s | Regular kicks. Mixed 2 dB quieter so the sound effects sit on top. |
+| boss_a.ogg | 168 BPM | about −16 LUFS | 34.3 s | Boss kicks. |

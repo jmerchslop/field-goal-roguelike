@@ -75,6 +75,7 @@ func _run() -> void:
 	_check_en1()
 	_check_f3()
 	_check_au1()
+	_check_music1()
 	_check_drive_lid_and_power_safety()
 	_check_m2_kickers()
 	_check_honest_cards_and_bench()
@@ -142,6 +143,12 @@ func _release_sfx() -> void:
 		if beds.crowd_player != null:
 			beds.crowd_player.stop()
 			beds.crowd_player.stream = null
+		for field in [beds.field_a, beds.field_b]:
+			if field != null:
+				field.stop()
+				field.stream = null
+		beds._play_stream = null
+		beds._boss_stream = null
 
 
 func check(ok: bool, label: String) -> void:
@@ -3646,6 +3653,55 @@ func _check_au1() -> void:
 	check(beds._logged.size() == before + 1, "a missing bed is logged once")
 	var sfx = get_root().get_node("Sfx")
 	check(sfx.player_bus("menu") == "SFX", "menu clicks stay on the SFX bus")
+
+
+func _check_music1() -> void:
+	check(ResourceLoader.exists("res://audio/music/gameplay_kick_a.ogg"), "gameplay_kick_a is in the music folder")
+	check(ResourceLoader.exists("res://audio/music/boss_a.ogg"), "boss_a is in the music folder")
+	var beds = get_root().get_node("Beds")
+	beds.boot()
+	check(beds.play_ready and beds.boss_ready, "both field loops loaded")
+	check(beds.field_a.bus == "Music" and beds.field_b.bus == "Music", "field music uses the Music bus")
+	check(beds._play_stream.loop and beds._boss_stream.loop, "both field loops are set to loop")
+	beds.set_field_level(1.0)
+	beds.select_kick(false)
+	check(beds.field_track().ends_with("gameplay_kick_a.ogg") and beds.field_starts() == 1, "a regular kick selects gameplay_kick_a")
+	print("MUSIC1 regular kick %s" % beds.field_track().get_file())
+	beds.tick_field(1.0)
+	check(near(beds.field_gain_at(0), 1.0, 0.02), "the regular loop fades in over 1 second")
+	beds.select_kick(false)
+	check(beds.field_starts() == 1, "the same kick type does not restart the track")
+	print("MUSIC1 same type kept gameplay_kick_a, starts %d" % beds.field_starts())
+	beds.select_kick(true)
+	check(beds.field_track().ends_with("boss_a.ogg") and beds.field_starts() == 2, "a boss kick selects boss_a")
+	print("MUSIC1 boss kick %s" % beds.field_track().get_file())
+	beds.tick_field(0.5)
+	check(near(beds.field_gain_at(0), 0.5, 0.05) and near(beds.field_gain_at(1), 0.5, 0.05), "the switch is halfway through a 1 second crossfade")
+	print("MUSIC1 crossfade 1.00 s, halfway gains %.2f %.2f" % [beds.field_gain_at(0), beds.field_gain_at(1)])
+	beds.tick_field(0.5)
+	check(near(beds.field_gain_at(0), 0.0, 0.05) and near(beds.field_gain_at(1), 1.0, 0.05), "the crossfade finishes with boss_a up and the kick loop down")
+	beds.reset_duck()
+	beds.begin_cam_music_duck()
+	beds.tick_field(0.30)
+	check(near(beds.music_duck_db(), -6.0, 0.25), "the cam ducks the music about 6 dB, got %s" % beds.music_duck_db())
+	print("MUSIC1 cam duck %.2f dB" % beds.music_duck_db())
+	beds.note_crowd_reaction(true, 0.40)
+	check(near(beds.music_duck_db(), -6.0, 0.25), "a reaction while the cam is up stays ducked")
+	beds.tick_field(0.40)
+	check(near(beds._music_duck_sec, 0.80, 0.01), "the music recovers over 0.80 s after the reaction")
+	beds.tick_field(0.80)
+	check(near(beds.music_duck_db(), 0.0, 0.25), "the music is back after the recovery, got %s" % beds.music_duck_db())
+	print("MUSIC1 recover %.2f dB" % beds.music_duck_db())
+	beds.reset_duck()
+	beds.note_crowd_reaction(false, 0.50)
+	beds.tick_field(0.30)
+	check(near(beds.music_duck_db(), -6.0, 0.25), "with the cam off the reaction still ducks about 6 dB")
+	print("MUSIC1 reaction duck %.2f dB" % beds.music_duck_db())
+	beds.reset_duck()
+	var before := int(beds._logged.size())
+	beds.note_missing("res://audio/music/missing_loop.ogg", "kick loop")
+	beds.note_missing("res://audio/music/missing_loop.ogg", "kick loop")
+	check(beds._logged.size() == before + 1, "a missing music file is logged once")
 
 
 func _check_f3() -> void:
