@@ -209,8 +209,10 @@ func _draw_help_book() -> void:
 	_pg_center(HowToPlay.title(page_id), 104, 20, Color(0.95, 0.78, 0.28))
 	if page_id == "wind":
 		_draw_help_wind()
-	else:
+	elif page_id == "kick":
 		_draw_help_kick()
+	else:
+		_draw_help_entries(page_id)
 	_pg_center("PAGE %d OF %d" % [page + 1, HowToPlay.page_count()], 570, 14, Color(0.82, 0.84, 0.8))
 	var last := page >= HowToPlay.page_count() - 1
 	_menu_button(rects["prev"], "PREV", false, page == 0)
@@ -236,7 +238,7 @@ func _draw_help_kick() -> void:
 		_text(Vector2(meter.position.x + (meter.size.x - width) * 0.5, meter.position.y + meter.size.y + 28.0), caption, 15, Color(0.82, 0.84, 0.8))
 
 
-func _draw_demo_meter(rect: Rect2, needle_angle: float) -> void:
+func _draw_demo_meter(rect: Rect2, needle_angle: float, show_labels: bool = true) -> void:
 	var scale := rect.size.x / MeterGauge.FRAME_W
 	var hub := rect.position + Vector2(MeterGauge.HUB_X, MeterGauge.HUB_Y) * scale
 	var inner := MeterGauge.GROOVE_INNER * scale
@@ -265,9 +267,10 @@ func _draw_demo_meter(rect: Rect2, needle_angle: float) -> void:
 		draw_texture(needle_tex, -MeterGauge.NEEDLE_PIVOT, Color.WHITE)
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	texture_filter = saved_filter
-	var cream := Color(0.93, 0.91, 0.84)
-	_help_arc_label(hub, outer, 180.0, "POWER", cream)
-	_help_arc_label(hub, outer, 0.0, "ACCURACY", cream)
+	if show_labels:
+		var cream := Color(0.93, 0.91, 0.84)
+		_help_arc_label(hub, outer, 180.0, "POWER", cream)
+		_help_arc_label(hub, outer, 0.0, "ACCURACY", cream)
 
 
 func _help_fill(text: String) -> String:
@@ -286,6 +289,19 @@ func _help_arc_label(hub: Vector2, radius: float, degrees: float, text: String, 
 	_pg(text, Vector2(at.x - float(width) * 0.5, at.y + plate_drop + 18.0), 14, color)
 
 
+func _draw_help_post(center: Vector2, scale: float, color: Color) -> void:
+	var half_w := 60.0 * scale
+	var rise := 140.0 * scale
+	var drop := 62.0 * scale
+	var thick := maxf(2.0, 6.0 * scale)
+	var left := Vector2(center.x - half_w, center.y)
+	var right := Vector2(center.x + half_w, center.y)
+	draw_line(left, right, color, thick)
+	draw_line(left, Vector2(left.x, center.y - rise), color, thick)
+	draw_line(right, Vector2(right.x, center.y - rise), color, thick)
+	draw_line(center, Vector2(center.x, center.y + drop), color, thick)
+
+
 func _draw_help_wind() -> void:
 	var cream := Color(0.93, 0.91, 0.84)
 	var grey := Color(0.82, 0.84, 0.8)
@@ -294,10 +310,7 @@ func _draw_help_wind() -> void:
 	var centers: Array[float] = [244.0, 508.0, 772.0, 1036.0]
 	for i in centers.size():
 		var cx: float = centers[i]
-		draw_line(Vector2(cx - 60.0, 330.0), Vector2(cx + 60.0, 330.0), yellow, 6.0)
-		draw_line(Vector2(cx - 60.0, 330.0), Vector2(cx - 60.0, 190.0), yellow, 6.0)
-		draw_line(Vector2(cx + 60.0, 330.0), Vector2(cx + 60.0, 190.0), yellow, 6.0)
-		draw_line(Vector2(cx, 330.0), Vector2(cx, 392.0), yellow, 6.0)
+		_draw_help_post(Vector2(cx, 330.0), 1.0, yellow)
 		var mph := int(HowToPlay.WIND_MPH[i])
 		var band := KickLogic.ribbon_band(mph)
 		for side in [-60.0, 60.0]:
@@ -317,6 +330,128 @@ func _draw_help_wind() -> void:
 			var width := font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x
 			_text(Vector2(content.position.x + (content.size.x - width) * 0.5, y), line, 16, KickConstants.COLOR_TEXT)
 		y += 24.0
+
+
+func _draw_help_entries(page_id: String) -> void:
+	var intro := HowToPlay.fill_numbers(HowToPlay.intro(page_id))
+	var font := ThemeDB.fallback_font
+	var content: Rect2 = help_book_rects()["content"]
+	if font != null and intro != "":
+		var width := font.get_string_size(intro, HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x
+		_text(Vector2(content.position.x + (content.size.x - width) * 0.5, 146.0), intro, 16, Color(0.82, 0.84, 0.8))
+	var cream := Color(0.93, 0.91, 0.84)
+	var items: Array = HowToPlay.entries(page_id)
+	var cells: Array = HowToPlay.cells(page_id)
+	for i in items.size():
+		var cell: Rect2 = cells[i]
+		var entry: Dictionary = items[i]
+		var box := Rect2(cell.position.x + 12.0, cell.position.y + 10.0, 96.0, 96.0)
+		draw_rect(box, Color(0.1, 0.11, 0.12))
+		draw_rect(box, Color(0.45, 0.47, 0.5), false, 2.0)
+		_draw_help_picture(str(entry["picture"]), box)
+		_pg(str(entry["name"]), Vector2(cell.position.x + 122.0, cell.position.y + 12.0), 16, cream)
+		_draw_wrapped_at(HowToPlay.fill_numbers(str(entry["body"])), cell.position.x + 122.0, cell.position.y + 53.0, 218.0, 15)
+	var note := HowToPlay.fill_numbers(HowToPlay.footer(page_id))
+	if note != "" and font != null:
+		var note_w := font.get_string_size(note, HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x
+		_text(Vector2(content.position.x + (content.size.x - note_w) * 0.5, 420.0), note, 16, cream)
+
+
+func _draw_help_picture(kind: String, box: Rect2) -> void:
+	if kind == "iced" or kind == "narrow":
+		var id := Loadout.ICED if kind == "iced" else Loadout.NARROW
+		var icon := _icon(Loadout.sprite_path(id))
+		if icon != null:
+			_draw_fit(icon, box)
+		return
+	if kind == "monsoon":
+		_draw_help_post(box.get_center(), 0.5, Color(0.98, 0.85, 0.2))
+		var rain := Color(0.6, 0.75, 1.0, 0.85)
+		var lean := deg_to_rad(20.0)
+		var step := Vector2(sin(lean), cos(lean)) * 14.0
+		for i in 8:
+			var at := box.position + Vector2(12.0 + float(i % 4) * 20.0, 14.0 + float(i / 4) * 28.0)
+			draw_line(at, at + step, rain, 2.0)
+		draw_rect(Rect2(box.position.x, box.end.y - 10.0, box.size.x, 10.0), Color(0.42, 0.3, 0.18))
+		return
+	if kind == "lights":
+		var lamp := _icon("res://art/field/floodlight-sideline.png")
+		if lamp != null:
+			_draw_fit(lamp, box)
+		return
+	if kind == "clock":
+		var digit := str(int(round(RunLogic.CLOCK_SEC)))
+		var label_w := BitmapFonts.measure_px("ui", "KICK CLOCK", 12)
+		_pg("KICK CLOCK", Vector2(box.position.x + (box.size.x - float(label_w)) * 0.5, box.position.y + 6.0), 12, Color(0.95, 0.86, 0.45))
+		var digit_w := BitmapFonts.measure_px("callout", digit, 56)
+		BitmapFonts.paint_px(self, "callout", digit, Vector2(box.position.x + (box.size.x - float(digit_w)) * 0.5, box.position.y + 28.0), 56, Color(1.0, 0.96, 0.78))
+		return
+	if kind == "big_game" or kind == "perfect":
+		var meter_w := 96.0
+		var meter_h := meter_w * MeterGauge.FRAME_H / MeterGauge.FRAME_W
+		var meter := Rect2(box.position.x, box.position.y + (box.size.y - meter_h) * 0.5, meter_w, meter_h)
+		_draw_demo_meter(meter, 45.0, false)
+		if kind == "big_game":
+			draw_line(box.position, box.end, Color(0.85, 0.12, 0.1), 3.0)
+		return
+	if kind == "moving":
+		var yellow := Color(0.98, 0.85, 0.2)
+		var ghost := yellow
+		ghost.a = 0.35
+		var mid := box.get_center() + Vector2(0, -6)
+		_draw_help_post(mid + Vector2(-9, 0), 0.36, yellow)
+		_draw_help_post(mid + Vector2(9, 0), 0.36, ghost)
+		_draw_double_arrow(Vector2(box.position.x + 16.0, box.end.y - 12.0), Vector2(box.end.x - 16.0, box.end.y - 12.0), Color(0.93, 0.91, 0.84))
+		return
+	if kind == "bonus_coin" or kind == "inner_coin" or kind == "on_fire":
+		var coin := _icon("res://art/field/bonus-coin.png")
+		var side := 88.0
+		var tint := Color.WHITE
+		if kind == "inner_coin":
+			side = 64.0
+			tint = KickConstants.INNER_RING_COLOR
+		elif kind == "on_fire":
+			side = 64.0 * KickConstants.FIRE_RING_SCALE
+			tint = KickConstants.INNER_RING_COLOR
+		var coin_rect := Rect2(box.position + (box.size - Vector2(side, side)) * 0.5, Vector2(side, side))
+		if coin != null:
+			_draw_fit(coin, coin_rect, tint)
+		if kind == "on_fire":
+			var tag_w := BitmapFonts.measure_px("ui", "ON FIRE", 12)
+			_pg("ON FIRE", Vector2(box.position.x + (box.size.x - float(tag_w)) * 0.5, box.position.y + 2.0), 12, Color(1.0, 0.55, 0.1))
+		return
+	if kind == "choice":
+		var labels := ["S", "L", "B"]
+		var total := 28.0 * 3.0 + 8.0 * 2.0
+		var x := box.position.x + (box.size.x - total) * 0.5
+		for i in 3:
+			var lift := -4.0 if i == 1 else 0.0
+			var card := Rect2(x + float(i) * 36.0, box.position.y + 28.0 + lift, 28.0, 40.0)
+			draw_rect(card, Color(0.08, 0.09, 0.1))
+			draw_rect(card, Color(0.95, 0.78, 0.22), false, 2.0)
+			var mark_w := BitmapFonts.measure_px("ui", labels[i], 12)
+			_pg(labels[i], Vector2(card.position.x + (card.size.x - float(mark_w)) * 0.5, card.position.y + 12.0), 12, Color(0.93, 0.91, 0.84))
+		return
+	if kind == "lucky":
+		var yellow := Color(0.98, 0.85, 0.2)
+		var mid := box.get_center() + Vector2(8, -8)
+		_draw_help_post(mid, 0.34, yellow)
+		var upright := Vector2(mid.x - 60.0 * 0.34, mid.y)
+		draw_set_transform(upright + Vector2(-8, 0), 0.0, Vector2(1.3, 0.75))
+		draw_circle(Vector2.ZERO, 7.0, Color(0.55, 0.32, 0.16))
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		var tag_w := BitmapFonts.measure_px("ui", "LUCKY", 12)
+		_pg("LUCKY", Vector2(box.position.x + (box.size.x - float(tag_w)) * 0.5, box.end.y - 16.0), 12, Color(0.95, 0.78, 0.22))
+
+
+func _draw_double_arrow(start: Vector2, finish: Vector2, color: Color) -> void:
+	draw_line(start, finish, color, 2.0)
+	var direction := (finish - start).normalized()
+	var normal := Vector2(-direction.y, direction.x)
+	draw_line(finish, finish - direction * 7.0 + normal * 4.0, color, 2.0)
+	draw_line(finish, finish - direction * 7.0 - normal * 4.0, color, 2.0)
+	draw_line(start, start + direction * 7.0 + normal * 4.0, color, 2.0)
+	draw_line(start, start + direction * 7.0 - normal * 4.0, color, 2.0)
 
 
 func _draw_gate(front: FrontEnd) -> void:

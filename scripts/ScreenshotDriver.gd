@@ -210,6 +210,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "ui5b":
+		if not await _capture_ui5b():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "ui5a":
 		if not await _capture_ui5a():
 			get_tree().quit(1)
@@ -6187,6 +6193,49 @@ func _capture_sk2() -> bool:
 	board.refresh_view()
 	print("SK2 retry ", board.run.rung_tag(), " ", board.run.distance_yards(), " awaiting ", board.run.awaiting_rung)
 	return await _capture("sk2_retry_keeps_rung.png")
+
+
+func _capture_ui5b() -> bool:
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
+	board.selecting = true
+	board.front.run_mode = "standard"
+	board.confirm_kicker()
+	board.run.open_tad(0)
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.AIMING
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.special_kicks.clear()
+	board._special_banner = 2.0
+	board.paused = true
+	board._open_help()
+	board.help_page = 2
+	board.refresh_view()
+	if not await _capture("ui5b_help_bosses_kick5.png"):
+		return false
+	board.help_page = 3
+	board.refresh_view()
+	if not await _capture("ui5b_help_bosses_kick10.png"):
+		return false
+	board.help_page = 4
+	board.refresh_view()
+	if not await _capture("ui5b_help_ring_bonuses.png"):
+		return false
+	board.help_page = 5
+	board.refresh_view()
+	if not await _capture("ui5b_help_more_bonuses.png"):
+		return false
+	board.help_page = 0
+	board.refresh_view()
+	if not await _capture("ui5b_help_page1_of_6.png"):
+		return false
+	board.help_page = 2
+	board.refresh_view()
+	DisplayServer.window_set_size(Vector2i(1920, 1080))
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var wide: bool = await _capture("ui5b_help_window_1920x1080.png")
+	DisplayServer.window_set_size(Vector2i(1280, 720))
+	return wide
 
 
 func _capture_ui5a() -> bool:

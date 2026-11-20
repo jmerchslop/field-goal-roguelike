@@ -120,6 +120,7 @@ const LONG_MULT := 2.0
 # Score: distance × ((1 + 0.25 × streak) × ring factor + flat bonuses).
 # Then ×1.5 on a boss kick, +5 if perfect. The inner ring caps at ×8.
 const STREAK_MULT_STEP := 0.25
+const INNER_RING_COLOR := Color(0.35, 0.90, 1.00)
 const INNER_RING_RADIUS := 0.50
 const INNER_RING_INSET := 1.0
 const INNER_RING_MAX_RADIUS := 0.98

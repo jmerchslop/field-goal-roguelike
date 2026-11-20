@@ -85,6 +85,7 @@ func _run() -> void:
 	_check_ui2_layout()
 	_check_ui4()
 	_check_ui5a()
+	_check_ui5b()
 	_check_drive_lid_and_power_safety()
 	_check_m2_kickers()
 	_check_honest_cards_and_bench()
@@ -124,6 +125,7 @@ func _finish_live() -> void:
 	_check_ui2_live()
 	await _check_ui4_live()
 	await _check_ui5a_live()
+	_check_ui5b_live()
 	_release_sfx()
 	await create_timer(0.6).timeout
 	_release_sfx()
@@ -11623,7 +11625,7 @@ func _check_ui4_live() -> void:
 
 func _check_ui5a() -> void:
 	check(BitmapFonts.ui_allows(FrontEnd.HOW_TO_PLAY_WORD) and BitmapFonts.callout_allows(FrontEnd.HOW_TO_PLAY_WORD), "HOW TO PLAY fits Pixel Gothic and Stadium Block")
-	check(HowToPlay.page_count() == 2 and HowToPlay.title("kick") == "KICK AND AIM" and HowToPlay.title("wind") == "WIND CLUES", "the book opens with kick and wind pages")
+	check(HowToPlay.page_count() == 6 and HowToPlay.title("kick") == "KICK AND AIM" and HowToPlay.title("wind") == "WIND CLUES", "the book still opens with kick and wind, then four more pages")
 	var script = load("res://scripts/hud.gd")
 	var hud = script.new()
 	var meter: Rect2 = hud.help_demo_meter_rect()
@@ -11702,9 +11704,12 @@ func _check_ui5a_live() -> void:
 	check(game.help_open and game.paused and game.help_page == 0, "confirm on HOW TO PLAY opens the book without unpausing")
 	game._pause_input(_key_event(KEY_LEFT))
 	check(game.help_page == 0, "left stays on page 1")
+	var last_page := HowToPlay.page_count() - 1
+	for _step in last_page + 1:
+		game._pause_input(_key_event(KEY_RIGHT))
+	check(game.help_page == last_page, "right stops on the last page")
 	game._pause_input(_key_event(KEY_RIGHT))
-	game._pause_input(_key_event(KEY_RIGHT))
-	check(game.help_page == 1, "right stops on the last page")
+	check(game.help_page == last_page, "right stays on page 6")
 	game._pause_input(_key_event(KEY_SPACE))
 	check(not game.help_open and game.paused and game.pause_index == 1, "confirm on the last page returns to HOW TO PLAY")
 	game._pause_input(_key_event(KEY_ESCAPE))
@@ -11762,4 +11767,122 @@ func _check_ui5a_live() -> void:
 	check(not quitting.paused and quitting.front.screen == FrontEnd.Screen.MAIN, "confirm on SAVE AND QUIT still leaves the run")
 	records.file_path = kept_path
 	quitting.free()
+
+
+func _ui5b_boss_token(token: String) -> String:
+	match token:
+		"ICED":
+			return RunLogic.ICED
+		"SQUEEZE":
+			return RunLogic.SQUEEZE
+		"MONSOON":
+			return RunLogic.MONSOON
+		"LIGHTS":
+			return RunLogic.LIGHTS
+		"CLOCK":
+			return RunLogic.CLOCK
+		"BIG_GAME":
+			return RunLogic.BIG_GAME
+		"MOVING":
+			return RunLogic.MOVING
+	return ""
+
+
+func _check_ui5b() -> void:
+	var source := FileAccess.get_file_as_string("res://scripts/RunLogic.gd")
+	var start := source.find("func _roll_standard_bosses")
+	var stop := source.find("func _boss_keys_current")
+	var roll := source.substr(start, stop - start)
+	var early_line := ""
+	var late_line := ""
+	for line in roll.split("\n"):
+		if line.find("var early") >= 0:
+			early_line = line
+		if line.find("standard_bosses[10] =") >= 0:
+			late_line = line
+	var open := early_line.find("= [")
+	var close := early_line.find("]", open)
+	var inside := early_line.substr(open + 3, close - open - 3)
+	var early: Array = []
+	for part in inside.split(","):
+		var token := part.strip_edges()
+		var name := _ui5b_boss_token(token)
+		check(name != "", "kick 5 rolls an unknown boss %s" % token)
+		early.append(name)
+	var page5: Array = []
+	for entry in HowToPlay.entries("bosses5"):
+		page5.append(str(entry["id"]))
+	check(page5 == early, "page 3 is the kick 5 boss pool, got %s" % str(page5))
+	var page10: Array = []
+	for entry in HowToPlay.entries("bosses10"):
+		page10.append(str(entry["id"]))
+	check(late_line.find("BIG_GAME") >= 0 and late_line.find("MOVING") >= 0 and page10 == [RunLogic.BIG_GAME, RunLogic.MOVING], "page 4 is the kick 10 boss pool, line %s page %s" % [late_line, str(page10)])
+	var seen := {}
+	for name in [RunLogic.ICED, RunLogic.SQUEEZE, RunLogic.MONSOON, RunLogic.BIG_GAME, RunLogic.LIGHTS, RunLogic.CLOCK, RunLogic.MOVING]:
+		seen[name] = 0
+	for page in ["bosses5", "bosses10"]:
+		for entry in HowToPlay.entries(page):
+			var id := str(entry["id"])
+			if seen.has(id):
+				seen[id] = int(seen[id]) + 1
+	var once := true
+	for name in seen.keys():
+		if int(seen[name]) != 1:
+			once = false
+	check(once, "each boss has exactly one help entry")
+	var numbers: Dictionary = HowToPlay.number_values()
+	check(str(numbers["boss_mult"]) == "1.5" and str(numbers["squeeze"]) == "5.17" and str(numbers["normal_gap"]) == "6.16", "boss numbers format from the constants")
+	check(str(numbers["rain_pct"]) == "20" and str(numbers["lights_pct"]) == "35" and str(numbers["clock"]) == "4", "rain, lights, and the clock come from the live scales")
+	check(str(numbers["swing"]) == "3" and str(numbers["period"]) == "4" and str(numbers["ring_cap"]) == "8" and str(numbers["fire_heat"]) == "3", "swing, period, ring cap, and heat come from the constants")
+	check(str(numbers["long"]) == "6" and str(numbers["bomb"]) == "12" and str(numbers["perfect"]) == "5", "long, bomb, and perfect come from the constants")
+	check(str(numbers["count_list"]) == "4, 3, 2, 1", "the kick clock counts 4, 3, 2, 1 before the buzzer")
+	var clock_body := ""
+	for entry in HowToPlay.entries("bosses5"):
+		if str(entry["id"]) == RunLogic.CLOCK:
+			clock_body = HowToPlay.fill_numbers(str(entry["body"]))
+	check(clock_body.find("4, 3, 2, 1") >= 0 and clock_body.find("buzzer") >= 0, "the kick clock page matches the countdown, got %s" % clock_body)
+	var doubled := HowToPlay.fill_numbers(HowToPlay.intro("bosses5"), {"boss_mult": "9.9"})
+	check(doubled.find("9.9") >= 0 and doubled.find("x1.5") < 0, "a changed boss multiplier flows into the intro")
+	var hud = load("res://scripts/hud.gd").new()
+	var font := ThemeDB.fallback_font
+	var content_w := 1056.0
+	var tallest := ""
+	var tallest_bottom := 0.0
+	for page in ["bosses5", "bosses10", "rings", "bonuses"]:
+		var intro := HowToPlay.fill_numbers(HowToPlay.intro(page))
+		check(font.get_string_size(intro, HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x <= content_w, "the %s intro fits" % page)
+		var page_tall := ""
+		var page_bottom := 0.0
+		for entry in HowToPlay.entries(page):
+			var name := str(entry["name"])
+			check(BitmapFonts.measure_px("ui", name, 16) <= 218, "%s fits the name line" % name)
+			var body := HowToPlay.fill_numbers(str(entry["body"]))
+			var lines: PackedStringArray = hud._wrap_lines(body, 218.0, 15)
+			var bottom := 53.0 + float(lines.size()) * 19.0
+			if bottom > page_bottom:
+				page_bottom = bottom
+				page_tall = name
+			check(bottom <= 182.0, "%s stays in its cell, bottom %s" % [name, bottom])
+		check(true, "tallest %s body is %s at %s" % [page, page_tall, page_bottom])
+		if page_bottom > tallest_bottom:
+			tallest_bottom = page_bottom
+			tallest = "%s %s" % [page, page_tall]
+	check(tallest != "", "tallest help body is %s at %s" % [tallest, tallest_bottom])
+	check(load(Loadout.sprite_path(Loadout.ICED)) != null, "the iced icon loads")
+	check(load(Loadout.sprite_path(Loadout.NARROW)) != null, "the narrow posts icon loads")
+	check(load("res://art/field/bonus-coin.png") != null, "the bonus coin loads")
+	check(load("res://art/field/floodlight-sideline.png") != null, "the floodlight loads")
+	hud.free()
+
+
+func _check_ui5b_live() -> void:
+	var packed: PackedScene = load("res://scenes/main.tscn")
+	var game = packed.instantiate()
+	get_root().add_child(game)
+	var tint: Color = KickConstants.INNER_RING_COLOR
+	var live := Color(1, 1, 1, 1)
+	if game._inner_ring != null:
+		live = game._inner_ring.modulate
+	check(game._inner_ring != null and absf(live.r - tint.r) < 0.001 and absf(live.g - tint.g) < 0.001 and absf(live.b - tint.b) < 0.001, "the inner ring tint matches the shared color, null %s live %s" % [game._inner_ring == null, live])
+	game.free()
 

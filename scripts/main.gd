@@ -3066,7 +3066,7 @@ func _build_ring() -> void:
 	_inner_ring.centered = true
 	_inner_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_inner_ring.visible = false
-	_inner_ring.modulate = Color(0.35, 0.90, 1.00)
+	_inner_ring.modulate = KickConstants.INNER_RING_COLOR
 	var cyan := paint.duplicate() as StandardMaterial3D
 	cyan.vertex_color_use_as_albedo = true
 	_inner_ring.material_override = cyan
@@ -3132,7 +3132,7 @@ func _place_inner_ring() -> void:
 			var pulse := 0.875 + 0.125 * sin(float(Time.get_ticks_msec()) * 0.004)
 			_inner_ring.modulate = Color(1.0, 0.55, 0.1, pulse)
 		else:
-			_inner_ring.modulate = Color(0.35, 0.90, 1.00)
+			_inner_ring.modulate = KickConstants.INNER_RING_COLOR
 	var arrived := logic.reached_uprights and logic.ball_forward_yards + 0.05 >= logic.kick_distance
 	if logic.inner_ring_hit and arrived and _inner_pop < 0.0 and logic.phase == KickLogic.Phase.RESULT:
 		_inner_pop = 0.0
