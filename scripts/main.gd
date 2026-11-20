@@ -20,6 +20,9 @@ var paused := false
 var _twist_time := 0.0
 var _twist_armed := false
 var _clock_done := false
+var _clock_opened := false
+var _clock_logged := false
+var clock_sounds: Array[String] = []
 var _posts_judged := false
 var pause_index := 0
 var _checkpoint: Dictionary = {}
@@ -1365,6 +1368,8 @@ func _confirm_kick() -> void:
 	var phase_before := logic.phase
 	var forward_before := logic.ball_forward_yards
 	if phase_before == KickLogic.Phase.AIMING:
+		if _twist_armed and run.clock_seconds() > 0.0 and not _clock_done:
+			_log_clock("kicked")
 		_clock_done = true
 		dismiss_tad_card()
 	logic.press_space()
@@ -1397,6 +1402,9 @@ func _twist_blocked() -> bool:
 func _arm_boss_twist() -> void:
 	_twist_time = 0.0
 	_clock_done = false
+	_clock_opened = false
+	_clock_logged = false
+	clock_sounds = []
 	_posts_judged = false
 	var clock := run.clock_seconds() > 0.0 and not run.practicing
 	# Practice used to hold the posts still. TAD 10 keeps the sine through that swing.
@@ -1475,22 +1483,80 @@ func dismiss_tad_card() -> void:
 		tad_card_fade = 0.0
 
 
+func _clock_banner_hold() -> bool:
+	if not special_banner_on():
+		return false
+	return SpecialKicks.banner_lines(run.special_for_kick()).size() >= 2
+
+
 func tick_kick_clock(delta: float) -> void:
 	# TOO WEAK holds whichever clock is up, Kick Clock or No Huddle.
 	if too_weak_age >= 0.0:
+		return
+	if _clock_banner_hold():
 		return
 	if _twist_blocked() or run.practicing or not _twist_armed or _clock_done:
 		return
 	var seconds := run.clock_seconds()
 	if seconds <= 0.0 or logic.phase != KickLogic.Phase.AIMING:
 		return
-	var remain := seconds - _twist_time
-	if delta + 0.0000001 >= remain:
+	var prev := seconds - _twist_time
+	if delta + 0.0000001 >= prev:
 		_twist_time = seconds
+		_emit_clock("buzzer")
+		_log_clock("timeout")
 		_clock_done = true
 		_confirm_kick()
 		return
 	_twist_time += delta
+	var now := seconds - _twist_time
+	var mark := _latest_clock_mark(prev, now)
+	if mark != "":
+		_emit_clock(mark)
+
+
+func _clock_crossed(prev: float, now: float, mark: float) -> bool:
+	return prev > mark + 0.0001 and now <= mark + 0.0001
+
+
+func _latest_clock_mark(prev: float, now: float) -> String:
+	var best_left := 999.0
+	var best := ""
+	if not _clock_opened:
+		_clock_opened = true
+		best_left = prev
+		best = "tick"
+	var whole := int(floor(prev - 0.0001))
+	while whole > 3:
+		if _clock_crossed(prev, now, float(whole)):
+			if float(whole) < best_left:
+				best_left = float(whole)
+				best = "tick"
+		whole -= 1
+	for mark in [3.0, 2.5, 2.0, 1.5, 1.0, 0.5]:
+		if _clock_crossed(prev, now, mark):
+			if mark < best_left:
+				best_left = mark
+				best = "fast"
+	return best
+
+
+func _emit_clock(kind: String) -> void:
+	clock_sounds.append(kind)
+	var pool := "clock_tick"
+	if kind == "fast":
+		pool = "clock_tick_fast"
+	elif kind == "buzzer":
+		pool = "clock_buzzer"
+	Sfx.play_pool(pool)
+
+
+func _log_clock(ending: String) -> void:
+	if not OS.is_debug_build() or _clock_logged:
+		return
+	_clock_logged = true
+	var left := run.clock_seconds() - _twist_time
+	print("KICK CLOCK end=%s left=%.2f sounds=%s" % [ending, left, ",".join(clock_sounds)])
 
 
 func tick_moving_posts(before: float, after: float, delta: float) -> void:

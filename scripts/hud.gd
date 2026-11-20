@@ -178,11 +178,34 @@ func _pg_center(text: String, y: float, size: int, color: Color, font_key: Strin
 	BitmapFonts.paint_px(self, font_key, text, Vector2((KickConstants.WINDOW_WIDTH - float(width)) * 0.5, y), size, color)
 
 
-func _draw_meter(logic: KickLogic, run: RunLogic) -> void:
-	# Small enough that the frame stays off the uprights, the kicker, and the corner text.
+func _meter_rect() -> Rect2:
 	var gauge_w := 332.0
 	var gauge_h := gauge_w * 625.0 / 1003.0
-	var origin := Vector2(KickConstants.WINDOW_WIDTH - 18.0 - gauge_w, KickConstants.WINDOW_HEIGHT - 14.0 - gauge_h)
+	return Rect2(Vector2(KickConstants.WINDOW_WIDTH - 18.0 - gauge_w, KickConstants.WINDOW_HEIGHT - 14.0 - gauge_h), Vector2(gauge_w, gauge_h))
+
+
+func clock_layout(digit_text: String) -> Dictionary:
+	var meter := _meter_rect()
+	var label_px := 20
+	var digit_px := 90
+	var label_w := BitmapFonts.measure_px("ui", "KICK CLOCK", label_px)
+	var digit_w := BitmapFonts.measure_px("callout", digit_text, digit_px)
+	var center := meter.position.x + meter.size.x * 0.5
+	var digit_top := meter.position.y - 12.0 - float(digit_px)
+	var label_top := digit_top - 32.0
+	return {
+		"meter": meter,
+		"label": Rect2(center - float(label_w) * 0.5, label_top, float(label_w), float(label_px)),
+		"digit": Rect2(center - float(digit_w) * 0.5, digit_top, float(digit_w), float(digit_px)),
+	}
+
+
+func _draw_meter(logic: KickLogic, run: RunLogic) -> void:
+	# Small enough that the frame stays off the uprights, the kicker, and the corner text.
+	var meter := _meter_rect()
+	var gauge_w := meter.size.x
+	var gauge_h := meter.size.y
+	var origin := meter.position
 	var scale := gauge_w / MeterGauge.FRAME_W
 	var hub := origin + Vector2(MeterGauge.HUB_X, MeterGauge.HUB_Y) * scale
 	var inner := MeterGauge.GROOVE_INNER * scale
@@ -364,8 +387,11 @@ func _draw_kick_clock() -> void:
 	if digit < 1:
 		return
 	var text := str(digit)
-	_pg("KICK CLOCK", Vector2(28, 148), 16, Color(0.95, 0.86, 0.45))
-	BitmapFonts.paint_px(self, "callout", text, Vector2(36, 174), 72, Color(1.0, 0.96, 0.78))
+	var layout := clock_layout(text)
+	var label: Rect2 = layout["label"]
+	var block: Rect2 = layout["digit"]
+	_pg("KICK CLOCK", label.position, 20, Color(0.95, 0.86, 0.45))
+	BitmapFonts.paint_px(self, "callout", text, block.position, 90, Color(1.0, 0.96, 0.78))
 
 
 func _draw_hud(logic: KickLogic, run: RunLogic) -> void:

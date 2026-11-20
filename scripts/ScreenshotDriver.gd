@@ -210,6 +210,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "ui2":
+		if not await _capture_ui2():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "ui3":
 		if not await _capture_ui3():
 			get_tree().quit(1)
@@ -6169,6 +6175,58 @@ func _capture_sk2() -> bool:
 	board.refresh_view()
 	print("SK2 retry ", board.run.rung_tag(), " ", board.run.distance_yards(), " awaiting ", board.run.awaiting_rung)
 	return await _capture("sk2_retry_keeps_rung.png")
+
+
+func _capture_ui2() -> bool:
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
+	board.selecting = true
+	board.front.run_mode = "standard"
+	board.confirm_kicker()
+	board.run.special_kicks[1] = ""
+	board.run.awaiting_rung = false
+	board._special_banner = 2.0
+	board.force_weather(RunLogic.CLOCK)
+	board.logic.phase = KickLogic.Phase.AIMING
+	board.refresh_view()
+	print("UI2 boss digit ", board.clock_digit())
+	if not await _capture("ui2_clock_boss_4.png"):
+		return false
+	board._twist_time = 3.2
+	board.refresh_view()
+	print("UI2 boss low ", board.clock_digit())
+	if not await _capture("ui2_clock_boss_1.png"):
+		return false
+	board.run.give(Loadout.NO_HUDDLE)
+	board.run.special_kicks[1] = ""
+	board.force_weather(RunLogic.CLEAR)
+	board.logic.phase = KickLogic.Phase.AIMING
+	board.refresh_view()
+	print("UI2 huddle ", board.clock_digit(), " sec ", board.run.clock_seconds())
+	if not await _capture("ui2_clock_no_huddle_5.png"):
+		return false
+	board.run.kick_number = 4
+	board.run.set_heat_for_test(3)
+	board.run.special_kicks[4] = SpecialKicks.ON_FIRE
+	board._special_banner = 0.2
+	board._arm_boss_twist()
+	board.logic.phase = KickLogic.Phase.AIMING
+	board.refresh_view()
+	print("UI2 fire banner ", board.special_banner_on(), " digit ", board.clock_digit())
+	if not await _capture("ui2_clock_on_fire_banner.png"):
+		return false
+	board.run.special_kicks[4] = ""
+	board._special_banner = 2.0
+	board.force_weather(RunLogic.SNOW)
+	board.logic.phase = KickLogic.Phase.AIMING
+	for _i in 8:
+		await get_tree().process_frame
+	board._twist_time = 0.0
+	board._clock_done = false
+	board._twist_armed = true
+	board.logic.phase = KickLogic.Phase.AIMING
+	board.refresh_view()
+	print("UI2 snow ", board.run.weather, " digit ", board.clock_digit())
+	return await _capture("ui2_clock_snow.png")
 
 
 func _capture_ui3() -> bool:

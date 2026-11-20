@@ -82,6 +82,7 @@ func _run() -> void:
 	_check_sk1()
 	_check_sk2()
 	_check_ui3_text()
+	_check_ui2_layout()
 	_check_drive_lid_and_power_safety()
 	_check_m2_kickers()
 	_check_honest_cards_and_bench()
@@ -118,6 +119,7 @@ func _finish_live() -> void:
 	_check_live_field()
 	_check_live_kick_sounds()
 	_check_ui3_live()
+	_check_ui2_live()
 	_release_sfx()
 	await create_timer(0.6).timeout
 	_release_sfx()
@@ -11178,6 +11180,131 @@ func _ui3_wrap_count(text: String, width: float, size: int = 14) -> int:
 	if line.strip_edges() != "":
 		count += 1
 	return count
+
+
+func _check_ui2_layout() -> void:
+	var hud = load("res://scripts/hud.gd").new()
+	var layout: Dictionary = hud.clock_layout("4")
+	var meter: Rect2 = layout["meter"]
+	var label: Rect2 = layout["label"]
+	var digit: Rect2 = layout["digit"]
+	var center := meter.position.x + meter.size.x * 0.5
+	check(absf(label.position.x + label.size.x * 0.5 - center) <= 1.0, "the clock label is centered on the meter")
+	check(absf(digit.position.x + digit.size.x * 0.5 - center) <= 1.0, "the clock digit is centered on the meter")
+	check(absf(digit.position.y + digit.size.y - (meter.position.y - 12.0)) <= 1.0, "the digit sits 12 px above the meter")
+	check(absf((digit.position.y - label.position.y) - 32.0) <= 1.0, "the label keeps the scaled gap above the digit")
+	check(not meter.intersects(label) and not meter.intersects(digit), "the clock does not cover the meter card")
+	var extra := 16 * 5
+	var kick_bug := Rect2(868, 10, 398, 74 + extra)
+	var score_bug := Rect2(868, 18 + 74 + extra, 398, 70)
+	var plate := Rect2(12, 580, 430, 140)
+	check(not label.intersects(kick_bug) and not digit.intersects(kick_bug), "the clock misses the kick bug")
+	check(not label.intersects(score_bug) and not digit.intersects(score_bug), "the clock misses the score bug at full extra, including the SK2 line")
+	check(not label.intersects(plate) and not digit.intersects(plate), "the clock misses the kicker plate")
+	print("UI2 rects label ", label, " digit ", digit, " meter ", meter, " scale 1.25")
+	hud.free()
+
+
+func _ui2_sounds(game) -> PackedStringArray:
+	var names := PackedStringArray()
+	for item in game.clock_sounds:
+		names.append(str(item))
+	return names
+
+
+func _ui2_arm(game, weather: String) -> void:
+	game.logic.phase = KickLogic.Phase.AIMING
+	game.run.phase = RunLogic.Phase.PLAYING
+	game.run.kick_resolved = false
+	game.run.special_kicks[game.run.kick_number] = ""
+	game.run.awaiting_rung = false
+	game._special_banner = 2.0
+	game.force_weather(weather)
+
+
+func _ui2_run_out(game) -> void:
+	var guard := 0
+	while not game._clock_done and guard < 800:
+		game.tick_kick_clock(1.0 / 60.0)
+		guard += 1
+
+
+func _ui2_until(game, left: float) -> void:
+	var guard := 0
+	while game.run.clock_seconds() - game._twist_time > left and not game._clock_done and guard < 800:
+		game.tick_kick_clock(1.0 / 60.0)
+		guard += 1
+
+
+func _check_ui2_live() -> void:
+	var sfx: KickSfx = get_root().get_node("Sfx")
+	sfx.scan()
+	check(sfx.files_of("clock_tick").is_empty() and sfx.files_of("clock_tick_fast").is_empty() and sfx.files_of("clock_buzzer").is_empty(), "the clock files are missing, so the pools stay empty")
+	OS.set_environment("FG_SHOTS", "")
+	var packed: PackedScene = load("res://scenes/main.tscn")
+	var game = packed.instantiate()
+	get_root().add_child(game)
+	game._taking_pictures = true
+	game.highlight = Kickers.slot_for(Kickers.WALK_ON)
+	game.confirm_kicker()
+	_ui2_arm(game, RunLogic.CLOCK)
+	var calls := sfx.play_calls
+	_ui2_run_out(game)
+	check(_ui2_sounds(game) == PackedStringArray(["tick", "fast", "fast", "fast", "fast", "fast", "fast", "buzzer"]), "a 4 second timeout is tick, six fast ticks, and the buzzer, got %s" % ",".join(_ui2_sounds(game)))
+	check(game._clock_done and game.logic.phase != KickLogic.Phase.AIMING, "the buzzer lands as the kick fires")
+	check(sfx.play_calls == calls, "missing clock files do not play or raise play_calls")
+	_ui2_arm(game, RunLogic.CLOCK)
+	_ui2_until(game, 2.2)
+	check(_ui2_sounds(game) == PackedStringArray(["tick", "fast", "fast"]), "a boss kick at 2.2 is tick and two fast ticks, got %s" % ",".join(_ui2_sounds(game)))
+	check(not game._clock_done, "kicking early does not buzz")
+	game.run.give(Loadout.NO_HUDDLE)
+	_ui2_arm(game, RunLogic.CLEAR)
+	check(is_equal_approx(game.run.clock_seconds(), 5.0), "No Huddle is a 5 second clock")
+	_ui2_run_out(game)
+	check(_ui2_sounds(game) == PackedStringArray(["tick", "tick", "fast", "fast", "fast", "fast", "fast", "fast", "buzzer"]), "a 5 second timeout adds the extra slow tick, got %s" % ",".join(_ui2_sounds(game)))
+	_ui2_arm(game, RunLogic.CLEAR)
+	_ui2_until(game, 2.2)
+	check(_ui2_sounds(game) == PackedStringArray(["tick", "tick", "fast", "fast"]), "No Huddle at 2.2 is two slow ticks and two fast ticks, got %s" % ",".join(_ui2_sounds(game)))
+	_ui2_arm(game, RunLogic.CLOCK)
+	game._twist_time = 4.0 - 3.2
+	game._clock_opened = true
+	game.clock_sounds.clear()
+	game.tick_kick_clock(0.9)
+	check(_ui2_sounds(game).size() == 1, "a 0.9 second jump plays only the latest mark, got %s" % ",".join(_ui2_sounds(game)))
+	_ui2_arm(game, RunLogic.CLOCK)
+	game.tick_kick_clock(0.2)
+	var held_time := float(game._twist_time)
+	var held_sounds := _ui2_sounds(game)
+	game.paused = true
+	game.tick_kick_clock(1.0)
+	check(is_equal_approx(game._twist_time, held_time) and _ui2_sounds(game) == held_sounds, "pause freezes the clock and its ticks")
+	game.paused = false
+	game.run.awaiting_offer = true
+	game.tick_kick_clock(1.0)
+	check(is_equal_approx(game._twist_time, held_time) and _ui2_sounds(game) == held_sounds, "an offer freezes the clock and its ticks")
+	game.run.awaiting_offer = false
+	game.too_weak_age = 0.2
+	game.tick_kick_clock(1.0)
+	check(is_equal_approx(game._twist_time, held_time) and _ui2_sounds(game) == held_sounds, "TOO WEAK freezes the clock and its ticks")
+	game.too_weak_age = -1.0
+	game.run.practicing = true
+	game._arm_boss_twist()
+	game.tick_kick_clock(1.0)
+	check(game.clock_sounds.is_empty(), "practice has no clock sounds")
+	game.run.practicing = false
+	game.run.give(Loadout.NO_HUDDLE)
+	_ui2_arm(game, RunLogic.CLEAR)
+	game.run.kick_number = 4
+	game.run.set_heat_for_test(3)
+	game.run.special_kicks[4] = SpecialKicks.ON_FIRE
+	game._special_banner = 0.0
+	game._arm_boss_twist()
+	game.tick_kick_clock(1.6)
+	check(is_equal_approx(game._twist_time, 0.0) and game.clock_sounds.is_empty() and game.clock_digit() == 5, "the ON FIRE banner holds a full 5")
+	game._special_banner = 1.6
+	_ui2_run_out(game)
+	check(_ui2_sounds(game) == PackedStringArray(["tick", "tick", "fast", "fast", "fast", "fast", "fast", "fast", "buzzer"]), "after the banner the full 5 second clock still runs, got %s" % ",".join(_ui2_sounds(game)))
+	game.free()
 
 
 func _check_ui3_live() -> void:

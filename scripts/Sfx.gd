@@ -20,6 +20,9 @@ const POOL_NAMES := {
 	"cheer": ["crowdcheer1", "crowdcheer2"],
 	"groan": ["crowdgroan1", "crowdgroan2"],
 	"ooh": ["crowdooh1"],
+	"clock_tick": ["clocktick1"],
+	"clock_tick_fast": ["clocktickfast1"],
+	"clock_buzzer": ["clockbuzzer1"],
 }
 
 const CROWD_BUS := "Crowd"
