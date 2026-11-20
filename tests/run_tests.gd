@@ -8746,9 +8746,14 @@ func _check_cam1() -> void:
 	check(KickSfx.crowd_pick("SHORT", false, false, false) == "groan" and KickSfx.crowd_pick("WIDE LEFT", false, false, false) == "groan", "SHORT and WIDE pick groan")
 	check(KickSfx.crowd_pick("WIDE RIGHT", true, false, false) == "" and KickSfx.crowd_pick("GOOD", false, false, true) == "", "a shank and a practice swing pick no reaction")
 	var sfx: KickSfx = get_root().get_node("Sfx")
-	sfx.play_crowd_reaction("DOINK", false, false, false)
-	sfx.play_crowd_reaction("DOINK", false, false, false)
-	check(sfx._crowd_logged.has("ooh") and sfx.player_bus("cheer") == "Crowd" and sfx.player_bus("groan") == "Crowd" and sfx.player_bus("ooh") == "Crowd", "missing crowd pools log once and use the Crowd bus")
+	sfx.scan()
+	check(sfx.files_of("cheer").size() == 2 and sfx.files_of("groan").size() == 2 and sfx.files_of("ooh").size() == 1, "the cheer, groan, and ooh pools found their files")
+	var cheer_file := sfx.play_crowd_reaction("GOOD", false, false, false)
+	var groan_file := sfx.play_crowd_reaction("SHORT", false, false, false)
+	var ooh_file := sfx.play_crowd_reaction("DOINK", false, false, false)
+	check(cheer_file.begins_with("crowdcheer") and groan_file.begins_with("crowdgroan") and ooh_file == "crowdooh1.ogg", "a make cheers, a miss groans, and a doink oohs, got %s / %s / %s" % [cheer_file, groan_file, ooh_file])
+	check(not sfx._crowd_logged.has("cheer") and not sfx._crowd_logged.has("groan") and not sfx._crowd_logged.has("ooh"), "present crowd files are not logged missing")
+	check(sfx.player_bus("cheer") == "Crowd" and sfx.player_bus("groan") == "Crowd" and sfx.player_bus("ooh") == "Crowd", "the crowd pools use the Crowd bus")
 
 
 func _cam_finish(game, scale: float) -> Dictionary:
