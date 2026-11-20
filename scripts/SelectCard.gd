@@ -109,6 +109,8 @@ static func every_line() -> PackedStringArray:
 	for level in range(0, RunLogic.TAD_MAX + 1):
 		lines.append("TAD %d" % level)
 		lines.append(RunLogic.tad_summary(level))
+		if level >= 1:
+			lines.append(RunLogic.tad_line(level))
 	lines.append("TAD 1 UNLOCKED")
 	lines.append("OFF AT TAD 5+")
 	for id in order():
@@ -143,7 +145,7 @@ static func grid_rects() -> Array:
 static func step_highlight(index: int, dx: int, dy: int) -> int:
 	var slot := index
 	if slot < 0 or slot > 7:
-		slot = 1
+		slot = Kickers.slot_for(Kickers.WALK_ON)
 	var col := posmod(slot % 4 + dx, 4)
 	var row := posmod(int(slot / 4) + dy, 2)
 	return row * 4 + col

@@ -33,6 +33,9 @@ var _frame_peak := 0.0
 var _cash_time := 0.0
 var _vitamin_time := 0.0
 var highlight := -1
+var tad_card_age := -1.0
+var tad_card_fade := -1.0
+var tad_card_done := false
 var tad_picker_slot := -1
 var meter_time := 0.0
 var _pose := "idle"
@@ -297,6 +300,7 @@ func load_current_kick() -> void:
 		_frame_watch = 1.0
 		_frame_peak = 0.0
 	consider_too_weak()
+	_arm_tad_card()
 	refresh_view()
 
 
@@ -476,6 +480,9 @@ func confirm_kicker() -> void:
 	tad_picker_slot = -1
 	too_weak_debug = ""
 	too_weak_age = -1.0
+	tad_card_age = -1.0
+	tad_card_fade = -1.0
+	tad_card_done = false
 	selecting = false
 	front.came_from_gate = false
 	var mode := front.run_mode
@@ -502,7 +509,7 @@ func open_select() -> void:
 	showing_records = false
 	tad_picker_slot = -1
 	front.screen = FrontEnd.Screen.SELECT
-	highlight = 1
+	highlight = Kickers.slot_for(Kickers.WALK_ON)
 	_show_fresh_unlocks()
 	refresh_view()
 
@@ -1027,6 +1034,7 @@ func _process(delta: float) -> void:
 				run.unlock_toast = ""
 				_unlock_seen = ""
 				_unlock_time = 0.0
+	tick_tad_card(delta)
 	if logic.phase == KickLogic.Phase.AIMING and not run.practicing and not selecting:
 		_special_banner += delta
 		_maybe_fire_sound()
@@ -1358,6 +1366,7 @@ func _confirm_kick() -> void:
 	var forward_before := logic.ball_forward_yards
 	if phase_before == KickLogic.Phase.AIMING:
 		_clock_done = true
+		dismiss_tad_card()
 	logic.press_space()
 	_sync_kick_audio(phase_before, forward_before)
 	if logic.insured:
@@ -1408,6 +1417,62 @@ func clock_digit() -> int:
 	if left <= 0.001:
 		return 0
 	return ceili(left)
+
+
+func tad_card_alpha() -> float:
+	if tad_card_done or tad_card_age < 0.0:
+		return 0.0
+	if tad_card_fade < 0.0:
+		return 1.0
+	return clampf(1.0 - tad_card_fade / 0.3, 0.0, 1.0)
+
+
+func _tad_card_context() -> bool:
+	if tad_card_done:
+		return false
+	if not run.tad_active(1):
+		return false
+	if run.kick_number != 1 or not run.is_first_ball:
+		return false
+	if run.practicing or run.run_mode == "endless":
+		return false
+	if run.awaiting_offer or run.awaiting_rung or run.awaiting_shop or run.awaiting_mulligan:
+		return false
+	if logic.phase != KickLogic.Phase.AIMING:
+		return false
+	if selecting or showing_records or paused:
+		return false
+	return true
+
+
+func _arm_tad_card() -> void:
+	if tad_card_done or tad_card_age >= 0.0 or tad_card_fade >= 0.0:
+		return
+	if _tad_card_context():
+		tad_card_age = 0.0
+
+
+func tick_tad_card(delta: float) -> void:
+	if tad_card_fade >= 0.0:
+		tad_card_fade += delta
+		if tad_card_fade >= 0.3:
+			tad_card_done = true
+			tad_card_age = -1.0
+			tad_card_fade = -1.0
+		return
+	if not _tad_card_context():
+		return
+	if tad_card_age < 0.0:
+		tad_card_age = 0.0
+	else:
+		tad_card_age += delta
+	if tad_card_age >= 4.0:
+		tad_card_fade = 0.0
+
+
+func dismiss_tad_card() -> void:
+	if tad_card_age >= 0.0 and tad_card_fade < 0.0:
+		tad_card_fade = 0.0
 
 
 func tick_kick_clock(delta: float) -> void:
@@ -1592,7 +1657,7 @@ func _start_new_run() -> void:
 	front.gate = ""
 	front.came_from_gate = true
 	selecting = true
-	highlight = 1
+	highlight = Kickers.slot_for(Kickers.WALK_ON)
 	showing_records = false
 	front.screen = FrontEnd.Screen.SELECT
 	refresh_view()
@@ -1784,7 +1849,7 @@ func _apply_menu_choice(choice: String) -> void:
 			return
 		front.screen = FrontEnd.Screen.SELECT
 		selecting = true
-		highlight = 1
+		highlight = Kickers.slot_for(Kickers.WALK_ON)
 		showing_records = false
 
 

@@ -18,23 +18,6 @@ const UNLOCKABLE: Array = [PHIL, GARY, VEX, COLE, WILLOW, CARLOS]
 
 const ALL: Array = [
 	{
-		"id": BIG_BRUCE,
-		"name": "Big Bruce",
-		"lore": "A farmer who's been booting fence posts loose since he was nine. He can kick it a mile. The hay ball goes where the wind takes it.",
-		"excels": "Farm Strength. A press under 80% still kicks at 80%.",
-		"downside": "The Farm Ball. Drift ×1.10.",
-		"ball_name": "The Farm Ball",
-		"ball_description": "A light hay ball. Drift ×1.10. A doink stays a doink.",
-		"ball_type": "farm_ball",
-		"accuracy": 90,
-		"range_line": "70 yd",
-		"kit_line": "Farm Strength",
-		"unlock": "",
-		"color": Color(0.55, 0.09, 0.08),
-		"shape": "square",
-		"portrait_path": "res://art/kickers/big_bruce.png",
-	},
-	{
 		"id": WALK_ON,
 		"name": "The Walk-On",
 		"lore": "Nobody recruited him. He showed up to tryouts in borrowed cleats and never left.",
@@ -50,6 +33,23 @@ const ALL: Array = [
 		"color": Color(0.22, 0.38, 0.82),
 		"shape": "circle",
 		"portrait_path": "res://art/kickers/walk_on.png",
+	},
+	{
+		"id": BIG_BRUCE,
+		"name": "Big Bruce",
+		"lore": "A farmer who's been booting fence posts loose since he was nine. He can kick it a mile. The hay ball goes where the wind takes it.",
+		"excels": "Farm Strength. A press under 80% still kicks at 80%.",
+		"downside": "The Farm Ball. Drift ×1.10.",
+		"ball_name": "The Farm Ball",
+		"ball_description": "A light hay ball. Drift ×1.10. A doink stays a doink.",
+		"ball_type": "farm_ball",
+		"accuracy": 90,
+		"range_line": "70 yd",
+		"kit_line": "Farm Strength",
+		"unlock": "",
+		"color": Color(0.55, 0.09, 0.08),
+		"shape": "square",
+		"portrait_path": "res://art/kickers/big_bruce.png",
 	},
 	{
 		"id": PHIL,
@@ -69,38 +69,21 @@ const ALL: Array = [
 		"portrait_path": "res://art/kickers/phil_portrait.png",
 	},
 	{
-		"id": GARY,
-		"name": "Gary the Goat",
-		"lore": "He treats a good kick like gold. First-try makes make his gear a little luckier.",
-		"excels": "Good As Gold. The good band counts as PERFECT.",
-		"downside": "No Farm Strength. A miss still misses.",
-		"ball_name": "Lucky Ball",
-		"ball_description": "Each first-try make adds 4%. The bonus caps at +24%. A miss resets it.",
+		"id": WILLOW,
+		"name": "Willow Reed",
+		"lore": "She takes her time. The first loadout offer of the run includes a range item.",
+		"excels": "Synchronicity. The first loadout offer includes a range item.",
+		"downside": "50 yards with nothing on. The Chill Ball is slow.",
+		"ball_name": "The Chill Ball",
+		"ball_description": "Both needles run at half speed. Items and weather still stack on top.",
 		"ball_type": "standard",
-		"accuracy": 98,
-		"range_line": "65 yd",
-		"kit_line": "Good As Gold",
-		"unlock": "Beat Standard without a miss",
-		"color": Color(0.55, 0.28, 0.12),
-		"shape": "square",
-		"portrait_path": "res://art/kickers/gary_portrait.png",
-	},
-	{
-		"id": VEX,
-		"name": "Vex",
-		"lore": "The saucer carries a long way, then keeps curving left.",
-		"excels": "Out of This World Range. A 500 yard base, so full power with nothing on carries 500 yards.",
-		"downside": "The Flying Saucer always curves left.",
-		"ball_name": "The Flying Saucer",
-		"ball_description": "Curves left like 11 mph of west wind, on top of the real wind.",
-		"ball_type": "standard",
-		"accuracy": 94,
-		"range_line": "500 yd",
-		"kit_line": "Out of This World Range",
-		"unlock": "Make a 500-yard field goal in Endless",
-		"color": Color(0.75, 0.8, 0.88),
+		"accuracy": 88,
+		"range_line": "50 yd",
+		"kit_line": "Synchronicity",
+		"unlock": "MAKE A KICK WITH 1 ATTEMPT LEFT ON KICK 8 OR LATER",
+		"color": Color(0.2, 0.35, 0.72),
 		"shape": "circle",
-		"portrait_path": "res://art/kickers/vex_portrait.png",
+		"portrait_path": "res://art/kickers/willow_portrait.png",
 	},
 	{
 		"id": COLE,
@@ -120,21 +103,21 @@ const ALL: Array = [
 		"portrait_path": "res://art/kickers/cole_portrait.png",
 	},
 	{
-		"id": WILLOW,
-		"name": "Willow Reed",
-		"lore": "She takes her time. The first loadout offer of the run includes a range item.",
-		"excels": "Synchronicity. The first loadout offer includes a range item.",
-		"downside": "50 yards with nothing on. The Chill Ball is slow.",
-		"ball_name": "The Chill Ball",
-		"ball_description": "Both needles run at half speed. Items and weather still stack on top.",
+		"id": GARY,
+		"name": "Gary the Goat",
+		"lore": "He treats a good kick like gold. First-try makes make his gear a little luckier.",
+		"excels": "Good As Gold. The good band counts as PERFECT.",
+		"downside": "No Farm Strength. A miss still misses.",
+		"ball_name": "Lucky Ball",
+		"ball_description": "Each first-try make adds 4%. The bonus caps at +24%. A miss resets it.",
 		"ball_type": "standard",
-		"accuracy": 88,
-		"range_line": "50 yd",
-		"kit_line": "Synchronicity",
-		"unlock": "MAKE A KICK WITH 1 ATTEMPT LEFT ON KICK 8 OR LATER",
-		"color": Color(0.2, 0.35, 0.72),
-		"shape": "circle",
-		"portrait_path": "res://art/kickers/willow_portrait.png",
+		"accuracy": 98,
+		"range_line": "65 yd",
+		"kit_line": "Good As Gold",
+		"unlock": "Beat Standard without a miss",
+		"color": Color(0.55, 0.28, 0.12),
+		"shape": "square",
+		"portrait_path": "res://art/kickers/gary_portrait.png",
 	},
 	{
 		"id": CARLOS,
@@ -153,7 +136,25 @@ const ALL: Array = [
 		"shape": "square",
 		"portrait_path": "res://art/kickers/carlos_portrait.png",
 	},
+	{
+		"id": VEX,
+		"name": "Vex",
+		"lore": "The saucer carries a long way, then keeps curving left.",
+		"excels": "Out of This World Range. A 500 yard base, so full power with nothing on carries 500 yards.",
+		"downside": "The Flying Saucer always curves left.",
+		"ball_name": "The Flying Saucer",
+		"ball_description": "Curves left like 11 mph of west wind, on top of the real wind.",
+		"ball_type": "standard",
+		"accuracy": 94,
+		"range_line": "500 yd",
+		"kit_line": "Out of This World Range",
+		"unlock": "Make a 500-yard field goal in Endless",
+		"color": Color(0.75, 0.8, 0.88),
+		"shape": "circle",
+		"portrait_path": "res://art/kickers/vex_portrait.png",
+	},
 ]
+
 
 
 static func save_tag(id: String) -> String:
@@ -189,6 +190,13 @@ static func id_for_slot(slot: int) -> String:
 	if slot < 0 or slot >= ALL.size():
 		return ""
 	return str(ALL[slot]["id"])
+
+
+static func slot_for(id: String) -> int:
+	for i in ALL.size():
+		if str(ALL[i]["id"]) == id:
+			return i
+	return -1
 
 
 static func has_portrait(id: String) -> bool:
@@ -347,9 +355,9 @@ static func _tad_rundown(cap: int, picked: int) -> PackedStringArray:
 	lines.append("Two-a-days %d: %s." % [level, RunLogic.tad_name(level)])
 	lines.append(RunLogic.tad_sentence(level))
 	if level >= 2:
-		lines.append("All below also apply.")
+		lines.append("Also on:")
 		for below in range(level - 1, 0, -1):
-			lines.append("%s. %s" % [RunLogic.tad_name(below), RunLogic.tad_sentence(below)])
+			lines.append(RunLogic.tad_line(below))
 	return lines
 
 

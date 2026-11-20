@@ -41,6 +41,7 @@ func _draw() -> void:
 	_draw_weather_tint(run)
 	_draw_meter(logic, run)
 	_draw_hud(logic, run)
+	_draw_tad_card(run)
 	_draw_special_banner(run)
 	_draw_kick_clock()
 	_draw_loadout_rail(run)
@@ -85,6 +86,19 @@ func gate_hit(point: Vector2, which: String) -> int:
 	return -1
 
 
+func _tad_list_px(plate_width: float) -> int:
+	var limit := int(plate_width) - 32
+	var size := 13
+	if game == null or game.run == null:
+		return size
+	var widest := 0
+	for level in range(1, game.run.tad_level + 1):
+		widest = maxi(widest, BitmapFonts.measure_px("ui", RunLogic.tad_line(level), size))
+	if widest > limit:
+		return 12
+	return size
+
+
 func _pause_drop() -> float:
 	if game == null or game.run == null or not game.run.tad_active(1):
 		return 0.0
@@ -112,8 +126,9 @@ func _draw_pause_panel() -> void:
 		var y := 214.0
 		_pg_center("TWO A DAYS %d" % game.run.tad_level, y, 16, Color(0.95, 0.78, 0.28))
 		y += 22.0
+		var line_px := _tad_list_px(plate.size.x)
 		for level in range(1, game.run.tad_level + 1):
-			_pg_center(RunLogic.tad_summary(level), y, 13, Color(0.93, 0.91, 0.84))
+			_pg_center(RunLogic.tad_line(level), y, line_px, Color(0.93, 0.91, 0.84))
 			y += 16.0
 	var labels := [FrontEnd.RESUME_WORD, FrontEnd.SAVE_QUIT_WORD]
 	var buttons := _pause_buttons()
@@ -308,6 +323,38 @@ func _draw_special_banner(run: RunLogic) -> void:
 	_pg(lines[0], Vector2(panel.position.x + (width - float(top_w)) * 0.5, panel.position.y + 12.0), 16, Color(0.93, 0.91, 0.84))
 	_pg(lines[1], Vector2(panel.position.x + (width - float(bot_w)) * 0.5, panel.position.y + 36.0), 28, Color(1.0, 0.55, 0.1))
 	texture_filter = saved
+
+
+func _draw_tad_card(run: RunLogic) -> void:
+	if game == null:
+		return
+	var alpha := float(game.tad_card_alpha())
+	if alpha <= 0.001 or not run.tad_active(1):
+		return
+	var count := run.tad_level
+	var header := "TWO A DAYS %d" % count
+	var size := 13
+	var widest := BitmapFonts.measure_px("ui", header, 16)
+	for level in range(1, count + 1):
+		widest = maxi(widest, BitmapFonts.measure_px("ui", RunLogic.tad_line(level), size))
+	var plate := Rect2(20, 60, float(widest) + 32.0, 28.0 + float(count) * float(size + 3))
+	if plate.end.x > 850.0 or plate.end.y > 600.0:
+		size = 12
+		widest = BitmapFonts.measure_px("ui", header, 16)
+		for level in range(1, count + 1):
+			widest = maxi(widest, BitmapFonts.measure_px("ui", RunLogic.tad_line(level), size))
+		plate = Rect2(20, 60, float(widest) + 32.0, 28.0 + float(count) * float(size + 3))
+	draw_rect(plate, Color(0.07, 0.075, 0.08, 0.94 * alpha))
+	draw_rect(plate, Color(0.92, 0.93, 0.95, alpha), false, 3.0)
+	draw_rect(plate.grow(-6), Color(0.28, 0.3, 0.33, alpha), false, 1.0)
+	var head_w := BitmapFonts.measure_px("ui", header, 16)
+	_pg(header, Vector2(plate.position.x + (plate.size.x - float(head_w)) * 0.5, plate.position.y + 8.0), 16, Color(0.95, 0.78, 0.28, alpha))
+	var y := plate.position.y + 28.0
+	for level in range(1, count + 1):
+		var line := RunLogic.tad_line(level)
+		var line_w := BitmapFonts.measure_px("ui", line, size)
+		_pg(line, Vector2(plate.position.x + (plate.size.x - float(line_w)) * 0.5, y), size, Color(0.93, 0.91, 0.84, alpha))
+		y += float(size + 3)
 
 
 func _draw_kick_clock() -> void:
@@ -1594,13 +1641,29 @@ func _draw_slot_tooltip() -> void:
 	_paint_tooltip(box, lines)
 
 
-func _paint_tooltip(box: Rect2, lines: Array) -> void:
+func _rundown_fit(sentences: PackedStringArray, width: float, panel_h: float) -> Dictionary:
+	var chosen := {"size": 11, "step": 12, "rows": [], "height": panel_h}
+	for pair in [[14, 18], [12, 15], [11, 12]]:
+		var size := int(pair[0])
+		var step := int(pair[1])
+		var wrapped: Array = []
+		for sentence in sentences:
+			for row in _wrap_lines(str(sentence), width, size):
+				wrapped.append(row)
+		var height := 16.0 + float(wrapped.size()) * float(step)
+		chosen = {"size": size, "step": step, "rows": wrapped, "height": height}
+		if height <= panel_h:
+			return chosen
+	return chosen
+
+
+func _paint_tooltip(box: Rect2, lines: Array, size: int = 14, step: int = 18) -> void:
 	draw_rect(box, Color(0.05, 0.08, 0.1, 0.94))
 	draw_rect(box, KickConstants.COLOR_ATTEMPT, false, 2.0)
-	var y := box.position.y + 18.0
+	var y := box.position.y + float(step)
 	for line in lines:
-		_text(Vector2(box.position.x + 8, y), str(line), 14, KickConstants.COLOR_TEXT)
-		y += 18.0
+		_text(Vector2(box.position.x + 8, y), str(line), size, KickConstants.COLOR_TEXT)
+		y += float(step)
 
 
 func _draw_kicker_rundown(slot: int) -> void:
@@ -1616,17 +1679,19 @@ func _draw_kicker_rundown(slot: int) -> void:
 			picked = SaveData.tad_selected(id)
 	var grid_left := float(kicker_rects[0].position.x)
 	var width := maxf(120.0, grid_left - 16.0)
-	var wrapped: Array = []
+	var sentences: PackedStringArray = PackedStringArray()
 	for sentence in Kickers.rundown_lines(id, unlocked, cap, picked):
-		for row in _wrap_lines(sentence, width - 16.0, 14):
-			wrapped.append(row)
-	var height := 16.0 + float(wrapped.size()) * 18.0
+		if str(sentence).strip_edges() != "":
+			sentences.append(str(sentence))
+	var fit := _rundown_fit(sentences, width - 16.0, 692.0 - 46.0)
+	var wrapped: Array = fit["rows"]
+	var height := float(fit["height"])
 	var top := 46.0
 	var limit := 692.0
 	if top + height > limit:
 		height = limit - top
 	# The left gutter stays off the cards, the gold rim, and the footer.
-	_paint_tooltip(Rect2(8.0, top, width, height), wrapped)
+	_paint_tooltip(Rect2(8.0, top, width, height), wrapped, int(fit["size"]), int(fit["step"]))
 
 
 func _slot_color(slot: String) -> Color:

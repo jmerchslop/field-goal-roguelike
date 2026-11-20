@@ -210,6 +210,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "ui3":
+		if not await _capture_ui3():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "rs1":
 		if not await _capture_rs1():
 			get_tree().quit(1)
@@ -380,11 +386,11 @@ func _ready() -> void:
 		return
 	board.front.screen = FrontEnd.Screen.SELECT
 	board.selecting = true
-	board.highlight = 0
+	board.highlight = Kickers.slot_for(Kickers.BIG_BRUCE)
 	if not await _capture("kicker_select.png"):
 		get_tree().quit(1)
 		return
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	if not await _capture("view_rest.png"):
 		get_tree().quit(1)
@@ -442,7 +448,7 @@ func _ready() -> void:
 	if not await _capture("sweet_spot_meter.png"):
 		get_tree().quit(1)
 		return
-	board.highlight = 0
+	board.highlight = Kickers.slot_for(Kickers.BIG_BRUCE)
 	board.confirm_kicker()
 	if not await _capture("big_bruce_play.png"):
 		get_tree().quit(1)
@@ -469,7 +475,7 @@ func _ready() -> void:
 	if not await _capture("miss_same_kick.png"):
 		get_tree().quit(1)
 		return
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	board.run.attempts = 2
 	_finish_centered_power(20.0)
@@ -491,7 +497,7 @@ func _ready() -> void:
 	if not await _capture("power_100_long.png"):
 		get_tree().quit(1)
 		return
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	board.run.resolve_kick("GOOD", 0.0, false)
 	board.run.roll_offer()
@@ -548,11 +554,11 @@ func _ready() -> void:
 		get_tree().quit(1)
 		return
 	board.open_select()
-	board.highlight = 0
+	board.highlight = Kickers.slot_for(Kickers.BIG_BRUCE)
 	if not await _capture("select_headshots.png"):
 		get_tree().quit(1)
 		return
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	_log_posts("center")
 	if not await _capture("stadium_center.png"):
@@ -678,7 +684,7 @@ func _ready() -> void:
 	if not await _capture("anim_walk_early.png"):
 		get_tree().quit(1)
 		return
-	board.highlight = 0
+	board.highlight = Kickers.slot_for(Kickers.BIG_BRUCE)
 	board.confirm_kicker()
 	board.pose_for_shot("idle")
 	if not await _capture("anim_bruce_idle.png"):
@@ -776,7 +782,7 @@ func _capture_records_story() -> bool:
 	if not await _capture("records_empty.png"):
 		return false
 	board.showing_records = false
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	if not await _capture("slots_empty.png"):
 		return false
@@ -887,7 +893,7 @@ func _capture_records_story() -> bool:
 	if not await _capture("persist_reload.png"):
 		return false
 	board.showing_records = false
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	if not await _capture("slots_empty_again.png"):
 		return false
@@ -915,15 +921,15 @@ func _capture_range_hotfix() -> bool:
 	board.showing_records = false
 	board.save_note = ""
 	board._note_time = 0.0
-	board.highlight = 0
+	board.highlight = Kickers.slot_for(Kickers.BIG_BRUCE)
 	board.confirm_kicker()
 	if not await _shoot_power_result(19, "bruce_p100_kick19_short.png", "SHORT", 70.0):
 		return false
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	if not await _shoot_power_result(14, "walkon_p100_kick14_short.png", "SHORT", 55.0):
 		return false
-	board.highlight = 0
+	board.highlight = Kickers.slot_for(Kickers.BIG_BRUCE)
 	board.confirm_kicker()
 	board.run.give(Loadout.CANNON, 1)
 	if not await _shoot_power_result(18, "bruce_cannon_kick18_good.png", "GOOD", 76.0):
@@ -988,7 +994,7 @@ func _capture_meter_row() -> bool:
 	board.showing_records = false
 	board.save_note = ""
 	board.run.trophy_name = ""
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	board.run.cash_popup = ""
 	board.run.vitamin_note = ""
@@ -1059,7 +1065,7 @@ func _capture_meter_row() -> bool:
 	board.load_current_kick()
 	if not await _capture("meter_rank_badge.png"):
 		return false
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	board.run.give(Loadout.ICED)
 	board.load_current_kick()
@@ -1069,7 +1075,7 @@ func _capture_meter_row() -> bool:
 	board.meter_time = 0.5
 	if not await _capture("meter_iced_curse_hidden.png"):
 		return false
-	board.highlight = 0
+	board.highlight = Kickers.slot_for(Kickers.BIG_BRUCE)
 	board.confirm_kicker()
 	var step_guard := 0
 	while board.run.kick_number < 5 and step_guard < 20:
@@ -1096,7 +1102,7 @@ func _capture_meter_row() -> bool:
 func _capture_vitamin_shop() -> bool:
 	board.showing_records = false
 	board.save_note = ""
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	board.run.cash_popup = ""
 	if not await _capture("shop_hud_zero.png"):
@@ -1275,7 +1281,7 @@ func _swing_meter(power_value: float, error_value: float) -> void:
 
 
 func _capture_needle() -> bool:
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	board.showing_records = false
 	board.save_note = ""
@@ -1333,7 +1339,7 @@ func _capture_needle() -> bool:
 	print("NEEDLE p100 P ", board.logic.power, " fill ", board.logic.fill_power, " angle ", board.logic.needle_angle, " phase ", board.logic.phase)
 	if not await _capture("needle_p100_redtip.png"):
 		return false
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	board.run.give(Loadout.HERO_BALL, 1)
 	board.load_current_kick()
@@ -1343,7 +1349,7 @@ func _capture_needle() -> bool:
 	print("NEEDLE hero t=0.50s P=", board.logic.power_true, " speed ", board.logic.stats.power_speed, " (plain would be 50)")
 	if not await _capture("needle_hero_slow.png"):
 		return false
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	board.run.give(Loadout.STONE)
 	board.load_current_kick()
@@ -1353,7 +1359,7 @@ func _capture_needle() -> bool:
 	print("NEEDLE stone toe t=0.50s P=", board.logic.power_true, " speed ", board.logic.stats.power_speed, " (plain would be 50)")
 	if not await _capture("needle_stone_toe_fast.png"):
 		return false
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	board.force_weather(RunLogic.RAIN)
 	board.load_current_kick()
@@ -1366,7 +1372,7 @@ func _capture_needle() -> bool:
 	print("NEEDLE rain t=0.75s after MAX e=", board.logic.needle, " (clear would be about -7.5) angle ", board.logic.needle_angle)
 	if not await _capture("needle_rain_acc_fast.png"):
 		return false
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	board.run.give(Loadout.ICED)
 	board.force_weather(RunLogic.CLEAR)
@@ -1378,7 +1384,7 @@ func _capture_needle() -> bool:
 	print("NEEDLE iced curse fade ", board.run.needle_fades())
 	if not await _capture("needle_iced_curse.png"):
 		return false
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	var step_guard := 0
 	while board.run.kick_number < 5 and step_guard < 20:
@@ -1400,7 +1406,7 @@ func _capture_needle() -> bool:
 	print("NEEDLE iced boss fade ", RunLogic.iced_needle_alpha(board.run.needle_fades(), true, 80.0, 11.4))
 	if not await _capture("needle_iced_boss.png"):
 		return false
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	board.force_weather(RunLogic.CLEAR)
 	board.run.give(Loadout.PINPOINT, 4)
@@ -1413,7 +1419,7 @@ func _capture_needle() -> bool:
 	print("NEEDLE pinpoint perfect band ", board.logic.stats.perfect_band, " good ", board.logic.stats.good_band)
 	if not await _capture("needle_pinpoint_wide.png"):
 		return false
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	board.run.give(Loadout.TIGHT)
 	board.load_current_kick()
@@ -1429,7 +1435,7 @@ func _capture_needle() -> bool:
 
 
 func _capture_trail() -> bool:
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.selecting = true
 	board.confirm_kicker()
 	board.logic.aim_degrees = 0.0
@@ -1535,7 +1541,7 @@ func _capture_trail() -> bool:
 
 
 func _capture_c3() -> bool:
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.selecting = true
 	board.confirm_kicker()
 	board.logic.aim_degrees = 0.0
@@ -1599,7 +1605,7 @@ func _capture_c3() -> bool:
 
 
 func _capture_b5() -> bool:
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	if board._shift_weather(KEY_9) != RunLogic.LIGHTS:
 		print("Shift+9 did not map to Under the Lights")
@@ -1663,7 +1669,7 @@ func _capture_b5() -> bool:
 
 
 func _capture_b5b() -> bool:
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	board.force_weather(RunLogic.LIGHTS)
 	board.glare_time = 0.5
@@ -1728,7 +1734,7 @@ func _capture_b5b() -> bool:
 
 
 func _capture_b5c() -> bool:
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	board.run.spot_yards = 0.0
 	board.logic.start_lateral_yards = 0.0
@@ -1787,7 +1793,7 @@ func _capture_b5c() -> bool:
 
 func _capture_rw2() -> bool:
 	board.open_select()
-	board.highlight = 3
+	board.highlight = Kickers.slot_for(Kickers.GARY)
 	board.save_note = str(Kickers.get_def(Kickers.GARY).get("ball_description", ""))
 	board.refresh_view()
 	if board.save_note.find("3%") < 0 or board.save_note.find("+25%") < 0 or board.save_note.find("miss") < 0:
@@ -1797,7 +1803,7 @@ func _capture_rw2() -> bool:
 		return false
 	board.save_note = ""
 	board.open_select()
-	board.highlight = 4
+	board.highlight = Kickers.slot_for(Kickers.VEX)
 	var had_vex: bool = SaveData.has_unlock(Kickers.VEX)
 	SaveData.unlocks[Kickers.VEX] = false
 	board.save_note = ""
@@ -1816,7 +1822,7 @@ func _capture_rw2() -> bool:
 	SaveData.unlocks[Kickers.VEX] = had_vex
 	board.save_note = ""
 	board.selecting = false
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	board.force_weather(RunLogic.CLEAR)
 	board.run.set_wind(0.0, 0.0)
@@ -1836,7 +1842,7 @@ func _capture_rw2() -> bool:
 
 
 func _capture_rw1() -> bool:
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	board.force_weather(RunLogic.CLEAR)
 	board.run.set_wind(0.0, 0.0)
@@ -1946,7 +1952,7 @@ func _capture_au1() -> bool:
 	board.refresh_view()
 	if not await _capture("au1_options_sliders.png"):
 		return false
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.open_select()
 	board.confirm_kicker()
 	await get_tree().create_timer(1.2).timeout
@@ -1965,21 +1971,21 @@ func _capture_f3() -> bool:
 	SaveData.kickers[Kickers.WALK_ON]["tad_unlocked"] = 3
 	SaveData.set_tad_selected(Kickers.WALK_ON, 2)
 	board.open_select()
-	board.highlight = 0
+	board.highlight = Kickers.slot_for(Kickers.BIG_BRUCE)
 	board.refresh_view()
 	if not await _capture("f3_bruce.png"):
 		return false
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.refresh_view()
 	if not await _capture("f3_walk_on.png"):
 		return false
 	SaveData.unlocks[Kickers.CARLOS] = true
-	board.highlight = 7
+	board.highlight = Kickers.slot_for(Kickers.CARLOS)
 	board.refresh_view()
 	if not await _capture("f3_unlocked_third.png"):
 		return false
 	SaveData.unlocks[Kickers.CARLOS] = false
-	board.highlight = 2
+	board.highlight = Kickers.slot_for(Kickers.PHIL)
 	board.refresh_view()
 	if not await _capture("f3_locked.png"):
 		return false
@@ -1991,7 +1997,7 @@ func _capture_f3() -> bool:
 
 func _capture_fx1() -> bool:
 	board._taking_pictures = true
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	board.run.unlock_toast = "Willow Reed unlocked"
 	board._unlock_seen = ""
@@ -2087,7 +2093,7 @@ func _capture_fx1() -> bool:
 
 
 func _capture_pk2b() -> bool:
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	board._taking_pictures = true
 	board.run.force_offer([
@@ -2172,7 +2178,7 @@ func _capture_pk2b() -> bool:
 
 
 func _capture_pk2a() -> bool:
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	board.run.force_offer([
 		{"id": Loadout.HYPE_MAN, "rank": 1, "kind": Loadout.PERK, "slot": Loadout.PERK},
@@ -2246,7 +2252,7 @@ func _capture_pk2a() -> bool:
 
 func _capture_ui1() -> bool:
 	board.front.run_mode = "endless"
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	board.run.run_mode = "endless"
 	board.run.cleats_id = Loadout.CANNON
@@ -2317,7 +2323,7 @@ func _capture_rail_closeup(file_name: String) -> bool:
 
 func _capture_bl1() -> bool:
 	board.front.run_mode = "standard"
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	board.refresh_view()
 	var ball_px := float(board.sprite_screen_height(board._ball))
@@ -2457,7 +2463,7 @@ func _capture_tw1() -> bool:
 	if had_file:
 		backup = FileAccess.get_file_as_bytes(path)
 	board.front.run_mode = "standard"
-	board.highlight = 0
+	board.highlight = Kickers.slot_for(Kickers.BIG_BRUCE)
 	board.confirm_kicker()
 	board.run.belt = [Vitamins.PROTEIN, ""]
 	board.apply_live_vitamins()
@@ -2487,7 +2493,7 @@ func _capture_tw1() -> bool:
 	if not await _capture("tw1_breakdown.png"):
 		_restore_as2_save(had_file, path, backup)
 		return false
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	board.debug_too_weak(false)
 	if board.too_weak_age < 0.0:
@@ -2504,7 +2510,7 @@ func _capture_tw1() -> bool:
 		_restore_as2_save(had_file, path, backup)
 		return false
 	board.front.run_mode = "endless"
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	board.run.score = 80
 	board.run.longest_make = 64.0
@@ -2537,11 +2543,11 @@ func _capture_as2() -> bool:
 	SaveData.kickers[Kickers.WALK_ON]["tad_selected"] = 4
 	board.front.run_mode = "standard"
 	board.open_select()
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.tad_picker_slot = -1
 	board.refresh_view()
 	var cards: Array = SelectCard.grid_rects()
-	for pair in [[Kickers.WALK_ON, 1], [Kickers.PHIL, 2]]:
+	for pair in [[Kickers.WALK_ON, Kickers.slot_for(Kickers.WALK_ON)], [Kickers.PHIL, Kickers.slot_for(Kickers.PHIL)]]:
 		var id := str(pair[0])
 		var card: Rect2 = cards[int(pair[1])]
 		var layout: Dictionary = SelectCard.picker_layout(card)
@@ -2550,7 +2556,7 @@ func _capture_as2() -> bool:
 	if not await _capture("as2_browse.png"):
 		_restore_as2_save(had_file, path, backup)
 		return false
-	board.tad_picker_slot = 1
+	board.tad_picker_slot = Kickers.slot_for(Kickers.WALK_ON)
 	board.refresh_view()
 	if board._hud.tad_wheel.size.x < 1.0:
 		print("AS2 picker did not open")
@@ -2559,12 +2565,12 @@ func _capture_as2() -> bool:
 	if not await _capture("as2_picker.png"):
 		_restore_as2_save(had_file, path, backup)
 		return false
-	if not await _capture_region("as2_picker_closeup.png", cards[1].grow(6.0)):
+	if not await _capture_region("as2_picker_closeup.png", cards[Kickers.slot_for(Kickers.WALK_ON)].grow(6.0)):
 		_restore_as2_save(had_file, path, backup)
 		return false
 	SaveData.kickers[Kickers.WALK_ON]["tad_unlocked"] = 10
 	SaveData.kickers[Kickers.WALK_ON]["tad_selected"] = 6
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	var found := false
 	for seed in 80:
@@ -2586,7 +2592,7 @@ func _capture_as2() -> bool:
 		return false
 	board.open_select()
 	SaveData.kickers[Kickers.WALK_ON]["tad_selected"] = 7
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	print("AS2 tad7 level ", board.run.tad_level, " power ", board.run.stats.power_speed, " omega ", board.logic._power_omega(), " base ", MeterGauge.omega_base())
 	board.logic.press_space()
@@ -2596,7 +2602,7 @@ func _capture_as2() -> bool:
 		return false
 	board.open_select()
 	SaveData.kickers[Kickers.WALK_ON]["tad_selected"] = 8
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	var before := int(board.run.attempts)
 	board.run.resolve_kick("GOOD", 0.0, false)
@@ -2612,7 +2618,7 @@ func _capture_as2() -> bool:
 		return false
 	board.open_select()
 	SaveData.kickers[Kickers.WALK_ON]["tad_selected"] = 9
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	print("AS2 tad9 weather ", board.run.weather)
 	if board.run.weather != RunLogic.RAIN and board.run.weather != RunLogic.SNOW and board.run.weather != RunLogic.MUD:
@@ -2623,7 +2629,7 @@ func _capture_as2() -> bool:
 		return false
 	board.open_select()
 	SaveData.kickers[Kickers.WALK_ON]["tad_selected"] = 10
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	board._twist_time = 1.0
 	board._apply_post_slide()
@@ -2686,7 +2692,7 @@ func _capture_as1() -> bool:
 	SaveData.kickers[Kickers.WALK_ON]["tad_unlocked"] = 3
 	SaveData.set_tad_selected(Kickers.WALK_ON, 3)
 	board.open_select()
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.refresh_view()
 	if not await _capture("as1_select_tad.png"):
 		return false
@@ -2714,7 +2720,7 @@ func _capture_as1() -> bool:
 
 
 func _capture_mf1() -> bool:
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	board.logic.press_space()
 	board.logic.advance(board.logic.windup_left)
@@ -2762,7 +2768,7 @@ func _capture_mf1() -> bool:
 
 
 func _capture_pk1() -> bool:
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	board.run.give(Loadout.RAIN_DANCE, 1)
 	board.run.force_weather(RunLogic.CLEAR)
@@ -2807,7 +2813,7 @@ func _capture_pk1() -> bool:
 
 
 func _capture_boss2() -> bool:
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	var first := ""
 	var second := ""
@@ -2865,7 +2871,7 @@ func _capture_boss2() -> bool:
 
 
 func _capture_rt1() -> bool:
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	board.force_weather(RunLogic.CLEAR)
 	board.load_current_kick()
@@ -2917,7 +2923,7 @@ func _capture_rt1() -> bool:
 
 
 func _capture_boss1() -> bool:
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	board.force_weather(RunLogic.CLOCK)
 	board.logic.phase = KickLogic.Phase.AIMING
@@ -2951,7 +2957,7 @@ func _capture_boss1() -> bool:
 
 
 func _capture_b5e() -> bool:
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	board.run.spot_yards = 0.0
 	board.logic.start_lateral_yards = 0.0
@@ -2999,7 +3005,7 @@ func _capture_b5e() -> bool:
 
 
 func _capture_b5d() -> bool:
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	board.run.spot_yards = 0.0
 	board.logic.start_lateral_yards = 0.0
@@ -3067,7 +3073,7 @@ func _beams_on_tee(label: String) -> bool:
 
 
 func _capture_c4() -> bool:
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	board.force_weather(RunLogic.CLEAR)
 	board.run.wind_speed = 0
@@ -3122,7 +3128,7 @@ func _capture_c4() -> bool:
 
 
 func _capture_r2() -> bool:
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	board.force_weather(RunLogic.CLEAR)
 	board.run.attempts = 3
@@ -3210,7 +3216,7 @@ func _capture_r2() -> bool:
 
 
 func _capture_r1() -> bool:
-	board.highlight = 0
+	board.highlight = Kickers.slot_for(Kickers.BIG_BRUCE)
 	board.confirm_kicker()
 	board.force_weather(RunLogic.CLEAR)
 	if not board.run.arm_debug_ring():
@@ -3343,7 +3349,7 @@ func _capture_r1() -> bool:
 
 
 func _capture_g6() -> bool:
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.selecting = true
 	board.confirm_kicker()
 	board.logic.aim_degrees = 0.0
@@ -3438,7 +3444,7 @@ func _show_reaction(result: String, age: float, shanked: bool) -> void:
 
 
 func _capture_g5() -> bool:
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.selecting = true
 	board.confirm_kicker()
 	board.logic.aim_degrees = 0.0
@@ -3559,7 +3565,7 @@ func _capture_slot(file_name: String, slot: int) -> bool:
 func _capture_f2() -> bool:
 	_lock_roster(false)
 	board.open_select()
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.refresh_view()
 	if not await _capture("f2_select_fresh.png"):
 		return false
@@ -3567,11 +3573,11 @@ func _capture_f2() -> bool:
 		return false
 	if not await _capture_slot("f2_phil_locked.png", 2):
 		return false
-	board.highlight = 0
+	board.highlight = Kickers.slot_for(Kickers.BIG_BRUCE)
 	board.refresh_view()
 	if not await _capture("f2_highlight.png"):
 		return false
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	if board.selecting or board.run.kicker_id != Kickers.WALK_ON:
 		print("Walk-On did not start")
@@ -3580,7 +3586,7 @@ func _capture_f2() -> bool:
 		return false
 	_lock_roster(true)
 	board.open_select()
-	board.highlight = 4
+	board.highlight = Kickers.slot_for(Kickers.VEX)
 	board.refresh_view()
 	if not await _capture_slot("f2_vex_card.png", 4):
 		return false
@@ -3596,7 +3602,7 @@ func _go_to_spot(yards: float) -> void:
 
 
 func _capture_c3b() -> bool:
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.selecting = true
 	board.confirm_kicker()
 	board.logic.aim_degrees = 0.0
@@ -3666,7 +3672,7 @@ func _capture_c3b() -> bool:
 
 
 func _capture_cone5() -> bool:
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.selecting = true
 	board.confirm_kicker()
 	board.logic.aim_degrees = 0.0
@@ -3752,7 +3758,7 @@ func _capture_cone5() -> bool:
 
 
 func _capture_cone() -> bool:
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.selecting = true
 	board.confirm_kicker()
 	board.logic.phase = KickLogic.Phase.AIMING
@@ -3839,7 +3845,7 @@ func _capture_cone() -> bool:
 
 
 func _capture_icons() -> bool:
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.selecting = true
 	board.front.run_mode = "endless"
 	board.confirm_kicker()
@@ -3889,7 +3895,7 @@ func _capture_pause() -> bool:
 	records.file_path = "user://fg_pause_shot.cfg"
 	board.showing_records = false
 	board.selecting = false
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.front.run_mode = "standard"
 	board.confirm_kicker()
 	board.run.kick_number = 2
@@ -3907,7 +3913,7 @@ func _capture_pause() -> bool:
 	board.front.gate_index = 0
 	if not await _capture("pause_confirm_standard.png"):
 		return false
-	board.highlight = 0
+	board.highlight = Kickers.slot_for(Kickers.BIG_BRUCE)
 	board.front.run_mode = "endless"
 	board.front.gate = ""
 	board.confirm_kicker()
@@ -4009,7 +4015,7 @@ func _capture_menus() -> bool:
 	board.front.menu_index = 0
 	board.front.confirm_menu()
 	board.selecting = true
-	board.highlight = 0
+	board.highlight = Kickers.slot_for(Kickers.BIG_BRUCE)
 	if not await _capture("select_from_standard.png"):
 		return false
 	board.selecting = false
@@ -4070,7 +4076,7 @@ func _capture_modes() -> bool:
 	board.showing_records = false
 	board.front.screen = FrontEnd.Screen.PLAY
 	board.selecting = false
-	board.highlight = 0
+	board.highlight = Kickers.slot_for(Kickers.BIG_BRUCE)
 	board.front.run_mode = "endless"
 	board.confirm_kicker()
 	board.run.run_mode = "endless"
@@ -4140,7 +4146,7 @@ func _capture_modes() -> bool:
 	if not await _capture("endless_perk_iv.png"):
 		return false
 	board.front.run_mode = "standard"
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	board.run.kick_resolved = true
 	board.run.last_result_made = true
@@ -4160,7 +4166,7 @@ func _capture_modes() -> bool:
 	if not await _capture("standard_no_high_ranks.png"):
 		return false
 	board.run.skip_offer()
-	board.highlight = 0
+	board.highlight = Kickers.slot_for(Kickers.BIG_BRUCE)
 	board.confirm_kicker()
 	board.run.kick_number = 11
 	board.run.run_mode = "endless"
@@ -4222,7 +4228,7 @@ func _capture_modes() -> bool:
 	board.front.screen = FrontEnd.Screen.SELECT
 	board.selecting = true
 	board.showing_records = false
-	board.highlight = 0
+	board.highlight = Kickers.slot_for(Kickers.BIG_BRUCE)
 	if not await _capture("bruce_select_kit.png"):
 		return false
 	board.confirm_kicker()
@@ -4288,7 +4294,7 @@ func _capture_modes() -> bool:
 		return false
 	board.front.screen = FrontEnd.Screen.SELECT
 	board.selecting = true
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	if not await _capture("walkon_unchanged.png"):
 		return false
 	return true
@@ -4391,7 +4397,7 @@ func _capture_clean_meter() -> bool:
 	board.run.awaiting_mulligan = false
 	board.run.curse_prompt = false
 	board.front.run_mode = "standard"
-	board.highlight = 0
+	board.highlight = Kickers.slot_for(Kickers.BIG_BRUCE)
 	board.confirm_kicker()
 	board.run.set_wind(0.0, 0.0)
 	board.force_weather(RunLogic.CLEAR)
@@ -4431,7 +4437,7 @@ func _capture_clean_meter() -> bool:
 	board._pose = "run"
 	if not await _capture("meter_clean_accuracy.png"):
 		return false
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	board.force_weather(RunLogic.CLEAR)
 	board.load_current_kick()
@@ -4446,7 +4452,7 @@ func _capture_clean_meter() -> bool:
 	board._pose = "run"
 	if not await _capture("meter_clean_walkon_sweep.png"):
 		return false
-	board.highlight = 0
+	board.highlight = Kickers.slot_for(Kickers.BIG_BRUCE)
 	board.confirm_kicker()
 	board.run.belt = [Vitamins.MAGNESIUM, ""]
 	if not board.run.use_belt(0):
@@ -4469,13 +4475,13 @@ func _capture_roster() -> bool:
 	board.showing_records = false
 	board.selecting = true
 	board.front.screen = FrontEnd.Screen.SELECT
-	board.highlight = 2
+	board.highlight = Kickers.slot_for(Kickers.PHIL)
 	if not await _capture("select_locked.png"):
 		return false
 	SaveData.try_unlock(Kickers.PHIL)
 	SaveData.try_unlock(Kickers.GARY)
 	SaveData.try_unlock(Kickers.VEX)
-	board.highlight = 4
+	board.highlight = Kickers.slot_for(Kickers.VEX)
 	if not await _capture("select_unlocked.png"):
 		return false
 	board.showing_records = true
@@ -4521,7 +4527,7 @@ func _capture_roster() -> bool:
 			return false
 		if not await _capture_gauge_crop("meter_band_%s_close.png" % str(entry[1])):
 			return false
-	board.highlight = 2
+	board.highlight = Kickers.slot_for(Kickers.PHIL)
 	board.confirm_kicker()
 	board.run.cash = 12
 	board.run.kick_number = 5
@@ -4534,7 +4540,7 @@ func _capture_roster() -> bool:
 	if not await _capture("phil_shop_free.png"):
 		return false
 	board.run.leave_shop()
-	board.highlight = 3
+	board.highlight = Kickers.slot_for(Kickers.GARY)
 	board.confirm_kicker()
 	board.force_weather(RunLogic.CLEAR)
 	board.run.set_wind(0.0, 0.0)
@@ -4545,7 +4551,7 @@ func _capture_roster() -> bool:
 	print("GARY result ", board.logic.result_text, " perfect ", board.logic.perfect, " e ", board.logic.accuracy_error)
 	if not await _capture("gary_good_as_gold.png"):
 		return false
-	board.highlight = 4
+	board.highlight = Kickers.slot_for(Kickers.VEX)
 	board.confirm_kicker()
 	board.run.kick_number = 1
 	board.force_weather(RunLogic.CLEAR)
@@ -4578,7 +4584,7 @@ func _capture_roster() -> bool:
 	print("VEX 80 range ", board.logic.max_range, " ", board.logic.result_text)
 	if not await _capture("vex_short_80.png"):
 		return false
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	board.run.belt = [Vitamins.MAGNESIUM, ""]
 	if not board.run.use_belt(0):
@@ -4597,7 +4603,7 @@ func _capture_roster() -> bool:
 
 
 func _capture_shank_meter() -> bool:
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	board.force_weather(RunLogic.CLEAR)
 	board.run.set_wind(0.0, 0.0)
@@ -4670,7 +4676,7 @@ func _capture_shank_meter() -> bool:
 	print("PINPOINT bands ", board.logic.stats.perfect_band, board.logic.stats.good_band)
 	if not await _capture_gauge_crop("meter_pinpoint_walkon_close.png"):
 		return false
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	board.run.give(Loadout.TIGHT)
 	board.load_current_kick()
@@ -4682,7 +4688,7 @@ func _capture_shank_meter() -> bool:
 	print("TIGHT bands ", board.logic.stats.perfect_band, board.logic.stats.good_band)
 	if not await _capture_gauge_crop("meter_tight_walkon_close.png"):
 		return false
-	board.highlight = 0
+	board.highlight = Kickers.slot_for(Kickers.BIG_BRUCE)
 	board.confirm_kicker()
 	board.force_weather(RunLogic.CLEAR)
 	board.load_current_kick()
@@ -4703,7 +4709,7 @@ func _capture_m2_kickers() -> bool:
 	board.showing_records = false
 	board.selecting = true
 	board.front.screen = FrontEnd.Screen.SELECT
-	board.highlight = 5
+	board.highlight = Kickers.slot_for(Kickers.COLE)
 	if not await _capture("select_eight_locked.png"):
 		return false
 	SaveData.try_unlock(Kickers.COLE)
@@ -4729,7 +4735,7 @@ func _capture_m2_kickers() -> bool:
 			board.pose_for_shot(str(pose))
 			if not await _capture("field_%s_%s.png" % [str(card[1]), str(pose)]):
 				return false
-	board.highlight = 5
+	board.highlight = Kickers.slot_for(Kickers.COLE)
 	board.confirm_kicker()
 	board.run.kick_number = 5
 	board.run.last_result_made = true
@@ -4746,7 +4752,7 @@ func _capture_m2_kickers() -> bool:
 	if not await _capture("cole_kick5_no_shop.png"):
 		return false
 	board.run.unlock_toast = ""
-	board.highlight = 6
+	board.highlight = Kickers.slot_for(Kickers.WILLOW)
 	board.confirm_kicker()
 	board.run.kick_number = 5
 	board.run.last_result_made = true
@@ -4759,7 +4765,7 @@ func _capture_m2_kickers() -> bool:
 	if not await _capture("willow_first_shop.png"):
 		return false
 	board.run.leave_shop()
-	board.highlight = 7
+	board.highlight = Kickers.slot_for(Kickers.CARLOS)
 	board.confirm_kicker()
 	board.force_weather(RunLogic.CLEAR)
 	board.run.set_wind(0.0, 0.0)
@@ -4808,7 +4814,7 @@ func _lock_preview_power(power_value: float) -> void:
 
 
 func _capture_drive_lid() -> bool:
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	board.showing_records = false
 	board.selecting = false
@@ -4835,7 +4841,7 @@ func _capture_drive_lid() -> bool:
 	if not await _capture("drive_lid_rank2_offer.png"):
 		return false
 	board.run.skip_offer()
-	board.highlight = 0
+	board.highlight = Kickers.slot_for(Kickers.BIG_BRUCE)
 	board.confirm_kicker()
 	board.run.give(Loadout.DRIVE_LID, 1)
 	board.load_current_kick()
@@ -4847,7 +4853,7 @@ func _capture_drive_lid() -> bool:
 	if not await _capture("drive_lid_bruce_69.png"):
 		return false
 	board.save_note = ""
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	board.run.run_mode = "endless"
 	board.run.kick_number = 6
@@ -4974,7 +4980,7 @@ func _capture_t1b() -> bool:
 		tag = "after"
 	board.showing_records = false
 	board.selecting = false
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	board.force_weather(RunLogic.CLEAR)
 	board.run.set_wind(0.0, 0.0)
@@ -5041,10 +5047,10 @@ func _capture_t1() -> bool:
 		return false
 	board.front.screen = FrontEnd.Screen.SELECT
 	board.selecting = true
-	board.highlight = 0
+	board.highlight = Kickers.slot_for(Kickers.BIG_BRUCE)
 	if not await _capture("t1_%s_select.png" % tag):
 		return false
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	board.force_weather(RunLogic.CLEAR)
 	board.run.set_wind(0.0, 0.0)
@@ -5122,7 +5128,7 @@ func _capture_menu_and_rerolls() -> bool:
 	if not await _capture("options_selected_plate.png"):
 		return false
 	SaveData.wins = saved_wins
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	board.force_weather(RunLogic.CLEAR)
 	board.run.set_wind(0.0, 0.0)
@@ -5234,7 +5240,7 @@ func _capture_ball_sprites() -> bool:
 			return false
 		if not await _capture_ball_zoom("flight_%s_%s_close.png" % [str(entry[1]), str(entry[2])], false):
 			return false
-	board.highlight = 3
+	board.highlight = Kickers.slot_for(Kickers.GARY)
 	board.confirm_kicker()
 	board.force_weather(RunLogic.CLEAR)
 	board.run.set_wind(0.0, 0.0)
@@ -5309,7 +5315,7 @@ func _settle_weather() -> void:
 
 
 func _capture_precip() -> bool:
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.selecting = true
 	board.confirm_kicker()
 	board.logic.phase = KickLogic.Phase.AIMING
@@ -5376,7 +5382,7 @@ func _capture_precip() -> bool:
 
 
 func _capture_sky() -> bool:
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.selecting = true
 	board.confirm_kicker()
 	board.logic.phase = KickLogic.Phase.AIMING
@@ -5420,7 +5426,7 @@ func _capture_sky() -> bool:
 
 
 func _capture_stands() -> bool:
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.selecting = true
 	board.confirm_kicker()
 	board.logic.phase = KickLogic.Phase.AIMING
@@ -5476,7 +5482,7 @@ func _capture_corner(file_name: String) -> bool:
 
 
 func _capture_gear() -> bool:
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.selecting = true
 	board.confirm_kicker()
 	board.run.run_mode = "endless"
@@ -5515,7 +5521,7 @@ func _capture_gear() -> bool:
 		board._sync_debug_loadout()
 		if not await _capture("gear_badge_%s.png" % Loadout.rank_label(rank).to_lower()):
 			return false
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.selecting = true
 	board.confirm_kicker()
 	board.run.give(Loadout.CANNON, 6)
@@ -5536,7 +5542,7 @@ func _capture_gear() -> bool:
 		return false
 	if not await _shoot_hook(true, "gear_hook_true_lid.png"):
 		return false
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.selecting = true
 	board.confirm_kicker()
 	board.load_current_kick()
@@ -5593,7 +5599,7 @@ func _shoot_range(kicker_id: String, cleats: String, cleat_rank: int, helmet: St
 
 
 func _shoot_hook(true_lid: bool, file_name: String) -> bool:
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.selecting = true
 	board.confirm_kicker()
 	board.run.helmet_id = Loadout.TRUE_LID if true_lid else ""
@@ -5608,7 +5614,7 @@ func _shoot_hook(true_lid: bool, file_name: String) -> bool:
 
 
 func _shoot_patient(gloves: bool, big_game: bool, file_name: String) -> bool:
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.selecting = true
 	board.confirm_kicker()
 	board.run.gloves_id = Loadout.PATIENT_GLOVES if gloves else ""
@@ -5625,7 +5631,7 @@ func _shoot_patient(gloves: bool, big_game: bool, file_name: String) -> bool:
 
 
 func _shoot_wind(speed: float, direction: float, shelter: bool, file_name: String) -> bool:
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.selecting = true
 	board.confirm_kicker()
 	board.run.helmet_id = Loadout.SHELTER_LID if shelter else ""
@@ -5638,7 +5644,7 @@ func _shoot_wind(speed: float, direction: float, shelter: bool, file_name: Strin
 
 
 func _shoot_hush(gloves: bool, file_name: String) -> bool:
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.selecting = true
 	board.confirm_kicker()
 	board.run.gloves_id = Loadout.HUSH_GLOVES if gloves else ""
@@ -5653,7 +5659,7 @@ func _shoot_hush(gloves: bool, file_name: String) -> bool:
 func _capture_broadcast() -> bool:
 	board.front.screen = FrontEnd.Screen.SELECT
 	board.selecting = true
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.confirm_kicker()
 	board.logic.phase = KickLogic.Phase.AIMING
 	if not await _capture("hud_walkon_kick1.png"):
@@ -5703,7 +5709,7 @@ func _capture_broadcast() -> bool:
 	board.logic.kick_distance = board.run.distance_yards()
 	if not await _capture("hud_boss.png"):
 		return false
-	board.highlight = 0
+	board.highlight = Kickers.slot_for(Kickers.BIG_BRUCE)
 	board.selecting = true
 	board.confirm_kicker()
 	board.logic.phase = KickLogic.Phase.AIMING
@@ -5711,7 +5717,7 @@ func _capture_broadcast() -> bool:
 		return false
 	var vex_was_open := SaveData.has_unlock(Kickers.VEX)
 	SaveData.unlocks[Kickers.VEX] = true
-	board.highlight = 4
+	board.highlight = Kickers.slot_for(Kickers.VEX)
 	board.selecting = true
 	board.confirm_kicker()
 	board.logic.phase = KickLogic.Phase.AIMING
@@ -5750,7 +5756,7 @@ func _capture_broadcast() -> bool:
 func _capture_stamps() -> bool:
 	board.front.screen = FrontEnd.Screen.SELECT
 	board.selecting = true
-	board.highlight = 0
+	board.highlight = Kickers.slot_for(Kickers.BIG_BRUCE)
 	board.confirm_kicker()
 	board.logic.phase = KickLogic.Phase.POWER
 	board.result_age = 0.0
@@ -5840,7 +5846,7 @@ func _stamp(result: String, shanked: bool, insured: bool, middle: bool, error: f
 
 
 func _capture_pace1() -> bool:
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.selecting = true
 	board.front.run_mode = "standard"
 	board.confirm_kicker()
@@ -5950,7 +5956,7 @@ func _capture_pace2() -> bool:
 	if had_file:
 		backup = FileAccess.get_file_as_bytes(path)
 	var had_willow := bool(SaveData.has_unlock(Kickers.WILLOW))
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.selecting = true
 	board.front.run_mode = "standard"
 	board.confirm_kicker()
@@ -5986,8 +5992,8 @@ func _capture_pace2() -> bool:
 	SaveData.kickers[Kickers.WALK_ON]["tad_selected"] = 8
 	board.front.run_mode = "standard"
 	board.open_select()
-	board.highlight = 1
-	board.tad_picker_slot = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
+	board.tad_picker_slot = Kickers.slot_for(Kickers.WALK_ON)
 	board.refresh_view()
 	print("PACE2 tad ", SaveData.tad_selected(Kickers.WALK_ON), " ", RunLogic.tad_name(8), " ", RunLogic.tad_summary(8))
 	if not await _capture("pace2_tad8_select.png"):
@@ -5995,7 +6001,7 @@ func _capture_pace2() -> bool:
 		return false
 	SaveData.unlocks[Kickers.WILLOW] = false
 	board.tad_picker_slot = -1
-	board.highlight = 6
+	board.highlight = Kickers.slot_for(Kickers.WILLOW)
 	board.refresh_view()
 	print("PACE2 willow ", SelectCard.unlock_line(Kickers.WILLOW))
 	var saved := await _capture("pace2_willow_locked_card.png")
@@ -6004,7 +6010,7 @@ func _capture_pace2() -> bool:
 
 
 func _capture_sk1() -> bool:
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.selecting = true
 	board.front.run_mode = "standard"
 	board.confirm_kicker()
@@ -6088,7 +6094,7 @@ func _capture_sk1() -> bool:
 
 
 func _capture_sk2() -> bool:
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.selecting = true
 	board.front.run_mode = "standard"
 	board.confirm_kicker()
@@ -6165,6 +6171,51 @@ func _capture_sk2() -> bool:
 	return await _capture("sk2_retry_keeps_rung.png")
 
 
+func _capture_ui3() -> bool:
+	var had_gary := bool(SaveData.has_unlock(Kickers.GARY))
+	board.open_select()
+	board.front.run_mode = "standard"
+	board.refresh_view()
+	print("UI3 order ", Kickers.id_for_slot(0), " ", Kickers.id_for_slot(3), " ", Kickers.id_for_slot(7))
+	if not await _capture("ui3_select_order.png"):
+		SaveData.unlocks[Kickers.GARY] = had_gary
+		return false
+	SaveData.unlocks[Kickers.GARY] = true
+	SaveData.kickers[Kickers.GARY]["tad_unlocked"] = 10
+	SaveData.kickers[Kickers.GARY]["tad_selected"] = 10
+	board.highlight = Kickers.slot_for(Kickers.GARY)
+	board.tad_picker_slot = board.highlight
+	board.refresh_view()
+	if not await _capture("ui3_select_tad10_rundown.png"):
+		SaveData.unlocks[Kickers.GARY] = had_gary
+		return false
+	board.tad_picker_slot = -1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
+	board.selecting = true
+	board.confirm_kicker()
+	board.run.open_tad(10)
+	board.run.special_kicks[1] = ""
+	board.run.awaiting_rung = false
+	board.tad_card_done = false
+	board.tad_card_age = -1.0
+	board.tad_card_fade = -1.0
+	board.load_current_kick()
+	print("UI3 card alpha ", board.tad_card_alpha(), " line ", RunLogic.tad_line(10))
+	if not await _capture("ui3_kick1_tad_card.png"):
+		SaveData.unlocks[Kickers.GARY] = had_gary
+		return false
+	board.paused = true
+	board.refresh_view()
+	if not await _capture("ui3_pause_tad10.png"):
+		SaveData.unlocks[Kickers.GARY] = had_gary
+		return false
+	board.run.open_tad(3)
+	board.refresh_view()
+	var saved := await _capture("ui3_pause_tad3.png")
+	SaveData.unlocks[Kickers.GARY] = had_gary
+	return saved
+
+
 func _sk2_choice(kick: int) -> bool:
 	board.run.kick_number = kick
 	board.run.phase = RunLogic.Phase.PLAYING
@@ -6187,7 +6238,7 @@ func _sk2_choice(kick: int) -> bool:
 
 
 func _capture_mtr1() -> bool:
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.selecting = true
 	board.front.run_mode = "standard"
 	board.confirm_kicker()
@@ -6245,12 +6296,12 @@ func _capture_clean1() -> bool:
 		backup = FileAccess.get_file_as_bytes(path)
 	board.front.screen = FrontEnd.Screen.SELECT
 	board.selecting = true
-	board.highlight = 0
+	board.highlight = Kickers.slot_for(Kickers.BIG_BRUCE)
 	print("CLEAN1 bruce ", Kickers.rundown_lines(Kickers.BIG_BRUCE, true))
 	if not await _capture("clean1_bruce_select.png"):
 		_restore_luck1_save(had_file, path, backup, bool(SaveData.has_unlock(Kickers.GARY)))
 		return false
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.front.run_mode = "standard"
 	board.confirm_kicker()
 	board.run.tad_level = 0
@@ -6325,7 +6376,7 @@ func _capture_luck1() -> bool:
 	SaveData.unlocks[Kickers.GARY] = true
 	board.front.screen = FrontEnd.Screen.SELECT
 	board.selecting = true
-	board.highlight = 3
+	board.highlight = Kickers.slot_for(Kickers.GARY)
 	print("LUCK1 select ", SelectCard.luck_line(Kickers.GARY))
 	if not await _capture("luck1_select_gary.png"):
 		_restore_luck1_save(had_file, path, backup, had_gary)
@@ -6397,7 +6448,7 @@ func _restore_luck1_save(had_file: bool, path: String, backup: PackedByteArray, 
 
 
 func _capture_en1() -> bool:
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.selecting = true
 	board.front.run_mode = "endless"
 	board.confirm_kicker()
@@ -6447,7 +6498,7 @@ func _capture_en1() -> bool:
 	print("EN1 far ", board.run.phase)
 	if not await _capture("en1_far_win.png"):
 		return false
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.selecting = true
 	board.front.run_mode = "standard"
 	board.confirm_kicker()
@@ -6484,7 +6535,7 @@ func _capture_ring1b() -> bool:
 	var backup := PackedByteArray()
 	if had_file:
 		backup = FileAccess.get_file_as_bytes(path)
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.selecting = true
 	board.front.run_mode = "standard"
 	board.confirm_kicker()
@@ -6532,8 +6583,8 @@ func _capture_ring1b() -> bool:
 	SaveData.kickers[Kickers.WALK_ON]["tad_selected"] = 2
 	board.front.run_mode = "standard"
 	board.open_select()
-	board.highlight = 1
-	board.tad_picker_slot = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
+	board.tad_picker_slot = Kickers.slot_for(Kickers.WALK_ON)
 	board.refresh_view()
 	print("RING1B tad ", RunLogic.tad_name(2), " ", RunLogic.tad_summary(2))
 	var saved := await _capture("ring1b_tad2_select.png")
@@ -6542,7 +6593,7 @@ func _capture_ring1b() -> bool:
 
 
 func _capture_ring1a() -> bool:
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.selecting = true
 	board.front.run_mode = "standard"
 	board.confirm_kicker()
@@ -6592,7 +6643,7 @@ func _capture_ring1a() -> bool:
 	board.refresh_view()
 	if not await _capture("ring1a_cole_miss_half.png"):
 		return false
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.selecting = true
 	board.front.run_mode = "standard"
 	board.confirm_kicker()
@@ -6635,7 +6686,7 @@ func _capture_ring1a() -> bool:
 
 
 func _capture_pace3() -> bool:
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.selecting = true
 	board.front.run_mode = "standard"
 	board.confirm_kicker()
@@ -6654,7 +6705,7 @@ func _capture_pace3() -> bool:
 	print("PACE3 after pick kick ", board.run.kick_number, " live ", board.run.forced_offer_live, " offer ", board.run.offer.size())
 	if not await _capture("pace3_after_pick_normal_offer.png"):
 		return false
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.selecting = true
 	board.front.run_mode = "endless"
 	board.confirm_kicker()
@@ -6684,7 +6735,7 @@ func _restore_pace2_save(had_file: bool, path: String, backup: PackedByteArray, 
 
 
 func _capture_cam1() -> bool:
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.selecting = true
 	board.front.run_mode = "standard"
 	board.confirm_kicker()
@@ -6713,7 +6764,7 @@ func _capture_cam1() -> bool:
 		return false
 	if not await _cam_kicker(5, 72.0, 100.0, 72.0 / 76.0, "cam1_barely_hold.png"):
 		return false
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.selecting = true
 	board.confirm_kicker()
 	board.set_wind(0.0, 0.0)
@@ -6768,7 +6819,7 @@ func _capture_cam1() -> bool:
 		return false
 	if not await _capture("cam1_offer_after.png"):
 		return false
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.selecting = true
 	board.confirm_kicker()
 	board.force_weather(RunLogic.MOVING)
@@ -6798,7 +6849,7 @@ func _capture_cam1() -> bool:
 	if not await _capture("cam1_snow_follow.png"):
 		return false
 	board.front.run_mode = "endless"
-	board.highlight = 1
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	board.selecting = true
 	board.confirm_kicker()
 	board.run.kick_number = 37
@@ -6882,12 +6933,12 @@ func _capture_rs1() -> bool:
 	for id in Kickers.UNLOCKABLE:
 		SaveData.unlocks[id] = true
 	board.open_select()
-	board.highlight = 0
+	board.highlight = Kickers.slot_for(Kickers.BIG_BRUCE)
 	board.refresh_view()
 	if not await _capture("rs1_select_all_unlocked.png"):
 		_restore_as2_save(had_file, path, backup)
 		return false
-	board.highlight = 4
+	board.highlight = Kickers.slot_for(Kickers.VEX)
 	board.refresh_view()
 	if not await _capture("rs1_vex_card.png"):
 		_restore_as2_save(had_file, path, backup)
@@ -6914,7 +6965,7 @@ func _capture_rs1() -> bool:
 		_restore_as2_save(had_file, path, backup)
 		return false
 	board.front.run_mode = "endless"
-	board.highlight = 4
+	board.highlight = Kickers.slot_for(Kickers.VEX)
 	board.selecting = true
 	board.confirm_kicker()
 	board.run.kick_number = 117
@@ -6951,7 +7002,7 @@ func _rs1_hud(slot: int, file_name: String, expect: float) -> bool:
 
 func _rs1_plate() -> bool:
 	board.front.run_mode = "standard"
-	board.highlight = 4
+	board.highlight = Kickers.slot_for(Kickers.VEX)
 	board.selecting = true
 	board.confirm_kicker()
 	board.set_wind(0.0, 0.0)

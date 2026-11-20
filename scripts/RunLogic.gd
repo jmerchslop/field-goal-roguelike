@@ -631,7 +631,7 @@ static func tad_summary(level: int) -> String:
 		1:
 			return "SHOP PRICES X1.5"
 		2:
-			return "POSTS SHIFT EVERY KICK"
+			return "POSTS SHIFT FROM KICK 2"
 		3:
 			return "KICKS +4 YD"
 		4:
@@ -641,15 +641,19 @@ static func tad_summary(level: int) -> String:
 		6:
 			return "CURSE OFFERS X2"
 		7:
-			return "NEEDLES X1.33"
+			return "BOTH NEEDLES X1.33"
 		8:
 			return "START WITH 1 ATTEMPT"
 		9:
 			return "BAD WEATHER EVERY KICK"
 		10:
-			return "MOVING CREW"
+			return "POSTS MOVE EVERY KICK"
 		_:
 			return "STANDARD"
+
+
+static func tad_line(level: int) -> String:
+	return "%d %s. %s" % [level, tad_name(level).to_upper(), tad_summary(level)]
 
 
 static func tad_name(level: int) -> String:
@@ -683,7 +687,7 @@ static func tad_sentence(level: int) -> String:
 		1:
 			return "Shop prices are 1.50 times, rounded up."
 		2:
-			return "The posts shift on every kick from kick 2."
+			return "The posts shift 1 to 3 yards on every kick from kick 2."
 		3:
 			return "Kicks are 4 yards longer."
 		4:
@@ -693,13 +697,13 @@ static func tad_sentence(level: int) -> String:
 		6:
 			return "Curse offers ×2. Still at most one curse."
 		7:
-			return "Needles ×1.33 on every kick."
+			return "Both needles ×1.33 on every kick."
 		8:
-			return "The run starts with 1 attempt."
+			return "The run starts with 1 attempt instead of 2."
 		9:
 			return "Every kick is rain, snow, or mud."
 		10:
-			return "The posts move on every kick."
+			return "The posts slide side to side on every kick."
 		_:
 			return "Standard rules."
 

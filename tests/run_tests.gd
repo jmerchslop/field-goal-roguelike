@@ -81,6 +81,7 @@ func _run() -> void:
 	_check_mtr1()
 	_check_sk1()
 	_check_sk2()
+	_check_ui3_text()
 	_check_drive_lid_and_power_safety()
 	_check_m2_kickers()
 	_check_honest_cards_and_bench()
@@ -116,6 +117,7 @@ func _finish_live() -> void:
 	_check_markings()
 	_check_live_field()
 	_check_live_kick_sounds()
+	_check_ui3_live()
 	_release_sfx()
 	await create_timer(0.6).timeout
 	_release_sfx()
@@ -1073,10 +1075,10 @@ func _kick_power_accuracy(power_value: float, needle_at_lock: float) -> KickLogi
 
 func _check_kickers_and_fixes() -> void:
 	var first := Kickers.click_slot(-1, 0)
-	check(int(first["highlight"]) == 0 and not bool(first["confirm"]), "check 1 the first click highlights Big Bruce")
+	check(int(first["highlight"]) == 0 and not bool(first["confirm"]), "check 1 the first click highlights The Walk-On")
 	var again := Kickers.click_slot(0, 0)
 	check(bool(again["confirm"]), "check 1 clicking the highlighted card confirms")
-	check(Kickers.id_for_slot(0) == Kickers.BIG_BRUCE and Kickers.id_for_slot(1) == Kickers.WALK_ON, "the two slots are Big Bruce and The Walk-On")
+	check(Kickers.id_for_slot(0) == Kickers.WALK_ON and Kickers.id_for_slot(1) == Kickers.BIG_BRUCE, "the first two slots are The Walk-On and Big Bruce")
 	var bruce := KickerStats.new()
 	Kickers.apply_to(bruce, Kickers.BIG_BRUCE)
 	check(near(bruce.range_per_power, 0.54), "check 1 Big Bruce range per power is 0.54")
@@ -2805,8 +2807,8 @@ func _check_endless_and_farm() -> void:
 func _check_new_kickers() -> void:
 	check(not KickConstants.debug_unlock_all_kickers, "debug_unlock_all_kickers stays false")
 	check(Kickers.ALL.size() == 8, "select has eight kickers")
-	check(Kickers.id_for_slot(2) == Kickers.PHIL and Kickers.id_for_slot(3) == Kickers.GARY and Kickers.id_for_slot(4) == Kickers.VEX, "Phil, Gary, and Vex follow the starters")
-	check(Kickers.id_for_slot(5) == Kickers.COLE and Kickers.id_for_slot(6) == Kickers.WILLOW and Kickers.id_for_slot(7) == Kickers.CARLOS, "Cole, Willow, and Carlos follow Vex")
+	check(Kickers.id_for_slot(2) == Kickers.PHIL and Kickers.id_for_slot(3) == Kickers.WILLOW, "Phil and Willow follow the starters")
+	check(Kickers.id_for_slot(4) == Kickers.COLE and Kickers.id_for_slot(5) == Kickers.GARY and Kickers.id_for_slot(6) == Kickers.CARLOS and Kickers.id_for_slot(7) == Kickers.VEX, "Cole, Gary, Carlos, and Vex are the bottom row")
 	var records = get_root().get_node("SaveData")
 	var kept := str(records.file_path)
 	records.file_path = "user://fg_kicker_unlocks.cfg"
@@ -3325,7 +3327,7 @@ func _check_live_kick_sounds() -> void:
 	var game = packed.instantiate()
 	get_root().add_child(game)
 	game._taking_pictures = false
-	game.highlight = 1
+	game.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	game.confirm_kicker()
 	game.load_current_kick()
 	_park_open_lock(game.logic, 40.0, 0.0)
@@ -3361,13 +3363,13 @@ func _check_live_kick_sounds() -> void:
 	records.file_path = "user://fg_live_kick_sfx.cfg"
 	records.reset_save()
 	records.try_unlock(Kickers.CARLOS)
-	game.highlight = 7
+	game.highlight = Kickers.slot_for(Kickers.CARLOS)
 	game.confirm_kicker()
 	game.load_current_kick()
 	_park_open_lock(game.logic, 100.0, 12.0)
 	var dos_pools := _live_pools_after_space(game, sfx)
 	check(game.logic.perfect and dos_pools.has("ballcontact") and dos_pools.has("air_perfect") and not dos_pools.has("air_bad"), "Numero Dos auto-PERFECT uses the perfect airborne pool, got %s" % str(dos_pools))
-	game.highlight = 1
+	game.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	game.confirm_kicker()
 	game.load_current_kick()
 	var shank_logic: KickLogic = game.logic
@@ -3815,7 +3817,7 @@ func _check_as1() -> void:
 
 func _check_as2() -> void:
 	var rects: Array = SelectCard.grid_rects()
-	for pair in [[Kickers.WALK_ON, 1], [Kickers.PHIL, 2], [Kickers.CARLOS, 7]]:
+	for pair in [[Kickers.WALK_ON, Kickers.slot_for(Kickers.WALK_ON)], [Kickers.PHIL, Kickers.slot_for(Kickers.PHIL)], [Kickers.CARLOS, Kickers.slot_for(Kickers.CARLOS)]]:
 		var id := str(pair[0])
 		var card: Rect2 = rects[int(pair[1])]
 		var layout: Dictionary = SelectCard.picker_layout(card)
@@ -3830,7 +3832,7 @@ func _check_as2() -> void:
 	check(browsing.find("Two-a-days unlocked through 5.") >= 0 and browsing.find("Short week") < 0, "browsing reports only the unlocked cap")
 	check(" ".join(Kickers.rundown_lines(Kickers.WALK_ON, true, 0, -1)).find("Two-a-days not unlocked.") >= 0, "a cap of 0 says Two-a-Days is not unlocked")
 	var open := " ".join(Kickers.rundown_lines(Kickers.WALK_ON, true, 10, 6))
-	check(open.find("Crowded offers") >= 0 and open.find("Curse offers") >= 0 and open.find("All below also apply.") >= 0 and open.find("No rerolls") >= 0, "the open picker lists the selected twist and the ones below it")
+	check(open.find("Crowded offers") >= 0 and open.find("Curse offers") >= 0 and open.find("Also on:") >= 0 and open.find(RunLogic.tad_line(5)) >= 0, "the open picker lists the selected twist and the ones below it")
 	check(" ".join(Kickers.rundown_lines(Kickers.PHIL, false, 8, 4)).find("Two-a-days") < 0, "a locked card has no Two-a-Days section")
 	var records = load("res://scripts/SaveData.gd").new()
 	records.file_path = "user://fg_as2_tad.cfg"
@@ -4202,7 +4204,7 @@ func _check_tw1_live() -> void:
 	get_root().add_child(game)
 	game._taking_pictures = true
 	game.front.run_mode = "standard"
-	game.highlight = 1
+	game.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	game.confirm_kicker()
 	var spot_before := float(game.run.spot_yards)
 	game._taking_pictures = false
@@ -4232,7 +4234,7 @@ func _check_tw1_live() -> void:
 	check(game.run.phase == RunLogic.Phase.GAME_OVER and game.run.end_reason == "too_weak" and not records.has_run_slot("standard"), "the ending clears Continue")
 	check(game.run.score == score_before and near(game.run.longest_make, long_before) and records.tad_unlocked(Kickers.WALK_ON) == cap_before, "the ending keeps the score and does not unlock TAD")
 	game.front.run_mode = "standard"
-	game.highlight = 0
+	game.highlight = Kickers.slot_for(Kickers.BIG_BRUCE)
 	game.confirm_kicker()
 	game._taking_pictures = false
 	var shift_key := InputEventKey.new()
@@ -4243,7 +4245,7 @@ func _check_tw1_live() -> void:
 	game._taking_pictures = true
 	check(game.too_weak_age < 0.0 and game.too_weak_debug.find("base") >= 0, "Shift+Y prints the breakdown and leaves the kick alone")
 	game.front.run_mode = "endless"
-	game.highlight = 1
+	game.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	game.confirm_kicker()
 	game.run.run_mode = "endless"
 	game.run.score = 40
@@ -4291,7 +4293,7 @@ func _check_bl1_live() -> void:
 	var game = packed.instantiate()
 	get_root().add_child(game)
 	game._taking_pictures = true
-	game.highlight = 1
+	game.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	game.confirm_kicker()
 	game.refresh_view()
 	check(not game.ball_tumble_live() and is_equal_approx(game._ball.scale.y, 1.0), "the tee ball does not tumble")
@@ -5180,7 +5182,7 @@ func _check_drive_lid_and_power_safety() -> void:
 
 func _check_m2_kickers() -> void:
 	check(Kickers.ALL.size() == 8, "the roster has eight kickers")
-	check(Kickers.id_for_slot(0) == Kickers.BIG_BRUCE and Kickers.id_for_slot(1) == Kickers.WALK_ON and Kickers.id_for_slot(2) == Kickers.PHIL and Kickers.id_for_slot(3) == Kickers.GARY and Kickers.id_for_slot(4) == Kickers.VEX and Kickers.id_for_slot(5) == Kickers.COLE and Kickers.id_for_slot(6) == Kickers.WILLOW and Kickers.id_for_slot(7) == Kickers.CARLOS, "select order is Bruce, Walk-On, Phil, Gary, Vex, Cole, Willow, Carlos")
+	check(Kickers.id_for_slot(0) == Kickers.WALK_ON and Kickers.id_for_slot(1) == Kickers.BIG_BRUCE and Kickers.id_for_slot(2) == Kickers.PHIL and Kickers.id_for_slot(3) == Kickers.WILLOW and Kickers.id_for_slot(4) == Kickers.COLE and Kickers.id_for_slot(5) == Kickers.GARY and Kickers.id_for_slot(6) == Kickers.CARLOS and Kickers.id_for_slot(7) == Kickers.VEX, "select order is Walk-On, Bruce, Phil, Willow, Cole, Gary, Carlos, Vex")
 	check(not KickConstants.debug_unlock_all_kickers, "debug_unlock_all_kickers stays false")
 	check(Kickers.UNLOCKABLE.has(Kickers.COLE) and Kickers.UNLOCKABLE.has(Kickers.WILLOW) and Kickers.UNLOCKABLE.has(Kickers.CARLOS), "debug unlock covers Cole, Willow, and Carlos")
 	check(Kickers.unlock_hint(Kickers.COLE) == "Beat Standard", "Cole's locked card says Beat Standard")
@@ -6317,7 +6319,7 @@ func _check_pause_saves() -> void:
 	check(game.selecting and game.front.came_from_gate and int(records.run_slot("standard").get("kick_number", 0)) == 8, "Start New Run reaches character select and keeps the old slot")
 	game._leave_character_select()
 	check(game.front.gate == "choose" and not game.selecting and int(records.run_slot("standard").get("kick_number", 0)) == 8, "Esc from character select returns to Continue / New Run with the old save")
-	game.highlight = 1
+	game.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	game._taking_pictures = false
 	game.confirm_kicker()
 	game._taking_pictures = true
@@ -6401,7 +6403,7 @@ func _check_aim_cone() -> void:
 	var game = packed.instantiate()
 	get_root().add_child(game)
 	game._taking_pictures = true
-	game.highlight = 1
+	game.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	game.confirm_kicker()
 	game.logic.aim_degrees = 0.0
 	game.logic.aim_base = 0.0
@@ -6483,7 +6485,7 @@ func _check_ball_trail() -> void:
 	var game = packed.instantiate()
 	get_root().add_child(game)
 	game._taking_pictures = true
-	game.highlight = 1
+	game.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	game.confirm_kicker()
 	game.refresh_view()
 	check(game.logic.phase == KickLogic.Phase.AIMING and game.trail_count() == 0 and not game.trail_visible(), "aiming draws no trail")
@@ -6627,7 +6629,7 @@ func _check_live_field() -> void:
 	var game = packed.instantiate()
 	get_root().add_child(game)
 	game._taking_pictures = true
-	game.highlight = 1
+	game.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	game.confirm_kicker()
 	game.load_current_kick()
 	var attempts: int = game.run.attempts
@@ -6788,7 +6790,7 @@ func _check_playing_card() -> void:
 	check(hud.find("character-select-lock") < 0 and hud.find("Broadcast Bezel") < 0 and hud.find("Coin Window") < 0 and hud.find("Locker Plaque") < 0, "rejected frames and the lock JPEG are not drawn")
 	check(hud.find("Choose your kicker") < 0, "the old wide-panel select title is gone")
 	var ids: PackedStringArray = SelectCard.order()
-	check(ids.size() == 8 and ids[0] == Kickers.BIG_BRUCE and ids[1] == Kickers.WALK_ON and ids[2] == Kickers.PHIL and ids[3] == Kickers.GARY and ids[4] == Kickers.VEX and ids[5] == Kickers.COLE and ids[6] == Kickers.WILLOW and ids[7] == Kickers.CARLOS, "grid order is Bruce, Walk-On, Phil, Gary, Vex, Cole, Willow, Carlos")
+	check(ids.size() == 8 and ids[0] == Kickers.WALK_ON and ids[1] == Kickers.BIG_BRUCE and ids[2] == Kickers.PHIL and ids[3] == Kickers.WILLOW and ids[4] == Kickers.COLE and ids[5] == Kickers.GARY and ids[6] == Kickers.CARLOS and ids[7] == Kickers.VEX, "grid order is Walk-On, Bruce, Phil, Willow, Cole, Gary, Carlos, Vex")
 	var rects: Array = SelectCard.grid_rects()
 	check(rects.size() == 8, "the select grid has eight cards")
 	for rect in rects:
@@ -6859,15 +6861,15 @@ func _check_playing_card_live() -> void:
 	get_root().add_child(game)
 	game._taking_pictures = true
 	game.open_select()
-	check(game.highlight == 1 and game.selecting, "a new select highlights The Walk-On")
-	game.highlight = 4
+	check(game.highlight == Kickers.slot_for(Kickers.WALK_ON) and game.selecting, "a new select highlights The Walk-On")
+	game.highlight = Kickers.slot_for(Kickers.VEX)
 	game.confirm_kicker()
 	check(game.selecting and game.run.kicker_id != Kickers.VEX, "Space on locked Vex does not start a run")
-	game.highlight = 0
+	game.highlight = Kickers.slot_for(Kickers.BIG_BRUCE)
 	game.confirm_kicker()
 	check(not game.selecting and game.run.kicker_id == Kickers.BIG_BRUCE, "Space on Bruce starts the run as Bruce")
 	game.open_select()
-	game.highlight = 1
+	game.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	game.confirm_kicker()
 	check(not game.selecting and game.run.kicker_id == Kickers.WALK_ON, "Space on The Walk-On starts that run")
 	game.free()
@@ -6904,11 +6906,11 @@ func _check_as2_live() -> void:
 	game._taking_pictures = true
 	game.front.run_mode = "standard"
 	game.open_select()
-	game.highlight = 1
+	game.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	game.refresh_view()
 	check(game.tad_picker_slot == -1 and game._hud.tad_wheel.size.x < 1.0, "browsing draws no TAD picker")
 	_as2_key(game, KEY_SPACE)
-	check(game.selecting and game.tad_picker_slot == 1 and game._hud.tad_wheel.size.x > 1.0, "Space on a TAD 1+ kicker opens the picker")
+	check(game.selecting and game.tad_picker_slot == Kickers.slot_for(Kickers.WALK_ON) and game._hud.tad_wheel.size.x > 1.0, "Space on a TAD 1+ kicker opens the picker")
 	check(records.tad_selected(Kickers.WALK_ON) == 2, "the picker opens on the last selected level")
 	var right := InputEventMouseButton.new()
 	right.pressed = true
@@ -6923,7 +6925,7 @@ func _check_as2_live() -> void:
 	check(not game.selecting and game.front.screen == FrontEnd.Screen.MAIN, "Esc from browsing returns to the main menu")
 	game.front.run_mode = "standard"
 	game.open_select()
-	game.highlight = 1
+	game.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	_as2_key(game, KEY_BRACKETRIGHT)
 	check(records.tad_selected(Kickers.WALK_ON) == 2 and game.tad_picker_slot == -1, "brackets do nothing while browsing")
 	_as2_key(game, KEY_SPACE)
@@ -6944,39 +6946,39 @@ func _check_as2_live() -> void:
 	var body := InputEventMouseButton.new()
 	body.pressed = true
 	body.button_index = MOUSE_BUTTON_LEFT
-	body.position = game._hud.kicker_rects[1].get_center()
+	body.position = game._hud.kicker_rects[Kickers.slot_for(Kickers.WALK_ON)].get_center()
 	game._select_input(body)
 	check(not game.selecting and game.run.kicker_id == Kickers.WALK_ON and game.run.tad_level == 1, "a second click on the card starts at the picked level")
 	game.front.run_mode = "standard"
 	game.open_select()
-	game.highlight = 1
+	game.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	_as2_key(game, KEY_SPACE)
 	records.kickers[Kickers.BIG_BRUCE]["tad_unlocked"] = 3
 	records.kickers[Kickers.BIG_BRUCE]["tad_selected"] = 1
 	var move := InputEventMouseButton.new()
 	move.pressed = true
 	move.button_index = MOUSE_BUTTON_LEFT
-	move.position = game._hud.kicker_rects[0].get_center()
+	move.position = game._hud.kicker_rects[Kickers.slot_for(Kickers.BIG_BRUCE)].get_center()
 	game._select_input(move)
-	check(game.selecting and game.highlight == 0 and game.tad_picker_slot == 0, "clicking Bruce moves the picker onto his card")
-	_as2_key(game, KEY_3)
-	check(game.selecting and game.highlight == 2 and game.tad_picker_slot == -1, "a number key on a different card only moves the highlight")
-	_as2_key(game, KEY_3)
-	check(game.selecting and game.tad_picker_slot == -1, "a locked card still does not start")
+	check(game.selecting and game.highlight == Kickers.slot_for(Kickers.BIG_BRUCE) and game.tad_picker_slot == Kickers.slot_for(Kickers.BIG_BRUCE), "clicking Bruce moves the picker onto his card")
+	_as2_key(game, KEY_4)
+	check(game.selecting and game.highlight == Kickers.slot_for(Kickers.WILLOW) and game.tad_picker_slot == -1, "number key 4 highlights Willow")
+	_as2_key(game, KEY_4)
+	check(game.selecting and game.highlight == Kickers.slot_for(Kickers.WILLOW) and game.tad_picker_slot == -1, "a locked card still does not start")
 	records.kickers[Kickers.BIG_BRUCE]["tad_unlocked"] = 0
 	records.kickers[Kickers.BIG_BRUCE]["tad_selected"] = 0
-	game.highlight = 0
+	game.highlight = Kickers.slot_for(Kickers.BIG_BRUCE)
 	game.tad_picker_slot = -1
 	game.refresh_view()
 	_as2_key(game, KEY_SPACE)
 	check(not game.selecting and game.run.kicker_id == Kickers.BIG_BRUCE and game.run.tad_level == 0, "a TAD 0 kicker starts on Space with no picker")
 	game.front.run_mode = "standard"
 	game.open_select()
-	game.highlight = 4
+	game.highlight = Kickers.slot_for(Kickers.VEX)
 	_as2_key(game, KEY_SPACE)
 	check(game.selecting and game.tad_picker_slot == -1, "Space on a locked kicker does not open a picker")
 	game.front.run_mode = "endless"
-	game.highlight = 1
+	game.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	game.refresh_view()
 	check(game._hud.tad_wheel.size.x < 1.0, "Endless select has no TAD picker")
 	_as2_key(game, KEY_SPACE)
@@ -6997,7 +6999,7 @@ func _check_reaction_live() -> void:
 	var game = packed.instantiate()
 	get_root().add_child(game)
 	game._taking_pictures = true
-	game.highlight = 1
+	game.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	game.confirm_kicker()
 	game.logic.phase = KickLogic.Phase.RESULT
 	game.logic.result_text = "GOOD"
@@ -7147,7 +7149,7 @@ func _check_boss1() -> void:
 	var game = packed.instantiate()
 	get_root().add_child(game)
 	game._taking_pictures = true
-	game.highlight = 1
+	game.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	game.confirm_kicker()
 	check(game._boss_force_key(KEY_N) == RunLogic.CLOCK and game._boss_force_key(KEY_G) == RunLogic.MOVING, "N forces Kick Clock and G forces Moving Posts")
 	check(game._shift_weather(KEY_9) == RunLogic.LIGHTS and game._shift_weather(KEY_6) == RunLogic.SQUEEZE, "Shift+9 and Shift+6 still force the old bosses")
@@ -8126,7 +8128,7 @@ func _check_pk2a_live() -> void:
 	var game = packed.instantiate()
 	get_root().add_child(game)
 	game._taking_pictures = true
-	game.highlight = 1
+	game.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	game.confirm_kicker()
 	game._taking_pictures = false
 	var grant := InputEventKey.new()
@@ -8392,7 +8394,7 @@ func _check_pk2b_live() -> void:
 	var game = packed.instantiate()
 	get_root().add_child(game)
 	game._taking_pictures = true
-	game.highlight = 1
+	game.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	game.confirm_kicker()
 	game.run.give(Loadout.NO_HUDDLE)
 	game._arm_boss_twist()
@@ -8608,7 +8610,7 @@ func _check_fx1_live() -> void:
 	check(game.run.unlock_toast == "", "the replacement toast lasts its own 4 seconds")
 	records.unlocks[Kickers.VEX] = vex_was
 	records.save_file()
-	game.highlight = 1
+	game.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	game.confirm_kicker()
 	game.run.open_shop()
 	game.run.cash = 40
@@ -8854,7 +8856,7 @@ func _cam_finish(game, scale: float) -> Dictionary:
 
 
 func _cam_setup(game, aim: float, weather: String) -> void:
-	game.highlight = 1
+	game.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	game.selecting = true
 	game.confirm_kicker()
 	game.set_wind(0.0, 0.0)
@@ -8883,7 +8885,7 @@ func _check_cam1_live() -> void:
 	game._taking_pictures = true
 	get_root().add_child(game)
 	check(game.front.focus_kind(3) == "toggle", "Options focus 3 is the ball cam toggle")
-	game.highlight = 1
+	game.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	game.confirm_kicker()
 	game.logic.phase = KickLogic.Phase.RESULT
 	game.logic.result_text = "GOOD"
@@ -8905,7 +8907,7 @@ func _check_cam1_live() -> void:
 	game.result_age = 1.32
 	game.settle_kick()
 	check(game.run.awaiting_offer, "the offer opens at 0.52 plus 0.8 seconds")
-	game.highlight = 1
+	game.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	game.confirm_kicker()
 	game.logic.phase = KickLogic.Phase.RESULT
 	game.logic.result_text = "GOOD"
@@ -9110,7 +9112,7 @@ func _check_pace1() -> void:
 			gust.tad_level = 2
 			gust._roll_wind()
 			check(gust.wind_speed >= lo and gust.wind_speed <= hi, "PACE1 TAD 2 kick %d wind left the table band, got %s" % [kick, gust.wind_speed])
-	check(RunLogic.tad_summary(2) == "POSTS SHIFT EVERY KICK" and BitmapFonts.ui_allows(RunLogic.tad_summary(2)), "TAD 2 says POSTS SHIFT EVERY KICK")
+	check(RunLogic.tad_summary(2) == "POSTS SHIFT FROM KICK 2" and BitmapFonts.ui_allows(RunLogic.tad_summary(2)), "TAD 2 says POSTS SHIFT FROM KICK 2")
 	check(RunLogic.tad_name(2) == "Loaded dice", "TAD 2 is Loaded dice")
 	check(RunLogic.tad_name(8) == "Short bench" and RunLogic.tad_summary(8) == "START WITH 1 ATTEMPT", "TAD 8 says Short bench")
 	check(near(Loadout.HOWLING_ITEM, 1.10), "Howling Wind stays 1.10")
@@ -10613,7 +10615,7 @@ func _check_sk1() -> void:
 	missed_fire.phase = RunLogic.Phase.PLAYING
 	missed_fire.kick_resolved = false
 	missed_fire.resolve_kick("SHORT", 1.0, false)
-	check(missed_fire.heat == 0 and missed_fire.special_for_kick() == "", "a fire miss ends the fire")
+	check(missed_fire.heat == 0 and missed_fire.special_for_kick() != SpecialKicks.ON_FIRE, "a fire miss ends the fire")
 	check(near(float(missed_fire.inner_ring_place(missed_fire.post_half_gap())["radius"]), 0.50), "the retry ring is the normal radius")
 	var practice := _sk1_fresh()
 	practice.set_heat_for_test(2)
@@ -11093,6 +11095,188 @@ func _sk2_rate_on(run: RunLogic) -> Dictionary:
 	if eligible > 0:
 		rate = float(hits) / float(eligible)
 	return {"rate": rate, "pairs": pairs, "kick1": kick1, "blocked": blocked, "overs": overs, "eligible": eligible}
+
+
+func _check_ui3_text() -> void:
+	var want := {
+		1: "1 SHORT WEEK. SHOP PRICES X1.5",
+		2: "2 LOADED DICE. POSTS SHIFT FROM KICK 2",
+		3: "3 LONG YARDAGE. KICKS +4 YD",
+		4: "4 TIGHT HASHES. POSTS 0.25 YD NARROWER",
+		5: "5 NO REROLLS. NO OFFER REROLLS",
+		6: "6 CROWDED OFFERS. CURSE OFFERS X2",
+		7: "7 CRUNCH TIME. BOTH NEEDLES X1.33",
+		8: "8 SHORT BENCH. START WITH 1 ATTEMPT",
+		9: "9 FOUL WEATHER. BAD WEATHER EVERY KICK",
+		10: "10 MOVING CREW. POSTS MOVE EVERY KICK",
+	}
+	var widest := 0
+	for level in range(1, 11):
+		var line := RunLogic.tad_line(level)
+		check(line == str(want[level]), "tad line %s is %s, got %s" % [level, want[level], line])
+		check(BitmapFonts.ui_allows(line), "tad line %s fits Pixel Gothic" % level)
+		widest = maxi(widest, BitmapFonts.measure_px("ui", line, 13))
+	check(RunLogic.tad_summary(10) != RunLogic.tad_name(10).to_upper(), "TAD 10 summary is a rule, not the name")
+	check(RunLogic.tad_sentence(2) == "The posts shift 1 to 3 yards on every kick from kick 2.", "TAD 2 sentence names the 1 to 3 yard shift")
+	check(RunLogic.tad_sentence(7) == "Both needles ×1.33 on every kick.", "TAD 7 sentence says both needles")
+	check(RunLogic.tad_sentence(8) == "The run starts with 1 attempt instead of 2.", "TAD 8 sentence names the old attempt count")
+	check(RunLogic.tad_sentence(10) == "The posts slide side to side on every kick.", "TAD 10 sentence says the posts slide")
+	var pause_px := 13 if widest <= 620 - 32 else 12
+	print("UI3 pause line px ", pause_px, " widest ", widest)
+	var list_bottom := 214.0 + 22.0 + 10.0 * 16.0
+	var button_top := 318.0 + 28.0 + 16.0 * 10.0
+	check(button_top > list_bottom + 8.0, "the TAD 10 pause list stays above the buttons")
+	var rects: Array = SelectCard.grid_rects()
+	var wrap_w := maxf(120.0, float(rects[0].position.x) - 16.0) - 16.0
+	var panel_h := 692.0 - 46.0
+	var worst_id := ""
+	var worst_h := 0.0
+	for id in [Kickers.WALK_ON, Kickers.BIG_BRUCE, Kickers.PHIL, Kickers.GARY, Kickers.VEX, Kickers.COLE, Kickers.WILLOW, Kickers.CARLOS]:
+		var sentences := PackedStringArray()
+		for sentence in Kickers.rundown_lines(id, true, 10, 10):
+			if str(sentence).strip_edges() != "":
+				sentences.append(str(sentence))
+		var rows18 := 0
+		for sentence in sentences:
+			rows18 += _ui3_wrap_count(str(sentence), wrap_w, 14)
+		var legacy := 16.0 + float(rows18) * 18.0
+		var fit_h := legacy
+		var fit_size := 14
+		var fit_step := 18
+		for pair in [[14, 18], [12, 15], [11, 12]]:
+			var rows := 0
+			for sentence in sentences:
+				rows += _ui3_wrap_count(str(sentence), wrap_w, int(pair[0]))
+			var block := 16.0 + float(rows) * float(pair[1])
+			fit_h = block
+			fit_size = int(pair[0])
+			fit_step = int(pair[1])
+			if block <= panel_h:
+				break
+		if fit_h > worst_h:
+			worst_h = fit_h
+			worst_id = id
+		check(fit_h <= panel_h, "%s TAD 10 rundown fits, height %s panel %s" % [id, fit_h, panel_h])
+		if legacy > panel_h:
+			print("UI3 ", id, " at 18px pitch is ", legacy, " so the rundown uses ", fit_size, " px step ", fit_step)
+	print("UI3 rundown fit ", worst_id, " height ", worst_h, " panel ", panel_h, " width ", wrap_w)
+
+
+func _ui3_wrap_count(text: String, width: float, size: int = 14) -> int:
+	var font := ThemeDB.fallback_font
+	if font == null or text == "":
+		return 1 if text != "" else 0
+	var count := 0
+	var line := ""
+	for word in text.split(" "):
+		var trial := (line + word).strip_edges()
+		if line != "" and font.get_string_size(trial, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > width:
+			count += 1
+			line = word + " "
+		else:
+			line = trial + " "
+	if line.strip_edges() != "":
+		count += 1
+	return count
+
+
+func _check_ui3_live() -> void:
+	OS.set_environment("FG_SHOTS", "")
+	var packed: PackedScene = load("res://scenes/main.tscn")
+	var game = packed.instantiate()
+	get_root().add_child(game)
+	game._taking_pictures = true
+	game.highlight = Kickers.slot_for(Kickers.WALK_ON)
+	game.confirm_kicker()
+	game.run.open_tad(3)
+	game.run.special_kicks[1] = ""
+	game.run.awaiting_rung = false
+	game.tad_card_age = -1.0
+	game.tad_card_done = false
+	game.load_current_kick()
+	check(game.tad_card_alpha() == 1.0 and game.run.kick_number == 1, "the kick 1 card shows at TAD 3")
+	game.tick_tad_card(3.9)
+	check(game.tad_card_alpha() == 1.0, "the kick 1 card is still up at 3.9 seconds")
+	game.tick_tad_card(0.1)
+	game.tick_tad_card(0.3)
+	check(game.tad_card_alpha() == 0.0, "the kick 1 card is gone after 4.0 seconds plus the fade")
+	game.tad_card_done = false
+	game.tad_card_age = -1.0
+	game.tad_card_fade = -1.0
+	game.load_current_kick()
+	game._confirm_kick()
+	game.tick_tad_card(0.3)
+	check(game.tad_card_alpha() == 0.0, "the first Space fades the kick 1 card")
+	game.run.phase = RunLogic.Phase.PLAYING
+	game.run.kick_resolved = false
+	game.run.resolve_kick("SHORT", 1.0, false)
+	game.run.begin_retry()
+	game.load_current_kick()
+	check(game.tad_card_alpha() == 0.0, "a retry of kick 1 does not bring the card back")
+	game.tad_card_done = false
+	game.tad_card_age = -1.0
+	game.run.kick_number = 2
+	game.run.is_first_ball = true
+	game.load_current_kick()
+	check(game.tad_card_alpha() == 0.0, "kick 2 has no TWO A DAYS card")
+	game.run.kick_number = 1
+	game.run.open_tad(0)
+	game.tad_card_done = false
+	game.tad_card_age = -1.0
+	game.load_current_kick()
+	check(game.tad_card_alpha() == 0.0, "TAD 0 has no TWO A DAYS card")
+	game.run.open_tad(3)
+	game.run.run_mode = "endless"
+	game.tad_card_done = false
+	game.tad_card_age = -1.0
+	game.load_current_kick()
+	check(game.tad_card_alpha() == 0.0, "Endless has no TWO A DAYS card")
+	game.run.run_mode = "standard"
+	game.run.open_tad(3)
+	game.tad_card_done = false
+	game.tad_card_age = -1.0
+	game.run.practicing = true
+	game.load_current_kick()
+	check(game.tad_card_alpha() == 0.0, "practice has no TWO A DAYS card")
+	game.free()
+	var paused_game = packed.instantiate()
+	get_root().add_child(paused_game)
+	paused_game._taking_pictures = true
+	paused_game.highlight = 1
+	paused_game.confirm_kicker()
+	paused_game.run.open_tad(10)
+	paused_game.paused = true
+	var buttons: Array = paused_game._hud._pause_buttons()
+	check(buttons.size() == 2, "pause still has two buttons at TAD 10")
+	check(paused_game._hud.pause_hit((buttons[0] as Rect2).get_center()) == 0, "RESUME still takes the first pause click")
+	check(paused_game._hud.pause_hit((buttons[1] as Rect2).get_center()) == 1, "SAVE AND QUIT still takes the second pause click")
+	check(paused_game._hud._tad_list_px(620.0) == 13 or paused_game._hud._tad_list_px(620.0) == 12, "the pause list uses 13 or 12")
+	print("UI3 live pause px ", paused_game._hud._tad_list_px(620.0))
+	paused_game.free()
+	var fresh = packed.instantiate()
+	get_root().add_child(fresh)
+	fresh._taking_pictures = true
+	fresh.open_select()
+	check(fresh.highlight == Kickers.slot_for(Kickers.WALK_ON), "a fresh select highlights Walk-On")
+	var right := SelectCard.step_highlight(0, 1, 0)
+	var wrapped := SelectCard.step_highlight(3, 1, 0)
+	var down := SelectCard.step_highlight(0, 0, 1)
+	check(right == 1 and wrapped == 0 and down == 4, "arrows wrap the new 4 by 2 grid, got %s %s %s" % [right, wrapped, down])
+	var records = get_root().get_node("SaveData")
+	var kept_path := str(records.file_path)
+	var kept_unlocks: Dictionary = records.unlocks.duplicate()
+	records.file_path = "user://fg_ui3_save.cfg"
+	records.reset_save()
+	records.unlocks[Kickers.GARY] = true
+	records.kickers[Kickers.GARY]["tad_unlocked"] = 6
+	records.kickers[Kickers.GARY]["tad_selected"] = 4
+	records.save_file()
+	records.load_file()
+	check(bool(records.has_unlock(Kickers.GARY)) and records.tad_unlocked(Kickers.GARY) == 6 and records.tad_selected(Kickers.GARY) == 4, "an old save keeps Gary's unlock and TAD")
+	records.file_path = kept_path
+	records.unlocks = kept_unlocks
+	records.load_file()
+	fresh.free()
 
 
 func _sk2_walk(seed_value: int, with_special: bool) -> Array:
