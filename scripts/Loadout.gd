@@ -87,15 +87,15 @@ static func tip_lock_yards(rank: int) -> float:
 
 
 static func _visor_line(rank: int) -> String:
-	var resist := int(round(KickLogic.visor_resistance(rank) * 100.0))
+	var factor := _two_decimals(1.0 - KickLogic.visor_resistance(rank))
 	var shown := int(KickLogic.path_percent_for_rank(rank))
 	if shown <= 0:
 		if rank <= 1:
-			return "Shows wind mph and an arrow. %d%% wind resistance." % resist
-		return "Wind mph and an arrow. %d%% wind resistance." % resist
+			return "Shows wind mph and an arrow. Wind ×%s." % factor
+		return "Wind mph and an arrow. Wind ×%s." % factor
 	if shown >= 100:
-		return "Wind mph and an arrow. %d%% wind resistance. Dotted path for the full flight, ending at the posts." % resist
-	return "Wind mph and an arrow. %d%% wind resistance. Dotted path for %d%% of this kick." % [resist, shown]
+		return "Wind mph and an arrow. Wind ×%s. Dotted path for the full flight, ending at the posts." % factor
+	return "Wind mph and an arrow. Wind ×%s. Dotted path for %d%% of this kick." % [factor, shown]
 
 
 static func effect_rank(rank: int) -> int:
@@ -295,7 +295,7 @@ static func _ice_cage_line(rank: int) -> String:
 	var line := "Immune to Iced. The OVERPOWER band shrink is halved."
 	if rank <= 1:
 		return line
-	line += " The needles ×0.90."
+	line += " Both needles ×0.90."
 	var capped := mini(rank, 12)
 	var perfect := 0
 	var odd := 3
@@ -457,7 +457,7 @@ static func effect_line(id: String, rank: int) -> String:
 		PINPOINT:
 			return "Perfect +%s, Good +%s" % [_count_text(pinpoint_perfect(rank)), _count_text(pinpoint_good(rank))]
 		ANCHOR:
-			return _with_late_yards("Needles ×%s" % _two_decimals(anchor_factor(rank)), rank)
+			return _with_late_yards("Power needle ×%s" % _two_decimals(anchor_factor(rank)), rank)
 		STICKER:
 			return _with_late_yards("Drift ×%s" % _two_decimals(sticker_factor(rank)), rank)
 		DRIVE_LID:
@@ -515,13 +515,13 @@ static func effect_line(id: String, rank: int) -> String:
 				return "5 practice swings, unused carry (max 5)"
 			return "%d practice swings, unused carry (max %d)" % [swings, swings]
 		HIGH_AIR:
-			return "+%d yd, tailwind range ×1.5" % high_air_yards(rank)
+			return "+%d yd, tailwind gain ×1.5" % high_air_yards(rank)
 		GUIDE_GLOVES:
 			return _with_late_yards("Inner ring +%s yd" % _two_decimals(guide_ring_yards(rank)), rank)
 		PATIENT_GLOVES:
-			return _with_late_yards("Both needles ×%s" % _two_decimals(patient_factor(rank)), rank)
+			return _with_late_yards("Accuracy needle ×%s" % _two_decimals(patient_factor(rank)), rank)
 		HUSH_GLOVES:
-			return _with_late_yards("First %d mph of wind ignored" % effect_rank(rank), rank)
+			return _with_late_yards("Wind -%d mph" % effect_rank(rank), rank)
 		WEATHER_WRAPS:
 			if rank <= 1:
 				return "Rain, snow, and mud penalties cut in half"
@@ -603,7 +603,7 @@ static func effect_line(id: String, rank: int) -> String:
 				return "Boss kicks +2.5 Mult, on top of ×1.5"
 			return "Boss kicks +3.0 Mult, on top of ×1.5"
 		RAIN_DANCE:
-			return "In rain, snow, mud, or Monsoon: +4 yd and the needles ×0.90."
+			return "In rain, snow, mud, or Monsoon: +4 yd and both needles ×0.90."
 		SECOND_LOOK:
 			return "One free offer reroll every 5 kicks. Unused free rerolls carry over."
 		CHAIN_GANG:
@@ -635,9 +635,9 @@ static func effect_line(id: String, rank: int) -> String:
 		NO_HUDDLE:
 			return "Down: 5 second kick clock every kick. Up: +12 yd."
 		ALL_NATURAL:
-			return "Down: no vitamins or B12 for the run. Up: needles ×0.70."
+			return "Down: no vitamins or B12 for the run. Up: both needles ×0.70."
 		TRAINING_CAMP:
-			return "Down: needles ×1.30 for your next 3 makes. Up: then +10 yd for the run."
+			return "Down: both needles ×1.30 for your next 3 makes. Up: then +10 yd for the run."
 	return ""
 
 
@@ -768,9 +768,9 @@ static func vitamin_line(id: String, state: Dictionary, item_scale: float) -> St
 	if id == Vitamins.PROTEIN:
 		return "+%s yd this kick" % _trim_number(protein_yards(1, state, item_scale))
 	if id == Vitamins.MAGNESIUM:
-		return "Needles ×%s this kick" % _factor_text(magnesium_factor(1, state, item_scale))
+		return "Both needles ×%s this kick" % _factor_text(magnesium_factor(1, state, item_scale))
 	if id == Vitamins.PICKLE:
-		return "Sideways wind drift ×%s" % _factor_text(pickle_factor(1, state, item_scale))
+		return "Drift ×%s this kick" % _factor_text(pickle_factor(1, state, item_scale))
 	if id == Vitamins.PREWORKOUT:
 		return "+%s Mult if this kick is made" % _trim_number(preworkout_mult(1, state, item_scale))
 	return Vitamins.effect_line(id)
@@ -811,7 +811,7 @@ static func lived_line(id: String, rank: int, state: Dictionary) -> String:
 		return "Boss kicks +%s Mult, on top of ×1.5." % _trim_number(drill_bonus_for(rank) * hype)
 	if id == RAIN_DANCE:
 		var slow := 1.0 - (1.0 - 0.90) * hype
-		return "In rain, snow, mud, or Monsoon: +%s yd and the needles ×%s." % [_trim_number(4.0 * hype), _factor_text(slow)]
+		return "In rain, snow, mud, or Monsoon: +%s yd and both needles ×%s." % [_trim_number(4.0 * hype), _factor_text(slow)]
 	if id == CHAIN_GANG:
 		return "Each consecutive make adds +%s yd on the next kick, up to +%s yd. A miss resets the streak." % [_trim_number(hype), _trim_number(10.0 * hype)]
 	return effect_line(id, rank)
@@ -1241,7 +1241,7 @@ static func _apply_piece(stats: KickerStats, item_id: String, item_rank: int, it
 		acc["good"] = float(acc["good"]) + pinpoint_good(item_rank)
 	elif item_id == ANCHOR:
 		var factor := _scale_factor(anchor_factor(item_rank), howling, item_scale)
-		acc["needle"] = float(acc["needle"]) * factor
+		acc["power_needle"] = float(acc["power_needle"]) * factor
 		acc["range"] = float(acc["range"]) + float(late_flat_yards(item_rank))
 	elif item_id == STICKER:
 		acc["drift"] = float(acc["drift"]) * _scale_factor(sticker_factor(item_rank), howling, item_scale)
@@ -1298,7 +1298,7 @@ static func _apply_piece(stats: KickerStats, item_id: String, item_rank: int, it
 		stats.ring_radius_bonus += guide_ring_yards(item_rank) * item_scale
 		acc["range"] = float(acc["range"]) + float(late_flat_yards(item_rank))
 	elif item_id == PATIENT_GLOVES:
-		acc["needle"] = float(acc["needle"]) * _scale_factor(patient_factor(item_rank), howling, item_scale)
+		acc["accuracy_needle"] = float(acc["accuracy_needle"]) * _scale_factor(patient_factor(item_rank), howling, item_scale)
 		acc["range"] = float(acc["range"]) + float(late_flat_yards(item_rank))
 	elif item_id == HUSH_GLOVES:
 		stats.hush_mph += float(item_fx)
@@ -1339,6 +1339,8 @@ static func apply(stats: KickerStats, state: Dictionary, howling: bool, item_sca
 		"power": power_mul,
 		"accuracy": accuracy_mul,
 		"needle": 1.0,
+		"power_needle": 1.0,
+		"accuracy_needle": 1.0,
 		"drift": drift_mul,
 	}
 	var best_doink := 0
@@ -1362,6 +1364,8 @@ static func apply(stats: KickerStats, state: Dictionary, howling: bool, item_sca
 	power_mul = float(acc["power"])
 	accuracy_mul = float(acc["accuracy"])
 	var needle_mul := float(acc["needle"])
+	var power_needle := float(acc["power_needle"])
+	var accuracy_needle := float(acc["accuracy_needle"])
 	drift_mul = float(acc["drift"])
 	var hero_add := 0.0
 	var storm := 0.0
@@ -1454,9 +1458,10 @@ static func apply(stats: KickerStats, state: Dictionary, howling: bool, item_sca
 		stats.good_band = maxf(stats.good_band - 2.0, 1.0)
 	if stats.perfect_band > stats.good_band:
 		stats.perfect_band = stats.good_band
-	# One product for both phases. A factor that used to hit only one needle is in it once.
-	stats.power_speed = KickConstants.POWER_RISE_PER_SEC * needle_mul
-	stats.accuracy_speed = stats.power_speed
+	# Shared slows stay in needle_mul. Anchor and Patient each slow one needle.
+	# Both speeds use the power unit, so 100 is one full sweep.
+	stats.power_speed = KickConstants.POWER_RISE_PER_SEC * needle_mul * power_needle
+	stats.accuracy_speed = KickConstants.POWER_RISE_PER_SEC * needle_mul * accuracy_needle
 	stats.drift_factor = drift_mul
 	stats.hero_mult = hero_add
 	stats.storm_per_mph = storm

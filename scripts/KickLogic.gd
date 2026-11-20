@@ -740,22 +740,22 @@ func _advance_accuracy(delta: float) -> float:
 
 
 func _power_omega() -> float:
-	return _kick_omega()
+	return _needle_omega(stats.power_speed)
 
 
 func _accuracy_omega() -> float:
-	return _kick_omega()
+	return _needle_omega(stats.accuracy_speed)
 
 
-# One speed for the power sweep, the red band, and the accuracy sweep.
-# power_speed already has the slow floor and the capped speed-up product.
-# Rain fills only the room left under that ceiling. Ball speed stays outside it.
-func _kick_omega() -> float:
+# Each needle uses its own speed, on the same 100 unit scale.
+# The red band stays on the power needle. Rain fills only the room left under the ceiling.
+# Ball speed stays outside that cap.
+func _needle_omega(speed: float) -> float:
 	var rain := rain_scale if rain_faster else 1.0
 	var speedup := maxf(stats.needle_speedup, 1.0)
 	var room := MeterGauge.NEEDLE_SPEEDUP_CEILING / speedup
 	var rain_eff := minf(rain, maxf(1.0, room))
-	return MeterGauge.omega_base() * (stats.power_speed / 100.0) * rain_eff * stats.ball_speed_mult
+	return MeterGauge.omega_base() * (speed / KickConstants.POWER_RISE_PER_SEC) * rain_eff * stats.ball_speed_mult
 
 
 # Seconds of power-phase sweep from the current needle to this power.

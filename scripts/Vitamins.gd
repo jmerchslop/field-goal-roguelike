@@ -76,7 +76,7 @@ static func effect_line(id: String) -> String:
 		PROTEIN:
 			return "+6 yd this kick"
 		MAGNESIUM:
-			return "Needles ×0.70 this kick"
+			return "Both needles ×0.70 this kick"
 		OMEGA:
 			return "Good wipes the aim error. No +5 Perfect bonus. Perfect cash still pays."
 		ELECTROLYTE:
@@ -90,7 +90,7 @@ static func effect_line(id: String) -> String:
 		LUTEIN:
 			return "Wind numbers and a full dotted path"
 		PICKLE:
-			return "Sideways wind drift ×0.5"
+			return "Drift ×0.5 this kick"
 		TART:
 			return "Remove one curse"
 		B12:

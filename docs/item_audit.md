@@ -1,6 +1,7 @@
 # Item, kit, range, and cash audit
 
 Generated: 2026-11-14
+CLEAN1: Wind is the whole wind in mph. Drift is the sideways push only. Headwind loss and tailwind gain are yards only. Anchor Cleats slows the power needle. Patient Gloves slows the accuracy needle. The table is unchanged, and each needle is floored at 0.40 on its own. Electrolyte is grey under Sudden Death and cannot be bought or used. The bottle stays, and it works again if Tart Cherry removes the curse.
 LUCK1: Luck is 0 to 10. Gary starts at 3, Walk-On at 2, and everyone else at 0. Each point is a 6% chance that a doink counts as Good (stamp LUCKY, no Doink Cap charge) and a 3% chance that an equipment card shows one rank higher (tag LUCKY, never above the mode cap). Doink Cap adds +1 luck at III, VI, IX, and XII, from the highest cap owned, and that luck is not summed. Lucky Ball is 4% per first-try make, capped at +24%. Film Room stays shelved. It could come back later as a luck perk.
 EN1: Endless is 100 kicks. Distance is round(50 + 950 × ((k − 1) / 99) ^ 2.2), from 50 to 1000. Kick 100 is always Big Game, and making it ends the run. Power safety uses the same two-miss counter as Standard until every range item is at XXIV. The Iced curse fades the accuracy needle the way the Iced boss does, and it still adds +0.75 Mult.
 RING1B: From kick 2, the posts have a 50% chance to sit 1–3 yards left or right, kept for that kick, and never more than 6 yards from the ball. Moving Posts and TAD 10 do not roll. TAD 2 is Loaded dice: the shift happens every kick from kick 2, and it no longer adds 3 mph.
@@ -110,8 +111,8 @@ Rank I is +2 / +3. Rank VI is +12 / +18. Rank XII is +24 / +36. Each rank past X
 - **slot:** cleats
 - **rank cap:** Standard VI, Endless XXIV
 - **soft cap:** from XIII. The factor stays the rank XII table value, 0.40.
-- **card text:** `"Needles ×{anchor_factor}"`. The card and the needles use the same table.
-- **actual effect:** both needle speeds are multiplied by `anchor_factor(rank)`. A higher rank replaces the previous factor. Big Game restores the kicker's base needle speeds, so this mul is off during Big Game. Patient Gloves multiply only the power needle, after this, if both are owned. Hero Ball's ×0.80 and Magnesium also multiply into the slow product. That product is floored at 0.35 before Stone Toe and UNDER THE LIGHTS.
+- **card text:** `"Power needle ×{anchor_factor}"`. The card and the power needle use the same table.
+- **actual effect:** `anchor_factor(rank)` multiplies the power needle only. The accuracy needle is unchanged. A higher rank replaces the previous factor. Big Game restores the kicker's base needle speeds, so this mul is off during Big Game. Patient Gloves multiply the accuracy needle with the same table. Hero Ball's ×0.80 and Magnesium multiply both needles. Each needle is floored at 0.40 on its own before Stone Toe and UNDER THE LIGHTS.
 - **match:** yes, ranks I–XXIV. Card and code are the same hundredths.
 
 | Rank | Card and factor |
@@ -140,7 +141,7 @@ Rank I is +2 / +3. Rank VI is +12 / +18. Rank XII is +24 / +36. Each rank past X
 - **slot:** helmet
 - **rank cap:** Standard VI, Endless XXIV
 - **soft cap:** resistance stays at 20% from III. The path reaches 100% at VIII (`min(rank, 8)` inside `path_percent_for_rank`). IX–XXIV match VIII.
-- **card text:** Rank I `"Shows wind mph and an arrow. 10% wind resistance."` Rank II is 15% and still no path. Rank III is 20% and still no path. Rank IV `"Wind mph and an arrow. 20% wind resistance. Dotted path for 40% of this kick."` V–VII are 55, 70, and 85. Rank VIII and above name the full flight.
+- **card text:** Rank I `"Shows wind mph and an arrow. Wind ×0.90."` Rank II is Wind ×0.85 and still no path. Rank III and above are Wind ×0.80. Rank IV adds `"Dotted path for 40% of this kick."` V–VII are 55, 70, and 85. Rank VIII and above name the full flight.
 - **actual effect:** ranks I–III set the readout and the arrow, resist 10/15/20% of blown wind, and draw no path. From IV, resistance stays 20% and the path is 40, 55, 70, 85, then 100 at VIII and up. Resistance multiplies blown speed after Howling and before Hush, drift, and wind-range. Big Game does not turn this off. A second helmet does not clear the path. Only Wind Visor writes it. Lutein still forces the path to 100.
 - **match:** yes, ranks I–XXIV
 
@@ -239,7 +240,7 @@ Rank XII and XIII–XXIV: +11 rerolls and five practice swings a quarter.
 - **slot:** gloves
 - **rank cap:** Standard VI, Endless XXIV
 - **soft cap:** none. XIII–XXIV use `_AIR_LATE`.
-- **card text:** `"+{high_air_yards} yd, tailwind range ×1.5"`.
+- **card text:** `"+{high_air_yards} yd, tailwind gain ×1.5"`.
 - **actual effect:** `range_bonus += high_air_yards(rank)` and `thin_air` is set, so a positive wind-range term is ×1.5. The yards add with Cannon and Drive Lid.
 - **match:** yes, ranks I–XXIV
 
@@ -264,8 +265,8 @@ Rank XII and XIII–XXIV: +11 rerolls and five practice swings a quarter.
 - **slot:** gloves
 - **rank cap:** Standard VI, Endless XXIV
 - **soft cap:** from XIII. The factor stays the rank XII table value, 0.40.
-- **card text:** `"Power needle ×{patient_factor}"`. Same table as Anchor. Rank I is ×0.85. Rank VI is ×0.58. Rank XII–XXIV is ×0.40.
-- **actual effect:** `patient_factor(rank)` multiplies the one needle-speed product, so both phases slow. Anchor, if also owned, multiplies that same product. The combined item, perk, and vitamin slow is floored at 0.35. Big Game restores the base speed, so this mul is off during Big Game.
+- **card text:** `"Accuracy needle ×{patient_factor}"`. Same table as Anchor. Rank I is ×0.85. Rank VI is ×0.58. Rank XII–XXIV is ×0.40.
+- **actual effect:** `patient_factor(rank)` multiplies the accuracy needle only. Anchor, if also owned, multiplies the power needle. Each needle is floored at 0.40 on its own. Big Game restores the base speed, so this mul is off during Big Game.
 - **match:** yes, ranks I–XXIV. Card and code use the same table.
 
 ### Hush Gloves
@@ -274,7 +275,7 @@ Rank XII and XIII–XXIV: +11 rerolls and five practice swings a quarter.
 - **slot:** gloves
 - **rank cap:** Standard VI, Endless XXIV
 - **soft cap:** from XIII. Ignored wind stays at 12 mph.
-- **card text:** `"First {effect_rank} mph of wind ignored"`. Rank I is 1. Rank VI is 6. Rank XII–XXIV is 12.
+- **card text:** `"Wind -{effect_rank} mph"`. Rank I is 1. Rank VI is 6. Rank XII–XXIV is 12. The hyphen is ASCII. The card audit rejects a unicode minus.
 - **actual effect:** `hush_mph` is subtracted from the blown wind speed before drift and wind range, floored at 0. Howling scales the wind vector before this subtraction.
 - **match:** yes, ranks I–XXIV
 
@@ -347,7 +348,7 @@ Rank XII and XIII–XXIV: +11 rerolls and five practice swings a quarter.
 - **id:** `rain_dance`
 - **slot:** perk
 - **rank cap:** Standard III, Endless VI
-- **card text:** `"In rain, snow, mud, or Monsoon: +4 yd and the needles ×0.90."` at every rank.
+- **card text:** `"In rain, snow, mud, or Monsoon: +4 yd and both needles ×0.90."` at every rank.
 - **actual effect:** `prepare_kick_stats` adds +4 yd and multiplies the combined needle speed by 0.90 only when the condition is RAIN, SNOW, MUD, or MONSOON. CLEAR, THIN AIR, ICED, THE SQUEEZE, BIG GAME, UNDER THE LIGHTS, KICK CLOCK, and MOVING POSTS do not trigger it. Vitamin D clears rain, snow, and mud, not Monsoon. The ×0.90 joins the other slows before the 0.35 floor and hits both phases. Big Game's speed copy strips that slow. The +4 is a perk range bonus, so Howling (×1.10), Compounding, and Lucky Ball scale it the same way they scale Glass Leg. Practice Swing gets neither.
 - **match:** yes, ranks I–VI. No icon file. The slot draws the word Rain.
 
@@ -441,14 +442,14 @@ Belt vitamins are one use. They are not equipment. Card lines are `Vitamins.effe
 | Id | Price | Card | Coded effect |
 | --- | --- | --- | --- |
 | `protein_shake` | 4 | `"+6 yd this kick"` | `range_bonus += 6`, then Phil's scale and `round_tenth` |
-| `magnesium` | 4 | `"Needles ×0.7 this kick"` | both needle speeds ×0.7, gap-scaled if Phil or Lucky Ball is on |
+| `magnesium` | 4 | `"Both needles ×0.70 this kick"` | both needle speeds ×0.7, gap-scaled if Phil or Lucky Ball is on |
 | `omega_3` | 5 | good band wipes the angle; the +5 perfect score bonus turns off; the perfect cash dollar can still pay | sets `stats.omega` |
 | `electrolyte_tabs` | 6 | `"A miss keeps the attempt"` | a miss does not spend an attempt, including a Bonus Ring miss |
 | `vitamin_d` | 5 | `"Ignore rain, snow, and mud"` | clears rain, snow, and mud flags. Monsoon's extras are not in that clear |
 | `pre_workout` | 4 | `"+0.5 Mult if this kick is made"` | +0.5 Mult on a make, scaled by Phil |
 | `zinc` | 5 | `"Reroll this kick's wind and weather"` | one reroll of wind and weather, then the bottle is consumed. A second use says `"Already rerolled"` |
 | `lutein` | 5 | `"Wind numbers and a full dotted path"` | `flag_reader`, `laser_line`, path percent at least 100 |
-| `pickle_juice` | 5 | `"Sideways wind drift ×0.5"` | `drift_factor` ×0.5, gap-scaled |
+| `pickle_juice` | 5 | `"Drift ×0.5 this kick"` | `drift_factor` ×0.5, gap-scaled |
 | `tart_cherry` | 6 | `"Remove one curse"` | opens the curse picker. It does not enter the active vitamin list |
 | `b12_shot` | 7 | `"+1 attempt"` | +1 attempt, once per shop visit, up to the cap. Not a belt item |
 
@@ -485,7 +486,7 @@ Cole's ball multiplier is 1.00 in `Kickers.apply_to`. It is not 0.90. Carlos is 
 - **Kit text:** `"Farm Strength. A press under 80% still kicks at 80%."`
 - **actual effect:** `power_floor` is 80. Full power is `16 + 0.54 × 100` = 70 yards before wind and items.
 - **match:** yes
-- **Ball:** `"The Farm Ball"`. Wind drift ×1.10. A doink stays a doink.
+- **Ball:** `"The Farm Ball"`. Drift ×1.10. A doink stays a doink.
 - **match:** yes
 
 ### The Walk-On
@@ -688,7 +689,7 @@ Blank cells are ranks that item cannot reach. "Next rank adds nothing" is the fi
 | Protein Shake | range | +6 yd this kick | one rank |
 | Magnesium | both needles | ×0.7 this kick | one rank |
 | Omega-3 | angle, perfect score | good band wipes the angle; +5 perfect score bonus off | one rank |
-| Electrolyte Tabs | attempt | a miss keeps the attempt | one rank |
+| Electrolyte Tabs | attempt | a miss keeps the attempt. Grey, and not usable, under Sudden Death | one rank |
 | Vitamin D | weather | ignore rain, snow, and mud | one rank |
 | Pre-Workout | mult | +0.5 on a make | one rank |
 | Zinc | wind and weather | one reroll | one rank |

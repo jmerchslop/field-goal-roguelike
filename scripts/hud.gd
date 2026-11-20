@@ -531,7 +531,7 @@ func _draw_chips(run: RunLogic, y: float) -> void:
 		if id != "":
 			var icon := _icon(Vitamins.sprite_path(id))
 			var bottle := Rect2(chip.position + Vector2(22, 3), Vector2(18, 18))
-			var locked := not run.belt_usable()
+			var locked := not run.belt_usable() or (id == Vitamins.ELECTROLYTE and run.electrolyte_blocked())
 			var tint := Color(0.55, 0.56, 0.58, 0.85) if locked else Color.WHITE
 			if icon != null:
 				draw_texture_rect(icon, bottle, false, tint)
@@ -1812,10 +1812,14 @@ func _draw_shop(run: RunLogic) -> void:
 		var label := "Z" if i == 0 else "X"
 		var slot := shop_belt_rect(i)
 		_draw_bottle(id, slot, id == "")
+		var belt_locked := id == Vitamins.ELECTROLYTE and run.electrolyte_blocked()
+		if belt_locked:
+			draw_rect(slot, Color(0.08, 0.08, 0.08, 0.55))
 		_text(slot.position + Vector2(4, 16), label, 12, KickConstants.COLOR_TEXT)
 		if id != "":
-			_text(slot.position + Vector2(42, 16), Vitamins.piece_name(id), 11, KickConstants.COLOR_TEXT)
-			_text(slot.position + Vector2(42, 34), run.vitamin_line(id), 10, KickConstants.COLOR_TEXT)
+			var name_color := Color(0.7, 0.7, 0.7) if belt_locked else KickConstants.COLOR_TEXT
+			_text(slot.position + Vector2(42, 16), Vitamins.piece_name(id), 11, name_color)
+			_text(slot.position + Vector2(42, 34), run.vitamin_line(id), 10, name_color)
 	var frames: Array = shop_shelf_frames()
 	for i in 3:
 		var id := str(run.shop_stock[i]) if i < run.shop_stock.size() else ""
@@ -1823,12 +1827,17 @@ func _draw_shop(run: RunLogic) -> void:
 		if id == "":
 			_text(frame.position + Vector2(28, 78), "SOLD", 22, Color(0.85, 0.85, 0.88))
 		else:
+			var shelf_blocked := id == Vitamins.ELECTROLYTE and run.electrolyte_blocked()
 			_draw_bottle(id, frame.grow(-18), false)
+			if shelf_blocked:
+				draw_rect(frame, Color(0.08, 0.08, 0.08, 0.72))
 			var plate := shop_price_plate(frame)
-			draw_rect(plate, Color(0.05, 0.04, 0.03, 0.88))
-			var price_color := Color(1.0, 0.3, 0.25) if run.shop_flash == str(i) else KickConstants.COLOR_ATTEMPT
+			draw_rect(plate, Color(0.08, 0.08, 0.08, 0.9) if shelf_blocked else Color(0.05, 0.04, 0.03, 0.88))
+			var price_color := Color(0.7, 0.7, 0.7) if shelf_blocked else (Color(1.0, 0.3, 0.25) if run.shop_flash == str(i) else KickConstants.COLOR_ATTEMPT)
 			_text(plate.position + Vector2(8, 16), "%d  $%d  %s" % [i + 1, run.item_price(id), Vitamins.piece_name(id)], 12, price_color)
 			_draw_wrapped(run.vitamin_line(id), Rect2(plate.position + Vector2(8, 30), Vector2(plate.size.x - 16, 40)), 10)
+			if shelf_blocked:
+				_text(Vector2(plate.position.x + 8, plate.position.y + plate.size.y + 4), "Sudden Death", 16, Color(0.8, 0.8, 0.8))
 	var b12 := shop_b12_rect()
 	var grey := run.b12_grey()
 	draw_rect(b12, Color(0.08, 0.08, 0.08, 0.9) if grey else Color(0.16, 0.12, 0.05, 0.92))

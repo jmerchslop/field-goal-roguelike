@@ -6,6 +6,8 @@ Generated: 2026-11-09
 **Painted:** 56
 **Template:** 80
 
+CLEAN1: Wind Visor says `Wind ×0.90`, `×0.85`, or `×0.80`. Hush Gloves says `Wind -N mph`. Pickle Juice says `Drift ×0.5 this kick`. High-Air says `tailwind gain ×1.5`. Anchor says `Power needle ×`. Patient says `Accuracy needle ×`. Ice Cage, Rain Dance, Magnesium, All Natural, and Training Camp say `both needles`. Bruce's ball says `Drift ×1.10`. Electrolyte under Sudden Death is grey and labeled `Sudden Death`.
+
 LUCK1: the kicker plate and the select card show `LUCK N` (gold above 0, grey at 0). A lucky doink stamps `LUCKY`. A lucky equipment card shows a gold `LUCKY` tag and is one rank higher. Doink Cap adds ` +N luck` at ranks III, VI, IX, and XII. Gary's Lucky Ball reads "Each first-try make adds 4%. The bonus caps at +24%. A miss resets it."
 
 Quoted words are the current player-facing text. `{braces}` name an inserted piece. They are not drawn as braces. The same words on two screens are listed twice. Painted letters live in an image. Code letters are drawn by script.
@@ -489,7 +491,7 @@ No pause screen exists. Esc during a kick is not given its own pause menu. A pri
 ### `select_bruce_ball_text`
 - **screen:** Character select
 - **when:** Ball description under the ball name, only while this kicker is unlocked.
-- **current:** "A light hay ball. Wind moves it 10% more than a normal ball. A doink stays a doink."
+- **current:** "A light hay ball. Drift ×1.10. A doink stays a doink."
 - **kind:** static
 - **source:** code
 
@@ -1913,7 +1915,7 @@ No pause screen exists. Esc during a kick is not given its own pause menu. A pri
 ### `offer_effect_anchor_needles`
 - **screen:** Loadout offer
 - **when:** Anchor Cleats, every rank. {factor} is 0.85 to the power of the rank. Same words on the loadout-rail tooltip; that copy is listed again below.
-- **current:** "Needles ×{factor}"
+- **current:** "Power needle ×{factor}"
 - **kind:** template
 - **source:** code
 
@@ -1934,7 +1936,7 @@ No pause screen exists. Esc during a kick is not given its own pause menu. A pri
 ### `offer_effect_wind_visor_1`
 - **screen:** Loadout offer
 - **when:** Wind Visor rank I. Same words on the loadout-rail tooltip; that copy is listed again below.
-- **current:** "Shows wind mph and an arrow"
+- **current:** "Shows wind mph and an arrow. Wind ×0.90."
 - **kind:** static
 - **source:** code
 
@@ -2088,7 +2090,7 @@ No pause screen exists. Esc during a kick is not given its own pause menu. A pri
 ### `offer_effect_high_air`
 - **screen:** Loadout offer
 - **when:** High-Air Gloves, every rank. {yards} is 2 times the rank. Same words on the loadout-rail tooltip; that copy is listed again below.
-- **current:** "+{yards} yd, tailwind range ×1.5"
+- **current:** "+{yards} yd, tailwind gain ×1.5"
 - **kind:** template
 - **source:** code
 
@@ -2565,8 +2567,8 @@ No pause screen exists. Esc during a kick is not given its own pause menu. A pri
 
 ### `tooltip_effect_anchor_needles`
 - **screen:** Loadout rail tooltip
-- **when:** Rail tooltip. Anchor Cleats, every rank. {factor} is 0.85 to the power of the rank.
-- **current:** "Needles ×{factor}"
+- **when:** Rail tooltip. Anchor Cleats, every rank. {factor} is the Anchor table, 0.85 at I through 0.40 at XII.
+- **current:** "Power needle ×{factor}"
 - **kind:** template
 - **source:** code
 
@@ -2587,7 +2589,7 @@ No pause screen exists. Esc during a kick is not given its own pause menu. A pri
 ### `tooltip_effect_wind_visor_1`
 - **screen:** Loadout rail tooltip
 - **when:** Rail tooltip. Wind Visor rank I.
-- **current:** "Shows wind mph and an arrow"
+- **current:** "Shows wind mph and an arrow. Wind ×0.90."
 - **kind:** static
 - **source:** code
 
@@ -2741,7 +2743,7 @@ No pause screen exists. Esc during a kick is not given its own pause menu. A pri
 ### `tooltip_effect_high_air`
 - **screen:** Loadout rail tooltip
 - **when:** Rail tooltip. High-Air Gloves, every rank. {yards} is 2 times the rank.
-- **current:** "+{yards} yd, tailwind range ×1.5"
+- **current:** "+{yards} yd, tailwind gain ×1.5"
 - **kind:** template
 - **source:** code
 
@@ -3163,7 +3165,7 @@ No pause screen exists. Esc during a kick is not given its own pause menu. A pri
 ### `shop_effect_magnesium`
 - **screen:** Vitamin Shop
 - **when:** Effect under the vitamin name, or on the B12 plate for B12 Shot.
-- **current:** "Needles ×0.7 this kick"
+- **current:** "Both needles ×0.70 this kick"
 - **kind:** static
 - **source:** code
 
@@ -3310,7 +3312,7 @@ No pause screen exists. Esc during a kick is not given its own pause menu. A pri
 ### `shop_effect_pickle_juice`
 - **screen:** Vitamin Shop
 - **when:** Effect under the vitamin name, or on the B12 plate for B12 Shot.
-- **current:** "Sideways wind drift ×0.5"
+- **current:** "Drift ×0.5 this kick"
 - **kind:** static
 - **source:** code
 
@@ -3991,7 +3993,7 @@ These strings were searched for and are not shown to a player. They are not in t
 ### `kicker_bruce_downside_not_drawn`
 - **screen:** Not drawn
 - **when:** Stored on the kicker. No screen draws the downside.
-- **current:** "The Farm Ball. Wind pushes it 10% more."
+- **current:** "The Farm Ball. Drift ×1.10."
 - **kind:** static
 - **source:** code
 

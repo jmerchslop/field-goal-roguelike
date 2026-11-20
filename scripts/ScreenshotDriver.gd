@@ -186,6 +186,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "clean1":
+		if not await _capture_clean1():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "rs1":
 		if not await _capture_rs1():
 			get_tree().quit(1)
@@ -5977,6 +5983,84 @@ func _capture_pace2() -> bool:
 	var saved := await _capture("pace2_willow_locked_card.png")
 	_restore_pace2_save(had_file, path, backup, had_willow)
 	return saved
+
+
+func _capture_clean1() -> bool:
+	var path := str(SaveData.file_path)
+	var had_file := FileAccess.file_exists(path)
+	var backup := PackedByteArray()
+	if had_file:
+		backup = FileAccess.get_file_as_bytes(path)
+	board.front.screen = FrontEnd.Screen.SELECT
+	board.selecting = true
+	board.highlight = 0
+	print("CLEAN1 bruce ", Kickers.rundown_lines(Kickers.BIG_BRUCE, true))
+	if not await _capture("clean1_bruce_select.png"):
+		_restore_luck1_save(had_file, path, backup, bool(SaveData.has_unlock(Kickers.GARY)))
+		return false
+	board.highlight = 1
+	board.front.run_mode = "standard"
+	board.confirm_kicker()
+	board.run.tad_level = 0
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.AIMING
+	board.run.phase = RunLogic.Phase.PLAYING
+	var visor_ok: bool = await _clean1_offer(Loadout.WIND_VISOR, 1, Loadout.HELMET, "clean1_visor_card.png")
+	if not visor_ok:
+		_restore_luck1_save(had_file, path, backup, bool(SaveData.has_unlock(Kickers.GARY)))
+		return false
+	var hush_ok: bool = await _clean1_offer(Loadout.HUSH_GLOVES, 3, Loadout.GLOVES, "clean1_hush_card.png")
+	if not hush_ok:
+		_restore_luck1_save(had_file, path, backup, bool(SaveData.has_unlock(Kickers.GARY)))
+		return false
+	var anchor_ok: bool = await _clean1_offer(Loadout.ANCHOR, 1, Loadout.CLEATS, "clean1_anchor_card.png")
+	if not anchor_ok:
+		_restore_luck1_save(had_file, path, backup, bool(SaveData.has_unlock(Kickers.GARY)))
+		return false
+	var patient_ok: bool = await _clean1_offer(Loadout.PATIENT_GLOVES, 1, Loadout.GLOVES, "clean1_patient_card.png")
+	if not patient_ok:
+		_restore_luck1_save(had_file, path, backup, bool(SaveData.has_unlock(Kickers.GARY)))
+		return false
+	board.run.awaiting_offer = false
+	board.run.awaiting_shop = true
+	board.run.shop_stock = [Vitamins.PICKLE, Vitamins.PROTEIN, Vitamins.MAGNESIUM]
+	board.run.shop_note = ""
+	print("CLEAN1 pickle ", board.run.vitamin_line(Vitamins.PICKLE))
+	if not await _capture("clean1_pickle_shelf.png"):
+		_restore_luck1_save(had_file, path, backup, bool(SaveData.has_unlock(Kickers.GARY)))
+		return false
+	board.run.give(Loadout.SUDDEN_DEATH)
+	board.run.shop_stock = [Vitamins.ELECTROLYTE, Vitamins.PROTEIN, Vitamins.MAGNESIUM]
+	board.run.cash = 20
+	board.run.shop_note = ""
+	print("CLEAN1 shelf blocked ", board.run.electrolyte_blocked())
+	if not await _capture("clean1_sd_electrolyte_shelf.png"):
+		_restore_luck1_save(had_file, path, backup, bool(SaveData.has_unlock(Kickers.GARY)))
+		return false
+	board.run.awaiting_shop = false
+	board.run.belt = [Vitamins.ELECTROLYTE, ""]
+	board.run.vitamin_note = "Sudden Death"
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.AIMING
+	print("CLEAN1 belt ", board.run.vitamin_note)
+	var saved := await _capture("clean1_sd_electrolyte_belt.png")
+	_restore_luck1_save(had_file, path, backup, bool(SaveData.has_unlock(Kickers.GARY)))
+	return saved
+
+
+func _clean1_offer(id: String, rank: int, slot: String, file_name: String) -> bool:
+	board.run.awaiting_shop = false
+	board.run.awaiting_offer = true
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.logic.phase = KickLogic.Phase.AIMING
+	board.run.offer = [{
+		"kind": Loadout.kind_of(id),
+		"slot": slot,
+		"id": id,
+		"rank": rank,
+	}]
+	print("CLEAN1 card ", board.run.lived_effect_line(id, rank))
+	return await _capture(file_name)
 
 
 func _capture_luck1() -> bool:

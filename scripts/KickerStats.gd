@@ -5,7 +5,7 @@ extends RefCounted
 # The live kick reads these. The constants stay the starting values.
 
 var power_speed := KickConstants.POWER_RISE_PER_SEC
-var accuracy_speed := KickConstants.ACCURACY_FALL_PER_SEC
+var accuracy_speed := KickConstants.POWER_RISE_PER_SEC
 # Sizes PERFECT and good. 100 is ±2 / ±8. It does not change needle speed.
 var accuracy := 100.0
 var ball_speed_mult := 1.0
@@ -82,7 +82,7 @@ var numero_dos := false
 
 func reset() -> void:
 	power_speed = KickConstants.POWER_RISE_PER_SEC
-	accuracy_speed = KickConstants.ACCURACY_FALL_PER_SEC
+	accuracy_speed = KickConstants.POWER_RISE_PER_SEC
 	accuracy = 100.0
 	ball_speed_mult = 1.0
 	needle_speedup = 1.0

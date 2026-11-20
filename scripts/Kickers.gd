@@ -3,7 +3,7 @@ extends RefCounted
 
 # The two kickers. Adding a third one later means adding data here.
 # Kick code never names a kicker. It only reads KickerStats and ball_type.
-# farm_ball multiplies sideways wind drift by 1.10. The kick reads ball_type.
+# farm_ball multiplies drift by 1.10. The kick reads ball_type.
 
 const BIG_BRUCE := "big_bruce"
 const WALK_ON := "walk_on"
@@ -22,9 +22,9 @@ const ALL: Array = [
 		"name": "Big Bruce",
 		"lore": "A farmer who's been booting fence posts loose since he was nine. He can kick it a mile. The hay ball goes where the wind takes it.",
 		"excels": "Farm Strength. A press under 80% still kicks at 80%.",
-		"downside": "The Farm Ball. Wind pushes it 10% more.",
+		"downside": "The Farm Ball. Drift ×1.10.",
 		"ball_name": "The Farm Ball",
-		"ball_description": "A light hay ball. Wind moves it 10% more than a normal ball. A doink stays a doink.",
+		"ball_description": "A light hay ball. Drift ×1.10. A doink stays a doink.",
 		"ball_type": "farm_ball",
 		"accuracy": 90,
 		"range_line": "70 yd",
@@ -288,10 +288,10 @@ static func rundown_lines(id: String, unlocked: bool, tad_cap: int = -1, tad_pic
 	if stats.ball_type == "farm_ball":
 		var pushed := KickLogic.drift_at_uprights(10.0, 90.0, 35.0, 0, 0, "farm_ball")
 		var plain := KickLogic.drift_at_uprights(10.0, 90.0, 35.0, 0, 0, "standard")
-		var extra := 0
+		var factor := 1.0
 		if absf(plain) > 0.0001:
-			extra = int(round((pushed / plain - 1.0) * 100.0))
-		lines.append("Wind pushes the ball %d%% more." % extra)
+			factor = pushed / plain
+		lines.append("Drift ×%s." % _plain_number(factor))
 	if stats.rerolls_per_run != 1:
 		lines.append("Starts with %d offer rerolls." % stats.rerolls_per_run)
 	if id == WALK_ON:

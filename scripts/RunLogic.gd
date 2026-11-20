@@ -373,9 +373,10 @@ func too_weak_report(kick: KickLogic, blocked: bool = false) -> Dictionary:
 	var vitamin_d := 0.0
 	if open_belt and kick != null and kick.snow_range and _belt_count(Vitamins.VITAMIN_D) > 0 and not vitamin_d_active():
 		vitamin_d = kick.snow_penalty
-	var belt_electrolyte := open_belt and _belt_count(Vitamins.ELECTROLYTE) > 0
-	# Sudden Death leaves one attempt, so Walk-On's retry counts only with a usable Electrolyte.
-	var retry_possible := attempts >= 2 or _vitamin_count(Vitamins.ELECTROLYTE) > 0 or belt_electrolyte
+	var electrolyte_live := not electrolyte_blocked()
+	var belt_electrolyte := open_belt and electrolyte_live and _belt_count(Vitamins.ELECTROLYTE) > 0
+	# Sudden Death leaves one attempt. A blocked Electrolyte does not count as a retry.
+	var retry_possible := attempts >= 2 or (electrolyte_live and _vitamin_count(Vitamins.ELECTROLYTE) > 0) or belt_electrolyte
 	var walk_on := 0.0
 	if kicker_id == Kickers.WALK_ON and is_first_ball and not practice and retry_possible:
 		walk_on = 6.0
@@ -710,7 +711,7 @@ func resolve_kick(result_text: String, _offset: float, perfect: bool, ring_hit: 
 			ring_factor = 1.0
 		is_first_ball = false
 		lucky_stacks = 0
-		if _vitamin_count(Vitamins.ELECTROLYTE) == 0:
+		if electrolyte_blocked() or _vitamin_count(Vitamins.ELECTROLYTE) == 0:
 			attempts -= 1
 			if attempts <= 0:
 				attempts = 0
@@ -1449,6 +1450,10 @@ func buy_shelf(index: int) -> bool:
 	var id := str(shop_stock[index])
 	if id == "":
 		return false
+	if id == Vitamins.ELECTROLYTE and electrolyte_blocked():
+		shop_note = "Sudden Death"
+		shop_flash = ""
+		return false
 	if cash < item_price(id):
 		shop_flash = str(index)
 		shop_note = ""
@@ -1485,6 +1490,10 @@ func buy_b12() -> bool:
 	shop_flash = ""
 	shop_note = ""
 	return true
+
+
+func electrolyte_blocked() -> bool:
+	return has_curse(Loadout.SUDDEN_DEATH)
 
 
 func b12_grey() -> bool:
@@ -1545,6 +1554,9 @@ func use_belt(index: int) -> bool:
 		return false
 	if not belt_usable():
 		vitamin_note = "All natural"
+		return false
+	if id == Vitamins.ELECTROLYTE and electrolyte_blocked():
+		vitamin_note = "Sudden Death"
 		return false
 	if id == Vitamins.ZINC:
 		if zinc_used:
@@ -2098,23 +2110,23 @@ func _walk_on_clutch() -> bool:
 
 
 func _finish_needles() -> void:
-	# One combined speed. Slows are already in power_speed. Walk-On clutch joins them
-	# before the 0.40 floor. Stone Toe, UNDER THE LIGHTS, TAD 7, and Training Camp
+	# Each needle is floored on its own at 0.40. Walk-On clutch joins both slows
+	# before that floor. Stone Toe, UNDER THE LIGHTS, TAD 7, and Training Camp
 	# multiply after the floor and stop at the speed-up ceiling.
 	# Rain is capped against that product in the kick omega. Ball speed is outside the cap.
 	var base := KickConstants.POWER_RISE_PER_SEC
 	var clutch := 0.90 if _walk_on_clutch() else 1.0
 	var stone := 1.20 if has_curse(Loadout.STONE) else 1.0
 	var lights := LIGHTS_NEEDLE if lights_active() else 1.0
-	# Practice Swing uses this same combined speed. Lights stay off during practice.
+	# Practice Swing uses these same speeds. Lights stay off during practice.
 	var crunch := 1.33 if tad_active(7) else 1.0
 	var camp := 1.30 if has_curse(Loadout.TRAINING_CAMP) and camp_makes < 3 else 1.0
 	var speedup := minf(stone * lights * crunch * camp, MeterGauge.NEEDLE_SPEEDUP_CEILING)
 	stats.needle_speedup = speedup
-	var slow := MeterGauge.floored_slow(stats.power_speed / base * clutch)
-	var combined := base * slow * speedup
-	stats.power_speed = combined
-	stats.accuracy_speed = combined
+	var slow_p := MeterGauge.floored_slow(stats.power_speed / base * clutch)
+	var slow_a := MeterGauge.floored_slow(stats.accuracy_speed / base * clutch)
+	stats.power_speed = base * slow_p * speedup
+	stats.accuracy_speed = base * slow_a * speedup
 
 
 func owned_labels() -> Array:
