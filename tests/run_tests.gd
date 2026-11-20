@@ -11610,6 +11610,7 @@ func _check_ui4_live() -> void:
 	game._unhandled_input(motion)
 	check(game.run.rung_highlight == 1 and game.offer_hover != 2, "hover skips a blocked rung")
 	game._taking_pictures = true
+	game.run.special_kicks[game.run.kick_number] = ""
 	game.run.awaiting_rung = false
 	game.run.awaiting_offer = false
 	game.logic.phase = KickLogic.Phase.AIMING
