@@ -99,6 +99,8 @@ var ring_offer_skipped := false
 var gm_passes := 0
 var gm_second_slots: Array = []
 var ring_offer_live := false
+var forced_offer_live := false
+var forced_curse_done := false
 var pk2_cursor := 0
 var pk2_grants: Array = []
 var camp_makes := 0
@@ -256,6 +258,8 @@ func new_run() -> void:
 	gm_passes = 0
 	gm_second_slots = []
 	ring_offer_live = false
+	forced_offer_live = false
+	forced_curse_done = false
 	pk2_cursor = 0
 	pk2_grants = []
 	camp_makes = 0
@@ -1238,6 +1242,7 @@ func pick_card(index: int) -> bool:
 	var from_ring := ring_offer_live
 	_close_offer()
 	ring_offer_live = false
+	forced_offer_live = false
 	var slot := str(card.get("slot", ""))
 	var picked := str(card.get("id", ""))
 	var rank := int(card.get("rank", 1))
@@ -1257,7 +1262,7 @@ func pick_card(index: int) -> bool:
 
 
 func skip_offer() -> bool:
-	if not awaiting_offer:
+	if forced_offer_live or not awaiting_offer:
 		return false
 	_close_offer()
 	ring_offer_live = false
@@ -1276,7 +1281,7 @@ func free_reroll_ready() -> bool:
 
 
 func reroll_offer() -> bool:
-	if tad_active(5) or not awaiting_offer or awaiting_shop:
+	if forced_offer_live or tad_active(5) or not awaiting_offer or awaiting_shop:
 		return false
 	# The banked free reroll is spent before Walk-On or Scout Lid charges.
 	if second_look_bank > 0 and stats.second_look:
@@ -1774,6 +1779,41 @@ func _set_perk_rank(id: String, rank: int) -> void:
 	rebuild_stats()
 
 
+func forced_curse_due() -> bool:
+	if forced_curse_done or practicing or not wants_upgrade():
+		return false
+	if run_mode == "endless":
+		return kick_number == 11
+	return kick_number == 6
+
+
+func _forced_curse_pool() -> Array:
+	var cards: Array = []
+	for card in Loadout.legal_curses(loadout_state()):
+		var id := str(card.get("id", ""))
+		if id == Loadout.SUDDEN_DEATH or id == Loadout.ALL_NATURAL:
+			continue
+		cards.append(card)
+	return cards
+
+
+func open_forced_curse_offer() -> bool:
+	# Shown once, even when nothing legal is left and the panel is skipped.
+	forced_curse_done = true
+	var bag: Array = _forced_curse_pool()
+	if bag.is_empty():
+		return false
+	var cards: Array = []
+	while cards.size() < 3 and not bag.is_empty():
+		var index := _offer_rng.randi() % bag.size()
+		cards.append(bag[index])
+		bag.remove_at(index)
+	offer = cards
+	awaiting_offer = true
+	forced_offer_live = true
+	return true
+
+
 func open_ring_offer() -> bool:
 	if not ring_offer_pending or phase != Phase.PLAYING:
 		return false
@@ -2135,6 +2175,8 @@ func export_resume() -> Dictionary:
 	var place := "tee"
 	if awaiting_shop:
 		place = "shop"
+	elif awaiting_offer and forced_offer_live:
+		place = "forced"
 	elif awaiting_offer and not last_result_made:
 		place = "ring"
 	elif awaiting_offer:
@@ -2178,6 +2220,7 @@ func export_resume() -> Dictionary:
 		"older_weather": _older_weather,
 		"power_item_seen": power_item_seen,
 		"offers_without_power": offers_without_power,
+		"forced_curse_done": forced_curse_done,
 		"synchronicity_offer_done": synchronicity_offer_done,
 		"zinc_used": zinc_used,
 		"lucky_stacks": lucky_stacks,
@@ -2282,6 +2325,7 @@ func import_resume(data: Dictionary) -> void:
 	_older_weather = str(data.get("older_weather", ""))
 	power_item_seen = bool(data.get("power_item_seen", false))
 	offers_without_power = int(data.get("offers_without_power", 0))
+	forced_curse_done = bool(data.get("forced_curse_done", false))
 	synchronicity_offer_done = bool(data.get("synchronicity_offer_done", false))
 	zinc_used = bool(data.get("zinc_used", false))
 	lucky_stacks = int(data.get("lucky_stacks", 0))
@@ -2338,6 +2382,13 @@ func import_resume(data: Dictionary) -> void:
 		awaiting_offer = true
 		kick_resolved = true
 		last_result_made = true
+		offer = _dict_list(data.get("offer", []))
+	elif place == "forced":
+		awaiting_offer = true
+		kick_resolved = true
+		last_result_made = true
+		forced_offer_live = true
+		forced_curse_done = true
 		offer = _dict_list(data.get("offer", []))
 	elif place == "ring":
 		awaiting_offer = true

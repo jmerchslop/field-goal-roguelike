@@ -1029,6 +1029,9 @@ func _draw_offer(run: RunLogic) -> void:
 	var left := 260.0
 	if count > 0 and left + total > meter_left - 16.0:
 		left = maxf(16.0, meter_left - 16.0 - total)
+	if run.forced_offer_live:
+		_pg_centered("FORCED CURSE", 248.0, 22, KickConstants.COLOR_ATTEMPT)
+		_text_centered("Pick one. This one can't be skipped.", 286.0, 18, KickConstants.COLOR_TEXT)
 	for i in count:
 		var rect := Rect2(left + float(i) * (width + gap), 318.0, width, 210.0)
 		card_rects.append(rect)
@@ -1042,11 +1045,12 @@ func _draw_offer(run: RunLogic) -> void:
 		_draw_slot_icon(id, rank, slot, Rect2(rect.position + Vector2(14, 28), Vector2(72, 72)), true)
 		_text(rect.position + Vector2(96, 62), Loadout.card_title(id, rank), 18, KickConstants.COLOR_ATTEMPT)
 		_draw_wrapped(run.lived_effect_line(id, rank), Rect2(rect.position + Vector2(12, 112), Vector2(width - 24, 90)), 15)
-	if run.free_reroll_ready():
-		_text_centered("Free rerolls %d. %s rerolls. %s skips." % [run.second_look_bank, Settings.key_sentence("offer_reroll"), Settings.key_sentence("skip")], 640.0, 18, KickConstants.COLOR_TEXT)
-	else:
-		_text_centered("Rerolls left: %d. %s rerolls. %s skips." % [run.rerolls_left, Settings.key_sentence("offer_reroll"), Settings.key_sentence("skip")], 640.0, 18, KickConstants.COLOR_TEXT)
-	_text_centered("Skip takes nothing.", 666.0, 16, KickConstants.COLOR_TEXT)
+	if not run.forced_offer_live:
+		if run.free_reroll_ready():
+			_text_centered("Free rerolls %d. %s rerolls. %s skips." % [run.second_look_bank, Settings.key_sentence("offer_reroll"), Settings.key_sentence("skip")], 640.0, 18, KickConstants.COLOR_TEXT)
+		else:
+			_text_centered("Rerolls left: %d. %s rerolls. %s skips." % [run.rerolls_left, Settings.key_sentence("offer_reroll"), Settings.key_sentence("skip")], 640.0, 18, KickConstants.COLOR_TEXT)
+		_text_centered("Skip takes nothing.", 666.0, 16, KickConstants.COLOR_TEXT)
 
 
 func _wrap_lines(text: String, width: float, size: int) -> PackedStringArray:

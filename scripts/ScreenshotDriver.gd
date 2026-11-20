@@ -156,6 +156,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "pace3":
+		if not await _capture_pace3():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "rs1":
 		if not await _capture_rs1():
 			get_tree().quit(1)
@@ -5944,6 +5950,42 @@ func _capture_pace2() -> bool:
 	var saved := await _capture("pace2_willow_locked_card.png")
 	_restore_pace2_save(had_file, path, backup, had_willow)
 	return saved
+
+
+func _capture_pace3() -> bool:
+	board.highlight = 1
+	board.selecting = true
+	board.front.run_mode = "standard"
+	board.confirm_kicker()
+	board.run.kick_number = 6
+	board.run.attempts = 3
+	board.run.kick_resolved = false
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run._place_spot()
+	board.load_current_kick()
+	board.run.resolve_kick("GOOD", 1.0, false)
+	board._finish_resolved_kick()
+	print("PACE3 forced ", board.run.forced_offer_live, " cards ", board.run.offer.size())
+	if not await _capture("pace3_forced_offer.png"):
+		return false
+	board._choose_card(0)
+	print("PACE3 after pick kick ", board.run.kick_number, " live ", board.run.forced_offer_live, " offer ", board.run.offer.size())
+	if not await _capture("pace3_after_pick_normal_offer.png"):
+		return false
+	board.highlight = 1
+	board.selecting = true
+	board.front.run_mode = "endless"
+	board.confirm_kicker()
+	board.run.kick_number = 11
+	board.run.attempts = 3
+	board.run.kick_resolved = false
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run._place_spot()
+	board.load_current_kick()
+	board.run.resolve_kick("GOOD", 1.0, false)
+	board._finish_resolved_kick()
+	print("PACE3 endless ", board.run.run_mode, " kick ", board.run.kick_number, " live ", board.run.forced_offer_live, " cards ", board.run.offer.size())
+	return await _capture("pace3_endless_k11.png")
 
 
 func _restore_pace2_save(had_file: bool, path: String, backup: PackedByteArray, had_willow: bool) -> void:

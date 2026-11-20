@@ -1579,6 +1579,20 @@ No pause screen exists. Esc during a kick is not given its own pause menu. A pri
 
 ## Loadout offer
 
+### `offer_forced_title`
+- **screen:** Loadout offer
+- **when:** Over the cards after a make on Standard kick 6 or Endless kick 11.
+- **current:** "FORCED CURSE"
+- **kind:** static
+- **source:** code
+
+### `offer_forced_body`
+- **screen:** Loadout offer
+- **when:** Under the forced-curse title. Default font. Skip and reroll hints stay hidden.
+- **current:** "Pick one. This one can't be skipped."
+- **kind:** static
+- **source:** code
+
 ### `offer_empty`
 - **screen:** Loadout offer
 - **when:** When a reroll or a roll leaves no cards.

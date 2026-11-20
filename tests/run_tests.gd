@@ -69,6 +69,7 @@ func _run() -> void:
 	_check_cam1()
 	_check_pace1()
 	_check_pace2()
+	_check_pace3()
 	_check_f3()
 	_check_au1()
 	_check_drive_lid_and_power_safety()
@@ -9355,4 +9356,123 @@ func _check_pace2() -> void:
 	var logic := FileAccess.get_file_as_string("res://scripts/RunLogic.gd")
 	var constants := FileAccess.get_file_as_string("res://scripts/KickConstants.gd")
 	check(logic.find("earns_attempt") < 0 and logic.find("late_earn") < 0 and constants.find("LATE_EARN") < 0, "PACE2 the free-attempt rule is gone")
+
+
+func _pace3_make(mode: String, kick: int) -> RunLogic:
+	var run := RunLogic.new()
+	run.start_with_kicker(Kickers.WALK_ON)
+	run.run_mode = mode
+	run.kick_number = kick
+	run.attempts = 3
+	run.resolve_kick("GOOD", 1.0, false)
+	return run
+
+
+func _pace3_ids(cards: Array) -> Array:
+	var ids: Array = []
+	for card in cards:
+		ids.append(str(card.get("id", "")))
+	return ids
+
+
+func _check_pace3() -> void:
+	var early := _pace3_make("standard", 5)
+	check(not early.forced_curse_due(), "PACE3 kick 5 does not open a forced curse")
+	var made := _pace3_make("standard", 6)
+	check(made.forced_curse_due(), "PACE3 a make on Standard kick 6 is due")
+	var missed := RunLogic.new()
+	missed.start_with_kicker(Kickers.WALK_ON)
+	missed.kick_number = 6
+	missed.attempts = 2
+	missed.resolve_kick("SHORT", 0.0, false)
+	check(not missed.forced_curse_due(), "PACE3 a miss on kick 6 is not due")
+	missed.begin_retry()
+	missed.resolve_kick("GOOD", 1.0, false)
+	check(missed.forced_curse_due(), "PACE3 the retry make on kick 6 is due once")
+	check(missed.open_forced_curse_offer() and not missed.forced_curse_due(), "PACE3 opening the offer spends it")
+	var practice := _pace3_make("standard", 6)
+	practice.practicing = true
+	check(not practice.forced_curse_due(), "PACE3 practice does not open the forced curse")
+	var endless_early := _pace3_make("endless", 10)
+	check(not endless_early.forced_curse_due(), "PACE3 Endless kick 10 is not the forced curse")
+	var endless := _pace3_make("endless", 11)
+	check(endless.forced_curse_due(), "PACE3 a make on Endless kick 11 is due")
+	var curse_ids: Array = []
+	for card in Loadout.legal_curses(RunLogic.new().loadout_state()):
+		curse_ids.append(str(card.get("id", "")))
+	for sample in 300:
+		var rolled := _pace3_make("standard", 6)
+		rolled.give(Loadout.HEAVY)
+		rolled.banned_curses.append(Loadout.STONE)
+		rolled.set_offer_seed(sample + 20)
+		check(rolled.open_forced_curse_offer(), "PACE3 seed %s opened a forced offer" % sample)
+		var seen := {}
+		check(rolled.offer.size() > 0 and rolled.offer.size() <= 3, "PACE3 seed %s has 1 to 3 cards" % sample)
+		for card in rolled.offer:
+			var id := str(card.get("id", ""))
+			check(str(card.get("kind", "")) == Loadout.CURSE, "PACE3 %s is a curse" % id)
+			check(id != Loadout.SUDDEN_DEATH and id != Loadout.ALL_NATURAL, "PACE3 %s is kept out of the forced pool" % id)
+			check(id != Loadout.HEAVY and id != Loadout.STONE, "PACE3 %s was owned or banned" % id)
+			check(curse_ids.has(id) and not seen.has(id), "PACE3 %s is a legal curse once" % id)
+			seen[id] = true
+	var one := _pace3_make("standard", 6)
+	for id in curse_ids:
+		if id != Loadout.HOWLING:
+			one.banned_curses.append(id)
+	one.set_offer_seed(8)
+	check(one.open_forced_curse_offer() and one.offer.size() == 1 and str(one.offer[0].get("id", "")) == Loadout.HOWLING, "PACE3 one legal curse is a one-card offer")
+	var none := _pace3_make("standard", 6)
+	none.give(Loadout.HEAVY)
+	none.give(Loadout.STONE)
+	check(none.forced_curse_due() and not none.open_forced_curse_offer() and none.forced_curse_done and not none.awaiting_offer, "PACE3 zero legal curses skips the panel")
+	none.roll_offer()
+	check(none.awaiting_offer and not none.forced_offer_live and none.offer.size() > 0, "PACE3 the normal offer opens when the curse panel is skipped")
+	var live := _pace3_make("standard", 6)
+	live.set_offer_seed(4)
+	var bank := live.offers_without_power
+	check(live.open_forced_curse_offer(), "PACE3 the kick 6 panel opens")
+	check(live.offers_without_power == bank, "PACE3 the forced panel does not count as a gear offer")
+	var before_cards := _pace3_ids(live.offer)
+	var charges := live.rerolls_left
+	check(not live.skip_offer() and not live.reroll_offer() and live.rerolls_left == charges and _pace3_ids(live.offer) == before_cards, "PACE3 skip and reroll do nothing")
+	var kick_before := live.kick_number
+	var picked := str(live.offer[0].get("id", ""))
+	check(live.pick_card(0) and live.has_curse(picked) and not live.forced_offer_live, "PACE3 the pick is a normal curse")
+	live.roll_offer()
+	check(live.kick_number == kick_before and live.awaiting_offer and not live.forced_offer_live, "PACE3 the normal offer stays on kick 6")
+	check(live.pick_card(0) and live.go_to_next_kick() and live.kick_number == kick_before + 1, "PACE3 the normal pick then advances")
+	var second := _pace3_make("standard", 6)
+	second.give(Loadout.HEAVY)
+	second.set_offer_seed(9)
+	check(second.open_forced_curse_offer() and second.pick_card(0), "PACE3 the second curse can be picked")
+	check(second.curse_ids.size() == 2 and second.curses_locked, "PACE3 the forced pick fills the 2-curse limit")
+	var tart := _pace3_make("standard", 6)
+	tart.set_offer_seed(11)
+	check(tart.open_forced_curse_offer(), "PACE3 tart setup opens")
+	var tart_curse := str(tart.offer[0].get("id", ""))
+	check(tart.pick_card(0), "PACE3 tart setup picks")
+	tart.belt[0] = Vitamins.TART
+	check(tart.use_belt(0) and tart.curse_ids.is_empty() and tart.banned_curses.has(tart_curse), "PACE3 Tart Cherry removes the forced curse")
+	var saved := _pace3_make("standard", 6)
+	saved.set_offer_seed(15)
+	check(saved.open_forced_curse_offer(), "PACE3 the saved offer opens")
+	var saved_ids := _pace3_ids(saved.offer)
+	var resumed := RunLogic.new()
+	resumed.import_resume(saved.export_resume())
+	check(resumed.forced_offer_live and resumed.forced_curse_done and _pace3_ids(resumed.offer) == saved_ids and not resumed.forced_curse_due(), "PACE3 a reload keeps the same forced cards")
+	var hud := FileAccess.get_file_as_string("res://scripts/hud.gd")
+	var body := "Pick one. This one can't be skipped."
+	check(hud.find("FORCED CURSE") >= 0 and BitmapFonts.ui_allows("FORCED CURSE"), "PACE3 the title is Pixel Gothic")
+	check(hud.find(body) >= 0 and body.find("!") < 0, "PACE3 the body has no exclamation point")
+	var packed: PackedScene = load("res://scenes/main.tscn")
+	var game = packed.instantiate()
+	get_root().add_child(game)
+	game._taking_pictures = true
+	game.run.start_with_kicker(Kickers.WALK_ON)
+	game.run.kick_number = 6
+	game.run.attempts = 3
+	game.run.resolve_kick("GOOD", 1.0, false)
+	game._finish_resolved_kick()
+	check(game.run.forced_offer_live and game.run.offer.size() == 3 and game.run.kick_number == 6, "PACE3 the kick scene opens the forced panel")
+	game.free()
 

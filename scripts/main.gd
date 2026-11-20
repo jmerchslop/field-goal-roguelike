@@ -356,6 +356,10 @@ func _finish_resolved_kick() -> void:
 			run.begin_retry()
 			load_current_kick()
 		return
+	if run.forced_curse_due():
+		if run.open_forced_curse_offer():
+			_remember_run()
+			return
 	if run.wants_upgrade():
 		run.roll_offer()
 		_remember_run()
@@ -397,9 +401,15 @@ func _sync_kick_audio(phase_before: int, forward_before: float) -> void:
 
 
 func _choose_card(index: int) -> void:
+	var forced := run.forced_offer_live
 	if not run.pick_card(index):
 		return
 	_cue("offer")
+	if forced:
+		run.roll_offer()
+		_remember_run()
+		refresh_view()
+		return
 	_after_cards()
 
 
