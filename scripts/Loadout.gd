@@ -605,7 +605,7 @@ static func effect_line(id: String, rank: int) -> String:
 		TEAM_DOCTOR:
 			return _doctor_card(1.5 + 0.1 * float(maxi(rank, 1) - 1))
 		ICED:
-			return "Down: The meter hides for 0.4s after you start it. Up: +0.75 Mult"
+			return "Down: The accuracy needle fades out early in its sweep, like the Iced boss. Up: +0.75 Mult"
 		SHANKY:
 			return "Down: accuracy error ×1.5. Up: +1.0 Mult"
 		HEAVY:
@@ -1403,7 +1403,6 @@ static func apply(stats: KickerStats, state: Dictionary, howling: bool, item_sca
 	var curses: Array = state.get("curses", [])
 	if curses.has(ICED):
 		curse_mult += 0.75
-		stats.hide_meter = true
 	if curses.has(SHANKY):
 		angle *= 1.5
 		curse_mult += 1.0

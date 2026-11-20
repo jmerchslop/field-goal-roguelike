@@ -72,6 +72,7 @@ func _run() -> void:
 	_check_pace3()
 	_check_ring1a()
 	_check_ring1b()
+	_check_en1()
 	_check_f3()
 	_check_au1()
 	_check_drive_lid_and_power_safety()
@@ -1585,7 +1586,7 @@ func _check_ui_copy() -> void:
 	check(Loadout.effect_line(Loadout.IRON_GRIP, 1) == "OVERPOWER band +10% wide.", "Iron Grip I widens the OVERPOWER band")
 	check(Loadout.effect_line(Loadout.IRON_GRIP, 3) == "OVERPOWER band +30% wide.", "Iron Grip III widens the band and does not mention noise")
 	check(Loadout.effect_line(Loadout.TIGHT, 1) == "Down: Perfect and Good -2. Up: +1.0 Mult", "Tight Window keeps +1.0 Mult and says Good")
-	check(Loadout.effect_line(Loadout.ICED, 1) == "Down: The meter hides for 0.4s after you start it. Up: +0.75 Mult", "Iced keeps the BAL2 +0.75 Mult")
+	check(Loadout.effect_line(Loadout.ICED, 1) == "Down: The accuracy needle fades out early in its sweep, like the Iced boss. Up: +0.75 Mult", "Iced fades the needle and keeps +0.75 Mult")
 	check(Vitamins.effect_line(Vitamins.MAGNESIUM) == "Needles ×0.70 this kick", "Magnesium prints 0.70")
 	check(is_equal_approx(0.70, 0.7), "Magnesium's printed 0.70 is the same 0.7 the needles use")
 	var minus := String.chr(0x2212)
@@ -1734,12 +1735,14 @@ func _check_curses_and_rarity() -> void:
 	check(not paired, "Ice Cage is never paired with Iced")
 	cage.weather = RunLogic.ICED
 	check(not cage.needle_fades(), "Ice Cage blocks the kick 5 needle fade")
-	check(not cage.meter_hidden(true, 1.0), "Ice Cage blocks the Iced meter hide")
+	cage.weather = RunLogic.CLEAR
+	cage.curse_ids = [Loadout.ICED]
+	cage.rebuild_stats()
+	check(cage.has_curse(Loadout.ICED) and not cage.needle_fades(), "Ice Cage blocks the Iced curse fade")
 	var iced := RunLogic.new()
 	iced.new_run()
 	iced.give(Loadout.ICED)
-	check(iced.meter_hidden(true, 0.4) and not iced.meter_hidden(true, 0.39), "Iced hides the meter 0.4 seconds after Space")
-	check(not iced.meter_hidden(false, 1.0), "Iced does not hide the meter before the meter starts")
+	check(iced.needle_fades() and iced.weather != RunLogic.ICED, "the Iced curse fades the needle without the boss")
 	iced.set_wind(0.0, 0.0)
 	iced.resolve_kick("GOOD", 2.0, false)
 	check(iced.score_line.find("0.75 curse") >= 0, "Iced shows +0.75 Mult, got %s" % iced.score_line)
@@ -2662,25 +2665,25 @@ func _check_endless_and_farm() -> void:
 	check(capped.cleats_rank == 6 and capped._perk_rank(Loadout.HERO_BALL) == 3, "a Standard offer cannot rank past VI or perk III")
 	var endless := RunLogic.new()
 	endless.run_mode = "endless"
-	check(near(endless.distance_yards(), 20.0) and not endless.is_boss(), "Endless kick 1 is 20 yards and not a boss")
+	check(near(endless.distance_yards(), 50.0) and not endless.is_boss(), "Endless kick 1 is 50 yards and not a boss")
 	endless.kick_number = 2
-	check(near(endless.distance_yards(), 25.0), "Endless kick 2 is 25 yards")
+	check(near(endless.distance_yards(), 50.0), "Endless kick 2 is 50 yards")
 	endless.kick_number = 3
-	check(near(endless.distance_yards(), 30.0), "Endless kick 3 is 30 yards")
+	check(near(endless.distance_yards(), 50.0), "Endless kick 3 is 50 yards")
 	endless.kick_number = 5
-	check(not endless.is_boss(), "Endless kick 5 is not a boss")
+	check(not endless.is_boss() and near(endless.distance_yards(), 51.0), "Endless kick 5 is 51 yards and not a boss")
 	endless.kick_number = 10
-	check(endless.is_boss() and near(endless.distance_yards(), 65.0), "Endless kick 10 is a 65-yard boss")
+	check(endless.is_boss() and near(endless.distance_yards(), 55.0), "Endless kick 10 is a 55-yard boss")
 	endless.kick_number = 15
 	check(not endless.is_boss(), "Endless kick 15 is not a boss")
 	endless.kick_number = 20
-	check(endless.is_boss() and near(endless.distance_yards(), 115.0), "Endless kick 20 is a 115-yard boss")
+	check(endless.is_boss() and near(endless.distance_yards(), 75.0), "Endless kick 20 is a 75-yard boss")
 	endless.kick_number = 30
-	check(endless.is_boss(), "Endless kick 30 is a boss")
+	check(endless.is_boss() and near(endless.distance_yards(), 114.0), "Endless kick 30 is a 114-yard boss")
 	endless.kick_number = 37
-	check(near(endless.distance_yards(), 200.0) and not endless.is_boss(), "Endless kick 37 is 200 yards")
-	endless.kick_number = 197
-	check(near(endless.distance_yards(), 1000.0), "Endless distance caps at 1000 yards")
+	check(near(endless.distance_yards(), 153.0) and not endless.is_boss(), "Endless kick 37 is 153 yards")
+	endless.kick_number = 100
+	check(near(endless.distance_yards(), 1000.0), "Endless kick 100 is 1000 yards")
 	var seen := {}
 	for seed_value in 280:
 		var rolled := RunLogic.new()
@@ -2727,7 +2730,7 @@ func _check_endless_and_farm() -> void:
 	bruce.run_mode = "endless"
 	check(near(bruce.stats.range_base + bruce.stats.range_per_power * 100.0, 70.0), "Bruce with no items is still 70 yards at full power")
 	bruce.kick_number = 11
-	check(near(bruce.distance_yards(), 70.0), "Endless kick 11 is 70 yards")
+	check(near(bruce.distance_yards(), 56.0), "Endless kick 11 is 56 yards")
 	check(KickLogic.classify(65.0, 70.0, 0.0) == "SHORT", "65 yards is SHORT of a 70-yard kick")
 	bruce.give(Loadout.CANNON, 12)
 	bruce.give(Loadout.HIGH_AIR, 12)
@@ -2797,10 +2800,11 @@ func _check_endless_and_farm() -> void:
 	deep.attempts = 3
 	deep.resolve_kick("GOOD", 0.0, true)
 	check(deep.phase == RunLogic.Phase.PLAYING and not records.has_trophy("season_complete"), "Endless kick 20 is not a Standard win and does not grant Season Complete")
-	deep.kick_number = 197
+	deep.kick_number = 100
 	deep.kick_resolved = false
+	deep.phase = RunLogic.Phase.PLAYING
 	deep.resolve_kick("GOOD", 0.0, false)
-	check(deep.phase == RunLogic.Phase.FAR and near(deep.longest_make, 1000.0), "making the 1000-yard kick finishes with THAT'S FAR ENOUGH")
+	check(deep.phase == RunLogic.Phase.FAR and near(deep.longest_make, 1000.0), "making kick 100 finishes with THAT'S FAR ENOUGH")
 	check(records.longest_make >= 1000, "the 1000-yard make is saved in the records")
 	records.file_path = kept_path
 
@@ -2961,14 +2965,14 @@ func _check_new_kickers() -> void:
 	var early := RunLogic.new()
 	early.start_with_kicker(Kickers.WALK_ON)
 	early.run_mode = "endless"
-	early.kick_number = 12
+	early.kick_number = 20
 	early.attempts = 1
 	early.resolve_kick("SHORT", 0.0, false)
 	check(early.phase == RunLogic.Phase.GAME_OVER and near(early.distance_yards(), 75.0) and not records.has_unlock(Kickers.VEX), "dying on the 75-yard Endless kick does not unlock Vex")
 	var late := RunLogic.new()
 	late.start_with_kicker(Kickers.WALK_ON)
 	late.run_mode = "endless"
-	late.kick_number = 13
+	late.kick_number = 25
 	late.attempts = 1
 	late.resolve_kick("SHORT", 0.0, false)
 	check(late.phase == RunLogic.Phase.GAME_OVER and late.distance_yards() > 75.0 and not records.has_unlock(Kickers.VEX), "failing Endless past 75 yards does not unlock Vex")
@@ -3609,9 +3613,9 @@ func _check_rw2() -> void:
 	var short_make := RunLogic.new()
 	short_make.start_with_kicker(Kickers.BIG_BRUCE)
 	short_make.run_mode = "endless"
-	short_make.kick_number = 96
+	short_make.kick_number = 71
 	short_make.resolve_kick("GOOD", 0.0, false)
-	check(near(short_make.distance_yards(), 495.0) and not records.has_unlock(Kickers.VEX), "a 495-yard Endless make does not unlock Vex")
+	check(near(short_make.distance_yards(), 493.0) and not records.has_unlock(Kickers.VEX), "a 493-yard Endless make does not unlock Vex")
 	var standard_make := RunLogic.new()
 	standard_make.start_with_kicker(Kickers.WALK_ON)
 	standard_make.run_mode = "standard"
@@ -3621,9 +3625,9 @@ func _check_rw2() -> void:
 	var long_make := RunLogic.new()
 	long_make.start_with_kicker(Kickers.COLE)
 	long_make.run_mode = "endless"
-	long_make.kick_number = 97
+	long_make.kick_number = 72
 	long_make.resolve_kick("GOOD", 0.0, false)
-	check(near(long_make.distance_yards(), 500.0) and records.has_unlock(Kickers.VEX), "an Endless 500-yard make unlocks Vex through resolve_kick")
+	check(near(long_make.distance_yards(), 507.0) and records.has_unlock(Kickers.VEX), "an Endless 507-yard make unlocks Vex through resolve_kick")
 	records.unlocks[Kickers.VEX] = had_vex
 
 
@@ -5060,7 +5064,7 @@ func _check_drive_lid_and_power_safety() -> void:
 	early.offer = _non_power_offer()
 	var early_ids := _offer_ids(early.offer)
 	early._consider_power_safety()
-	check(_offer_ids(early.offer) == early_ids and not early.power_item_seen, "Endless does not force a power item before the 50-yard kick")
+	check(_offer_ids(early.offer) == early_ids and not early.power_item_seen, "the first Endless offer is not forced")
 	var standard := RunLogic.new()
 	standard.new_run()
 	standard.kick_number = 6
@@ -5077,6 +5081,7 @@ func _check_drive_lid_and_power_safety() -> void:
 	var never_two_curses := true
 	for _spin in 24:
 		forced.power_item_seen = false
+		forced.offers_without_power = 2
 		forced.offer = _non_power_offer()
 		forced._consider_power_safety()
 		if not Loadout.offer_has_power(forced.offer):
@@ -5085,7 +5090,7 @@ func _check_drive_lid_and_power_safety() -> void:
 			kept_equipment = false
 		if _curse_count(forced.offer) > 1:
 			never_two_curses = false
-	check(always_power, "the 50-yard Endless offer includes a power item when one is legal")
+	check(always_power, "the third Endless offer includes a power item when one is legal")
 	check(kept_equipment, "the force keeps the equipment card when a perk or curse can be replaced")
 	check(never_two_curses, "the force never creates two curses")
 	check(forced.power_item_seen, "seeing a power item, including one the safety net added, is remembered")
@@ -5112,10 +5117,11 @@ func _check_drive_lid_and_power_safety() -> void:
 	remembered.run_mode = "endless"
 	remembered.kick_number = 6
 	remembered.power_item_seen = true
+	remembered.offers_without_power = 0
 	remembered.offer = _non_power_offer()
 	var remembered_ids := _offer_ids(remembered.offer)
 	remembered._consider_power_safety()
-	check(_offer_ids(remembered.offer) == remembered_ids, "after a power item was already shown, later offers are not forced")
+	check(_offer_ids(remembered.offer) == remembered_ids, "an Endless offer is not forced until two offers miss a power card")
 	var noted := RunLogic.new()
 	noted.new_run()
 	noted.offer = [Loadout._card(Loadout.EQUIPMENT, Loadout.CLEATS, Loadout.CANNON, 2), Loadout._card(Loadout.PERK, Loadout.PERK, Loadout.HOT_STREAK, 1), Loadout._card(Loadout.CURSE, Loadout.CURSE, Loadout.ICED, 1)]
@@ -5272,8 +5278,8 @@ func _check_m2_kickers() -> void:
 	var hundred := RunLogic.new()
 	hundred.start_with_kicker(Kickers.WALK_ON)
 	hundred.run_mode = "endless"
-	hundred.kick_number = 17
-	check(near(hundred.distance_yards(), 100.0), "Endless kick 17 is the 100-yard kick")
+	hundred.kick_number = 27
+	check(near(hundred.distance_yards(), 100.0), "Endless kick 27 is the 100-yard kick")
 	hundred.resolve_kick("GOOD", 0.0, false)
 	check(Kickers.is_unlocked(Kickers.CARLOS), "making the listed 100-yard kick unlocks Carlos")
 	records.unlocks[Kickers.COLE] = false
@@ -5281,7 +5287,7 @@ func _check_m2_kickers() -> void:
 	var passed := RunLogic.new()
 	passed.start_with_kicker(Kickers.WALK_ON)
 	passed.run_mode = "endless"
-	passed.kick_number = 16
+	passed.kick_number = 25
 	passed.attempts = 1
 	passed.resolve_kick("SHORT", 0.0, false)
 	check(passed.distance_yards() > 75.0 and passed.phase == RunLogic.Phase.GAME_OVER and not Kickers.is_unlocked(Kickers.COLE), "Endless past 75 yards does not unlock Cole")
@@ -5827,7 +5833,7 @@ func _check_result_stamps() -> void:
 func _check_broadcast_hud() -> void:
 	check(BroadcastHud.kick_title(1, false) == "KICK 1 OF 10", "a standard kick reads KICK n OF 10")
 	check(BroadcastHud.kick_title(3, false) == "KICK 3 OF 10", "kick 3 reads KICK 3 OF 10")
-	check(BroadcastHud.kick_title(8, true) == "KICK 8" and BroadcastHud.kick_title(8, true).find("OF") < 0, "endless drops the of count")
+	check(BroadcastHud.kick_title(8, true) == "KICK 8 OF 100", "endless reads KICK 8 OF 100")
 	check(BroadcastHud.yards_text(35.0) == "35 YD", "the big yard figure is the required distance")
 	check(BroadcastHud.aim_text(0.0) == "AIM 0.0", "a straight aim has no side letter")
 	check(BroadcastHud.aim_text(-1.25) == "AIM L 1.3" or BroadcastHud.aim_text(-1.2) == "AIM L 1.2", "aim left is L and has no degree sign")
@@ -9112,7 +9118,7 @@ func _check_pace1() -> void:
 	var cycle: Array = [7, 8, 9, 10, 7, 8, 9, 10]
 	for offset in range(8):
 		check(RunTable.table_kick("endless", 11 + offset) == int(cycle[offset]), "PACE1 endless table kick %d" % (11 + offset))
-	check(near(RunTable.endless_distance(30), 165.0), "PACE1 endless distance at kick 30 is unchanged")
+	check(near(RunTable.endless_distance(30), 114.0), "EN1 endless distance at kick 30 is 114")
 	var sim := RunLogic.new()
 	sim.start_with_kicker(Kickers.WALK_ON)
 	sim.run_mode = "endless"
@@ -9369,7 +9375,7 @@ func _check_pace2() -> void:
 	endless.run_mode = "endless"
 	endless.offers_without_power = 5
 	endless.roll_offer()
-	check(endless.offers_without_power == 5, "PACE2 Endless does not use the Standard offer counter")
+	check(endless.offers_without_power == 0 and Loadout.offer_has_power(endless.offer), "PACE2 Endless uses the same offer counter")
 	check(SelectCard.unlock_line(Kickers.WILLOW) == "MAKE A KICK WITH 1 ATTEMPT LEFT ON KICK 8 OR LATER", "PACE2 Willow's card names kick 8")
 	check(BitmapFonts.ui_allows(SelectCard.unlock_line(Kickers.WILLOW)), "PACE2 Willow's unlock line stays in Pixel Gothic")
 	var logic := FileAccess.get_file_as_string("res://scripts/RunLogic.gd")
@@ -9840,4 +9846,178 @@ func _ring1b_sequence(use_dice: bool) -> Array:
 			run.post_shift_yards()
 		rows.append("%s:%s:%s" % [kick, run.wind_speed, run.weather])
 	return rows
+
+
+func _check_en1() -> void:
+	var marks := {1: 50, 10: 55, 17: 67, 25: 92, 27: 100, 50: 252, 63: 389, 72: 507, 75: 551, 90: 802, 100: 1000}
+	var previous := 0.0
+	for kick in range(1, 101):
+		var yards := RunTable.endless_distance(kick)
+		check(yards + 0.001 >= previous, "the Endless curve does not drop at kick %d" % kick)
+		previous = yards
+		if marks.has(kick):
+			check(int(round(yards)) == int(marks[kick]), "Endless kick %d is %s yards, got %s" % [kick, marks[kick], yards])
+	check(int(round(RunTable.endless_distance(100))) == 1000 and int(round(RunTable.endless_distance(197))) == 1000, "kick 100 is 1000 and a later kick stays clamped")
+	var finale := RunLogic.new()
+	finale.start_with_kicker(Kickers.WALK_ON)
+	finale.run_mode = "endless"
+	finale.kick_number = 99
+	finale.attempts = 3
+	finale.resolve_kick("GOOD", 1.0, false)
+	check(finale.phase == RunLogic.Phase.PLAYING and finale.can_advance() and finale.go_to_next_kick() and finale.kick_number == 100, "making kick 99 advances to kick 100")
+	finale.kick_resolved = false
+	finale.phase = RunLogic.Phase.PLAYING
+	finale.attempts = 2
+	finale.resolve_kick("SHORT", 0.0, false)
+	check(finale.phase == RunLogic.Phase.PLAYING and finale.kick_number == 100 and not finale.can_advance(), "a miss on kick 100 retries kick 100")
+	finale.kick_resolved = false
+	finale.resolve_kick("GOOD", 1.0, false)
+	check(finale.phase == RunLogic.Phase.FAR and not finale.can_advance(), "making kick 100 ends on the far screen")
+	var sim := RunLogic.new()
+	sim.start_with_kicker(Kickers.WALK_ON)
+	sim.run_mode = "endless"
+	var steps := 0
+	while sim.phase == RunLogic.Phase.PLAYING and steps < 120:
+		sim.kick_resolved = false
+		sim.attempts = 3
+		sim.resolve_kick("GOOD", 1.0, false)
+		if sim.phase == RunLogic.Phase.FAR:
+			break
+		if not sim.go_to_next_kick():
+			break
+		steps += 1
+	check(sim.phase == RunLogic.Phase.FAR and sim.kick_number == 100 and steps == 99, "a full Endless run ends on kick 100, steps %d" % steps)
+	var boss_ok := true
+	for seed_value in 50:
+		var seeded := RunLogic.new()
+		seeded.set_seed(7000 + seed_value)
+		seeded.run_mode = "endless"
+		if seeded._endless_boss(100) != RunLogic.BIG_GAME:
+			boss_ok = false
+		var plain := RunLogic.new()
+		plain.set_seed(7000 + seed_value)
+		plain.run_mode = "endless"
+		var shifted := RunLogic.new()
+		shifted.set_seed(7000 + seed_value)
+		shifted.run_mode = "endless"
+		shifted._endless_boss(100)
+		for kick in [10, 20, 30, 40, 50, 60, 70, 80, 90]:
+			if plain._endless_boss(kick) != shifted._endless_boss(kick):
+				boss_ok = false
+	check(boss_ok, "kick 100 is always Big Game and does not move the earlier boss sequence")
+	var shop := RunLogic.new()
+	shop.run_mode = "endless"
+	shop.kick_number = 95
+	check(shop.next_boss_line() == "Next boss: Big Game", "the kick 95 shop names Big Game, got %s" % shop.next_boss_line())
+	shop.kick_number = 100
+	check(shop.next_boss_line() == "", "kick 100 does not name another boss")
+	var safety := RunLogic.new()
+	safety.new_run()
+	safety.run_mode = "endless"
+	for index in 6:
+		safety.offer = _non_power_offer()
+		safety._consider_power_safety()
+		var wanted: bool = index % 3 == 2
+		check(Loadout.offer_has_power(safety.offer) == wanted, "Endless offer %d power safety" % index)
+		safety._note_shown_offer()
+	var maxed := RunLogic.new()
+	maxed.new_run()
+	maxed.run_mode = "endless"
+	maxed.give(Loadout.CANNON, 24)
+	maxed.give(Loadout.DRIVE_LID, 24)
+	maxed.give(Loadout.HIGH_AIR, 24)
+	maxed.give(Loadout.GLASS_LEG, 6)
+	maxed.give(Loadout.HEAVY)
+	maxed.give(Loadout.NARROW)
+	maxed.offers_without_power = 2
+	maxed.offer = _non_power_offer()
+	var maxed_ids := _offer_ids(maxed.offer)
+	check(Loadout.legal_power_items(maxed.loadout_state(), maxed.attempt_cap).is_empty(), "XXIV range items leave no power card to force")
+	maxed._consider_power_safety()
+	check(_offer_ids(maxed.offer) == maxed_ids, "a maxed Endless loadout does not swap in a power card")
+	var standard := RunLogic.new()
+	standard.new_run()
+	standard.offers_without_power = 2
+	standard.offer = _non_power_offer()
+	var standard_ids := _offer_ids(standard.offer)
+	standard._consider_power_safety()
+	check(_offer_ids(standard.offer) == standard_ids, "the Endless counter does not force a Standard offer")
+	var refill := RunLogic.new()
+	refill.run_mode = "endless"
+	for kick in [1, 11, 91]:
+		refill.kick_number = kick
+		check(refill.is_block_start(), "Endless refill on kick %d" % kick)
+	for kick in [5, 15, 45, 95]:
+		refill.kick_number = kick
+		refill.last_result_made = true
+		refill.phase = RunLogic.Phase.PLAYING
+		check(refill.opens_shop(), "Endless shop on kick %d" % kick)
+	for kick in [17, 47, 77, 97]:
+		refill.kick_number = kick
+		check(refill.scheduled_ring(), "Endless ring on kick %d" % kick)
+	refill.kick_number = 11
+	refill.kick_resolved = true
+	refill.last_result_made = true
+	refill.phase = RunLogic.Phase.PLAYING
+	refill.forced_curse_done = false
+	check(refill.forced_curse_due(), "Endless forced curse is kick 11")
+	var records = get_root().get_node("SaveData")
+	var had_carlos := bool(records.unlocks.get(Kickers.CARLOS, false))
+	var had_vex := bool(records.unlocks.get(Kickers.VEX, false))
+	records.unlocks[Kickers.CARLOS] = false
+	records.unlocks[Kickers.VEX] = false
+	var carlos := RunLogic.new()
+	carlos.start_with_kicker(Kickers.WALK_ON)
+	carlos.run_mode = "endless"
+	carlos.kick_number = 27
+	carlos.attempts = 3
+	check(near(carlos.distance_yards(), 100.0), "kick 27 is 100 yards")
+	carlos.resolve_kick("GOOD", 1.0, false)
+	check(bool(records.unlocks.get(Kickers.CARLOS, false)), "a 100-yard Endless make unlocks Carlos")
+	var vex := RunLogic.new()
+	vex.start_with_kicker(Kickers.WALK_ON)
+	vex.run_mode = "endless"
+	vex.kick_number = 72
+	vex.attempts = 3
+	check(near(vex.distance_yards(), 507.0), "kick 72 is 507 yards")
+	vex.resolve_kick("GOOD", 1.0, false)
+	check(bool(records.unlocks.get(Kickers.VEX, false)), "a 507-yard Endless make unlocks Vex")
+	records.unlocks[Kickers.CARLOS] = had_carlos
+	records.unlocks[Kickers.VEX] = had_vex
+	var curse := RunLogic.new()
+	curse.new_run()
+	curse.give(Loadout.ICED)
+	var boss := RunLogic.new()
+	boss.new_run()
+	boss.weather = RunLogic.ICED
+	var both := RunLogic.new()
+	both.new_run()
+	both.give(Loadout.ICED)
+	both.weather = RunLogic.ICED
+	var curse_alpha := RunLogic.iced_needle_alpha(curse.needle_fades(), true, 80.0, 12.0)
+	var boss_alpha := RunLogic.iced_needle_alpha(boss.needle_fades(), true, 80.0, 12.0)
+	var both_alpha := RunLogic.iced_needle_alpha(both.needle_fades(), true, 80.0, 12.0)
+	check(curse.needle_fades() and boss.needle_fades() and near(curse_alpha, boss_alpha) and near(curse_alpha, both_alpha) and curse_alpha < 0.9, "the curse, the boss, and both together fade once")
+	check(near(curse.stats.curse_mult, 0.75), "the Iced curse still adds 0.75 Mult")
+	var immune := RunLogic.new()
+	immune.new_run()
+	immune.give(Loadout.ICED)
+	immune.stats.ice_veins = true
+	check(not immune.needle_fades(), "Ice Veins blocks the curse fade")
+	var hud := FileAccess.get_file_as_string("res://scripts/hud.gd")
+	var logic := FileAccess.get_file_as_string("res://scripts/RunLogic.gd")
+	var loadout := FileAccess.get_file_as_string("res://scripts/Loadout.gd")
+	var stats := FileAccess.get_file_as_string("res://scripts/KickerStats.gd")
+	check(hud.find("meter_hidden") < 0 and hud.find("hide_meter") < 0, "the HUD no longer hides the meter")
+	check(logic.find("meter_hidden") < 0 and logic.find("hide_meter") < 0, "RunLogic no longer hides the meter")
+	check(loadout.find("hide_meter") < 0 and stats.find("hide_meter") < 0, "hide_meter is gone")
+	var iced_line := Loadout.effect_line(Loadout.ICED, 1)
+	check(iced_line.find("!") < 0, "the Iced curse card has no exclamation point")
+	check(BroadcastHud.kick_title(23, true) == "KICK 23 OF 100" and BitmapFonts.ui_allows(BroadcastHud.kick_title(23, true)), "KICK 23 OF 100 is Pixel Gothic")
+	var dropped := RunLogic.new()
+	dropped.import_resume({"mode": "endless", "kick_number": 150, "kicker_id": Kickers.WALK_ON})
+	check(dropped.kicker_id == "", "an Endless save past kick 100 is dropped")
+	var kept := RunLogic.new()
+	kept.import_resume({"mode": "endless", "kick_number": 40, "kicker_id": Kickers.WALK_ON})
+	check(kept.run_mode == "endless" and kept.kick_number == 40 and near(kept.distance_yards(), 172.0), "an Endless save at kick 40 loads at 172 yards")
 

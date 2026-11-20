@@ -9,9 +9,8 @@ static func is_safe(text: String) -> bool:
 
 
 static func kick_title(number: int, endless: bool) -> String:
-	if endless:
-		return "KICK %d" % number
-	return "KICK %d OF %d" % [number, RunTable.count()]
+	var total := RunTable.ENDLESS_KICKS if endless else RunTable.count()
+	return "KICK %d OF %d" % [number, total]
 
 
 static func posts_text(shift: int) -> String:

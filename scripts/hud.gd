@@ -39,9 +39,7 @@ func _draw() -> void:
 	var run: RunLogic = game.run
 	_draw_cam_dip()
 	_draw_weather_tint(run)
-	var on_meter := logic.phase == KickLogic.Phase.POWER or logic.phase == KickLogic.Phase.ACCURACY or logic.phase == KickLogic.Phase.FLIGHT or logic.phase == KickLogic.Phase.RESULT
-	if not run.meter_hidden(on_meter, game.meter_time):
-		_draw_meter(logic, run)
+	_draw_meter(logic, run)
 	_draw_hud(logic, run)
 	_draw_kick_clock()
 	_draw_loadout_rail(run)
@@ -347,7 +345,11 @@ func _draw_kick_bug(logic: KickLogic, run: RunLogic) -> void:
 	var left := Rect2(bug.position.x + 6, bug.position.y + 6, 118, 36)
 	draw_rect(left, Color(0.12, 0.62, 0.78))
 	var title := BroadcastHud.kick_title(run.kick_number, run.run_mode == "endless")
-	_pg(title, left.position + Vector2(6, 4), 13, Color(0.05, 0.08, 0.1))
+	var title_px := 13
+	var title_limit := int(left.size.x) - 12
+	while title_px > 9 and BitmapFonts.measure_px("ui", title, title_px) > title_limit:
+		title_px -= 1
+	_pg(title, left.position + Vector2(6, 4), title_px, Color(0.05, 0.08, 0.1))
 	var yards := BroadcastHud.yards_text(logic.kick_distance)
 	var yard_box := Rect2(left.position.x + left.size.x + 6, left.position.y, 128, 36)
 	_pg(yards, yard_box.position + Vector2(4, 4), 26, cream)

@@ -59,7 +59,6 @@ var wind_preview_count := 0
 var red_tip_off := false
 var ice_cage := false
 var ice_veins := false
-var hide_meter := false
 var heavy_ball := false
 var howling := false
 var shaky := false
@@ -131,7 +130,6 @@ func reset() -> void:
 	red_tip_off = false
 	ice_cage = false
 	ice_veins = false
-	hide_meter = false
 	heavy_ball = false
 	howling = false
 	shaky = false

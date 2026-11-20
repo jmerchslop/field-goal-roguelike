@@ -174,6 +174,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "en1":
+		if not await _capture_en1():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "rs1":
 		if not await _capture_rs1():
 			get_tree().quit(1)
@@ -1339,7 +1345,7 @@ func _capture_needle() -> bool:
 	board.logic.advance(board.logic.windup_left)
 	board.logic.advance(0.2)
 	board.meter_time = 0.5
-	print("NEEDLE iced curse hidden ", board.run.meter_hidden(true, board.meter_time))
+	print("NEEDLE iced curse fade ", board.run.needle_fades())
 	if not await _capture("needle_iced_curse.png"):
 		return false
 	board.highlight = 1
@@ -4816,6 +4822,7 @@ func _capture_drive_lid() -> bool:
 	board.run.run_mode = "endless"
 	board.run.kick_number = 6
 	board.run.power_item_seen = false
+	board.run.offers_without_power = 2
 	board.run.phase = RunLogic.Phase.PLAYING
 	board.run.offer = [
 		{"id": Loadout.WIND_VISOR, "rank": 1, "kind": Loadout.EQUIPMENT, "slot": Loadout.HELMET},
@@ -5965,6 +5972,88 @@ func _capture_pace2() -> bool:
 	return saved
 
 
+func _capture_en1() -> bool:
+	board.highlight = 1
+	board.selecting = true
+	board.front.run_mode = "endless"
+	board.confirm_kicker()
+	board.run.kick_number = 1
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.weather = RunLogic.CLEAR
+	board.run.weather_forced = true
+	board.run.set_wind(0.0, 0.0)
+	board.run._place_spot()
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.AIMING
+	print("EN1 kick 1 ", board.run.distance_yards(), " ", BroadcastHud.kick_title(1, true))
+	if not await _capture("en1_kick1.png"):
+		return false
+	board.run.kick_number = 27
+	board.run._place_spot()
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.AIMING
+	print("EN1 kick 27 ", board.run.distance_yards())
+	if not await _capture("en1_kick27.png"):
+		return false
+	board.run.kick_number = 95
+	board.run.last_result_made = true
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.awaiting_shop = true
+	board.run.shop_stock = [Vitamins.PROTEIN, Vitamins.OMEGA, Vitamins.ELECTROLYTE]
+	board.run.cash = 20
+	board.refresh_view()
+	print("EN1 shop 95 ", board.run.next_boss_line())
+	if not await _capture("en1_shop95_next_boss.png"):
+		return false
+	board.run.awaiting_shop = false
+	board.run.kick_number = 100
+	board.run.weather_forced = false
+	board.run._roll_weather()
+	board.run._place_spot()
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.AIMING
+	print("EN1 kick 100 ", board.run.distance_yards(), " ", board.run.weather)
+	if not await _capture("en1_kick100_big_game.png"):
+		return false
+	board.run.kick_resolved = false
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.attempts = 2
+	board.run.resolve_kick("GOOD", 1.0, false)
+	board.refresh_view()
+	print("EN1 far ", board.run.phase)
+	if not await _capture("en1_far_win.png"):
+		return false
+	board.highlight = 1
+	board.selecting = true
+	board.front.run_mode = "standard"
+	board.confirm_kicker()
+	board.run.give(Loadout.ICED)
+	board.run.weather = RunLogic.CLEAR
+	board.run.weather_forced = true
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.ACCURACY
+	board.logic.power = 80.0
+	board.logic.fill_power = 80.0
+	board.logic.needle = 12.0
+	board.logic.needle_angle = MeterGauge.angle_from_error(12.0)
+	board.refresh_view()
+	print("EN1 curse fade ", board.run.needle_fades(), " ", RunLogic.iced_needle_alpha(true, true, 80.0, 12.0))
+	if not await _capture("en1_iced_curse_fade.png"):
+		return false
+	board.run.curse_ids = []
+	board.run.rebuild_stats()
+	board.run.force_weather(RunLogic.ICED)
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.ACCURACY
+	board.logic.power = 80.0
+	board.logic.fill_power = 80.0
+	board.logic.needle = 12.0
+	board.logic.needle_angle = MeterGauge.angle_from_error(12.0)
+	board.refresh_view()
+	print("EN1 boss fade ", board.run.needle_fades(), " ", RunLogic.iced_needle_alpha(true, true, 80.0, 12.0))
+	return await _capture("en1_iced_boss_fade.png")
+
+
 func _capture_ring1b() -> bool:
 	var path := str(SaveData.file_path)
 	var had_file := FileAccess.file_exists(path)
@@ -6408,7 +6497,7 @@ func _capture_rs1() -> bool:
 	board.run.set_wind(0.0, 0.0)
 	board.run.weather = RunLogic.CLEAR
 	board.load_current_kick()
-	if board.too_weak_age < 0.0 or absf(board.logic.kick_distance - 600.0) > 0.1:
+	if board.too_weak_age < 0.0 or absf(board.logic.kick_distance - 1000.0) > 0.1:
 		print("RS1 too weak ", board.too_weak_age, " dist ", board.logic.kick_distance, " max ", board.logic.max_range_at_full_power())
 		_restore_as2_save(had_file, path, backup)
 		return false

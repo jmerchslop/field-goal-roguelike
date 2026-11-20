@@ -10,6 +10,8 @@ const SPOT_WIDE := "wide"
 const CLEAR := "clear"
 const BOSS := "boss"
 
+const ENDLESS_KICKS := 100
+
 const KICKS: Array = [
 	{"kick": 1, "distance": 35.0, "spot": SPOT_CENTER, "wind_min": 3.0, "wind_max": 3.0, "conditions": CLEAR},
 	{"kick": 2, "distance": 40.0, "spot": SPOT_CENTER, "wind_min": 3.0, "wind_max": 6.0, "conditions": CLEAR},
@@ -29,7 +31,9 @@ static func count() -> int:
 
 
 static func endless_distance(kick_number: int) -> float:
-	return minf(1000.0, 20.0 + float(kick_number - 1) * 5.0)
+	var kick := clampi(kick_number, 1, ENDLESS_KICKS)
+	var along := float(kick - 1) / 99.0
+	return float(round(50.0 + 950.0 * pow(along, 2.2)))
 
 
 # Endless kicks 1–10 use that Standard row. Kicks 11+ cycle rows 7–10.

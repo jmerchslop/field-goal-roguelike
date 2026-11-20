@@ -1,6 +1,7 @@
 # Item, kit, range, and cash audit
 
 Generated: 2026-11-14
+EN1: Endless is 100 kicks. Distance is round(50 + 950 × ((k − 1) / 99) ^ 2.2), from 50 to 1000. Kick 100 is always Big Game, and making it ends the run. Power safety uses the same two-miss counter as Standard until every range item is at XXIV. The Iced curse fades the accuracy needle the way the Iced boss does, and it still adds +0.75 Mult.
 RING1B: From kick 2, the posts have a 50% chance to sit 1–3 yards left or right, kept for that kick, and never more than 6 yards from the ball. Moving Posts and TAD 10 do not roll. TAD 2 is Loaded dice: the shift happens every kick from kick 2, and it no longer adds 3 mph.
 RING1A: DOWN THE MIDDLE is gone. Every kick has a cyan inner ring, radius 0.50, centered 1 yard inside one upright. A make through it doubles the stored ring factor before that kick scores, up to ×8. A miss resets it. Cole's Showtime halves it instead. A hit pays +$2. Guide Gloves widen the ring and no longer change the hook.
 PACE3: After a make on Standard kick 6, or Endless kick 11, one unskippable curse offer appears, then the normal offer. Sudden Death and All Natural stay out of that panel. It cannot be rerolled. Tart Cherry can still remove the pick.
@@ -372,8 +373,8 @@ Rank XII and XIII–XXIV: +11 rerolls and five practice swings a quarter.
 - **id:** `iced`
 - **slot:** curse
 - **rank cap:** 1
-- **card text:** `"Down: meter hides 0.4s after Space. Up: +0.75 Mult"`
-- **actual effect:** +0.75 Mult. The meter hides 0.4 seconds after it starts. Ice Cage in either helmet slot blocks the hide and blocks taking this curse. The Mult is not multiplied by Howling's equipment ×1.10. Phil's scale does scale curse Mult.
+- **card text:** `"Down: The accuracy needle fades out early in its sweep, like the Iced boss. Up: +0.75 Mult"`
+- **actual effect:** +0.75 Mult. The accuracy needle fades the way the Iced boss does, for as long as the curse is owned. Ice Cage in either helmet slot blocks the fade and blocks taking this curse. The Mult is not multiplied by Howling's equipment ×1.10. Phil's scale does scale curse Mult.
 - **match:** yes
 
 ### Shanky Cleats
@@ -598,7 +599,7 @@ Boss weather is the condition name. Wind still comes from the kick table. Retrie
 
 | Boss | Where | What the code changes | Items |
 | --- | --- | --- | --- |
-| Iced | Standard kick 5, one of the early five. Endless pool. | Meter hides the way the Iced curse does, unless Ice Cage or Ice Veins is on. | Ice Cage blocks the hide. No needle multiplier. |
+| Iced | Standard kick 5, one of the early five. Endless pool. Kick 100 is always Big Game. | The accuracy needle fades out over the first 18% of its sweep and is back by halfway, unless Ice Cage or Ice Veins is on. The meter stays on screen. | Ice Cage blocks the fade. The Iced curse uses this same fade. No needle multiplier. |
 | The Squeeze | Standard kick 5, one of the early five. Endless pool. | Posts are 5.17 yards wide. | Narrow Posts does not stack a second shrink. No needle multiplier. |
 | Monsoon | Standard kick 5, one of the early five. Endless pool. | Rain and mud together. Weather Wraps rank III ignores both. | Vitamin D clears plain rain, snow, and mud, not the Monsoon extras. |
 | Big Game | Standard kick 10, 50/50 with Moving Posts. Endless pool. | Meter-help is stripped. The combined needle speed, bands, and the OVERPOWER width are copied back to the bare kicker. The base band, the +4, and the 25% accuracy-band shrink stay. Vitamins then join the slow product and the 0.35 floor. Stone Toe's ×1.20 applies to both needles after that floor. Tight Window's −2 bands are applied again. Range gear is kept. | Anchor, Patient Gloves, Hero Ball's needle slow, Ice Cage's band adds, Iron Grip widening, Iron Grip yards, and Ice Cage's 12.5% shrink are off. Magnesium still slows. |
@@ -670,7 +671,7 @@ Blank cells are ranks that item cannot reach. "Next rank adds nothing" is the fi
 
 | Item | Downside | Upside |
 | --- | --- | --- |
-| Iced | meter hides 0.4 s after Space, unless Ice Cage | +0.75 Mult |
+| Iced | accuracy needle fades like the Iced boss, unless Ice Cage | +0.75 Mult |
 | Shanky Cleats | accuracy error ×1.5 | +1.0 Mult |
 | Heavy Ball | max(2, 2% of kick distance) | accuracy error ×0.85 |
 | Howling Wind | wind ×1.5 | equipment and perks ×1.10 |

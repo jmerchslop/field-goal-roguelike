@@ -632,7 +632,7 @@ func can_advance() -> bool:
 	if phase != Phase.PLAYING or not kick_resolved or not last_result_made:
 		return false
 	if run_mode == "endless":
-		return distance_yards() < 1000.0
+		return kick_number < RunTable.ENDLESS_KICKS
 	return kick_number < RunTable.count()
 
 
@@ -689,7 +689,7 @@ func resolve_kick(result_text: String, _offset: float, perfect: bool, ring_hit: 
 			best_streak = streak
 		if ring_hit:
 			middles_this_run += 1
-		if run_mode == "endless" and distance >= 1000.0:
+		if run_mode == "endless" and kick_number >= RunTable.ENDLESS_KICKS:
 			phase = Phase.FAR
 		elif run_mode != "endless" and kick_number >= RunTable.count():
 			phase = Phase.WIN
@@ -809,18 +809,10 @@ func post_width() -> float:
 
 
 func needle_fades() -> bool:
-	# Kick 5 fades only the needle. Ice Cage blocks that. The Iced curse hides the bar instead.
+	# The Iced boss and the Iced curse fade the accuracy needle. Ice Cage blocks both.
 	if stats.ice_veins or has_ice_cage():
 		return false
-	return weather == ICED
-
-
-func meter_hidden(on_meter: bool, seconds_after_start: float) -> bool:
-	if not stats.hide_meter or has_ice_cage():
-		return false
-	if not on_meter:
-		return false
-	return seconds_after_start >= 0.4
+	return weather == ICED or has_curse(Loadout.ICED)
 
 
 func has_curse(id: String) -> bool:
@@ -1355,8 +1347,6 @@ func _maybe_standard_power_safety() -> void:
 
 
 func _note_shown_offer() -> void:
-	if run_mode == "endless":
-		return
 	for card in offer:
 		if Loadout.is_power_item(str(card.get("id", ""))):
 			offers_without_power = 0
@@ -1365,7 +1355,8 @@ func _note_shown_offer() -> void:
 
 
 func _consider_power_safety() -> void:
-	if run_mode == "endless" and not power_item_seen and RunTable.endless_distance(kick_number + 1) >= 50.0:
+	# Endless uses the same two-miss counter as Standard, with no range target.
+	if run_mode == "endless" and offers_without_power >= 2:
 		offer = Loadout.with_power_safety(offer, loadout_state(), attempt_cap, _offer_rng)
 	for card in offer:
 		if Loadout.is_power_item(str(card.get("id", ""))):
@@ -1389,12 +1380,10 @@ func follow_offer() -> String:
 
 func next_boss_line() -> String:
 	if run_mode == "endless":
-		var target := 0
-		if kick_number == 5:
-			target = 10
-		elif kick_number == 10 or kick_number == 15:
-			target = 20
-		if target == 0:
+		if kick_number <= 0 or kick_number % 5 != 0 or kick_number >= RunTable.ENDLESS_KICKS:
+			return ""
+		var target := (int(kick_number / 10) + 1) * 10
+		if target > RunTable.ENDLESS_KICKS:
 			return ""
 		return "Next boss: %s" % _boss_label(_endless_boss(target))
 	if kick_number == 5 or kick_number == 9:
@@ -1421,6 +1410,9 @@ func _boss_label(name: String) -> String:
 
 
 func _endless_boss(kick: int) -> String:
+	if kick == RunTable.ENDLESS_KICKS:
+		endless_bosses[kick] = BIG_GAME
+		return BIG_GAME
 	if endless_bosses.has(kick):
 		return str(endless_bosses[kick])
 	var names := endless_boss_names()
@@ -2327,6 +2319,14 @@ func import_resume(data: Dictionary) -> void:
 		var records = _records()
 		if records != null:
 			records.clear_run_slot("standard")
+		new_run()
+		kicker_id = ""
+		return
+	if saved_mode == "endless" and saved_kick > RunTable.ENDLESS_KICKS:
+		print("EN1 dropped old Endless save")
+		var endless_records = _records()
+		if endless_records != null:
+			endless_records.clear_run_slot("endless")
 		new_run()
 		kicker_id = ""
 		return

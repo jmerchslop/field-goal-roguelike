@@ -131,6 +131,10 @@ func has_run_slot(mode: String) -> bool:
 		print("PACE1 dropped old 20-kick save")
 		clear_run_slot("standard")
 		return false
+	if mode == "endless" and int(data.get("kick_number", 0)) > RunTable.ENDLESS_KICKS and str(data.get("kicker_id", "")) != "":
+		print("EN1 dropped old Endless save")
+		clear_run_slot("endless")
+		return false
 	return str(data.get("kicker_id", "")) != ""
 
 

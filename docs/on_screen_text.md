@@ -790,7 +790,7 @@ No pause screen exists. Esc during a kick is not given its own pause menu. A pri
 ### `hud_kick_endless`
 - **screen:** In-kick HUD
 - **when:** Endless mode, top of the left panel.
-- **current:** "Kick {kick_number}"
+- **current:** "KICK {kick_number} OF 100"
 - **kind:** template
 - **source:** code
 
@@ -2226,7 +2226,7 @@ No pause screen exists. Esc during a kick is not given its own pause menu. A pri
 ### `offer_effect_curse_iced`
 - **screen:** Loadout offer
 - **when:** Iced curse card. Same words on the loadout-rail tooltip; that copy is listed again below.
-- **current:** "Down: meter hides 0.4s after Space. Up: +0.5 Mult"
+- **current:** "Down: The accuracy needle fades out early in its sweep, like the Iced boss. Up: +0.75 Mult"
 - **kind:** static
 - **source:** code
 
@@ -2879,7 +2879,7 @@ No pause screen exists. Esc during a kick is not given its own pause menu. A pri
 ### `tooltip_effect_curse_iced`
 - **screen:** Loadout rail tooltip
 - **when:** Rail tooltip. Iced curse card.
-- **current:** "Down: meter hides 0.4s after Space. Up: +0.5 Mult"
+- **current:** "Down: The accuracy needle fades out early in its sweep, like the Iced boss. Up: +0.75 Mult"
 - **kind:** static
 - **source:** code
 
