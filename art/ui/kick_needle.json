@@ -1,0 +1,18 @@
+{
+ "file": "kick_needle.png",
+ "size": [
+  62,
+  404
+ ],
+ "points": "up (12 o'clock) at 0 rotation",
+ "pivot_in_sprite": [
+  30,
+  372
+ ],
+ "pivot_on_meter": [
+  504,
+  510
+ ],
+ "tip_radius_px": 366,
+ "note": "rotate around pivot; cap is round so it stays clean at any angle; draw above the frame and bands"
+}

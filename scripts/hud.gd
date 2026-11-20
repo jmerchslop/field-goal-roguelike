@@ -165,19 +165,19 @@ func _draw_meter(logic: KickLogic, run: RunLogic) -> void:
 	var gauge_w := 332.0
 	var gauge_h := gauge_w * 625.0 / 1003.0
 	var origin := Vector2(KickConstants.WINDOW_WIDTH - 18.0 - gauge_w, KickConstants.WINDOW_HEIGHT - 14.0 - gauge_h)
-	var scale := gauge_w / 1003.0
-	var hub := origin + Vector2(504.0, 510.0) * scale
-	# Inset so the live color covers the painted band and leaves the metal bezel alone.
-	var inner := 308.0 * scale
-	var outer := 386.0 * scale
+	var scale := gauge_w / MeterGauge.FRAME_W
+	var hub := origin + Vector2(MeterGauge.HUB_X, MeterGauge.HUB_Y) * scale
+	var inner := MeterGauge.GROOVE_INNER * scale
+	var outer := MeterGauge.GROOVE_OUTER * scale
 	var stats: KickerStats = logic.stats
 	var layout := MeterGauge.accuracy_layout(logic.shown_perfect_band(), logic.shown_good_band())
+	var saved_filter := texture_filter
+	texture_filter = TEXTURE_FILTER_NEAREST
 	var art := _meter_art()
 	if art != null:
+		meter_frame_draws += 1
 		draw_texture_rect(art, Rect2(origin, Vector2(gauge_w, gauge_h)), false)
-	# One opaque well. The disk stays inside the painted arc so the field still shows around the gear.
-	_draw_well(hub, 276.0 * scale)
-	# Opaque live wedges and the orange fill sit on the painted band. One copy, not a stacked PNG.
+	# The frame groove is empty. One set of live wedges fills it.
 	_draw_annulus(hub, inner, outer, 90.0, float(layout["band_top"]), Color(0.78, 0.1, 0.08, 1.0))
 	_draw_annulus(hub, inner, outer, float(layout["band_top"]), float(layout["perfect_top"]), Color(0.93, 0.74, 0.12, 1.0))
 	_draw_annulus(hub, inner, outer, float(layout["perfect_top"]), float(layout["perfect_bottom"]), Color(0.2, 0.78, 0.28, 1.0))
@@ -206,9 +206,13 @@ func _draw_meter(logic: KickLogic, run: RunLogic) -> void:
 		fade_sample = 100.0
 	var fade := RunLogic.iced_needle_alpha(run.needle_fades(), logic.phase == KickLogic.Phase.ACCURACY, logic.power, fade_sample)
 	if fade > 0.02:
-		_draw_gauge_needle(hub, outer - 8.0 * scale, logic.needle_angle, fade)
-	draw_circle(hub, 16.0 * scale, Color(0.42, 0.4, 0.44, 1.0))
-	draw_circle(hub, 7.0 * scale, Color(0.72, 0.7, 0.68, 1.0))
+		var needle_tex := _needle_art()
+		if needle_tex != null:
+			meter_needle_draws += 1
+			draw_set_transform(hub, deg_to_rad(90.0 - logic.needle_angle), Vector2(scale, scale))
+			draw_texture(needle_tex, -MeterGauge.NEEDLE_PIVOT, Color(1, 1, 1, fade))
+			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	texture_filter = saved_filter
 
 
 func _draw_meter_popup(logic: KickLogic, hub: Vector2, outer: float) -> void:
@@ -248,19 +252,6 @@ func _draw_annulus(hub: Vector2, inner: float, outer: float, from_deg: float, to
 	for i in steps + 1:
 		var t := float(steps - i) / float(steps)
 		points.append(_gauge_point(hub, inner, lerpf(from_deg, to_deg, t)))
-	draw_colored_polygon(points, color)
-
-
-func _draw_gauge_needle(hub: Vector2, length: float, degrees: float, alpha: float) -> void:
-	var rad := deg_to_rad(degrees)
-	var dir := Vector2(cos(rad), -sin(rad))
-	var side := Vector2(-dir.y, dir.x)
-	var color := Color(0.86, 0.88, 0.9, alpha)
-	var points := PackedVector2Array([
-		hub + side * 5.0,
-		hub - side * 5.0,
-		hub + dir * length,
-	])
 	draw_colored_polygon(points, color)
 
 
@@ -307,16 +298,6 @@ func _draw_kick_clock() -> void:
 	var text := str(digit)
 	_pg("KICK CLOCK", Vector2(28, 148), 16, Color(0.95, 0.86, 0.45))
 	BitmapFonts.paint_px(self, "callout", text, Vector2(36, 174), 72, Color(1.0, 0.96, 0.78))
-
-
-func _draw_well(hub: Vector2, radius: float) -> void:
-	var steps := 36
-	var points := PackedVector2Array()
-	points.append(hub)
-	for i in steps + 1:
-		var t := float(i) / float(steps)
-		points.append(_gauge_point(hub, radius, lerpf(180.0, 0.0, t)))
-	draw_colored_polygon(points, Color(18.0 / 255.0, 20.0 / 255.0, 24.0 / 255.0, 1.0))
 
 
 func _draw_hud(logic: KickLogic, run: RunLogic) -> void:
@@ -1316,7 +1297,10 @@ var slot_hits: Array = []
 var hover_slot := -1
 var pinned_slot := -1
 var _icons := {}
-var _keyed_meter: Texture2D
+var _meter_frame: Texture2D
+var _needle_tex: Texture2D
+var meter_frame_draws := 0
+var meter_needle_draws := 0
 
 
 func _process(_delta: float) -> void:
@@ -1485,17 +1469,17 @@ func _draw_fit(texture: Texture2D, rect: Rect2, tint: Color = Color.WHITE) -> vo
 
 
 func _meter_art() -> Texture2D:
-	if _keyed_meter != null:
-		return _keyed_meter
-	var raw := load("res://art/ui/kick_meter.png") as Texture2D
-	if raw == null:
-		return null
-	var image := raw.get_image()
-	if image == null:
-		_keyed_meter = raw
-		return _keyed_meter
-	_keyed_meter = ImageTexture.create_from_image(MeterGauge.key_meter_image(image))
-	return _keyed_meter
+	if _meter_frame != null:
+		return _meter_frame
+	_meter_frame = load(MeterGauge.FRAME_PATH) as Texture2D
+	return _meter_frame
+
+
+func _needle_art() -> Texture2D:
+	if _needle_tex != null:
+		return _needle_tex
+	_needle_tex = load(MeterGauge.NEEDLE_PATH) as Texture2D
+	return _needle_tex
 
 
 func _icon(path: String) -> Texture2D:

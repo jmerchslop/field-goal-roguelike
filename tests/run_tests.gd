@@ -78,6 +78,7 @@ func _run() -> void:
 	_check_music1()
 	_check_luck1()
 	_check_clean1()
+	_check_mtr1()
 	_check_drive_lid_and_power_safety()
 	_check_m2_kickers()
 	_check_honest_cards_and_bench()
@@ -335,14 +336,6 @@ func _check_pendulum() -> void:
 	check(near(bruce.stats.red_tip_start, 95.0) and near(walk.stats.red_tip_start, 95.0), "Big Bruce uses the default red tip")
 	check(KickConstants.ACCURACY_DEG_PER_ERROR == 0.35, "degrees per unit of e stay 0.35")
 	check(KickLogic.is_perfect(1.5) and not KickLogic.is_perfect(1.51), "landing inside the perfect band is still PERFECT")
-	var image := Image.create(4, 1, false, Image.FORMAT_RGBA8)
-	image.set_pixel(0, 0, Color8(10, 8, 4, 255))
-	image.set_pixel(1, 0, Color8(16, 16, 16, 255))
-	image.set_pixel(2, 0, Color8(17, 17, 17, 255))
-	image.set_pixel(3, 0, Color8(90, 86, 84, 255))
-	var keyed := MeterGauge.key_meter_image(image)
-	check(keyed.get_pixel(0, 0).a > 0.9 and keyed.get_pixel(1, 0).a > 0.9, "a dark pixel is not keyed out just because it is dark")
-	check(keyed.get_pixel(2, 0).a > 0.9 and keyed.get_pixel(3, 0).a > 0.9, "dark gray metal is not keyed out")
 	_check_clean_meter_and_accuracy_speed()
 	var wide: Dictionary = MeterGauge.accuracy_layout(10.0, 20.0)
 	var plain: Dictionary = MeterGauge.accuracy_layout(2.0, 8.0)
@@ -489,23 +482,7 @@ func _check_clean_meter_and_accuracy_speed() -> void:
 	check(left.phase == KickLogic.Phase.ACCURACY and near(left.fill_power, 40.0), "a mid-power lock freezes the fill and keeps sweeping")
 	check(near(moved, MeterGauge.omega_power(100.0) * 0.15, 0.05) and left.needle_angle > 90.0, "leftover left-side travel still uses power-phase speed")
 	check(near(MeterGauge.angle_from_error(15.0), 90.0) and near(MeterGauge.angle_from_error(0.0), 45.0) and near(MeterGauge.angle_from_error(-15.0), 0.0), "e mapping on the right arc is unchanged")
-	var texture := load("res://art/ui/kick_meter.png") as Texture2D
-	check(texture != null, "the kick meter painting loads")
-	if texture == null:
-		return
-	var cleaned := MeterGauge.key_meter_image(texture.get_image())
-	var outside := cleaned.get_pixel(0, 0)
-	var well_a := cleaned.get_pixel(504, 360)
-	var well_b := cleaned.get_pixel(420, 400)
-	var covered := cleaned.get_pixel(645, 369)
-	var dark_wedge := cleaned.get_pixel(616, 147)
-	var metal := cleaned.get_pixel(406, 80)
-	check(outside.a == 0.0, "the outside backdrop stays transparent")
-	check(well_a.a > 0.99 and well_b.a > 0.99, "the inner well is opaque")
-	check(near(well_a.r, well_b.r) and near(well_a.g, well_b.g) and near(well_a.b, well_b.b), "the inner well is one flat color")
-	check(near(covered.r, well_a.r) and near(covered.g, well_a.g) and covered.a > 0.99, "the baked needle in the well is covered by that fill")
-	check(dark_wedge.a > 0.99 and dark_wedge.r8 <= 20, "a dark wedge pixel stays opaque instead of being keyed out")
-	check(metal.a > 0.99, "the metal frame stays opaque")
+	check(MeterGauge.GROOVE_INNER == 300.0 and MeterGauge.GROOVE_OUTER == 395.0, "the live band fills the card groove")
 
 
 func _check_perfect_band() -> void:
@@ -2491,6 +2468,8 @@ func _check_sprite_scan_and_gauge() -> void:
 		"res://art/loadout/hero_ball_perk.png",
 		"res://art/loadout/wind_visor_helmet_ii.png",
 		"res://art/ui/kick_meter.png",
+		"res://art/ui/kick_meter_card.png",
+		"res://art/ui/kick_needle.png",
 		"res://art/shop/vitamin_shop.png",
 		"res://art/kickers/big_bruce.png",
 		"res://art/loadout/mystery_cleats.png",
@@ -2506,7 +2485,7 @@ func _check_sprite_scan_and_gauge() -> void:
 	check(not items.has(Loadout.IRON_GRIP), "a vitamin or meter image is not forced onto a loadout item")
 	var unmatched: Array = mapped["unmatched"]
 	check(unmatched.has("res://art/loadout/mystery_cleats.png"), "a cleat-shaped name that is not in the catalog is reported")
-	check(not unmatched.has("res://art/ui/kick_meter.png") and not unmatched.has("res://art/shop/vitamin_shop.png"), "the meter and the shop art are not loadout icons")
+	check(not unmatched.has("res://art/ui/kick_meter.png") and not unmatched.has("res://art/ui/kick_meter_card.png") and not unmatched.has("res://art/ui/kick_needle.png") and not unmatched.has("res://art/shop/vitamin_shop.png"), "the meter art and the shop art are not loadout icons")
 	check(str(mapped["empty"].get(Loadout.PERK, "")).ends_with("empty_perk.png"), "empty_perk.png is the empty perk frame")
 	check(near(MeterGauge.power_angle(0.0), 180.0) and near(MeterGauge.power_angle(100.0), 90.0) and near(MeterGauge.power_angle(50.0), 135.0), "power fills from the left edge toward MAX")
 	check(near(MeterGauge.accuracy_angle(15.0, 2.0, 8.0), 90.0), "e=+15 sits just after MAX")
@@ -10490,4 +10469,103 @@ func _clean1_banned_hits() -> int:
 					hits += 1
 					break
 	return hits
+
+
+func _check_mtr1() -> void:
+	var frame := load(MeterGauge.FRAME_PATH) as Texture2D
+	var needle := load(MeterGauge.NEEDLE_PATH) as Texture2D
+	check(frame != null and needle != null, "the card frame and the needle sprite load")
+	if frame == null or needle == null:
+		return
+	var card := frame.get_image()
+	var sprite := needle.get_image()
+	check(card.get_width() == 1003 and card.get_height() == 625, "the card frame is 1003 by 625")
+	check(sprite.get_width() == 62 and sprite.get_height() == 404, "the needle sprite is 62 by 404")
+	check(sprite.get_pixel(30, 372).a > 0.9, "the needle pivot is the opaque cap")
+	var groove_bad := 0
+	var deg := 0.0
+	while deg <= 180.0:
+		for radius in [302.0, 347.0, 393.0]:
+			var px := _mtr1_pixel(card, radius, deg)
+			if absi(px.r8 - 18) > 2 or absi(px.g8 - 18) > 2 or absi(px.b8 - 20) > 2:
+				groove_bad += 1
+		deg += 2.0
+	check(groove_bad == 0, "the groove is empty flat color, bad samples %s" % groove_bad)
+	var well_bad := 0
+	for radius in [100.0, 250.0]:
+		deg = 0.0
+		while deg <= 180.0:
+			var px := _mtr1_pixel(card, radius, deg)
+			if absi(px.r8 - 20) > 2 or absi(px.g8 - 21) > 2 or absi(px.b8 - 24) > 2:
+				well_bad += 1
+			deg += 2.0
+	check(well_bad == 0, "the well is the flat fill, bad samples %s" % well_bad)
+	var scale := 332.0 / MeterGauge.FRAME_W
+	var hub := Vector2(MeterGauge.HUB_X, MeterGauge.HUB_Y)
+	for angle in [0.0, 45.0, 90.0, 135.0, 180.0]:
+		var tip := MeterGauge.needle_tip(hub, angle, scale)
+		var rad := deg_to_rad(angle)
+		var expect := hub + Vector2(cos(rad), -sin(rad)) * MeterGauge.NEEDLE_TIP * scale
+		check(tip.distance_to(expect) <= 2.0, "needle tip at %s stays on the arc, off by %s" % [angle, tip.distance_to(expect)])
+	var left := MeterGauge.needle_tip(hub, 180.0, scale)
+	var up := MeterGauge.needle_tip(hub, 90.0, scale)
+	var right := MeterGauge.needle_tip(hub, 0.0, scale)
+	check(left.x < hub.x - 20.0 and up.y < hub.y - 20.0 and right.x > hub.x + 20.0, "180 points left, 90 points up, and 0 points right")
+	check(is_equal_approx(MeterGauge.GROOVE_INNER * scale / scale, 300.0) and is_equal_approx(MeterGauge.GROOVE_OUTER * scale / scale, 395.0), "band radii are 300 and 395")
+	var normal := _mtr1_angles(1.5, 6.0, 0.0, 50.0, false)
+	var wide := _mtr1_angles(1.5, 6.0, KickConstants.OVERPOWER_BASE, 110.0, false)
+	var paid := _mtr1_angles(1.5, 6.0, KickConstants.OVERPOWER_BASE, 110.0, true)
+	check(_mtr1_same(normal, [90.0, 63.0, 63.0, 49.5, 49.5, 40.5, 40.5, 27.0, 27.0, 0.0, 90.0, 90.0, 180.0, 135.0]), "a normal kick keeps the old wedge angles")
+	check(_mtr1_same(wide, [90.0, 63.0, 63.0, 49.5, 49.5, 40.5, 40.5, 27.0, 27.0, 0.0, 90.0, 77.142857, 180.0, 90.0, 90.0, 81.0]), "an OVERPOWER width keeps the old band angles")
+	check(_mtr1_same(paid, [90.0, 63.0, 63.0, 49.5, 49.5, 40.5, 40.5, 27.0, 27.0, 0.0, 90.0, 77.142857, 180.0, 90.0, 90.0, 81.0, 90.0, 77.142857]), "a paid OVERPOWER adds the same flash angles")
+	check(near(RunLogic.iced_needle_alpha(true, true, 80.0, 15.0), 1.0), "the iced needle is solid at the start of the sweep")
+	check(near(RunLogic.iced_needle_alpha(true, true, 80.0, 12.0), 0.41701, 0.001), "the iced needle is mid-fade at e=12")
+	check(near(RunLogic.iced_needle_alpha(true, true, 80.0, 10.0), 0.015648, 0.001), "the iced needle is almost gone at e=10")
+	check(RunLogic.iced_needle_alpha(true, true, 80.0, 10.0) <= 0.02, "the needle draw is skipped at alpha 0.02 and below")
+	check(near(RunLogic.iced_needle_alpha(true, true, 80.0, 6.0), 0.316406, 0.001), "the iced needle is coming back at e=6")
+	check(near(RunLogic.iced_needle_alpha(false, true, 80.0, 12.0), 1.0) and near(RunLogic.iced_needle_alpha(true, false, 80.0, 12.0), 1.0), "the fade stays off outside an iced accuracy sweep")
+	var body := FileAccess.get_file_as_string("res://scripts/hud.gd")
+	var start := body.find("func _draw_meter")
+	var stop := body.find("func _draw_meter_popup")
+	var meter := body.substr(start, stop - start)
+	check(meter.count("draw_texture_rect(") == 1 and meter.count("draw_texture(") == 1, "one frame draw and one needle draw")
+	check(meter.find("draw_circle(") < 0 and meter.find("_draw_well") < 0, "the code hubs and the well fill are gone")
+
+
+func _mtr1_pixel(image: Image, radius: float, degrees: float) -> Color:
+	var rad := deg_to_rad(degrees)
+	var x := int(round(MeterGauge.HUB_X + cos(rad) * radius))
+	var y := int(round(MeterGauge.HUB_Y - sin(rad) * radius))
+	return image.get_pixel(x, y)
+
+
+func _mtr1_angles(perfect: float, good: float, width: float, fill: float, paid: bool) -> Array:
+	var layout := MeterGauge.accuracy_layout(perfect, good)
+	var angles := [
+		90.0, float(layout["band_top"]),
+		float(layout["band_top"]), float(layout["perfect_top"]),
+		float(layout["perfect_top"]), float(layout["perfect_bottom"]),
+		float(layout["perfect_bottom"]), float(layout["band_bottom"]),
+		float(layout["band_bottom"]), 0.0,
+		MeterGauge.MAX_ANGLE, MeterGauge.power_angle_raw(KickConstants.METER_MAX + width),
+	]
+	if fill > 0.5:
+		angles.append(180.0)
+		angles.append(MeterGauge.power_angle(minf(fill, KickConstants.METER_MAX)))
+		if fill > KickConstants.METER_MAX + 0.05:
+			angles.append(MeterGauge.MAX_ANGLE)
+			angles.append(MeterGauge.power_angle_raw(fill))
+	if paid:
+		angles.append(MeterGauge.MAX_ANGLE)
+		angles.append(MeterGauge.power_angle_raw(KickConstants.METER_MAX + width))
+	return angles
+
+
+func _mtr1_same(got: Array, want: Array) -> bool:
+	if got.size() != want.size():
+		return false
+	for i in got.size():
+		if absf(float(got[i]) - float(want[i])) > 0.02:
+			return false
+	return true
 

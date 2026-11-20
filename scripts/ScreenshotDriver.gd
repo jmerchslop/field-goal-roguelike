@@ -192,6 +192,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "mtr1":
+		if not await _capture_mtr1():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "rs1":
 		if not await _capture_rs1():
 			get_tree().quit(1)
@@ -5983,6 +5989,57 @@ func _capture_pace2() -> bool:
 	var saved := await _capture("pace2_willow_locked_card.png")
 	_restore_pace2_save(had_file, path, backup, had_willow)
 	return saved
+
+
+func _capture_mtr1() -> bool:
+	board.highlight = 1
+	board.selecting = true
+	board.front.run_mode = "standard"
+	board.confirm_kicker()
+	board.run.tad_level = 0
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.AIMING
+	board.logic.needle_angle = 90.0
+	board.logic.needle = 0.0
+	board.logic.fill_power = 0.0
+	board.run.phase = RunLogic.Phase.PLAYING
+	print("MTR1 full hud")
+	if not await _capture("mtr1_full_hud.png"):
+		return false
+	board.logic.phase = KickLogic.Phase.ACCURACY
+	board.logic.needle_angle = 45.0
+	board.logic.needle = 0.0
+	board.logic.fill_power = 70.0
+	board.logic.power = 70.0
+	print("MTR1 green ", board.logic.needle_angle)
+	if not await _capture("mtr1_normal_kick.png"):
+		return false
+	board.logic.phase = KickLogic.Phase.POWER
+	board.logic.stats.overpower_width = KickConstants.OVERPOWER_BASE
+	board.logic.fill_power = 110.0
+	board.logic.needle_angle = MeterGauge.power_angle_raw(110.0)
+	board.logic.needle = 110.0
+	board.logic.overpower_paid = false
+	print("MTR1 red ", board.logic.needle_angle)
+	if not await _capture("mtr1_red_band.png"):
+		return false
+	board.logic.phase = KickLogic.Phase.ACCURACY
+	board.logic.overpower_paid = true
+	board.logic.meter_popup = "OVERPOWER"
+	board.logic.meter_popup_age = 0.2
+	print("MTR1 paid")
+	if not await _capture("mtr1_overpower_paid.png"):
+		return false
+	board.logic.overpower_paid = false
+	board.logic.meter_popup = ""
+	board.run.force_weather(RunLogic.ICED)
+	board.logic.phase = KickLogic.Phase.ACCURACY
+	board.logic.power = 80.0
+	board.logic.needle = 12.0
+	board.logic.needle_angle = MeterGauge.angle_from_error(12.0)
+	board.logic.fill_power = 80.0
+	print("MTR1 iced ", RunLogic.iced_needle_alpha(true, true, 80.0, 12.0))
+	return await _capture("mtr1_iced_fade.png")
 
 
 func _capture_clean1() -> bool:

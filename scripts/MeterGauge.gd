@@ -20,15 +20,18 @@ const POWER_ANGLE := 180.0
 const MAX_ANGLE := 90.0
 const ACCURACY_ANGLE := 0.0
 const ERROR_AT_MAX := 15.0
-# Source-image geometry of res://art/ui/kick_meter.png. The outside backdrop is
-# already transparent. The open middle is filled; it is not color-keyed.
+# Playing Card frame. The groove is empty, so the live bands fill it edge to edge.
+const FRAME_PATH := "res://art/ui/kick_meter_card.png"
+const FRAME_W := 1003.0
+const FRAME_H := 625.0
 const HUB_X := 504.0
 const HUB_Y := 510.0
-const WELL_INNER := 58.0
-const WELL_OUTER := 270.0
-const NEEDLE_INNER := 270.0
-const NEEDLE_OUTER := 410.0
-const NEEDLE_HALF := 9.0
+const GROOVE_INNER := 300.0
+const GROOVE_OUTER := 395.0
+const WELL_RADIUS := 286.0
+const NEEDLE_PATH := "res://art/ui/kick_needle.png"
+const NEEDLE_PIVOT := Vector2(30, 372)
+const NEEDLE_TIP := 366.0
 
 
 static func omega_base() -> float:
@@ -112,55 +115,8 @@ static func is_red_tip(power_value: float, tip_start: float) -> bool:
 	return power_value >= tip_start
 
 
-# The rectangular backdrop stays transparent. Nothing else is color-keyed:
-# dark frame pixels, wedge pixels, and labels stay opaque. The open middle
-# becomes one flat fill, and the baked needle is painted over so only the
-# live needle remains. The source file is not modified.
-static func key_meter_image(source: Image) -> Image:
-	var image := source.duplicate() as Image
-	image.convert(Image.FORMAT_RGBA8)
-	var width := image.get_width()
-	var height := image.get_height()
-	if width < 800 or height < 500:
-		return image
-	var original := image.get_data()
-	var bytes := original.duplicate()
-	var count := width * height
-	var step := 0.70710678
-	for i in count:
-		var x := i % width
-		var y := int(i / width)
-		var dx := float(x) - HUB_X
-		var dy := float(y) - HUB_Y
-		var radius := sqrt(dx * dx + dy * dy)
-		var offset := i * 4
-		# The painted well is not a perfect circle. Fill the open middle, including
-		# the transparent ring that sits against the inner lip, and cover the
-		# baked needle there. Opaque lip pixels stay.
-		# Soft pixels between the well and the painted arc are the peek-through ring.
-		var in_upper := dy <= 4.0 and radius >= WELL_INNER and radius <= 340.0
-		var open_pixel := int(original[offset + 3]) < 250
-		if in_upper and (radius <= WELL_OUTER or open_pixel):
-			bytes[offset] = 18
-			bytes[offset + 1] = 20
-			bytes[offset + 2] = 24
-			bytes[offset + 3] = 255
-			continue
-		if radius < NEEDLE_INNER or radius > NEEDLE_OUTER:
-			continue
-		var perp := absf(dx + dy) * step
-		if perp > NEEDLE_HALF:
-			continue
-		var sx := int(round(float(x) + 16.0 * step))
-		var sy := int(round(float(y) + 16.0 * step))
-		if sx < 0 or sy < 0 or sx >= width or sy >= height:
-			continue
-		var src := (sy * width + sx) * 4
-		if int(original[src + 3]) == 0:
-			continue
-		bytes[offset] = original[src]
-		bytes[offset + 1] = original[src + 1]
-		bytes[offset + 2] = original[src + 2]
-		bytes[offset + 3] = 255
-	image.set_data(width, height, false, Image.FORMAT_RGBA8, bytes)
-	return image
+# The sprite points up at rotation 0. Screen rotation 90 − angle keeps 90 up,
+# 180 left, and 0 right. The tip sits NEEDLE_TIP pixels above the pivot.
+static func needle_tip(hub: Vector2, angle_deg: float, scale: float) -> Vector2:
+	var local := Vector2(0.0, -NEEDLE_TIP) * scale
+	return hub + local.rotated(deg_to_rad(90.0 - angle_deg))
