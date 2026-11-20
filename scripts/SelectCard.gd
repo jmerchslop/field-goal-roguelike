@@ -122,6 +122,8 @@ static func every_line() -> PackedStringArray:
 		lines.append(corner_text(id, true))
 		lines.append(corner_text(id, false))
 		lines.append("LOCKED")
+	for line in ["PICK ONE", "BONUS RING", "1 CLEATS", "1 HELMET", "1 GLOVES", "1 PERK", "1 CURSE", "1 SAFE", "2 LONG", "3 BOMB", "YD", "OUT OF RANGE", "LUCKY"]:
+		lines.append(line)
 	return lines
 
 

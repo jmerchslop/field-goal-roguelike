@@ -210,6 +210,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "ui4":
+		if not await _capture_ui4():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "ui2":
 		if not await _capture_ui2():
 			get_tree().quit(1)
@@ -6175,6 +6181,106 @@ func _capture_sk2() -> bool:
 	board.refresh_view()
 	print("SK2 retry ", board.run.rung_tag(), " ", board.run.distance_yards(), " awaiting ", board.run.awaiting_rung)
 	return await _capture("sk2_retry_keeps_rung.png")
+
+
+func _ui4_card(id: String, slot: String, lucky: bool = false) -> Dictionary:
+	return {"id": id, "rank": 1, "slot": slot, "lucky": lucky}
+
+
+func _ui4_boot() -> void:
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
+	board.selecting = true
+	board.front.run_mode = "standard"
+	board.confirm_kicker()
+	board.run.tad_level = 0
+	board.run.special_kicks.clear()
+	board._special_banner = 2.0
+	board.run.awaiting_rung = false
+	board.run.awaiting_offer = false
+	board.run.forced_offer_live = false
+	board.run.bomb_offer_live = false
+	board.run.ring_offer_live = false
+	board.clear_offer_hover()
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.AIMING
+	board.run.phase = RunLogic.Phase.PLAYING
+
+
+func _ui4_show(cards: Array, mode: String) -> void:
+	board.run.offer = cards
+	board.run.awaiting_offer = true
+	board.run.awaiting_rung = false
+	board.run.forced_offer_live = mode == "forced"
+	board.run.bomb_offer_live = mode == "bomb"
+	board.run.ring_offer_live = mode == "ring"
+	board.clear_offer_hover()
+
+
+func _capture_ui4() -> bool:
+	_ui4_boot()
+	var cleats := _ui4_card(Loadout.PINPOINT, Loadout.CLEATS)
+	var helmet := _ui4_card(Loadout.WIND_VISOR, Loadout.HELMET)
+	var gloves := _ui4_card(Loadout.IRON_GRIP, Loadout.GLOVES)
+	var perk := _ui4_card(Loadout.HERO_BALL, Loadout.PERK)
+	var curse := _ui4_card(Loadout.ICED, Loadout.CURSE)
+	var lucky := _ui4_card(Loadout.PINPOINT, Loadout.CLEATS, true)
+	_ui4_show([cleats, helmet, gloves], "")
+	print("UI4 equipment")
+	if not await _capture("ui4_offer_3_equipment.png"):
+		return false
+	_ui4_show([perk, curse, cleats], "")
+	if not await _capture("ui4_offer_mixed_perk_curse.png"):
+		return false
+	_ui4_show([cleats, helmet, gloves], "")
+	board.set_offer_hover(1, true)
+	if not await _capture("ui4_offer_hover.png"):
+		return false
+	_ui4_show([lucky, perk, curse], "")
+	if not await _capture("ui4_offer_lucky.png"):
+		return false
+	_ui4_show([cleats], "")
+	if not await _capture("ui4_offer_1_card.png"):
+		return false
+	_ui4_show([cleats, perk], "")
+	if not await _capture("ui4_offer_2_cards.png"):
+		return false
+	_ui4_show([curse, _ui4_card(Loadout.SHANKY, Loadout.CURSE), _ui4_card(Loadout.HEAVY, Loadout.CURSE)], "forced")
+	if not await _capture("ui4_forced_curse.png"):
+		return false
+	_ui4_show([cleats, helmet, gloves], "ring")
+	if not await _capture("ui4_bonus_ring.png"):
+		return false
+	_ui4_show([cleats, helmet, gloves], "bomb")
+	if not await _capture("ui4_bomb_bonus.png"):
+		return false
+	_ui4_boot()
+	var split := false
+	for kick_number in range(1, 16):
+		board.run.kick_number = kick_number
+		board.load_current_kick()
+		if not board.run.rung_blocked("long", board.logic) and board.run.rung_blocked("bomb", board.logic):
+			split = true
+			break
+	print("UI4 rung kick ", board.run.kick_number, " split ", split)
+	board.run.special_kicks[board.run.kick_number] = SpecialKicks.LONG_OR_SAFE
+	board.run.awaiting_offer = false
+	board.run.awaiting_rung = true
+	board.run.rung_highlight = 0
+	board.clear_offer_hover()
+	if not await _capture("ui4_long_or_safe.png"):
+		return false
+	_ui4_boot()
+	board.run.give(Loadout.GEAR_MANAGER)
+	_ui4_show([cleats, helmet, gloves], "")
+	if not await _capture("ui4_gear_manager.png"):
+		return false
+	_ui4_show([cleats, helmet, gloves], "")
+	DisplayServer.window_set_size(Vector2i(1920, 1080))
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var wide := await _capture("ui4_window_1920x1080.png")
+	DisplayServer.window_set_size(Vector2i(1280, 720))
+	return wide
 
 
 func _capture_ui2() -> bool:

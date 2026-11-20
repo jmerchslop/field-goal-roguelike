@@ -86,6 +86,10 @@ var _ring_pop := -1.0
 var _inner_ring: Sprite3D
 var _inner_pop := -1.0
 var glare_time := 0.0
+var offer_hover := -1
+var offer_hover_from := -1
+var offer_hover_age := 0.08
+var offer_primed := false
 var _beams: Node3D
 var _beam_mat: ShaderMaterial
 var _pool_mat: ShaderMaterial
@@ -993,6 +997,37 @@ func script_good_kick() -> void:
 	_cash_time = 0.0
 
 
+func offer_lift(index: int) -> float:
+	var t := clampf(offer_hover_age / 0.08, 0.0, 1.0)
+	if index == offer_hover:
+		return -8.0 * t
+	if index == offer_hover_from and offer_hover_from >= 0:
+		return -8.0 * (1.0 - t)
+	return 0.0
+
+
+func set_offer_hover(index: int, snap: bool = false) -> void:
+	if index == offer_hover and not snap:
+		return
+	if snap:
+		offer_hover_from = -1
+		offer_hover = index
+		offer_hover_age = 0.08
+		offer_primed = true
+		return
+	offer_hover_from = offer_hover
+	offer_hover = index
+	offer_hover_age = 0.0
+	offer_primed = true
+
+
+func clear_offer_hover() -> void:
+	offer_hover = -1
+	offer_hover_from = -1
+	offer_hover_age = 0.08
+	offer_primed = false
+
+
 func refresh_view() -> void:
 	_place_world()
 	if _hud != null:
@@ -1038,6 +1073,13 @@ func _process(delta: float) -> void:
 				_unlock_seen = ""
 				_unlock_time = 0.0
 	tick_tad_card(delta)
+	if run == null or (not run.awaiting_offer and not run.awaiting_rung):
+		if offer_primed:
+			clear_offer_hover()
+	elif offer_hover_age < 0.08:
+		offer_hover_age = minf(offer_hover_age + delta, 0.08)
+		if _hud != null:
+			_hud.queue_redraw()
 	if logic.phase == KickLogic.Phase.AIMING and not run.practicing and not selecting:
 		_special_banner += delta
 		_maybe_fire_sound()
@@ -1158,6 +1200,17 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if selecting:
 		_select_input(event)
+		return
+	if event is InputEventMouseMotion and (run.awaiting_offer or run.awaiting_rung):
+		var motion := event as InputEventMouseMotion
+		var hovered: int = _hud.card_index_at(motion.position)
+		if run.awaiting_rung:
+			var rung_names: Array = ["safe", "long", "bomb"]
+			if hovered >= 0 and hovered < rung_names.size() and not run.rung_blocked(str(rung_names[hovered]), logic):
+				run.rung_highlight = hovered
+				set_offer_hover(hovered)
+			return
+		set_offer_hover(hovered)
 		return
 	if event is InputEventMouseButton:
 		var mouse := event as InputEventMouseButton

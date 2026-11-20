@@ -83,6 +83,7 @@ func _run() -> void:
 	_check_sk2()
 	_check_ui3_text()
 	_check_ui2_layout()
+	_check_ui4()
 	_check_drive_lid_and_power_safety()
 	_check_m2_kickers()
 	_check_honest_cards_and_bench()
@@ -120,6 +121,7 @@ func _finish_live() -> void:
 	_check_live_kick_sounds()
 	_check_ui3_live()
 	_check_ui2_live()
+	await _check_ui4_live()
 	_release_sfx()
 	await create_timer(0.6).timeout
 	_release_sfx()
@@ -4634,7 +4636,7 @@ func _check_pk1() -> void:
 	look.second_look_bank = 1
 	check(look.free_reroll_ready(), "the offer shows a banked free reroll")
 	var hud_source := FileAccess.get_file_as_string("res://scripts/hud.gd")
-	check(hud_source.find("_text_centered(\"Free rerolls %d") >= 0 and hud_source.find("free_reroll_ready") >= 0, "the offer uses a default-font Free rerolls count")
+	check(hud_source.find("_center_default(\"Free rerolls %d") >= 0 and hud_source.find("free_reroll_ready") >= 0, "the offer uses a default-font Free rerolls count")
 	look.streak = 7
 	var saved := look.export_resume()
 	var resumed := RunLogic.new()
@@ -11427,4 +11429,166 @@ func _sk2_walk(seed_value: int, with_special: bool) -> Array:
 		if not run.go_to_next_kick():
 			break
 	return found
+
+
+func _check_ui4() -> void:
+	var script = load("res://scripts/hud.gd")
+	var kick := Rect2(868, 10, 398, 74)
+	var score := Rect2(868, 92, 398, 70)
+	var cash := Rect2(12, 604, 258, 22)
+	var plate := Rect2(12, 629, 430, 79)
+	for count in [1, 2, 3, 4]:
+		var rects: Array = script.pick_row_rects(count)
+		check(rects.size() == count, "pick row %d has one rect per card" % count)
+		var left: float = rects[0].position.x
+		var right: float = rects[count - 1].end.x
+		check(absf((left + right) * 0.5 - 640.0) <= 0.5, "pick row %d is centered on x 640, span %s to %s" % [count, left, right])
+		var inside := true
+		for i in count:
+			var rect: Rect2 = rects[i]
+			if rect.position.x < 0.0 or rect.end.x > 1280.0 or rect.size.x != 232.0 or rect.size.y != 324.0 or rect.position.y != 214.0:
+				inside = false
+			if i > 0:
+				var prev: Rect2 = rects[i - 1]
+				if absf(rect.position.x - (prev.position.x + prev.size.x) - 28.0) > 0.01:
+					inside = false
+		check(inside, "pick row %d is 232 by 324 with 28 px gaps inside the window" % count)
+		if count <= 3:
+			var panel: Rect2 = script.pick_panel_rect(count, score.end.y)
+			var clear := true
+			for rect in rects:
+				var card: Rect2 = rect
+				if card.intersects(kick) or card.intersects(score) or card.intersects(cash) or card.intersects(plate):
+					clear = false
+			if panel.intersects(kick) or panel.intersects(score) or panel.intersects(cash) or panel.intersects(plate):
+				clear = false
+			check(clear, "a %d card row stays off the kick bug, score bug, cash belt, and kicker plate" % count)
+	check(absf(script.pick_row_rects(1)[0].position.x - 524.0) <= 0.5, "one card is centered at x 524")
+	var panel3: Rect2 = script.pick_panel_rect(3, 0.0)
+	var panel4: Rect2 = script.pick_panel_rect(4, 0.0)
+	var shifted: Rect2 = script.pick_panel_rect(4, 180.0)
+	check(is_equal_approx(panel3.position.y, 172.0) and is_equal_approx(panel4.position.y, 172.0), "3 and 4 card panels start at y 172 when the score bug is clear, 3 %s, 4 %s" % [panel3, panel4])
+	check(is_equal_approx(shifted.position.y, 186.0), "a 4 card panel that meets the score bug starts at y 186, got %s" % shifted)
+	var hud = script.new()
+	var longest_title := ""
+	var longest_width := 0.0
+	var longest_effect := ""
+	var longest_effect_width := 0.0
+	var font := ThemeDB.fallback_font
+	var ids: Array = []
+	ids.append_array(Loadout.CLEAT_IDS)
+	ids.append_array(Loadout.HELMET_IDS)
+	ids.append_array(Loadout.GLOVE_IDS)
+	ids.append_array(Loadout.PERK_IDS)
+	ids.append_array(Loadout.CURSE_IDS)
+	var titles_fit := true
+	var effects_fit := true
+	for id in ids:
+		var rank := Loadout.max_rank(str(id))
+		var title := Loadout.card_title(str(id), rank)
+		var width := font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, 18).x
+		if width > longest_width:
+			longest_width = width
+			longest_title = title
+		var laid: Dictionary = hud.offer_name_lines(title)
+		var lines: PackedStringArray = laid["lines"]
+		if lines.size() > 2:
+			titles_fit = false
+		for line in lines:
+			if font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, int(laid["size"])).x > 200.0:
+				titles_fit = false
+		var run := RunLogic.new()
+		var effect := run.lived_effect_line(str(id), rank)
+		var effect_width := font.get_string_size(effect, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x
+		if effect_width > longest_effect_width:
+			longest_effect_width = effect_width
+			longest_effect = effect
+		var wrapped: Dictionary = hud.offer_effect_lines(effect)
+		if float(wrapped["height"]) > 116.0:
+			effects_fit = false
+	check(titles_fit, "the longest card title fits the name banner: %s" % longest_title)
+	check(effects_fit, "the longest effect fits the text well: %s" % longest_effect)
+	var offer_dir := "res://art/ui/offer"
+	check(not ResourceLoader.exists(offer_dir + "/offer_card_equipment.png"), "the offer art is not in the repo yet")
+	check(hud.offer_texture("offer_card_equipment.png") == null and hud.offer_texture("offer_panel.png") == null, "a missing offer file draws the code look")
+	var image := Image.create(464, 648, false, Image.FORMAT_RGBA8)
+	image.fill(Color(0.2, 0.45, 0.7, 1))
+	var folder := ProjectSettings.globalize_path(offer_dir)
+	DirAccess.make_dir_recursive_absolute(folder)
+	var saved := image.save_png(folder.path_join("offer_card_equipment.png"))
+	check(saved == OK, "the placeholder offer card was written")
+	hud.clear_offer_art()
+	var texture: Texture2D = hud.offer_texture("offer_card_equipment.png")
+	var drawn: Rect2 = script.pick_row_rects(1)[0]
+	check(texture != null and texture.get_width() == 464 and texture.get_height() == 648 and drawn.size == Vector2(232, 324), "a 464 by 648 offer card is drawn at 232 by 324")
+	DirAccess.remove_absolute(folder.path_join("offer_card_equipment.png"))
+	hud.clear_offer_art()
+	check(hud.offer_texture("offer_card_equipment.png") == null, "deleting the placeholder returns to the code look")
+	hud.free()
+
+
+func _check_ui4_live() -> void:
+	OS.set_environment("FG_SHOTS", "")
+	var packed: PackedScene = load("res://scenes/main.tscn")
+	var game = packed.instantiate()
+	get_root().add_child(game)
+	game._taking_pictures = true
+	game.highlight = Kickers.slot_for(Kickers.WALK_ON)
+	game.confirm_kicker()
+	game.load_current_kick()
+	game.run.phase = RunLogic.Phase.PLAYING
+	game.run.awaiting_offer = true
+	game.run.offer = [
+		{"id": Loadout.PINPOINT, "rank": 1, "slot": Loadout.CLEATS, "lucky": false},
+		{"id": Loadout.HERO_BALL, "rank": 1, "slot": Loadout.PERK, "lucky": false},
+		{"id": Loadout.ICED, "rank": 1, "slot": Loadout.CURSE, "lucky": false},
+	]
+	var hud = game._hud
+	var before: int = int(hud.meter_frame_draws)
+	game.refresh_view()
+	await process_frame
+	check(int(hud.meter_frame_draws) == before, "the meter stays hidden during an offer")
+	var bases: Array = hud.pick_row_rects(3)
+	game.set_offer_hover(1, true)
+	hud.card_rects = [bases[0], hud.lifted_rect(bases[1], game.offer_lift(1)), bases[2]]
+	var lifted: Rect2 = hud.card_rects[1]
+	check(game._hud.card_index_at(lifted.position + Vector2(8, 8)) == 1, "a click on the lifted card hits that card")
+	check(game._hud.card_index_at(bases[1].position + Vector2(8, bases[1].size.y - 2)) == -1, "a click in the gap the lift left misses")
+	game._taking_pictures = false
+	game._unhandled_input(_key_event(KEY_2))
+	game._taking_pictures = true
+	var took_middle := false
+	for item in game.run.perks:
+		if str(item.get("id", "")) == Loadout.HERO_BALL:
+			took_middle = true
+	check(not game.run.awaiting_offer and took_middle, "key 2 still takes the middle card")
+	var split := false
+	for kick_number in range(1, 16):
+		game.run.kick_number = kick_number
+		game.load_current_kick()
+		if not game.run.rung_blocked("long", game.logic) and game.run.rung_blocked("bomb", game.logic):
+			split = true
+			break
+	check(split, "a kick has LONG in range and BOMB out of range")
+	game.run.awaiting_rung = true
+	game.run.rung_highlight = 0
+	game.offer_primed = true
+	game._taking_pictures = false
+	hud.card_rects = hud.pick_row_rects(3)
+	var motion := InputEventMouseMotion.new()
+	motion.position = hud.card_rects[1].position + Vector2(30, 30)
+	game._unhandled_input(motion)
+	check(game.run.rung_highlight == 1, "hover moves the LONG OR SAFE highlight")
+	motion.position = hud.card_rects[2].position + Vector2(30, 30)
+	game._unhandled_input(motion)
+	check(game.run.rung_highlight == 1 and game.offer_hover != 2, "hover skips a blocked rung")
+	game._taking_pictures = true
+	game.run.awaiting_rung = false
+	game.run.awaiting_offer = false
+	game.logic.phase = KickLogic.Phase.AIMING
+	before = int(hud.meter_frame_draws)
+	game.refresh_view()
+	await process_frame
+	check(int(hud.meter_frame_draws) > before, "the meter draws again after the pick")
+	game.free()
 
