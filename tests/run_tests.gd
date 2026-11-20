@@ -11241,7 +11241,29 @@ func _ui2_until(game, left: float) -> void:
 func _check_ui2_live() -> void:
 	var sfx: KickSfx = get_root().get_node("Sfx")
 	sfx.scan()
-	check(sfx.files_of("clock_tick").is_empty() and sfx.files_of("clock_tick_fast").is_empty() and sfx.files_of("clock_buzzer").is_empty(), "the clock files are missing, so the pools stay empty")
+	var clock_ok := true
+	for n in [5, 4, 3, 2, 1]:
+		var files: Array = sfx.files_of("clock_count_%d" % n)
+		if files.size() != 1 or not str(files[0]).ends_with("clockcount%d.ogg" % n):
+			clock_ok = false
+	var buzzer_files: Array = sfx.files_of("clock_buzzer")
+	check(clock_ok and buzzer_files.size() == 1 and str(buzzer_files[0]).ends_with("clockbuzzer1.ogg"), "the six countdown files land in their own pools")
+	var calls := sfx.play_calls
+	var played_ok := true
+	for n in [5, 4, 3, 2, 1]:
+		if sfx.play_pool("clock_count_%d" % n) != "clockcount%d.ogg" % n:
+			played_ok = false
+		var player: AudioStreamPlayer = sfx._players["clock_count_%d" % n]
+		if player == null or player.bus != "SFX" or not is_equal_approx(player.pitch_scale, 1.0):
+			played_ok = false
+	if sfx.play_pool("clock_buzzer") != "clockbuzzer1.ogg":
+		played_ok = false
+	var horn: AudioStreamPlayer = sfx._players["clock_buzzer"]
+	check(played_ok and horn != null and horn.bus == "SFX" and is_equal_approx(horn.pitch_scale, 1.0) and sfx.play_calls == calls + 6, "the six countdown files play through play_pool on the SFX bus at pitch 1")
+	var quiet := sfx.play_calls
+	sfx._pools["clock_count_5"] = []
+	check(sfx.play_pool("clock_count_5") == "" and sfx.play_calls == quiet, "a missing countdown file stays silent and does not raise play_calls")
+	sfx.scan()
 	OS.set_environment("FG_SHOTS", "")
 	var packed: PackedScene = load("res://scenes/main.tscn")
 	var game = packed.instantiate()
@@ -11250,44 +11272,44 @@ func _check_ui2_live() -> void:
 	game.highlight = Kickers.slot_for(Kickers.WALK_ON)
 	game.confirm_kicker()
 	_ui2_arm(game, RunLogic.CLOCK)
-	var calls := sfx.play_calls
 	_ui2_run_out(game)
-	check(_ui2_sounds(game) == PackedStringArray(["tick", "fast", "fast", "fast", "fast", "fast", "fast", "buzzer"]), "a 4 second timeout is tick, six fast ticks, and the buzzer, got %s" % ",".join(_ui2_sounds(game)))
+	check(_ui2_sounds(game) == PackedStringArray(["count4", "count3", "count2", "count1", "buzzer"]), "a 4 second timeout is count4 through count1 and the buzzer, got %s" % ",".join(_ui2_sounds(game)))
 	check(game._clock_done and game.logic.phase != KickLogic.Phase.AIMING, "the buzzer lands as the kick fires")
-	check(sfx.play_calls == calls, "missing clock files do not play or raise play_calls")
 	_ui2_arm(game, RunLogic.CLOCK)
 	_ui2_until(game, 2.2)
-	check(_ui2_sounds(game) == PackedStringArray(["tick", "fast", "fast"]), "a boss kick at 2.2 is tick and two fast ticks, got %s" % ",".join(_ui2_sounds(game)))
+	check(_ui2_sounds(game) == PackedStringArray(["count4", "count3"]), "a boss kick at 2.2 is count4 and count3, got %s" % ",".join(_ui2_sounds(game)))
 	check(not game._clock_done, "kicking early does not buzz")
+	game._confirm_kick()
+	check(not _ui2_sounds(game).has("buzzer"), "an early kick stops the countdown without the buzzer")
 	game.run.give(Loadout.NO_HUDDLE)
 	_ui2_arm(game, RunLogic.CLEAR)
 	check(is_equal_approx(game.run.clock_seconds(), 5.0), "No Huddle is a 5 second clock")
 	_ui2_run_out(game)
-	check(_ui2_sounds(game) == PackedStringArray(["tick", "tick", "fast", "fast", "fast", "fast", "fast", "fast", "buzzer"]), "a 5 second timeout adds the extra slow tick, got %s" % ",".join(_ui2_sounds(game)))
+	check(_ui2_sounds(game) == PackedStringArray(["count5", "count4", "count3", "count2", "count1", "buzzer"]), "a 5 second timeout is count5 through count1 and the buzzer, got %s" % ",".join(_ui2_sounds(game)))
 	_ui2_arm(game, RunLogic.CLEAR)
 	_ui2_until(game, 2.2)
-	check(_ui2_sounds(game) == PackedStringArray(["tick", "tick", "fast", "fast"]), "No Huddle at 2.2 is two slow ticks and two fast ticks, got %s" % ",".join(_ui2_sounds(game)))
+	check(_ui2_sounds(game) == PackedStringArray(["count5", "count4", "count3"]), "No Huddle at 2.2 is count5, count4, and count3, got %s" % ",".join(_ui2_sounds(game)))
 	_ui2_arm(game, RunLogic.CLOCK)
 	game._twist_time = 4.0 - 3.2
 	game._clock_opened = true
 	game.clock_sounds.clear()
-	game.tick_kick_clock(0.9)
-	check(_ui2_sounds(game).size() == 1, "a 0.9 second jump plays only the latest mark, got %s" % ",".join(_ui2_sounds(game)))
+	game.tick_kick_clock(1.5)
+	check(_ui2_sounds(game) == PackedStringArray(["count2"]), "a jump across 3 and 2 plays only count2, got %s" % ",".join(_ui2_sounds(game)))
 	_ui2_arm(game, RunLogic.CLOCK)
 	game.tick_kick_clock(0.2)
 	var held_time := float(game._twist_time)
 	var held_sounds := _ui2_sounds(game)
 	game.paused = true
 	game.tick_kick_clock(1.0)
-	check(is_equal_approx(game._twist_time, held_time) and _ui2_sounds(game) == held_sounds, "pause freezes the clock and its ticks")
+	check(is_equal_approx(game._twist_time, held_time) and _ui2_sounds(game) == held_sounds, "pause freezes the countdown")
 	game.paused = false
 	game.run.awaiting_offer = true
 	game.tick_kick_clock(1.0)
-	check(is_equal_approx(game._twist_time, held_time) and _ui2_sounds(game) == held_sounds, "an offer freezes the clock and its ticks")
+	check(is_equal_approx(game._twist_time, held_time) and _ui2_sounds(game) == held_sounds, "an offer freezes the countdown")
 	game.run.awaiting_offer = false
 	game.too_weak_age = 0.2
 	game.tick_kick_clock(1.0)
-	check(is_equal_approx(game._twist_time, held_time) and _ui2_sounds(game) == held_sounds, "TOO WEAK freezes the clock and its ticks")
+	check(is_equal_approx(game._twist_time, held_time) and _ui2_sounds(game) == held_sounds, "TOO WEAK freezes the countdown")
 	game.too_weak_age = -1.0
 	game.run.practicing = true
 	game._arm_boss_twist()
@@ -11305,7 +11327,7 @@ func _check_ui2_live() -> void:
 	check(is_equal_approx(game._twist_time, 0.0) and game.clock_sounds.is_empty() and game.clock_digit() == 5, "the ON FIRE banner holds a full 5")
 	game._special_banner = 1.6
 	_ui2_run_out(game)
-	check(_ui2_sounds(game) == PackedStringArray(["tick", "tick", "fast", "fast", "fast", "fast", "fast", "fast", "buzzer"]), "after the banner the full 5 second clock still runs, got %s" % ",".join(_ui2_sounds(game)))
+	check(_ui2_sounds(game) == PackedStringArray(["count5", "count4", "count3", "count2", "count1", "buzzer"]), "after the banner the full 5 second countdown still runs, got %s" % ",".join(_ui2_sounds(game)))
 	game.free()
 
 
@@ -11554,6 +11576,8 @@ func _check_ui4_live() -> void:
 	var lifted: Rect2 = hud.card_rects[1]
 	check(game._hud.card_index_at(lifted.position + Vector2(8, 8)) == 1, "a click on the lifted card hits that card")
 	check(game._hud.card_index_at(bases[1].position + Vector2(8, bases[1].size.y - 2)) == -1, "a click in the gap the lift left misses")
+	game.run.special_kicks[game.run.kick_number] = ""
+	game.run.awaiting_rung = false
 	game._taking_pictures = false
 	game._unhandled_input(_key_event(KEY_2))
 	game._taking_pictures = true

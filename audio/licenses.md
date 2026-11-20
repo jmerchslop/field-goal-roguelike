@@ -12,6 +12,14 @@ The five files in `res://audio/sfx/` are Creative Commons 0 (CC0 1.0, public dom
 
 A light 40 Hz high-pass was applied to all five.
 
+## Kick clock
+
+`clockcount5.ogg` through `clockcount1.ogg` and `clockbuzzer1.ogg` are Creative Commons 0 (CC0 1.0, public domain dedication). Commercial use is allowed and attribution is not required. They are 44.1 kHz stereo Ogg Vorbis, trimmed so each file starts on the transient. Foley derived them only from `clockbuzzer_c`, which was cut from Freesound 510026. No other recording was added. Each beep is already a minor third above the one before it, so the game plays them at pitch 1.0.
+
+| File | Freesound id | Title | Author | URL | License | Processing |
+|---|---|---|---|---|---|---|
+| clockcount5.ogg, clockcount4.ogg, clockcount3.ogg, clockcount2.ogg, clockcount1.ogg, clockbuzzer1.ogg | 510026 | buzzer sportif.wav | Naïma | https://freesound.org/people/Naïma/sounds/510026/ | CC0 1.0 | Countdown option c. Pitch of 5, 4, 3, 2, 1, buzzer is −12, −9, −6, −3, 0, +1 semitones versus buzzer c. Beeps are 0.24 s from the attack of buzzer c (the first 0.62 s, before its release) and peak at −11.0 dBFS. The buzzer is buzzer c pitched up 1 semitone (0.755 s) and peaks at −6.0 dBFS. Page verified: “Buzzer recorded with a Tascam DR-44WL during a game.” |
+
 ## Field music
 
 Both loops were made by Foley for this project. They are 48 kHz stereo Ogg Vorbis and are cut to loop seamlessly from the end back to the start. They play on the Music bus.

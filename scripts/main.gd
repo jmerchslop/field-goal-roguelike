@@ -1577,31 +1577,29 @@ func _latest_clock_mark(prev: float, now: float) -> String:
 	var best := ""
 	if not _clock_opened:
 		_clock_opened = true
-		best_left = prev
-		best = "tick"
-	var whole := int(floor(prev - 0.0001))
-	while whole > 3:
+		var start_digit := int(ceili(prev))
+		if start_digit >= 1 and start_digit <= 5:
+			best_left = prev
+			best = "count%d" % start_digit
+	var whole := mini(4, int(floor(prev - 0.0001)))
+	while whole >= 1:
 		if _clock_crossed(prev, now, float(whole)):
 			if float(whole) < best_left:
 				best_left = float(whole)
-				best = "tick"
+				best = "count%d" % whole
 		whole -= 1
-	for mark in [3.0, 2.5, 2.0, 1.5, 1.0, 0.5]:
-		if _clock_crossed(prev, now, mark):
-			if mark < best_left:
-				best_left = mark
-				best = "fast"
 	return best
 
 
 func _emit_clock(kind: String) -> void:
 	clock_sounds.append(kind)
-	var pool := "clock_tick"
-	if kind == "fast":
-		pool = "clock_tick_fast"
-	elif kind == "buzzer":
+	var pool := ""
+	if kind == "buzzer":
 		pool = "clock_buzzer"
-	Sfx.play_pool(pool)
+	elif kind.begins_with("count") and kind.length() == 6:
+		pool = "clock_count_%s" % kind.substr(5)
+	if pool != "":
+		Sfx.play_pool(pool)
 
 
 func _log_clock(ending: String) -> void:

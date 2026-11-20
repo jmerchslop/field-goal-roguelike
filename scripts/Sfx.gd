@@ -20,8 +20,11 @@ const POOL_NAMES := {
 	"cheer": ["crowdcheer1", "crowdcheer2"],
 	"groan": ["crowdgroan1", "crowdgroan2"],
 	"ooh": ["crowdooh1"],
-	"clock_tick": ["clocktick1"],
-	"clock_tick_fast": ["clocktickfast1"],
+	"clock_count_5": ["clockcount5"],
+	"clock_count_4": ["clockcount4"],
+	"clock_count_3": ["clockcount3"],
+	"clock_count_2": ["clockcount2"],
+	"clock_count_1": ["clockcount1"],
 	"clock_buzzer": ["clockbuzzer1"],
 }
 
@@ -68,7 +71,7 @@ func _ensure_players() -> void:
 				_assign_bus(_players[pool])
 		return
 	_air = _make_player("Airborne")
-	for pool in ["footsteps", "ballcontact", "shank", "doink", "menu", "ui", "cheer", "groan", "ooh"]:
+	for pool in ["footsteps", "ballcontact", "shank", "doink", "menu", "ui", "cheer", "groan", "ooh", "clock_count_5", "clock_count_4", "clock_count_3", "clock_count_2", "clock_count_1", "clock_buzzer"]:
 		_players[pool] = _make_player(pool)
 	for pool in ["cheer", "groan", "ooh"]:
 		_assign_crowd(_players[pool])
