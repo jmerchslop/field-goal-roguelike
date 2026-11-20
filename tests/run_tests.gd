@@ -79,6 +79,7 @@ func _run() -> void:
 	_check_luck1()
 	_check_clean1()
 	_check_mtr1()
+	_check_sk1()
 	_check_drive_lid_and_power_safety()
 	_check_m2_kickers()
 	_check_honest_cards_and_bench()
@@ -10568,4 +10569,191 @@ func _mtr1_same(got: Array, want: Array) -> bool:
 		if absf(float(got[i]) - float(want[i])) > 0.02:
 			return false
 	return true
+
+
+func _check_sk1() -> void:
+	check(BitmapFonts.ui_allows("SPECIAL KICK") and BitmapFonts.ui_allows("ON FIRE"), "SPECIAL KICK and ON FIRE fit Pixel Gothic")
+	check(SpecialKicks.banner_lines(SpecialKicks.ON_FIRE)[0] == "SPECIAL KICK" and SpecialKicks.banner_lines(SpecialKicks.ON_FIRE)[1] == "ON FIRE", "the banner is SPECIAL KICK over ON FIRE")
+	var streak := _sk1_fresh()
+	for _step in 3:
+		_sk1_good(streak)
+	check(streak.kick_number == 4 and streak.heat == 3 and streak.special_for_kick() == SpecialKicks.ON_FIRE, "three makes light kick 4")
+	var broken := _sk1_fresh()
+	_sk1_good(broken)
+	_sk1_good(broken)
+	broken.phase = RunLogic.Phase.PLAYING
+	broken.kick_resolved = false
+	check(broken.special_for_kick() == "", "kick 3 is not on fire after two makes")
+	broken.resolve_kick("SHORT", 1.0, false)
+	check(broken.heat == 0, "a miss clears heat")
+	check(broken.begin_retry(), "the miss stays on this kick for the retry")
+	broken.phase = RunLogic.Phase.PLAYING
+	broken.kick_resolved = false
+	broken.resolve_kick("GOOD", 0.0, false)
+	check(broken.heat == 1 and broken.special_for_kick() == "", "make, make, miss, make never lights a kick")
+	var lucky := _sk1_fresh()
+	lucky.phase = RunLogic.Phase.PLAYING
+	lucky.resolve_kick("GOOD", 0.0, false)
+	check(lucky.heat == 1, "a GOOD, the result of a lucky or insured save, adds heat")
+	var fired := _sk1_fresh()
+	fired.set_heat_for_test(3)
+	fired.kick_number = 4
+	check(fired.special_for_kick() == SpecialKicks.ON_FIRE, "heat 3 makes an eligible kick ON FIRE")
+	fired.phase = RunLogic.Phase.PLAYING
+	fired.kick_resolved = false
+	fired.resolve_kick("GOOD", 0.0, false, true)
+	check(fired.heat == 0 and fired.cash_popup == "+$5", "a fire ring hit pays $5 and then heat is 0")
+	var missed_fire := _sk1_fresh()
+	missed_fire.set_heat_for_test(3)
+	missed_fire.kick_number = 4
+	missed_fire.special_for_kick()
+	missed_fire.phase = RunLogic.Phase.PLAYING
+	missed_fire.kick_resolved = false
+	missed_fire.resolve_kick("SHORT", 1.0, false)
+	check(missed_fire.heat == 0 and missed_fire.special_for_kick() == "", "a fire miss ends the fire")
+	check(near(float(missed_fire.inner_ring_place(missed_fire.post_half_gap())["radius"]), 0.50), "the retry ring is the normal radius")
+	var practice := _sk1_fresh()
+	practice.set_heat_for_test(2)
+	practice.practicing = true
+	practice.resolve_kick("GOOD", 0.0, false)
+	check(practice.heat == 2 and practice.special_for_kick() == "", "practice does not change heat and is not a special")
+	var gate := _sk1_fresh()
+	gate.set_heat_for_test(3)
+	for blocked in [1, 5, 7, 10]:
+		gate.kick_number = blocked
+		check(gate.special_for_kick() == "", "Standard kick %s is not on fire" % blocked)
+	gate.kick_number = 4
+	check(gate.special_for_kick() == SpecialKicks.ON_FIRE, "the fire waits for kick 4")
+	gate.kick_number = 6
+	check(gate.special_for_kick() == SpecialKicks.ON_FIRE, "kick 6 can still be on fire")
+	gate.kick_number = 8
+	check(gate.special_for_kick() == SpecialKicks.ON_FIRE, "kick 8 is the fire after the Bonus Ring")
+	var endless := _sk1_fresh()
+	endless.run_mode = "endless"
+	endless.set_heat_for_test(3)
+	for blocked_endless in [10, 17, 20]:
+		endless.kick_number = blocked_endless
+		check(endless.special_for_kick() == "", "Endless kick %s is not on fire" % blocked_endless)
+	endless.kick_number = 11
+	check(endless.special_for_kick() == SpecialKicks.ON_FIRE, "Endless fire moves from the boss to kick 11")
+	endless.kick_number = 18
+	check(endless.special_for_kick() == SpecialKicks.ON_FIRE, "Endless fire moves from the Bonus Ring to kick 18")
+	var radius := _sk1_fresh()
+	radius.kick_number = 4
+	radius.set_heat_for_test(0)
+	check(near(float(radius.inner_ring_place(3.08)["radius"]), 0.50), "a normal ring stays 0.50")
+	radius.set_heat_for_test(3)
+	radius.special_kicks.erase(4)
+	check(near(float(radius.inner_ring_place(3.08)["radius"]), 0.75), "fire widens 0.50 to 0.75")
+	radius.stats.ring_radius_bonus = 0.32
+	check(near(float(radius.inner_ring_place(3.08)["radius"]), 0.98), "a 0.32 bonus on fire caps at 0.98")
+	radius.stats.ring_radius_bonus = 0.48
+	check(near(float(radius.inner_ring_place(3.08)["radius"]), 0.98), "Guide Gloves at the 0.98 cap stay 0.98 on fire")
+	var calm := _sk1_fresh()
+	calm.kick_number = 2
+	calm.stats.ring_radius_bonus = 0.32
+	check(near(float(calm.inner_ring_place(3.08)["radius"]), 0.82), "the same bonus off fire is 0.82")
+	var hit := KickLogic.new()
+	hit.inner_ring_armed = true
+	hit.inner_ring_x = 0.0
+	hit.offset_yards = 0.70
+	hit.result_text = "GOOD"
+	hit.inner_ring_radius = 0.75
+	hit.note_inner_ring(0.0)
+	check(hit.inner_ring_hit, "0.70 from the center hits the fire ring")
+	hit.inner_ring_radius = 0.50
+	hit.note_inner_ring(0.0)
+	check(not hit.inner_ring_hit, "0.70 from the center misses the normal ring")
+	check(RunLogic.cash_payout(true, false, true, false, true) == 5, "a fire ring hit pays $5")
+	check(RunLogic.cash_payout(true, false, true, false, false) == 3, "a normal ring hit pays $3")
+	check(RunLogic.cash_payout(true, false, false, false, true) == 1, "fire without a ring hit adds no cash")
+	var capped := _sk1_fresh()
+	capped.run_mode = "endless"
+	capped.kick_number = 2
+	capped.set_heat_for_test(3)
+	capped.special_for_kick()
+	for _hit in 10:
+		capped.phase = RunLogic.Phase.PLAYING
+		capped.kick_resolved = false
+		capped.heat = 3
+		capped.resolve_kick("GOOD", 0.0, false, true)
+	check(capped.ring_factor <= 8.0 and is_equal_approx(capped.ring_factor, 8.0), "ten fire ring hits stay at ring factor 8")
+	var over_budget := 0
+	for seed_value in 500:
+		var standard := _sk1_fresh()
+		standard.set_seed(seed_value + 1)
+		for kick in range(1, 11):
+			standard.kick_number = kick
+			standard.special_for_kick()
+			if standard.twist_count() > 2:
+				over_budget += 1
+		var far := _sk1_fresh()
+		far.run_mode = "endless"
+		far.set_seed(seed_value + 1000)
+		for kick in range(1, 101):
+			far.kick_number = kick
+			far.special_for_kick()
+			if far.twist_count() > 2:
+				over_budget += 1
+	check(over_budget == 0, "twist count stays at 2 or under, overs %s" % over_budget)
+	var quiet := _sk1_walk(42, false)
+	var loud := _sk1_walk(42, true)
+	check(quiet == loud, "special kicks do not move wind, dice, or offers")
+	var untouched := _sk1_fresh()
+	untouched.set_seed(7)
+	untouched.kick_number = 4
+	untouched.set_heat_for_test(3)
+	var before_lines := untouched.special_lines
+	untouched.special_for_kick()
+	untouched.special_for_kick()
+	check(untouched.special_lines == before_lines + 1, "a kick prints one SPECIAL line")
+	var probe := RandomNumberGenerator.new()
+	probe.seed = 7 + 6421
+	check(is_equal_approx(untouched._special_rng.randf(), probe.randf()), "the special rng is never drawn")
+	var saved := _sk1_fresh()
+	saved.kick_number = 4
+	saved.set_heat_for_test(3)
+	saved.special_for_kick()
+	var loaded := RunLogic.new()
+	loaded.import_resume(saved.export_resume())
+	check(loaded.heat == 3 and loaded.special_for_kick() == SpecialKicks.ON_FIRE and near(float(loaded.inner_ring_place(3.08)["radius"]), 0.75), "a saved fire kick reloads ON FIRE")
+	var old := RunLogic.new()
+	old.import_resume({"mode": "standard", "kick_number": 3, "kicker_id": Kickers.WALK_ON})
+	check(old.heat == 0 and old.special_kicks.is_empty(), "an old save loads with heat 0")
+
+
+func _sk1_fresh() -> RunLogic:
+	var run := RunLogic.new()
+	run.start_with_kicker(Kickers.WALK_ON)
+	return run
+
+
+func _sk1_good(run: RunLogic) -> void:
+	run.phase = RunLogic.Phase.PLAYING
+	run.kick_resolved = false
+	run.special_for_kick()
+	run.resolve_kick("GOOD", 0.0, false)
+	run.go_to_next_kick()
+
+
+func _sk1_walk(seed_value: int, with_special: bool) -> Array:
+	var run := _sk1_fresh()
+	run.set_seed(seed_value)
+	run.set_offer_seed(seed_value)
+	var found: Array = []
+	for _step in 8:
+		if with_special:
+			run.special_for_kick()
+		found.append(run.wind_speed)
+		found.append(run.post_shift_yards())
+		found.append(str(run.weather))
+		run.phase = RunLogic.Phase.PLAYING
+		run.roll_offer()
+		var ids := ""
+		for card in run.offer:
+			ids += str(card.get("id", "")) + ":"
+		found.append(ids)
+		if not run.go_to_next_kick():
+			break
+	return found
 

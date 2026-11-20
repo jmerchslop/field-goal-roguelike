@@ -41,6 +41,7 @@ func _draw() -> void:
 	_draw_weather_tint(run)
 	_draw_meter(logic, run)
 	_draw_hud(logic, run)
+	_draw_special_banner(run)
 	_draw_kick_clock()
 	_draw_loadout_rail(run)
 	_draw_laser(logic, run)
@@ -289,6 +290,24 @@ func _draw_condition(run: RunLogic) -> void:
 		_text_centered("Meter upgrades off", 184.0, 16, KickConstants.COLOR_TEXT)
 
 
+func _draw_special_banner(run: RunLogic) -> void:
+	if game == null or not game.special_banner_on():
+		return
+	var lines := SpecialKicks.banner_lines(run.special_for_kick())
+	if lines.size() < 2:
+		return
+	var top_w := BitmapFonts.measure_px("ui", lines[0], 16)
+	var bot_w := BitmapFonts.measure_px("ui", lines[1], 28)
+	var width := float(maxi(top_w, bot_w) + 48)
+	var panel := Rect2((KickConstants.WINDOW_WIDTH - width) * 0.5, 196.0, width, 78.0)
+	var saved := texture_filter
+	texture_filter = TEXTURE_FILTER_NEAREST
+	_steel_panel(panel)
+	_pg(lines[0], Vector2(panel.position.x + (width - float(top_w)) * 0.5, panel.position.y + 12.0), 16, Color(0.93, 0.91, 0.84))
+	_pg(lines[1], Vector2(panel.position.x + (width - float(bot_w)) * 0.5, panel.position.y + 36.0), 28, Color(1.0, 0.55, 0.1))
+	texture_filter = saved
+
+
 func _draw_kick_clock() -> void:
 	if game == null:
 		return
@@ -319,6 +338,8 @@ func _draw_kick_bug(logic: KickLogic, run: RunLogic) -> void:
 	if big_game:
 		extra += 16
 	if run.post_shift_yards() != 0:
+		extra += 16
+	if run.on_fire():
 		extra += 16
 	var bug := Rect2(868, 10, 398, 74 + extra)
 	_steel_panel(bug)
@@ -367,6 +388,9 @@ func _draw_kick_bug(logic: KickLogic, run: RunLogic) -> void:
 		row_y += 16
 	if run.post_shift_yards() != 0:
 		_pg(BroadcastHud.posts_text(run.post_shift_yards()), Vector2(bug.position.x + 8, row_y), 12, Color(0.55, 0.9, 0.95))
+		row_y += 16
+	if run.on_fire():
+		_pg("ON FIRE", Vector2(bug.position.x + 8, row_y), 12, Color(1.0, 0.55, 0.1))
 
 
 func _draw_score_bug(run: RunLogic) -> void:
@@ -380,6 +404,8 @@ func _draw_score_bug(run: RunLogic) -> void:
 	if big_game:
 		extra += 16
 	if run.post_shift_yards() != 0:
+		extra += 16
+	if run.on_fire():
 		extra += 16
 	var bug := Rect2(868, 18 + 74 + extra, 398, 70)
 	_steel_panel(bug)

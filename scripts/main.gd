@@ -197,6 +197,10 @@ var _too_weak_sounded := false
 var result_age := 0.0
 var cam_w := 0.0
 var cam_started := false
+var _special_banner := 0.0
+var _fire_sound_played := false
+var _embers: CPUParticles3D
+const FIRE_WHOOSH := "res://audio/sfx_on_fire_whoosh.ogg"
 var cam_skipped := false
 var cam_delay := 0.0
 var _cam_hold: Dictionary = {}
@@ -316,6 +320,9 @@ func _copy_run_onto_kick() -> void:
 	logic.shaky = run.has_curse(Loadout.SHAKY)
 	logic.angle_scale = run.stats.angle_scale
 	logic.practice_swing = run.practicing
+	run.special_for_kick()
+	_special_banner = 0.0
+	_fire_sound_played = false
 	meter_time = 0.0
 	_reset_kick_pose()
 	Sfx.begin_kick()
@@ -1003,6 +1010,9 @@ func _process(delta: float) -> void:
 				run.unlock_toast = ""
 				_unlock_seen = ""
 				_unlock_time = 0.0
+	if logic.phase == KickLogic.Phase.AIMING and not run.practicing and not selecting:
+		_special_banner += delta
+		_maybe_fire_sound()
 	if OS.is_debug_build() and OS.get_environment("FX1_FRAMES") == "1" and _frame_watch > 0.0:
 		_frame_peak = maxf(_frame_peak, delta)
 		_frame_watch -= delta
@@ -2395,6 +2405,80 @@ func _tune_precip(particles: GPUParticles3D, active: bool, fall: float, life: fl
 	process.color = Color(1, 1, 1, 0.84 if particles == _snow else 0.72)
 
 
+func special_banner_on() -> bool:
+	if selecting or run.practicing or logic.phase != KickLogic.Phase.AIMING:
+		return false
+	if run.special_for_kick() == "":
+		return false
+	return _special_banner < 1.6
+
+
+func _maybe_fire_sound() -> void:
+	if _fire_sound_played or not special_banner_on():
+		return
+	_fire_sound_played = true
+	if not ResourceLoader.exists(FIRE_WHOOSH):
+		return
+	var player := AudioStreamPlayer.new()
+	player.stream = load(FIRE_WHOOSH)
+	player.bus = "SFX"
+	add_child(player)
+	player.play()
+
+
+func _build_embers() -> void:
+	_embers = CPUParticles3D.new()
+	_embers.name = "FireEmbers"
+	_embers.amount = 40
+	_embers.lifetime = 0.35
+	_embers.explosiveness = 0.0
+	_embers.local_coords = false
+	_embers.direction = Vector3(0, 1, 0)
+	_embers.spread = 35.0
+	_embers.initial_velocity_min = 0.35
+	_embers.initial_velocity_max = 1.1
+	_embers.gravity = Vector3(0, 0.8, 0)
+	_embers.scale_amount_min = 0.6
+	_embers.scale_amount_max = 1.0
+	_embers.preprocess = 0.2
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.22, 0.22)
+	_embers.mesh = quad
+	var ramp := Gradient.new()
+	ramp.set_color(0, Color(1.0, 0.85, 0.3))
+	ramp.set_color(1, Color(0.8, 0.1, 0.02))
+	_embers.color_ramp = ramp
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	mat.albedo_color = Color(1.0, 0.55, 0.1, 0.9)
+	_embers.material_override = mat
+	_embers.emitting = false
+	_embers.visible = false
+	_ball.add_child(_embers)
+	_prime_embers()
+
+
+func _prime_embers() -> void:
+	if _embers == null or DisplayServer.get_name() == "headless":
+		return
+	_embers.visible = true
+	_embers.emitting = true
+	RenderingServer.force_draw()
+	RenderingServer.force_draw()
+	_embers.emitting = false
+	_embers.visible = false
+
+
+func _sync_embers() -> void:
+	if _embers == null:
+		return
+	var flying := logic.phase == KickLogic.Phase.FLIGHT and run.on_fire()
+	_embers.emitting = flying
+	_embers.visible = flying
+
+
 func _prime_precip() -> void:
 	if DisplayServer.get_name() == "headless" or _camera == null or _weather_anchor == null:
 		return
@@ -2757,7 +2841,12 @@ func _place_inner_ring() -> void:
 	if logic.phase == KickLogic.Phase.AIMING:
 		_inner_pop = -1.0
 		_inner_ring.scale = Vector3.ONE
-		_inner_ring.modulate = Color(0.35, 0.90, 1.00)
+	if _inner_pop < 0.0:
+		if run.on_fire():
+			var pulse := 0.875 + 0.125 * sin(float(Time.get_ticks_msec()) * 0.004)
+			_inner_ring.modulate = Color(1.0, 0.55, 0.1, pulse)
+		else:
+			_inner_ring.modulate = Color(0.35, 0.90, 1.00)
 	var arrived := logic.reached_uprights and logic.ball_forward_yards + 0.05 >= logic.kick_distance
 	if logic.inner_ring_hit and arrived and _inner_pop < 0.0 and logic.phase == KickLogic.Phase.RESULT:
 		_inner_pop = 0.0
@@ -3340,6 +3429,7 @@ func _build_ball() -> void:
 	_ball.billboard = BaseMaterial3D.BILLBOARD_DISABLED
 	_fit_sprite(_ball, "res://art/field/football.png")
 	_world.add_child(_ball)
+	_build_embers()
 	var tee_mesh := CylinderMesh.new()
 	tee_mesh.top_radius = 0.02
 	tee_mesh.bottom_radius = 0.09
@@ -3441,6 +3531,7 @@ func _place_world() -> void:
 	_place_ribbons()
 	_place_ring()
 	_place_inner_ring()
+	_sync_embers()
 	_place_kicker(tee)
 	_place_arrow(tee)
 	_sample_trail()
@@ -4272,6 +4363,12 @@ func _trail_side(span: Vector3) -> Vector3:
 func _trail_vertex_color(along: float) -> Color:
 	var fade := lerpf(0.62, 0.96, along)
 	var color := TRAIL_COLOR
+	if run.on_fire():
+		var mid := Color(1.0, 0.45, 0.05, 1.0)
+		if along < 0.5:
+			color = Color(0.8, 0.1, 0.02).lerp(mid, along / 0.5)
+		else:
+			color = mid.lerp(Color(1.0, 0.85, 0.3), (along - 0.5) / 0.5)
 	color.a = fade * _trail_alpha
 	return color
 

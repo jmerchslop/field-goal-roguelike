@@ -175,7 +175,13 @@ var _offer_rng := RandomNumberGenerator.new()
 var _shop_rng := RandomNumberGenerator.new()
 var _dice_rng := RandomNumberGenerator.new()
 var _luck_offer_rng := RandomNumberGenerator.new()
+var _special_rng := RandomNumberGenerator.new()
 var luck_gear_rolls := 0
+var special_kicks := {}
+var heat := 0
+var last_special := ""
+var rolled_specials_used := {}
+var special_lines := 0
 var _previous_weather := ""
 var _older_weather := ""
 var _insurance_spent := false
@@ -190,6 +196,7 @@ func _init() -> void:
 	_shop_rng.randomize()
 	_dice_rng.randomize()
 	_luck_offer_rng.randomize()
+	_special_rng.randomize()
 	new_run()
 
 
@@ -202,6 +209,7 @@ func set_seed(seed_value: int) -> void:
 	_shop_rng.seed = seed_value + 4409
 	_dice_rng.seed = seed_value + 3571
 	_luck_offer_rng.seed = seed_value + 6151
+	_special_rng.seed = seed_value + 6421
 
 
 func set_offer_seed(seed_value: int) -> void:
@@ -264,6 +272,10 @@ func new_run() -> void:
 	inner_ring_sides = {}
 	post_shifts = {}
 	ring_debug = {}
+	special_kicks = {}
+	heat = 0
+	last_special = ""
+	rolled_specials_used = {}
 	ring_offer_pending = false
 	ring_offer_skipped = false
 	gm_passes = 0
@@ -451,6 +463,73 @@ func _belt_count(id: String) -> int:
 func posts_move() -> bool:
 	# TAD 10 reuses the MOVING POSTS sine. A kick that already rolled that boss uses it once.
 	return tad_active(10) or weather == MOVING
+
+
+func set_heat_for_test(value: int) -> void:
+	heat = value
+
+
+func on_fire() -> bool:
+	if practicing:
+		return false
+	return special_for_kick() == SpecialKicks.ON_FIRE
+
+
+func special_for_kick() -> String:
+	if practicing:
+		return ""
+	if special_kicks.has(kick_number):
+		return str(special_kicks[kick_number])
+	var id := ""
+	if SpecialKicks.eligible(self) and heat >= KickConstants.FIRE_HEAT:
+		id = SpecialKicks.ON_FIRE
+	special_kicks[kick_number] = id
+	if id != "":
+		last_special = id
+	var shown := id if id != "" else "none"
+	print("SPECIAL kick %d -> %s heat %d" % [kick_number, shown, heat])
+	special_lines += 1
+	if OS.is_debug_build():
+		assert(twist_count() <= 2)
+	return id
+
+
+# Future rolled specials land here. SK1 does not call it, so the rng stays put.
+func _roll_special() -> String:
+	var block := _special_block()
+	if bool(rolled_specials_used.get(block, false)):
+		return ""
+	var rolled: Array[String] = []
+	for kind in SpecialKicks.KINDS.keys():
+		var id := str(kind)
+		if str(SpecialKicks.KINDS[kind]) != "rolled" or id == last_special:
+			continue
+		rolled.append(id)
+	if rolled.is_empty():
+		return ""
+	var pick := rolled[_special_rng.randi() % rolled.size()]
+	rolled_specials_used[block] = true
+	last_special = pick
+	return pick
+
+
+func _special_block() -> int:
+	if run_mode == "endless":
+		return int((kick_number - 1) / 5)
+	return 1 if kick_number <= 5 else 2
+
+
+func twist_count() -> int:
+	var count := 0
+	if is_boss():
+		count += 1
+	if post_shift_yards() != 0:
+		count += 1
+	if ring_showing():
+		count += 1
+	if str(special_kicks.get(kick_number, "")) != "":
+		count += 1
+	return count
 
 
 func post_shift_yards() -> int:
@@ -649,6 +728,7 @@ func accepts_restart() -> bool:
 func resolve_kick(result_text: String, _offset: float, perfect: bool, ring_hit: bool = false) -> void:
 	if practicing or kick_resolved or phase != Phase.PLAYING:
 		return
+	var fire_now := special_for_kick() == SpecialKicks.ON_FIRE
 	kick_resolved = true
 	var attempts_before := attempts
 	var made := result_text == "GOOD"
@@ -690,6 +770,7 @@ func resolve_kick(result_text: String, _offset: float, perfect: bool, ring_hit: 
 		if has_curse(Loadout.TRAINING_CAMP) and camp_makes < 3:
 			camp_makes += 1
 		streak += 1
+		heat += 1
 		if streak > best_streak:
 			best_streak = streak
 		if ring_hit:
@@ -711,12 +792,17 @@ func resolve_kick(result_text: String, _offset: float, perfect: bool, ring_hit: 
 			ring_factor = 1.0
 		is_first_ball = false
 		lucky_stacks = 0
+		heat = 0
+		if fire_now:
+			special_kicks.erase(kick_number)
 		if electrolyte_blocked() or _vitamin_count(Vitamins.ELECTROLYTE) == 0:
 			attempts -= 1
 			if attempts <= 0:
 				attempts = 0
 				phase = Phase.GAME_OVER
-	var payout := cash_payout(made, perfect, ring_hit, boss)
+	if fire_now:
+		heat = 0
+	var payout := cash_payout(made, perfect, ring_hit, boss, fire_now)
 	cash += payout
 	cash_popup = "+$%d" % payout if payout > 0 else ""
 	_clear_ball_vitamins()
@@ -1693,7 +1779,7 @@ static func ring_placement(side: int, half_gap: float, distance: float, spot: fl
 	return {"x": sign * low + shift, "pulled": true, "blocked": false}
 
 
-static func cash_payout(made: bool, perfect: bool, ring_hit: bool, boss: bool) -> int:
+static func cash_payout(made: bool, perfect: bool, ring_hit: bool, boss: bool, fire: bool = false) -> int:
 	if not made:
 		return 0
 	var gain := 1
@@ -1701,6 +1787,8 @@ static func cash_payout(made: bool, perfect: bool, ring_hit: bool, boss: bool) -
 		gain += 1
 	if ring_hit:
 		gain += 2
+	if fire and ring_hit:
+		gain += KickConstants.FIRE_RING_CASH
 	if boss:
 		gain += 2
 	return gain
@@ -1760,7 +1848,10 @@ func inner_ring_place(half_gap: float) -> Dictionary:
 	var bonus := 0.0
 	if stats != null:
 		bonus = stats.ring_radius_bonus
-	var radius := minf(KickConstants.INNER_RING_RADIUS + bonus, KickConstants.INNER_RING_MAX_RADIUS)
+	var radius := KickConstants.INNER_RING_RADIUS + bonus
+	if on_fire():
+		radius *= KickConstants.FIRE_RING_SCALE
+	radius = minf(radius, KickConstants.INNER_RING_MAX_RADIUS)
 	var x_rel := float(side) * (half_gap - KickConstants.INNER_RING_INSET)
 	return {"x_rel": x_rel, "radius": radius, "side": side}
 
@@ -2318,6 +2409,10 @@ func export_resume() -> Dictionary:
 		"ring_spent": _kick_keys(ring_spent),
 		"ring_sides": _side_rows(),
 		"post_shifts": _shift_rows(),
+		"special_kicks": _special_rows(),
+		"heat": heat,
+		"last_special": last_special,
+		"rolled_specials_used": _rolled_rows(),
 		"ring_debug": _kick_keys(ring_debug),
 		"ring_offer": ring_offer_pending,
 		"gm_passes": gm_passes,
@@ -2437,6 +2532,14 @@ func import_resume(data: Dictionary) -> void:
 	post_shifts = {}
 	for pair in _dict_list(data.get("post_shifts", [])):
 		post_shifts[int(pair.get("kick", 0))] = int(pair.get("shift", 0))
+	heat = int(data.get("heat", 0))
+	last_special = str(data.get("last_special", ""))
+	special_kicks = {}
+	for pair in _dict_list(data.get("special_kicks", [])):
+		special_kicks[int(pair.get("kick", 0))] = str(pair.get("id", ""))
+	rolled_specials_used = {}
+	for pair in _dict_list(data.get("rolled_specials_used", [])):
+		rolled_specials_used[int(pair.get("block", 0))] = true
 	ring_offer_pending = bool(data.get("ring_offer", false))
 	kick10_boss = str(data.get("kick10_boss", ""))
 	var saved_bosses: Array = _dict_list(data.get("standard_bosses", []))
@@ -2511,6 +2614,21 @@ func _side_rows() -> Array:
 	var rows: Array = []
 	for kick in ring_sides.keys():
 		rows.append({"kick": int(kick), "side": int(ring_sides[kick])})
+	return rows
+
+
+func _special_rows() -> Array:
+	var rows: Array = []
+	for kick in special_kicks.keys():
+		rows.append({"kick": int(kick), "id": str(special_kicks[kick])})
+	return rows
+
+
+func _rolled_rows() -> Array:
+	var rows: Array = []
+	for block in rolled_specials_used.keys():
+		if bool(rolled_specials_used[block]):
+			rows.append({"block": int(block)})
 	return rows
 
 

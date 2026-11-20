@@ -198,6 +198,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "sk1":
+		if not await _capture_sk1():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "rs1":
 		if not await _capture_rs1():
 			get_tree().quit(1)
@@ -5989,6 +5995,90 @@ func _capture_pace2() -> bool:
 	var saved := await _capture("pace2_willow_locked_card.png")
 	_restore_pace2_save(had_file, path, backup, had_willow)
 	return saved
+
+
+func _capture_sk1() -> bool:
+	board.highlight = 1
+	board.selecting = true
+	board.front.run_mode = "standard"
+	board.confirm_kicker()
+	board.run.tad_level = 0
+	board.run.kick_number = 4
+	board.run.set_heat_for_test(3)
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.kick_resolved = false
+	board.run.special_kicks.erase(4)
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.AIMING
+	board._special_banner = 0.2
+	print("SK1 banner ", board.run.special_for_kick(), " radius ", board.run.inner_ring_place(board.run.post_half_gap())["radius"])
+	if not await _capture("sk1_banner.png"):
+		return false
+	board._special_banner = 2.0
+	if not await _capture("sk1_bug_and_ring.png"):
+		return false
+	board.run.kick_number = 7
+	board.run.set_heat_for_test(3)
+	board.run.special_kicks.erase(7)
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.kick_resolved = false
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.AIMING
+	print("SK1 kick 7 ", board.run.special_for_kick())
+	if not await _capture("sk1_bonus_ring_kick_no_fire.png"):
+		return false
+	board.run.kick_number = 4
+	board.run.set_heat_for_test(3)
+	board.run.special_kicks.erase(4)
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.kick_resolved = false
+	board.load_current_kick()
+	board.run.special_for_kick()
+	board.run.resolve_kick("SHORT", 2.0, false)
+	board.run.begin_retry()
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.AIMING
+	print("SK1 retry ", board.run.special_for_kick(), " heat ", board.run.heat)
+	if not await _capture("sk1_retry_after_fire_miss.png"):
+		return false
+	board.run.kick_number = 4
+	board.run.set_heat_for_test(3)
+	board.run.special_kicks.erase(4)
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.kick_resolved = false
+	OS.set_environment("FX1_FRAMES", "1")
+	board.load_current_kick()
+	Settings.ball_cam = true
+	board.set_wind(0.0, 0.0)
+	if not _lock_flight(80.0):
+		print("SK1 did not fly ", board.logic.phase, " ", board.logic.result_text)
+		return false
+	_fly_to(0.45)
+	_arm_cam(false)
+	board._sync_embers()
+	await get_tree().process_frame
+	board._frame_peak = 0.0
+	board._frame_watch = 1.0
+	var guard := 0
+	while board._frame_watch > 0.0 and guard < 240:
+		await get_tree().process_frame
+		guard += 1
+	print("SK1 frame peak_ms ", snappedf(board._frame_peak * 1000.0, 0.1))
+	if not await _capture("sk1_fire_trail.png"):
+		return false
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.kick_resolved = false
+	board.run.heat = 3
+	board.run.special_kicks[4] = SpecialKicks.ON_FIRE
+	board.run.resolve_kick("GOOD", 0.2, false, true)
+	board.logic.phase = KickLogic.Phase.RESULT
+	board.logic.result_text = "GOOD"
+	board.logic.inner_ring_hit = true
+	board.logic.lucky_save = false
+	board.logic.insured = false
+	board.result_age = 0.4
+	print("SK1 cash ", board.run.cash_popup)
+	return await _capture("sk1_ring_hit_cash.png")
 
 
 func _capture_mtr1() -> bool:
