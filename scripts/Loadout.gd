@@ -189,6 +189,10 @@ static func wraps_bonus_yards(rank: int) -> float:
 	return 18.0 + float(rank - 12)
 
 
+static func doink_cap_luck(rank: int) -> int:
+	return (1 if rank >= 3 else 0) + (1 if rank >= 6 else 0) + (1 if rank >= 9 else 0) + (1 if rank >= 12 else 0)
+
+
 static func doink_charges(rank: int) -> int:
 	if rank <= 0:
 		return 0
@@ -482,13 +486,19 @@ static func effect_line(id: String, rank: int) -> String:
 			return "+%d rerolls, and %s Practice Swings each half" % [scout, _swing_word(swings)]
 		DOINK_CAP:
 			var charges := doink_charges(rank)
+			var line := ""
 			if rank == 1:
-				return "1 doink becomes Good each half"
-			if rank < 6:
-				return "%d doinks become Good each half" % charges
-			if rank == 6:
-				return "5 doinks become Good each half, unused carry (max 5)"
-			return "%d doinks become Good each half, unused carry (max %d)" % [charges, charges]
+				line = "1 doink becomes Good each half"
+			elif rank < 6:
+				line = "%d doinks become Good each half" % charges
+			elif rank == 6:
+				line = "5 doinks become Good each half, unused carry (max 5)"
+			else:
+				line = "%d doinks become Good each half, unused carry (max %d)" % [charges, charges]
+			var extra := doink_cap_luck(rank)
+			if extra > 0:
+				line += ". +%d luck" % extra
+			return line
 		IRON_GRIP:
 			var wide := 10 * mini(maxi(rank, 0), 5)
 			var line := "OVERPOWER band +%d%% wide." % wide
@@ -1331,6 +1341,11 @@ static func apply(stats: KickerStats, state: Dictionary, howling: bool, item_sca
 		"needle": 1.0,
 		"drift": drift_mul,
 	}
+	var best_doink := 0
+	if str(state.get("helmet_id", "")) == DOINK_CAP:
+		best_doink = doink_cap_luck(int(state.get("helmet_rank", 0)))
+	if str(state.get("helmet2_id", "")) == DOINK_CAP:
+		best_doink = maxi(best_doink, doink_cap_luck(int(state.get("helmet2_rank", 0))))
 	for piece in pieces:
 		var item_id := str(piece[0])
 		var item_rank := int(piece[1])
@@ -1340,6 +1355,7 @@ static func apply(stats: KickerStats, state: Dictionary, howling: bool, item_sca
 		if second_slot != "" and not gm_on and benched.has(second_slot):
 			continue
 		_apply_piece(stats, item_id, item_rank, effect_rank(item_rank), howling, item_scale, acc)
+	stats.luck = mini(KickConstants.LUCK_MAX, stats.luck + best_doink)
 	range_add = float(acc["range"])
 	perfect_add = float(acc["perfect"])
 	good_add = float(acc["good"])

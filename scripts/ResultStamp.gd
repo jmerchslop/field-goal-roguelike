@@ -11,7 +11,7 @@ static func hold_ready(age: float) -> bool:
 	return age >= HOLD_SEC
 
 
-static func words(shanked: bool, result: String, bank: bool, insured: bool, perfect: bool, middle: bool) -> PackedStringArray:
+static func words(shanked: bool, result: String, bank: bool, insured: bool, perfect: bool, middle: bool, lucky: bool = false) -> PackedStringArray:
 	if shanked:
 		return PackedStringArray(["SHANK"])
 	if result != "GOOD":
@@ -20,6 +20,8 @@ static func words(shanked: bool, result: String, bank: bool, insured: bool, perf
 		return PackedStringArray([result])
 	if bank:
 		return PackedStringArray(["BANK SHOT"])
+	if lucky:
+		return PackedStringArray(["LUCKY"])
 	if insured:
 		return PackedStringArray(["INSURED"])
 	if middle and perfect:

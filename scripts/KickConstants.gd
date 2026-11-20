@@ -100,6 +100,11 @@ const WIDE_OFFSET_YARDS := 6.0
 const POST_DICE_CHANCE := 0.5
 const POST_DICE_MAX_GAP := 6.0
 
+# Luck is a whole number, 0 to 10. Each point is 6% on a doink and 3% on a gear card.
+const LUCK_MAX := 10
+const LUCK_DOINK_PCT := 6
+const LUCK_GEAR_PCT := 3
+
 # Score: distance × ((1 + 0.25 × streak) × ring factor + flat bonuses).
 # Then ×1.5 on a boss kick, +5 if perfect. The inner ring caps at ×8.
 const STREAK_MULT_STEP := 0.25

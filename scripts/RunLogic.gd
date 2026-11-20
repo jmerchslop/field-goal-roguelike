@@ -174,6 +174,8 @@ var _kick10_rng := RandomNumberGenerator.new()
 var _offer_rng := RandomNumberGenerator.new()
 var _shop_rng := RandomNumberGenerator.new()
 var _dice_rng := RandomNumberGenerator.new()
+var _luck_offer_rng := RandomNumberGenerator.new()
+var luck_gear_rolls := 0
 var _previous_weather := ""
 var _older_weather := ""
 var _insurance_spent := false
@@ -187,6 +189,7 @@ func _init() -> void:
 	_offer_rng.randomize()
 	_shop_rng.randomize()
 	_dice_rng.randomize()
+	_luck_offer_rng.randomize()
 	new_run()
 
 
@@ -198,6 +201,7 @@ func set_seed(seed_value: int) -> void:
 	_kick10_rng.seed = seed_value + 9001
 	_shop_rng.seed = seed_value + 4409
 	_dice_rng.seed = seed_value + 3571
+	_luck_offer_rng.seed = seed_value + 6151
 
 
 func set_offer_seed(seed_value: int) -> void:
@@ -1252,6 +1256,7 @@ func roll_offer() -> void:
 	if generated:
 		_apply_synchronicity_offer()
 		_note_shown_offer()
+		_apply_luck_gear()
 	awaiting_offer = true
 
 
@@ -2676,12 +2681,40 @@ func _fill_shelves(opening: bool = false, avoid: Array = []) -> void:
 		shop_stock[i] = str(picks[i])
 
 
+func luck() -> int:
+	return clampi(stats.luck, 0, KickConstants.LUCK_MAX)
+
+
+func _apply_luck_gear() -> void:
+	var points := luck()
+	if points <= 0 or offer.is_empty():
+		return
+	var chance := float(points) * float(KickConstants.LUCK_GEAR_PCT) / 100.0
+	for i in offer.size():
+		var card: Dictionary = offer[i]
+		if str(card.get("kind", "")) != Loadout.EQUIPMENT:
+			continue
+		var id := str(card.get("id", ""))
+		var rank := int(card.get("rank", 1))
+		var roll := _luck_offer_rng.randf()
+		luck_gear_rolls += 1
+		var short := id.split("_")[0]
+		var cap := Loadout.max_rank(id, run_mode)
+		if roll < chance and rank + 1 <= cap:
+			card["rank"] = rank + 1
+			card["lucky"] = true
+			offer[i] = card
+			print("LUCK gear roll %s %s %.3f vs %.3f -> LUCKY to %s" % [short, Loadout.rank_label(rank), roll, chance, Loadout.rank_label(rank + 1)])
+		else:
+			print("LUCK gear roll %s %s %.3f vs %.3f -> MISS" % [short, Loadout.rank_label(rank), roll, chance])
+
+
 func item_effect_scale() -> float:
 	var scale := 1.0
 	if stats.compounding:
 		scale *= 1.15
 	if stats.lucky_ball:
-		var lucky_bonus := minf(0.03 * float(lucky_stacks), 0.25)
+		var lucky_bonus := minf(0.04 * float(lucky_stacks), 0.24)
 		scale *= 1.0 + lucky_bonus
 	return scale
 

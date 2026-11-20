@@ -6,6 +6,8 @@ Generated: 2026-11-09
 **Painted:** 56
 **Template:** 80
 
+LUCK1: the kicker plate and the select card show `LUCK N` (gold above 0, grey at 0). A lucky doink stamps `LUCKY`. A lucky equipment card shows a gold `LUCKY` tag and is one rank higher. Doink Cap adds ` +N luck` at ranks III, VI, IX, and XII. Gary's Lucky Ball reads "Each first-try make adds 4%. The bonus caps at +24%. A miss resets it."
+
 Quoted words are the current player-facing text. `{braces}` name an inserted piece. They are not drawn as braces. The same words on two screens are listed twice. Painted letters live in an image. Code letters are drawn by script.
 
 Counts above cover the entries through Unlock and save notes. The last section, Not drawn, is excluded from the counts.
@@ -599,7 +601,28 @@ No pause screen exists. Esc during a kick is not given its own pause menu. A pri
 ### `select_gary_ball_text`
 - **screen:** Character select
 - **when:** Ball description under the ball name, only while this kicker is unlocked.
-- **current:** "Each first-try make boosts item numbers by 3% for the rest of the run."
+- **current:** "Each first-try make adds 4%. The bonus caps at +24%. A miss resets it."
+- **kind:** static
+- **source:** code
+
+### `select_luck`
+- **screen:** Character select
+- **when:** Under the ball line on an unlocked card. Base luck only. Gold above 0, grey at 0.
+- **current:** "LUCK {n}"
+- **kind:** template
+- **source:** code
+
+### `plate_luck`
+- **screen:** In-kick HUD
+- **when:** Kicker plate, on the MAX row after the yards. Includes Doink Cap luck. Gold above 0, grey at 0.
+- **current:** "LUCK {n}"
+- **kind:** template
+- **source:** code
+
+### `offer_lucky_tag`
+- **screen:** Loadout offer
+- **when:** Under the type label when luck bumped that equipment card one rank.
+- **current:** "LUCKY"
 - **kind:** static
 - **source:** code
 
@@ -1486,10 +1509,17 @@ No pause screen exists. Esc during a kick is not given its own pause menu. A pri
 - **kind:** static
 - **source:** code
 
+### `result_lucky`
+- **screen:** Kick result
+- **when:** Result banner when luck turns a doink into a make. Checked before INSURED. Uses the GOOD stamp color.
+- **current:** "LUCKY"
+- **kind:** static
+- **source:** code
+
 ### `result_insured`
 - **screen:** Kick result
 - **when:** Result banner when Doink Cap turns a doink into a make.
-- **current:** "INSURED!"
+- **current:** "INSURED"
 - **kind:** static
 - **source:** code
 
@@ -1995,14 +2025,14 @@ No pause screen exists. Esc during a kick is not given its own pause menu. A pri
 ### `offer_effect_doink_cap_low`
 - **screen:** Loadout offer
 - **when:** Doink Cap ranks I through V. Same words on the loadout-rail tooltip; that copy is listed again below.
-- **current:** "{count} doink-to-good a half"
+- **current:** "{count} doinks become Good each half" at I and II. From III, the same line plus ". +1 luck".
 - **kind:** template
 - **source:** code
 
 ### `offer_effect_doink_cap_6`
 - **screen:** Loadout offer
-- **when:** Doink Cap rank VI and above. Same words on the loadout-rail tooltip; that copy is listed again below.
-- **current:** "5 doink-to-good a half, unused carry (max 5)"
+- **when:** Doink Cap rank VI and above. Same words on the loadout-rail tooltip; that copy is listed again below. Luck is +2 at VI, +3 at IX, and +4 at XII and above.
+- **current:** "5 doinks become Good each half, unused carry (max 5). +2 luck"
 - **kind:** static
 - **source:** code
 
@@ -2648,14 +2678,14 @@ No pause screen exists. Esc during a kick is not given its own pause menu. A pri
 ### `tooltip_effect_doink_cap_low`
 - **screen:** Loadout rail tooltip
 - **when:** Rail tooltip. Doink Cap ranks I through V.
-- **current:** "{count} doink-to-good a half"
+- **current:** "{count} doinks become Good each half" at I and II. From III, the same line plus ". +1 luck".
 - **kind:** template
 - **source:** code
 
 ### `tooltip_effect_doink_cap_6`
 - **screen:** Loadout rail tooltip
-- **when:** Rail tooltip. Doink Cap rank VI and above.
-- **current:** "5 doink-to-good a half, unused carry (max 5)"
+- **when:** Rail tooltip. Doink Cap rank VI and above. Luck is +2 at VI, +3 at IX, and +4 at XII and above.
+- **current:** "5 doinks become Good each half, unused carry (max 5). +2 luck"
 - **kind:** static
 - **source:** code
 

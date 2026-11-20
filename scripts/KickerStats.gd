@@ -16,6 +16,7 @@ var house_account := false
 var gelcap := false
 var good_as_gold := false
 var lucky_ball := false
+var luck := 0
 var clearance := false
 var saucer_mph := 0.0
 var perfect_band := KickConstants.PERFECT_BAND
@@ -90,6 +91,7 @@ func reset() -> void:
 	gelcap = false
 	good_as_gold = false
 	lucky_ball = false
+	luck = 0
 	clearance = false
 	saucer_mph = 0.0
 	perfect_band = KickConstants.PERFECT_BAND

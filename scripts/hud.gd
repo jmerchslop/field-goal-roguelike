@@ -477,7 +477,17 @@ func _draw_kicker_plate(logic: KickLogic, run: RunLogic) -> void:
 	var fill_color := Color(0.95, 0.35, 0.18) if warn else Color(0.2, 0.78, 0.86)
 	draw_rect(Rect2(bar.position, Vector2(bar.size.x * fill, bar.size.y)), fill_color)
 	var yards_color := Color(0.95, 0.4, 0.22) if warn else Color(0.93, 0.91, 0.84)
-	_pg(BroadcastHud.yards_text(max_range), Vector2(text_x + 164, y - 2), 13, yards_color)
+	var yards := BroadcastHud.yards_text(max_range)
+	_pg(yards, Vector2(text_x + 164, y - 2), 13, yards_color)
+	var luck_n := run.luck()
+	var luck_text := "LUCK %d" % luck_n
+	var luck_size := 12
+	var luck_x := text_x + 164.0 + float(BitmapFonts.measure_px("ui", yards, 13)) + 8.0
+	var plate_right := plate.position.x + plate.size.x - 8.0
+	while luck_size > 8 and luck_x + float(BitmapFonts.measure_px("ui", luck_text, luck_size)) > plate_right:
+		luck_size -= 1
+	var luck_color := Color(0.95, 0.78, 0.22) if luck_n > 0 else Color(0.55, 0.58, 0.62)
+	_pg(luck_text, Vector2(luck_x, y), luck_size, luck_color)
 	y += 16
 	for line in kit_lines:
 		_pg(line, Vector2(text_x, y), 12, Color(0.55, 0.95, 0.62))
@@ -739,14 +749,19 @@ func _draw_playing_card(rect: Rect2, id: String, unlocked: bool, picked: bool) -
 	if unlocked:
 		var kits := SelectCard.kit_lines(id)
 		var ball := SelectCard.ball_line(id)
-		if kits.size() > 1 and not _well_fits(kits, ball, well, body):
+		var luck := SelectCard.luck_line(id)
+		var luck_color := Color(0.95, 0.78, 0.22) if SelectCard.base_luck(id) > 0 else Color(0.55, 0.58, 0.62)
+		if kits.size() > 1 and not _well_fits(kits, ball, well, body, true):
 			if id == Kickers.VEX:
 				body -= 1
 			else:
 				kits = PackedStringArray([kits[kits.size() - 1]])
 		var lines: PackedStringArray = kits.duplicate()
 		lines.append(ball)
-		_pg_stack(lines, well, body, cream, lines.size() - 1, Color(0.42, 0.82, 0.4))
+		lines.append(luck)
+		while body > 6 and not _lines_fit(lines, well, body):
+			body -= 1
+		_pg_stack(lines, well, body, cream, lines.size() - 2, Color(0.42, 0.82, 0.4), luck_color)
 	else:
 		var unlock := SelectCard.unlock_line(id)
 		var fit := body
@@ -772,10 +787,12 @@ func _card_slice(rect: Rect2, x: float, y: float, w: float, h: float) -> Rect2:
 	return Rect2(rect.position + Vector2(rect.size.x * x, rect.size.y * y), Vector2(rect.size.x * w, rect.size.y * h))
 
 
-func _well_fits(kits: PackedStringArray, ball: String, well: Rect2, size: int) -> bool:
+func _well_fits(kits: PackedStringArray, ball: String, well: Rect2, size: int, with_luck: bool = false) -> bool:
 	var lines := kits.size() + 1
 	if ball == "":
 		lines = kits.size()
+	if with_luck:
+		lines += 1
 	var height := lines * (size + 2)
 	if height > int(well.size.y):
 		return false
@@ -783,6 +800,15 @@ func _well_fits(kits: PackedStringArray, ball: String, well: Rect2, size: int) -
 	for line in kits:
 		widest = maxi(widest, BitmapFonts.measure_px("ui", line, size))
 	return widest <= int(well.size.x)
+
+
+func _lines_fit(lines: PackedStringArray, well: Rect2, size: int) -> bool:
+	if lines.size() * (size + 2) > int(well.size.y):
+		return false
+	for line in lines:
+		if BitmapFonts.measure_px("ui", line, size) > int(well.size.x):
+			return false
+	return true
 
 
 func _pg_centered(text: String, y: float, size: int, color: Color) -> void:
@@ -803,14 +829,18 @@ func _pg_block(text: String, area: Rect2, size: int, color: Color) -> void:
 		y += float(step)
 
 
-func _pg_stack(lines: PackedStringArray, area: Rect2, size: int, color: Color, green_at: int, green: Color) -> void:
+func _pg_stack(lines: PackedStringArray, area: Rect2, size: int, color: Color, green_at: int, green: Color, last_color: Color = Color(0, 0, 0, 0)) -> void:
 	if lines.is_empty():
 		return
 	var step := size + 2
 	var block_h := lines.size() * step
 	var y := area.position.y + maxf(0.0, (area.size.y - float(block_h)) * 0.5)
 	for i in lines.size():
-		var ink := green if i == green_at else color
+		var ink := color
+		if last_color.a > 0.0 and i == lines.size() - 1:
+			ink = last_color
+		elif i == green_at:
+			ink = green
 		var width := BitmapFonts.measure_px("ui", lines[i], size)
 		_pg(lines[i], Vector2(area.position.x + (area.size.x - float(width)) * 0.5, y), size, ink)
 		y += float(step)
@@ -1058,8 +1088,12 @@ func _draw_offer(run: RunLogic) -> void:
 		draw_rect(rect, Color(0.05, 0.08, 0.1, 0.94))
 		draw_rect(rect, _slot_color(slot), false, 4.0)
 		_text(rect.position + Vector2(96, 32), "%d  %s" % [i + 1, Loadout.type_label(slot)], 16, _slot_color(slot))
+		var title_y := 62.0
+		if bool(card.get("lucky", false)):
+			_pg("LUCKY", rect.position + Vector2(96, 48), 12, Color(0.95, 0.78, 0.22))
+			title_y = 74.0
 		_draw_slot_icon(id, rank, slot, Rect2(rect.position + Vector2(14, 28), Vector2(72, 72)), true)
-		_text(rect.position + Vector2(96, 62), Loadout.card_title(id, rank), 18, KickConstants.COLOR_ATTEMPT)
+		_text(rect.position + Vector2(96, title_y), Loadout.card_title(id, rank), 18, KickConstants.COLOR_ATTEMPT)
 		_draw_wrapped(run.lived_effect_line(id, rank), Rect2(rect.position + Vector2(12, 112), Vector2(width - 24, 90)), 15)
 	if not run.forced_offer_live:
 		if run.free_reroll_ready():
@@ -1117,7 +1151,7 @@ func _draw_attempt_pips(run: RunLogic, origin_x: float, origin_y: float) -> void
 func _draw_result(logic: KickLogic, run: RunLogic) -> void:
 	# Screen-space stamp. The field distance does not change its size.
 	var middle := logic.inner_ring_hit
-	var lines := ResultStamp.words(logic.shanked, logic.result_text, logic.bank_shot, logic.insured, logic.perfect, middle)
+	var lines := ResultStamp.words(logic.shanked, logic.result_text, logic.bank_shot, logic.insured, logic.perfect, middle, logic.lucky_save)
 	var main_lines: PackedStringArray = ResultStamp.primary_lines(lines[0])
 	var accuracy := ResultStamp.accuracy_line(logic.shanked, logic.perfect, logic.accuracy_error, logic.stats.perfect_band, logic.stats.good_band)
 	var ui_lines := 1 if accuracy == "" else 2

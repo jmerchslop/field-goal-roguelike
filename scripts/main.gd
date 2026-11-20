@@ -304,7 +304,9 @@ func _copy_run_onto_kick() -> void:
 	logic.wind_speed = run.wind_speed
 	logic.wind_direction = run.wind_direction
 	logic.insurance_ready = run.insurance_left > 0
+	logic.luck = run.luck()
 	logic.insured = false
+	logic.lucky_save = false
 	_copy_weather_onto_kick()
 	logic.post_half_gap = run.post_half_gap()
 	logic.post_center = float(run.post_shift_yards())

@@ -53,6 +53,9 @@ var result_text := ""
 var perfect := false
 var bank_shot := false
 var insured := false
+var lucky_save := false
+var luck := 0
+var luck_doink_rolls := 0
 var insurance_ready := false
 var reached_uprights := false
 # Saved wind for this kick. 0° blows toward the uprights. Positive crosswind pushes right.
@@ -112,15 +115,18 @@ var ball_height := 0.0
 var stats := KickerStats.new()
 
 var _rng := RandomNumberGenerator.new()
+var _luck_rng := RandomNumberGenerator.new()
 
 
 func _init() -> void:
 	_rng.randomize()
+	_luck_rng.randomize()
 
 
 # Tests pass a seed so the red-tip wobble can be replayed.
 func set_seed(seed_value: int) -> void:
 	_rng.seed = seed_value
+	_luck_rng.seed = seed_value + 6007
 
 
 # direction is -1 for left, +1 for right, and 0 to hold still.
@@ -243,6 +249,7 @@ func reset_kick() -> void:
 	perfect = false
 	bank_shot = false
 	insured = false
+	lucky_save = false
 	reached_uprights = false
 	drift_yards = 0.0
 	flight_elapsed = 0.0
@@ -559,6 +566,17 @@ func _apply_arrival(judged: Dictionary, _center: float, _half: float) -> void:
 	result_text = str(judged["text"])
 	bank_shot = bool(judged["bank"])
 	insured = false
+	lucky_save = false
+	if result_text == "DOINK" and luck > 0:
+		var roll := _luck_rng.randf()
+		var need := float(luck) * float(KickConstants.LUCK_DOINK_PCT) / 100.0
+		var hit := roll < need
+		luck_doink_rolls += 1
+		print("LUCK doink roll %.3f vs %.3f luck %d -> %s" % [roll, need, luck, "LUCKY" if hit else "MISS"])
+		if hit:
+			result_text = "GOOD"
+			lucky_save = true
+			perfect = false
 	if result_text == "DOINK" and insurance_ready:
 		result_text = "GOOD"
 		insured = true
@@ -575,7 +593,7 @@ func note_inner_ring(post_center: float) -> void:
 		inner_ring_hit = false
 		return
 	var rel := offset_yards - post_center
-	inner_ring_hit = result_text == "GOOD" and not bank_shot and not insured and absf(rel - inner_ring_x) <= inner_ring_radius
+	inner_ring_hit = result_text == "GOOD" and not bank_shot and not insured and not lucky_save and absf(rel - inner_ring_x) <= inner_ring_radius
 
 
 static func judge(max_range_yards: float, distance_yards: float, offset: float, _ball_type: String, half_gap: float = -1.0) -> Dictionary:
@@ -774,6 +792,7 @@ func _shank() -> void:
 	perfect = false
 	bank_shot = false
 	insured = false
+	lucky_save = false
 	power = 0.0
 	var side := -1.0 if _rng.randf() < 0.5 else 1.0
 	var full := 100.0
@@ -956,6 +975,7 @@ func _lock_accuracy(value: float) -> void:
 		result_text = ""
 		bank_shot = false
 		insured = false
+		lucky_save = false
 	else:
 		var judged_offset := 0.0
 		if reached_uprights:

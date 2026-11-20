@@ -1,6 +1,7 @@
 # Item, kit, range, and cash audit
 
 Generated: 2026-11-14
+LUCK1: Luck is 0 to 10. Gary starts at 3, Walk-On at 2, and everyone else at 0. Each point is a 6% chance that a doink counts as Good (stamp LUCKY, no Doink Cap charge) and a 3% chance that an equipment card shows one rank higher (tag LUCKY, never above the mode cap). Doink Cap adds +1 luck at III, VI, IX, and XII, from the highest cap owned, and that luck is not summed. Lucky Ball is 4% per first-try make, capped at +24%. Film Room stays shelved. It could come back later as a luck perk.
 EN1: Endless is 100 kicks. Distance is round(50 + 950 × ((k − 1) / 99) ^ 2.2), from 50 to 1000. Kick 100 is always Big Game, and making it ends the run. Power safety uses the same two-miss counter as Standard until every range item is at XXIV. The Iced curse fades the accuracy needle the way the Iced boss does, and it still adds +0.75 Mult.
 RING1B: From kick 2, the posts have a 50% chance to sit 1–3 yards left or right, kept for that kick, and never more than 6 yards from the ball. Moving Posts and TAD 10 do not roll. TAD 2 is Loaded dice: the shift happens every kick from kick 2, and it no longer adds 3 mph.
 RING1A: DOWN THE MIDDLE is gone. Every kick has a cyan inner ring, radius 0.50, centered 1 yard inside one upright. A make through it doubles the stored ring factor before that kick scores, up to ×8. A miss resets it. Cole's Showtime halves it instead. A hit pays +$2. Guide Gloves widen the ring and no longer change the hook.
@@ -511,7 +512,7 @@ Cole's ball multiplier is 1.00 in `Kickers.apply_to`. It is not 0.90. Carlos is 
 - **Kit text:** `"Good As Gold. The good band counts as PERFECT."`
 - **actual effect:** a good-band lock is a true perfect, including the perfect cash dollar. Full power is 65 yards. No power floor.
 - **match:** yes
-- **Ball:** `"Lucky Ball"`. Each first-try make adds 3% item scale, capped at +25% (`min(0.03 * stacks, 0.25)`). Phil's ×1.15 multiplies after that cap. Any miss sets `lucky_stacks` back to 0. A retry make is not a first ball, so it does not add a stack.
+- **Ball:** `"Lucky Ball"`. Each first-try make adds 4%. The bonus caps at +24% (`min(0.04 * stacks, 0.24)`). Phil's ×1.15 multiplies after that cap. Any miss sets `lucky_stacks` back to 0. A retry make is not a first ball, so it does not add a stack. Gary's base luck is 3. A doink has an 18 percent chance to count as Good.
 - **match:** yes
 
 ### Vex

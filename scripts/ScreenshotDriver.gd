@@ -180,6 +180,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "luck1":
+		if not await _capture_luck1():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "rs1":
 		if not await _capture_rs1():
 			get_tree().quit(1)
@@ -5796,6 +5802,7 @@ func _stamp(result: String, shanked: bool, insured: bool, middle: bool, error: f
 	board.logic.shanked = shanked
 	board.logic.result_text = result
 	board.logic.insured = insured
+	board.logic.lucky_save = false
 	board.logic.bank_shot = false
 	board.logic.perfect = false
 	board.logic.accuracy_error = error
@@ -5970,6 +5977,87 @@ func _capture_pace2() -> bool:
 	var saved := await _capture("pace2_willow_locked_card.png")
 	_restore_pace2_save(had_file, path, backup, had_willow)
 	return saved
+
+
+func _capture_luck1() -> bool:
+	var path := str(SaveData.file_path)
+	var had_file := FileAccess.file_exists(path)
+	var backup := PackedByteArray()
+	if had_file:
+		backup = FileAccess.get_file_as_bytes(path)
+	var had_gary := bool(SaveData.has_unlock(Kickers.GARY))
+	SaveData.unlocks[Kickers.GARY] = true
+	board.front.screen = FrontEnd.Screen.SELECT
+	board.selecting = true
+	board.highlight = 3
+	print("LUCK1 select ", SelectCard.luck_line(Kickers.GARY))
+	if not await _capture("luck1_select_gary.png"):
+		_restore_luck1_save(had_file, path, backup, had_gary)
+		return false
+	board.front.run_mode = "standard"
+	board.confirm_kicker()
+	board.run.tad_level = 0
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.AIMING
+	print("LUCK1 plate ", board.run.luck())
+	if not await _capture("luck1_plate_gary.png"):
+		_restore_luck1_save(had_file, path, backup, had_gary)
+		return false
+	board.logic.phase = KickLogic.Phase.RESULT
+	board.logic.shanked = false
+	board.logic.result_text = "GOOD"
+	board.logic.lucky_save = true
+	board.logic.insured = false
+	board.logic.bank_shot = false
+	board.logic.perfect = false
+	board.logic.inner_ring_hit = false
+	board.logic.accuracy_error = 4.0
+	board.logic.power = 80.0
+	board.result_age = 0.4
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.awaiting_offer = false
+	board.run.score_line = ""
+	if not await _capture("luck1_lucky_stamp.png"):
+		_restore_luck1_save(had_file, path, backup, had_gary)
+		return false
+	board.logic.lucky_save = false
+	board.logic.insured = true
+	if not await _capture("luck1_insured_after_fail.png"):
+		_restore_luck1_save(had_file, path, backup, had_gary)
+		return false
+	board.logic.phase = KickLogic.Phase.AIMING
+	board.logic.insured = false
+	board.run.offer = [{
+		"kind": Loadout.EQUIPMENT,
+		"slot": Loadout.CLEATS,
+		"id": Loadout.CANNON,
+		"rank": 2,
+		"lucky": true,
+	}]
+	board.run.awaiting_offer = true
+	if not await _capture("luck1_lucky_card.png"):
+		_restore_luck1_save(had_file, path, backup, had_gary)
+		return false
+	board.run.offer = [{
+		"kind": Loadout.EQUIPMENT,
+		"slot": Loadout.HELMET,
+		"id": Loadout.DOINK_CAP,
+		"rank": 3,
+	}]
+	print("LUCK1 doink text ", board.run.lived_effect_line(Loadout.DOINK_CAP, 3))
+	var saved := await _capture("luck1_doink_cap_text.png")
+	_restore_luck1_save(had_file, path, backup, had_gary)
+	return saved
+
+
+func _restore_luck1_save(had_file: bool, path: String, backup: PackedByteArray, had_gary: bool) -> void:
+	SaveData.unlocks[Kickers.GARY] = had_gary
+	if had_file:
+		var file := FileAccess.open(path, FileAccess.WRITE)
+		if file != null:
+			file.store_buffer(backup)
+			file.close()
+		SaveData.load_file()
 
 
 func _capture_en1() -> bool:

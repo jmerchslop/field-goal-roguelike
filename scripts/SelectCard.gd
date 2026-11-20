@@ -44,6 +44,16 @@ static func ball_line(id: String) -> String:
 	return BroadcastHud.ball_text(id)
 
 
+static func base_luck(id: String) -> int:
+	var stats := KickerStats.new()
+	Kickers.apply_to(stats, id)
+	return stats.luck
+
+
+static func luck_line(id: String) -> String:
+	return "LUCK %d" % base_luck(id)
+
+
 static func unlock_line(id: String) -> String:
 	match id:
 		Kickers.PHIL:

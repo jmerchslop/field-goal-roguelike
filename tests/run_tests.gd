@@ -76,6 +76,7 @@ func _run() -> void:
 	_check_f3()
 	_check_au1()
 	_check_music1()
+	_check_luck1()
 	_check_drive_lid_and_power_safety()
 	_check_m2_kickers()
 	_check_honest_cards_and_bench()
@@ -3514,13 +3515,13 @@ func _check_rw2() -> void:
 	lucky.give(Loadout.CANNON, 1)
 	lucky.stats.compounding = true
 	lucky.lucky_stacks = 9
-	check(near(lucky.item_effect_scale(), 1.15 * 1.25), "Compounding multiplies on top of the +25% Lucky Ball cap")
+	check(near(lucky.item_effect_scale(), 1.15 * 1.24), "Compounding multiplies on top of the +24% Lucky Ball cap")
 	lucky.stats.compounding = false
-	check(near(lucky.item_effect_scale(), 1.25), "nine Lucky Ball stacks pay +25%, not +27%")
+	check(near(lucky.item_effect_scale(), 1.24), "nine Lucky Ball stacks pay +24%, not +36%")
 	lucky.lucky_stacks = 8
 	check(near(lucky.item_effect_scale(), 1.24), "eight Lucky Ball stacks pay +24%")
 	lucky.lucky_stacks = 3
-	check(near(lucky.item_effect_scale(), 1.09), "three Lucky Ball stacks pay +9%")
+	check(near(lucky.item_effect_scale(), 1.12), "three Lucky Ball stacks pay +12%")
 	lucky.lucky_stacks = 0
 	lucky.prepare_kick_stats()
 	for _i in 8:
@@ -3535,7 +3536,7 @@ func _check_rw2() -> void:
 	lucky.kick_resolved = false
 	lucky.resolve_kick("GOOD", 0.0, false)
 	lucky.prepare_kick_stats()
-	check(lucky.lucky_stacks == 9 and near(lucky.stats.range_bonus, 7.5), "a ninth stack caps Cannon at 7.5, got %s" % lucky.stats.range_bonus)
+	check(lucky.lucky_stacks == 9 and near(lucky.stats.range_bonus, 7.4), "a ninth stack stays at the +24 percent cap, Cannon 7.4, got %s" % lucky.stats.range_bonus)
 	lucky.phase = RunLogic.Phase.PLAYING
 	lucky.kick_resolved = false
 	lucky.attempts = 2
@@ -4657,7 +4658,7 @@ func _check_pk1() -> void:
 	gary.weather = RunLogic.RAIN
 	gary.streak = 3
 	gary.prepare_kick_stats()
-	var lucky := 1.0 + 0.03
+	var lucky := 1.0 + 0.04
 	check(near(gary.stats.range_bonus, KickLogic.round_tenth(4.0 * lucky) + KickLogic.round_tenth(3.0 * lucky)), "Lucky Ball scales Rain Dance and Chain Gang yards")
 
 
@@ -5493,8 +5494,8 @@ func _check_honest_cards_and_bench() -> void:
 	check(Loadout.effect_line(Loadout.ICE_CAGE, 6) == "Immune to Iced. The OVERPOWER band shrink is halved. The needles ×0.90. Perfect +2, good +4.", "Ice Cage VI lists the full package")
 	check(Loadout.effect_line(Loadout.ICE_CAGE, 12) == "Immune to Iced. The OVERPOWER band shrink is halved. The needles ×0.90. Perfect +5, good +10.", "Ice Cage XII lists the grown bands")
 	check(Loadout.effect_line(Loadout.SCOUT_LID, 7) == "+6 rerolls, and two Practice Swings each half", "Scout Lid VII says +6 rerolls and two swings")
-	check(Loadout.effect_line(Loadout.DOINK_CAP, 7) == "7 doinks become Good each half, unused carry (max 7)", "Doink Cap VII carries 7")
-	check(Loadout.effect_line(Loadout.DOINK_CAP, 12) == "12 doinks become Good each half, unused carry (max 12)", "Doink Cap XII carries 12")
+	check(Loadout.effect_line(Loadout.DOINK_CAP, 7) == "7 doinks become Good each half, unused carry (max 7). +2 luck", "Doink Cap VII carries 7 and adds luck")
+	check(Loadout.effect_line(Loadout.DOINK_CAP, 12) == "12 doinks become Good each half, unused carry (max 12). +4 luck", "Doink Cap XII carries 12 and adds luck")
 	check(Loadout.effect_line(Loadout.REPLAY_GLOVES, 7) == "7 practice swings, unused carry (max 7)", "Replay Gloves VII carries 7")
 	check(Loadout.effect_line(Loadout.WEATHER_WRAPS, 7) == "Penalties ignored, +8 yd unless Clear", "Weather Wraps VII says +8")
 	check(Loadout.effect_line(Loadout.WEATHER_WRAPS, 12) == "Penalties ignored, +18 yd unless Clear", "Weather Wraps XII says +18")
@@ -10076,4 +10077,257 @@ func _check_en1() -> void:
 	var kept := RunLogic.new()
 	kept.import_resume({"mode": "endless", "kick_number": 40, "kicker_id": Kickers.WALK_ON})
 	check(kept.run_mode == "endless" and kept.kick_number == 40 and near(kept.distance_yards(), 172.0), "an Endless save at kick 40 loads at 172 yards")
+
+
+func _check_luck1() -> void:
+	for item in Kickers.ALL:
+		var id := str(item["id"])
+		var stats := KickerStats.new()
+		Kickers.apply_to(stats, id)
+		var expected := 0
+		if id == Kickers.GARY:
+			expected = 3
+		elif id == Kickers.WALK_ON:
+			expected = 2
+		check(stats.luck == expected, "%s base luck is %s, got %s" % [id, expected, stats.luck])
+	check(Loadout.doink_cap_luck(1) == 0 and Loadout.doink_cap_luck(2) == 0, "Doink Cap I and II add no luck")
+	check(Loadout.doink_cap_luck(3) == 1 and Loadout.doink_cap_luck(6) == 2, "Doink Cap III is +1 and VI is +2")
+	check(Loadout.doink_cap_luck(9) == 3 and Loadout.doink_cap_luck(12) == 4 and Loadout.doink_cap_luck(24) == 4, "Doink Cap IX is +3, XII and XXIV are +4")
+	var gary := RunLogic.new()
+	gary.start_with_kicker(Kickers.GARY)
+	gary.run_mode = "endless"
+	gary.helmet_id = Loadout.DOINK_CAP
+	gary.helmet_rank = 12
+	gary.rebuild_stats()
+	check(gary.luck() == 7, "Gary with Doink Cap XII has luck 7, got %s" % gary.luck())
+	gary.helmet_rank = 6
+	gary.helmet2_id = Loadout.DOINK_CAP
+	gary.helmet2_rank = 3
+	gary.rebuild_stats()
+	check(gary.luck() == 5, "two Doink Caps use the higher luck, got %s" % gary.luck())
+	gary.helmet_rank = 12
+	gary.helmet2_rank = 9
+	gary.rebuild_stats()
+	check(gary.luck() == 7, "Doink Cap XII plus IX is still +4, got %s" % gary.luck())
+	gary.stats.luck = 15
+	check(gary.luck() == 10, "luck clamps 15 to 10")
+	gary.stats.luck = -4
+	check(gary.luck() == 0, "luck clamps below 0 to 0")
+	gary.stats.luck = 3
+	gary.helmet_id = ""
+	gary.helmet2_id = ""
+	gary.curse_ids.append(Loadout.STONE)
+	gary.rebuild_stats()
+	check(gary.luck() == 3, "a curse does not change luck, got %s" % gary.luck())
+	gary.belt[0] = Vitamins.PROTEIN
+	gary.prepare_kick_stats()
+	check(gary.luck() == 3, "a vitamin does not change luck")
+	check(Loadout.effect_line(Loadout.DOINK_CAP, 1) == "1 doink becomes Good each half", "Doink Cap I has no luck suffix")
+	check(Loadout.effect_line(Loadout.DOINK_CAP, 3) == "3 doinks become Good each half. +1 luck", "Doink Cap III says +1 luck")
+	check(Loadout.effect_line(Loadout.DOINK_CAP, 6) == "5 doinks become Good each half, unused carry (max 5). +2 luck", "Doink Cap VI says +2 luck")
+	var lucky_ball := RunLogic.new()
+	lucky_ball.start_with_kicker(Kickers.GARY)
+	lucky_ball.lucky_stacks = 6
+	check(near(lucky_ball.item_effect_scale(), 1.24), "six Lucky Ball stacks are +24%")
+	lucky_ball.lucky_stacks = 9
+	check(near(lucky_ball.item_effect_scale(), 1.24), "nine Lucky Ball stacks stay at +24%")
+	var ball := str(Kickers.get_def(Kickers.GARY)["ball_description"])
+	check(ball == "Each first-try make adds 4%. The bonus caps at +24%. A miss resets it.", "Gary's Lucky Ball text is the 4% cap")
+	var gary_lines := Kickers.rundown_lines(Kickers.GARY, true)
+	check(gary_lines.has("Luck 3. A doink has an 18 percent chance to count as Good."), "Gary's rundown names luck 3")
+	check(gary_lines.has(ball), "Gary's rundown uses the 4% Lucky Ball sentence")
+	var walk_lines := Kickers.rundown_lines(Kickers.WALK_ON, true)
+	check(walk_lines.has("Luck 2."), "Walk-On's rundown names luck 2")
+	check(BitmapFonts.ui_allows("LUCK 3") and BitmapFonts.ui_allows("LUCKY") and BitmapFonts.ui_allows("LUCK 10"), "LUCK 3, LUCKY, and LUCK 10 fit Pixel Gothic")
+	check(BitmapFonts.callout_allows("LUCKY"), "the LUCKY stamp fits Stadium Block")
+	check(ball.find("!") < 0 and Loadout.effect_line(Loadout.DOINK_CAP, 3).find("!") < 0, "the new luck text has no exclamation point")
+	check(SelectCard.luck_line(Kickers.GARY) == "LUCK 3" and SelectCard.luck_line(Kickers.PHIL) == "LUCK 0", "the select line reads base luck")
+	var stamp := ResultStamp.words(false, "GOOD", false, true, true, true, true)
+	check(stamp.size() == 1 and stamp[0] == "LUCKY", "a lucky save stamps LUCKY ahead of INSURED")
+	var insured_stamp := ResultStamp.words(false, "GOOD", false, true, false, false)
+	check(insured_stamp[0] == "INSURED", "a failed luck roll still stamps INSURED")
+	var saved := KickLogic.new()
+	saved.luck = 3
+	saved.insurance_ready = true
+	saved.inner_ring_armed = true
+	saved.inner_ring_radius = 0.5
+	saved.offset_yards = 0.0
+	var found_save := false
+	for seed_value in range(1, 400):
+		saved.set_seed(seed_value)
+		saved.insurance_ready = true
+		saved.perfect = true
+		saved.luck_doink_rolls = 0
+		saved._apply_arrival({"text": "DOINK", "bank": false}, 0.0, 3.0)
+		if saved.lucky_save:
+			found_save = true
+			break
+	check(found_save and saved.result_text == "GOOD" and not saved.insured and saved.insurance_ready, "a lucky doink stays GOOD and keeps the charge")
+	check(not saved.perfect and not saved.inner_ring_hit and saved.luck_doink_rolls == 1, "a lucky save is not perfect and not an inner ring hit")
+	var payer := RunLogic.new()
+	payer.start_with_kicker(Kickers.BIG_BRUCE)
+	var cash_before := payer.cash
+	payer.resolve_kick(saved.result_text, saved.offset_yards, saved.perfect, saved.inner_ring_hit)
+	check(payer.streak == 1 and payer.cash == cash_before + 1 and payer.last_result_made and payer.middles_this_run == 0, "a lucky save pays like a make and is not a ring hit")
+	payer.insurance_left = 2
+	if saved.insured:
+		payer.consume_insurance()
+	check(payer.insurance_left == 2, "the lucky save does not spend a charge")
+	saved.lucky_save = false
+	saved.result_text = "GOOD"
+	saved.insured = false
+	saved.bank_shot = false
+	saved.note_inner_ring(0.0)
+	check(saved.inner_ring_hit, "the same arrival without the lucky flag is an inner ring hit")
+	var missed := KickLogic.new()
+	missed.luck = 3
+	var found_miss := false
+	for seed_value in range(1, 400):
+		missed.set_seed(seed_value)
+		missed.insurance_ready = true
+		missed._apply_arrival({"text": "DOINK", "bank": false}, 0.0, 3.0)
+		if not missed.lucky_save:
+			found_miss = true
+			break
+	check(found_miss and missed.insured and not missed.insurance_ready and missed.result_text == "GOOD", "a failed roll spends the charge")
+	check(ResultStamp.words(false, missed.result_text, false, missed.insured, missed.perfect, missed.inner_ring_hit, missed.lucky_save)[0] == "INSURED", "the failed roll stamps INSURED")
+	var bare := RunLogic.new()
+	bare.start_with_kicker(Kickers.BIG_BRUCE)
+	bare.insurance_left = 2
+	if missed.insured:
+		bare.consume_insurance()
+	check(bare.insurance_left == 1, "the run spends one charge after a failed roll")
+	var plain := KickLogic.new()
+	plain.luck = 3
+	plain.insurance_ready = false
+	var found_plain := false
+	for seed_value in range(1, 400):
+		plain.set_seed(seed_value)
+		plain.insurance_ready = false
+		plain._apply_arrival({"text": "DOINK", "bank": false}, 0.0, 3.0)
+		if not plain.lucky_save:
+			found_plain = true
+			break
+	check(found_plain and plain.result_text == "DOINK" and not plain.insured, "a failed roll with no charge stays DOINK")
+	var short_kick := KickLogic.new()
+	short_kick.luck = 5
+	short_kick.set_seed(3)
+	var before_rolls := short_kick.luck_doink_rolls
+	short_kick._apply_arrival({"text": "SHORT", "bank": false}, 0.0, 3.0)
+	check(short_kick.result_text == "SHORT" and short_kick.luck_doink_rolls == before_rolls, "SHORT never rolls luck")
+	var rated := KickLogic.new()
+	rated.luck = 3
+	rated.set_seed(11)
+	rated.luck_doink_rolls = 0
+	var lucky_n := 0
+	for _i in 10000:
+		rated.insurance_ready = false
+		rated._apply_arrival({"text": "DOINK", "bank": false}, 0.0, 3.0)
+		if rated.lucky_save:
+			lucky_n += 1
+	var doink_rate := float(lucky_n) / 10000.0
+	print("LUCK1 doink rate ", doink_rate)
+	check(rated.luck_doink_rolls == 10000, "each doink at luck 3 prints one roll, got %s" % rated.luck_doink_rolls)
+	check(absf(doink_rate - 0.18) <= 0.015, "luck 3 doinks are 18%% lucky, got %s" % doink_rate)
+	var zero := KickLogic.new()
+	zero.luck = 0
+	zero.set_seed(11)
+	zero.luck_doink_rolls = 0
+	var zero_n := 0
+	for _i in 10000:
+		zero._apply_arrival({"text": "DOINK", "bank": false}, 0.0, 3.0)
+		if zero.lucky_save or zero.result_text != "DOINK":
+			zero_n += 1
+	check(zero_n == 0 and zero.luck_doink_rolls == 0, "luck 0 never saves a doink and does not roll")
+	var gear := RunLogic.new()
+	gear.start_with_kicker(Kickers.BIG_BRUCE)
+	gear.stats.luck = 3
+	gear.set_seed(42)
+	gear.luck_gear_rolls = 0
+	var bumped := 0
+	var dirty := 0
+	for _i in 10000:
+		gear.offer = [
+			{"kind": Loadout.EQUIPMENT, "slot": Loadout.CLEATS, "id": Loadout.CANNON, "rank": 1},
+			{"kind": Loadout.PERK, "slot": Loadout.PERK, "id": Loadout.HOT_STREAK, "rank": 1},
+			{"kind": Loadout.CURSE, "slot": Loadout.CURSE, "id": Loadout.STONE, "rank": 1},
+		]
+		gear._apply_luck_gear()
+		var card: Dictionary = gear.offer[0]
+		if bool(card.get("lucky", false)):
+			bumped += 1
+			if int(card.get("rank", 1)) != 2:
+				dirty += 1
+		elif int(card.get("rank", 1)) != 1:
+			dirty += 1
+		if bool(gear.offer[1].get("lucky", false)) or bool(gear.offer[2].get("lucky", false)):
+			dirty += 1
+		if int(gear.offer[1].get("rank", 1)) != 1 or int(gear.offer[2].get("rank", 1)) != 1:
+			dirty += 1
+	var gear_rate := float(bumped) / 10000.0
+	print("LUCK1 gear rate ", gear_rate)
+	check(gear.luck_gear_rolls == 10000, "each equipment card prints one gear roll, got %s" % gear.luck_gear_rolls)
+	check(absf(gear_rate - 0.09) <= 0.01 and dirty == 0, "luck 3 bumps about 9%% of equipment and never a perk or curse, got %s" % gear_rate)
+	var capped := RunLogic.new()
+	capped.start_with_kicker(Kickers.BIG_BRUCE)
+	capped.stats.luck = 10
+	capped.run_mode = "standard"
+	capped.set_seed(4)
+	var over_standard := 0
+	for _i in 40:
+		capped.offer = [{"kind": Loadout.EQUIPMENT, "slot": Loadout.CLEATS, "id": Loadout.CANNON, "rank": 6}]
+		capped._apply_luck_gear()
+		if int(capped.offer[0].get("rank", 6)) != 6 or bool(capped.offer[0].get("lucky", false)):
+			over_standard += 1
+	capped.run_mode = "endless"
+	var over_endless := 0
+	for _i in 40:
+		capped.offer = [{"kind": Loadout.EQUIPMENT, "slot": Loadout.CLEATS, "id": Loadout.CANNON, "rank": 24}]
+		capped._apply_luck_gear()
+		if int(capped.offer[0].get("rank", 24)) != 24 or bool(capped.offer[0].get("lucky", false)):
+			over_endless += 1
+	check(over_standard == 0 and over_endless == 0, "luck never bumps past Standard VI or Endless XXIV")
+	var forced := RunLogic.new()
+	forced.start_with_kicker(Kickers.GARY)
+	forced.stats.luck = 10
+	forced.luck_gear_rolls = 0
+	forced.force_offer([{"kind": Loadout.EQUIPMENT, "slot": Loadout.CLEATS, "id": Loadout.CANNON, "rank": 2}])
+	forced.roll_offer()
+	check(int(forced.offer[0].get("rank", 0)) == 2 and not bool(forced.offer[0].get("lucky", false)) and forced.luck_gear_rolls == 0, "a forced offer is not bumped")
+	var picked := RunLogic.new()
+	picked.start_with_kicker(Kickers.BIG_BRUCE)
+	picked.give(Loadout.CANNON, 1)
+	picked.stats.luck = 10
+	picked.set_seed(1)
+	var found_card := false
+	for seed_value in range(1, 80):
+		picked.set_seed(seed_value)
+		picked.offer = [{"kind": Loadout.EQUIPMENT, "slot": Loadout.CLEATS, "id": Loadout.CANNON, "rank": 2}]
+		picked._apply_luck_gear()
+		if bool(picked.offer[0].get("lucky", false)):
+			found_card = true
+			break
+	check(found_card and int(picked.offer[0].get("rank", 0)) == 3, "a lucky card is one rank higher")
+	picked.phase = RunLogic.Phase.PLAYING
+	picked.awaiting_offer = true
+	check(picked.pick_card(0) and picked.cleats_rank == 3, "picking the lucky card stores the bumped rank, got %s" % picked.cleats_rank)
+	var quiet_ids := _luck_offer_ids(0)
+	var loud_ids := _luck_offer_ids(5)
+	check(quiet_ids == loud_ids and quiet_ids.size() > 0, "offer card ids do not change between luck 0 and luck 5")
+
+
+func _luck_offer_ids(points: int) -> PackedStringArray:
+	var run := RunLogic.new()
+	run.start_with_kicker(Kickers.BIG_BRUCE)
+	run.stats.luck = points
+	run.set_offer_seed(77)
+	run.set_seed(77)
+	var ids := PackedStringArray()
+	for _i in 6:
+		run.phase = RunLogic.Phase.PLAYING
+		run.roll_offer()
+		for card in run.offer:
+			ids.append(str(card.get("id", "")))
+		run.awaiting_offer = false
+	return ids
 

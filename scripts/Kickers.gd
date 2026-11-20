@@ -75,7 +75,7 @@ const ALL: Array = [
 		"excels": "Good As Gold. The good band counts as PERFECT.",
 		"downside": "No Farm Strength. A miss still misses.",
 		"ball_name": "Lucky Ball",
-		"ball_description": "Each first-try make adds 3%. The bonus caps at +25%. A miss resets it.",
+		"ball_description": "Each first-try make adds 4%. The bonus caps at +24%. A miss resets it.",
 		"ball_type": "standard",
 		"accuracy": 98,
 		"range_line": "65 yd",
@@ -223,6 +223,7 @@ static func apply_to(stats: KickerStats, id: String) -> void:
 	elif id == WALK_ON:
 		stats.range_per_power = 0.39
 		stats.rerolls_per_run = 2
+		stats.luck = 2
 	elif id == PHIL:
 		stats.range_per_power = 0.38
 		stats.compounding = true
@@ -232,6 +233,7 @@ static func apply_to(stats: KickerStats, id: String) -> void:
 		stats.range_per_power = 0.49
 		stats.good_as_gold = true
 		stats.lucky_ball = true
+		stats.luck = 3
 	elif id == VEX:
 		stats.clearance = false
 		stats.saucer_mph = 11.0
@@ -313,7 +315,11 @@ static func rundown_lines(id: String, unlocked: bool, tad_cap: int = -1, tad_pic
 	if stats.good_as_gold:
 		lines.append("The good band counts as perfect.")
 	if stats.lucky_ball:
-		lines.append("Each first-try make adds 3% to item scale, up to 25%. A miss resets it.")
+		lines.append("Each first-try make adds 4%. The bonus caps at +24%. A miss resets it.")
+	if id == GARY:
+		lines.append("Luck 3. A doink has an 18 percent chance to count as Good.")
+	elif id == WALK_ON:
+		lines.append("Luck 2.")
 	if stats.saucer_mph > 0.0:
 		lines.append("The saucer curves left like %s mph of west wind." % _plain_number(stats.saucer_mph))
 	if stats.brand_deal:
