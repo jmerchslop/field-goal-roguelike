@@ -222,6 +222,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "mtr2":
+		if not await _capture_mtr2():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "ui4b":
 		if not await _capture_ui4b():
 			get_tree().quit(1)
@@ -6336,6 +6342,75 @@ func _ui4_show(cards: Array, mode: String) -> void:
 	board.run.bomb_offer_live = mode == "bomb"
 	board.run.ring_offer_live = mode == "ring"
 	board.clear_offer_hover()
+
+
+func _capture_mtr2() -> bool:
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
+	board.selecting = true
+	board.front.run_mode = "standard"
+	board.confirm_kicker()
+	board.run.tad_level = 0
+	board.run.special_kicks.clear()
+	board._special_banner = 2.0
+	board.run.awaiting_rung = false
+	board.run.awaiting_offer = false
+	board.load_current_kick()
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.logic.phase = KickLogic.Phase.ACCURACY
+	board.logic.needle_angle = 45.0
+	board.logic.needle = 0.0
+	board.logic.fill_power = 70.0
+	board.logic.power = 70.0
+	board.logic.overpower_paid = false
+	if not await _capture("mtr2_normal_kick.png"):
+		return false
+	board.logic.phase = KickLogic.Phase.POWER
+	board.logic.stats.overpower_width = KickConstants.OVERPOWER_BASE
+	board.logic.fill_power = 110.0
+	board.logic.needle_angle = MeterGauge.power_angle_raw(110.0)
+	board.logic.needle = 110.0
+	board.logic.overpower_paid = false
+	if not await _capture("mtr2_red_band.png"):
+		return false
+	board.logic.phase = KickLogic.Phase.ACCURACY
+	board.logic.overpower_paid = true
+	board.logic.meter_popup = "OVERPOWER"
+	board.logic.meter_popup_age = 0.2
+	if not await _capture("mtr2_overpower.png"):
+		return false
+	var meter: Rect2 = board._hud._meter_rect()
+	var scale := meter.size.x / MeterGauge.FRAME_W
+	var hub := meter.position + Vector2(MeterGauge.HUB_X, MeterGauge.HUB_Y) * scale
+	if not await _capture_region("mtr2_hub_closeup.png", Rect2(hub - Vector2(90, 90), Vector2(180, 180))):
+		return false
+	board.logic.overpower_paid = false
+	board.logic.meter_popup = ""
+	board.run.force_weather(RunLogic.ICED)
+	board.logic.phase = KickLogic.Phase.ACCURACY
+	board.logic.power = 80.0
+	board.logic.needle = 12.0
+	board.logic.needle_angle = MeterGauge.angle_from_error(12.0)
+	board.logic.fill_power = 80.0
+	if not await _capture("mtr2_iced.png"):
+		return false
+	board.run.special_kicks[board.run.kick_number] = ""
+	board._special_banner = 2.0
+	board.force_weather(RunLogic.CLEAR)
+	board.too_weak_age = -1.0
+	board.run.give(Loadout.NO_HUDDLE)
+	board.logic.phase = KickLogic.Phase.AIMING
+	board.run.phase = RunLogic.Phase.PLAYING
+	board._arm_boss_twist()
+	board.logic.needle_angle = 90.0
+	board.logic.fill_power = 0.0
+	board.logic.needle = 0.0
+	print("MTR2 clock ", board.clock_digit(), " seconds ", board.run.clock_seconds())
+	if not await _capture("mtr2_kick_clock.png"):
+		return false
+	board.paused = true
+	board._open_help()
+	board.help_page = 0
+	return await _capture("mtr2_help_demo.png")
 
 
 func _ui4b_hide_art(hide: bool) -> void:

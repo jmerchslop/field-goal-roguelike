@@ -2481,6 +2481,7 @@ func _check_sprite_scan_and_gauge() -> void:
 		"res://art/loadout/wind_visor_helmet_ii.png",
 		"res://art/ui/kick_meter.png",
 		"res://art/ui/kick_meter_card.png",
+		"res://art/ui/kick_meter_stone.png",
 		"res://art/ui/kick_needle.png",
 		"res://art/shop/vitamin_shop.png",
 		"res://art/kickers/big_bruce.png",
@@ -2497,7 +2498,7 @@ func _check_sprite_scan_and_gauge() -> void:
 	check(not items.has(Loadout.IRON_GRIP), "a vitamin or meter image is not forced onto a loadout item")
 	var unmatched: Array = mapped["unmatched"]
 	check(unmatched.has("res://art/loadout/mystery_cleats.png"), "a cleat-shaped name that is not in the catalog is reported")
-	check(not unmatched.has("res://art/ui/kick_meter.png") and not unmatched.has("res://art/ui/kick_meter_card.png") and not unmatched.has("res://art/ui/kick_needle.png") and not unmatched.has("res://art/shop/vitamin_shop.png"), "the meter art and the shop art are not loadout icons")
+	check(not unmatched.has("res://art/ui/kick_meter.png") and not unmatched.has("res://art/ui/kick_meter_card.png") and not unmatched.has("res://art/ui/kick_meter_stone.png") and not unmatched.has("res://art/ui/kick_needle.png") and not unmatched.has("res://art/shop/vitamin_shop.png"), "the meter art and the shop art are not loadout icons")
 	check(str(mapped["empty"].get(Loadout.PERK, "")).ends_with("empty_perk.png"), "empty_perk.png is the empty perk frame")
 	check(near(MeterGauge.power_angle(0.0), 180.0) and near(MeterGauge.power_angle(100.0), 90.0) and near(MeterGauge.power_angle(50.0), 135.0), "power fills from the left edge toward MAX")
 	check(near(MeterGauge.accuracy_angle(15.0, 2.0, 8.0), 90.0), "e=+15 sits just after MAX")
@@ -10488,12 +10489,12 @@ func _clean1_banned_hits() -> int:
 func _check_mtr1() -> void:
 	var frame := load(MeterGauge.FRAME_PATH) as Texture2D
 	var needle := load(MeterGauge.NEEDLE_PATH) as Texture2D
-	check(frame != null and needle != null, "the card frame and the needle sprite load")
+	check(frame != null and needle != null, "the meter frame and the needle sprite load")
 	if frame == null or needle == null:
 		return
 	var card := frame.get_image()
 	var sprite := needle.get_image()
-	check(card.get_width() == 1003 and card.get_height() == 625, "the card frame is 1003 by 625")
+	check(card.get_width() == 1003 and card.get_height() == 625, "the meter frame is 1003 by 625")
 	check(sprite.get_width() == 62 and sprite.get_height() == 404, "the needle sprite is 62 by 404")
 	check(sprite.get_pixel(30, 372).a > 0.9, "the needle pivot is the opaque cap")
 	var groove_bad := 0

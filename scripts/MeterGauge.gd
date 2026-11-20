@@ -20,8 +20,8 @@ const POWER_ANGLE := 180.0
 const MAX_ANGLE := 90.0
 const ACCURACY_ANGLE := 0.0
 const ERROR_AT_MAX := 15.0
-# Playing Card frame. The groove is empty, so the live bands fill it edge to edge.
-const FRAME_PATH := "res://art/ui/kick_meter_card.png"
+# Stone frame. The groove is empty, so the live bands fill it edge to edge.
+const FRAME_PATH := "res://art/ui/kick_meter_stone.png"
 const FRAME_W := 1003.0
 const FRAME_H := 625.0
 const HUB_X := 504.0
