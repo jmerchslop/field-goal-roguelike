@@ -84,6 +84,7 @@ func _run() -> void:
 	_check_ui3_text()
 	_check_ui2_layout()
 	_check_ui4()
+	_check_ui5a()
 	_check_drive_lid_and_power_safety()
 	_check_m2_kickers()
 	_check_honest_cards_and_bench()
@@ -122,6 +123,7 @@ func _finish_live() -> void:
 	_check_ui3_live()
 	_check_ui2_live()
 	await _check_ui4_live()
+	await _check_ui5a_live()
 	_release_sfx()
 	await create_timer(0.6).timeout
 	_release_sfx()
@@ -11398,9 +11400,10 @@ func _check_ui3_live() -> void:
 	paused_game.run.open_tad(10)
 	paused_game.paused = true
 	var buttons: Array = paused_game._hud._pause_buttons()
-	check(buttons.size() == 2, "pause still has two buttons at TAD 10")
-	check(paused_game._hud.pause_hit((buttons[0] as Rect2).get_center()) == 0, "RESUME still takes the first pause click")
-	check(paused_game._hud.pause_hit((buttons[1] as Rect2).get_center()) == 1, "SAVE AND QUIT still takes the second pause click")
+	check(buttons.size() == 3, "pause still has three buttons at TAD 10")
+	check(paused_game._hud.pause_hit((buttons[0] as Rect2).get_center()) == 0, "RESUME takes the first pause click")
+	check(paused_game._hud.pause_hit((buttons[1] as Rect2).get_center()) == 1, "HOW TO PLAY takes the middle pause click")
+	check(paused_game._hud.pause_hit((buttons[2] as Rect2).get_center()) == 2, "SAVE AND QUIT takes the third pause click")
 	check(paused_game._hud._tad_list_px(620.0) == 13 or paused_game._hud._tad_list_px(620.0) == 12, "the pause list uses 13 or 12")
 	print("UI3 live pause px ", paused_game._hud._tad_list_px(620.0))
 	paused_game.free()
@@ -11615,4 +11618,147 @@ func _check_ui4_live() -> void:
 	await process_frame
 	check(int(hud.meter_frame_draws) > before, "the meter draws again after the pick")
 	game.free()
+
+
+func _check_ui5a() -> void:
+	check(BitmapFonts.ui_allows(FrontEnd.HOW_TO_PLAY_WORD) and BitmapFonts.callout_allows(FrontEnd.HOW_TO_PLAY_WORD), "HOW TO PLAY fits Pixel Gothic and Stadium Block")
+	check(HowToPlay.page_count() == 2 and HowToPlay.title("kick") == "KICK AND AIM" and HowToPlay.title("wind") == "WIND CLUES", "the book opens with kick and wind pages")
+	var script = load("res://scripts/hud.gd")
+	var hud = script.new()
+	var meter: Rect2 = hud.help_demo_meter_rect()
+	var base := KickerStats.new()
+	check(is_equal_approx(base.perfect_band, 1.5) and is_equal_approx(base.good_band, 6.0), "the demo meter uses the plain bands, perfect %s good %s" % [base.perfect_band, base.good_band])
+	check(absf(meter.size.x - 400.0) <= 0.1 and absf(meter.size.y - 249.0) <= 1.0 and absf(meter.position.x - 720.0) <= 0.1, "the demo meter is 400 wide at x 720, got %s" % meter)
+	var content: Rect2 = hud.help_book_rects()["content"]
+	var kick_bottom: float = hud.help_lowest_y("kick")
+	var wind_bottom: float = hud.help_lowest_y("wind")
+	check(kick_bottom <= content.end.y and wind_bottom <= content.end.y, "both help pages stay inside the content area, kick %s wind %s" % [kick_bottom, wind_bottom])
+	var font := ThemeDB.fallback_font
+	var wind_fits := true
+	for line in HowToPlay.WIND_LINES:
+		if font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x > content.size.x:
+			wind_fits = false
+	check(wind_fits, "the wind lines fit the content width")
+	for mph in [0, 5, 12, 20]:
+		var label := "WIND " + RunLogic.wind_name(mph).to_upper()
+		check(label == BroadcastHud.wind_band(mph, false), "the wind page uses the kick bug word for %d, got %s" % [mph, label])
+	for band in ["still", "light", "medium", "heavy"]:
+		var origin := Vector2(244, 190)
+		var got: Vector2 = script.help_ribbon_end(origin, band)
+		var lean := deg_to_rad(KickLogic.ribbon_lean_degrees(band))
+		var expect := origin + Vector2(sin(lean), cos(lean)) * 40.0
+		check(got.distance_to(expect) <= 0.5, "the %s ribbon matches the game lean" % band)
+	var bug := FileAccess.get_file_as_string("res://scripts/hud.gd")
+	var kick_bug_start := bug.find("func _draw_kick_bug")
+	var kick_bug_end := bug.find("func _score_bug_rect")
+	var kick_bug := bug.substr(kick_bug_start, kick_bug_end - kick_bug_start)
+	check(kick_bug.find("HOW TO PLAY") < 0 and kick_bug.find("WIND CLUES") < 0, "the kick bug does not gain help-page words")
+	var rects: Dictionary = hud.help_book_rects()
+	check(hud.help_hit((rects["prev"] as Rect2).get_center()) == 0, "PREV is hit 0")
+	check(hud.help_hit((rects["back"] as Rect2).get_center()) == 1, "BACK is hit 1")
+	check(hud.help_hit((rects["next"] as Rect2).get_center()) == 2, "NEXT is hit 2")
+	check(hud.help_hit(Vector2(10, 10)) == -1, "a click off the book buttons does nothing")
+	hud.free()
+
+
+func _check_ui5a_live() -> void:
+	OS.set_environment("FG_SHOTS", "")
+	var packed: PackedScene = load("res://scenes/main.tscn")
+	var game = packed.instantiate()
+	get_root().add_child(game)
+	game._taking_pictures = true
+	game.highlight = Kickers.slot_for(Kickers.WALK_ON)
+	game.confirm_kicker()
+	var hud = game._hud
+	for level in [0, 1, 5, 10]:
+		game.run.open_tad(level)
+		var plate: Rect2 = hud._pause_plate()
+		var buttons: Array = hud._pause_buttons()
+		var inside := plate.position.y >= 0.0 and plate.end.y <= 720.0 and plate.position.x >= 0.0 and plate.end.x <= 1280.0
+		for button in buttons:
+			var rect: Rect2 = button
+			if not plate.encloses(rect):
+				inside = false
+		if level > 0:
+			var line_top := 214.0 + 22.0 + 16.0 * float(level - 1)
+			var line_bottom := line_top + float(hud._tad_list_px(plate.size.x))
+			if (buttons[0] as Rect2).position.y < line_bottom:
+				inside = false
+		check(inside, "pause buttons sit in the plate at TAD %d, plate %s" % [level, plate])
+	game.paused = true
+	game.pause_index = 0
+	game._pause_input(_key_event(KEY_DOWN))
+	game._pause_input(_key_event(KEY_DOWN))
+	check(game.pause_index == 2, "down moves to SAVE AND QUIT")
+	game._pause_input(_key_event(KEY_DOWN))
+	check(game.pause_index == 2, "down stops on the last pause button")
+	game._pause_input(_key_event(KEY_UP))
+	game._pause_input(_key_event(KEY_UP))
+	game._pause_input(_key_event(KEY_UP))
+	check(game.pause_index == 0, "up stops on RESUME")
+	game.pause_index = 1
+	game._pause_input(_key_event(KEY_SPACE))
+	check(game.help_open and game.paused and game.help_page == 0, "confirm on HOW TO PLAY opens the book without unpausing")
+	game._pause_input(_key_event(KEY_LEFT))
+	check(game.help_page == 0, "left stays on page 1")
+	game._pause_input(_key_event(KEY_RIGHT))
+	game._pause_input(_key_event(KEY_RIGHT))
+	check(game.help_page == 1, "right stops on the last page")
+	game._pause_input(_key_event(KEY_SPACE))
+	check(not game.help_open and game.paused and game.pause_index == 1, "confirm on the last page returns to HOW TO PLAY")
+	game._pause_input(_key_event(KEY_ESCAPE))
+	check(not game.paused and not game.help_open, "Esc from the pause menu resumes")
+	game.paused = true
+	game._open_help()
+	game.help_page = 1
+	game._pause_input(_key_event(KEY_ESCAPE))
+	check(game.paused and not game.help_open and game.pause_index == 1, "Esc in the book returns to the pause menu")
+	game._pause_input(_key_event(KEY_ESCAPE))
+	check(not game.paused, "a second Esc resumes the game")
+	var settings = get_root().get_node("Settings")
+	var old_left := int(settings.binds["aim_left"])
+	var old_right := int(settings.binds["aim_right"])
+	var old_path := str(settings.file_path)
+	settings.file_path = "user://ui5a_settings.cfg"
+	check(settings.try_rebind("aim_left", KEY_A) == "ok" and settings.try_rebind("aim_right", KEY_D) == "ok", "aim rebinds to A and D")
+	var step: String = hud._help_fill(str(HowToPlay.KICK_STEPS[0]["body"]))
+	check(step.find("A") >= 0 and step.find("D") >= 0, "page 1 uses the rebound aim keys, got %s" % step)
+	settings.binds["aim_left"] = old_left
+	settings.binds["aim_right"] = old_right
+	settings.apply_binds()
+	settings.file_path = old_path
+	game.run.give(Loadout.NO_HUDDLE)
+	game.logic.phase = KickLogic.Phase.AIMING
+	game.run.phase = RunLogic.Phase.PLAYING
+	game.paused = false
+	game.help_open = false
+	game._arm_boss_twist()
+	game._taking_pictures = false
+	game._process(0.5)
+	check(game._twist_time > 0.2, "the clock runs while the book is closed")
+	game._arm_boss_twist()
+	var held_time := float(game._twist_time)
+	var held_phase := int(game.logic.phase)
+	var held_needle := float(game.logic.needle_angle)
+	game.paused = true
+	game.help_open = true
+	for _frame in 120:
+		game._process(1.0 / 60.0)
+	check(is_equal_approx(game._twist_time, held_time) and int(game.logic.phase) == held_phase and is_equal_approx(game.logic.needle_angle, held_needle), "the book freezes the clock, the phase, and the needle")
+	game._taking_pictures = true
+	game.free()
+	var quitting = packed.instantiate()
+	get_root().add_child(quitting)
+	quitting._taking_pictures = true
+	quitting.highlight = Kickers.slot_for(Kickers.WALK_ON)
+	quitting.confirm_kicker()
+	var records = get_root().get_node("SaveData")
+	var kept_path := str(records.file_path)
+	records.file_path = "user://ui5a_quit.cfg"
+	quitting.paused = true
+	quitting.pause_index = 2
+	quitting._pause_input(_key_event(KEY_SPACE))
+	check(not quitting.paused and quitting.front.screen == FrontEnd.Screen.MAIN, "confirm on SAVE AND QUIT still leaves the run")
+	records.file_path = kept_path
+	quitting.free()
 

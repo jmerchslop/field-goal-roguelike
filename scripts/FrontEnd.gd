@@ -27,6 +27,7 @@ var came_from_gate := false
 
 const PAUSE_WORD := "PAUSE"
 const RESUME_WORD := "RESUME"
+const HOW_TO_PLAY_WORD := "HOW TO PLAY"
 const SAVE_QUIT_WORD := "SAVE AND QUIT"
 const GATE_CONTINUE := "CONTINUE"
 const GATE_NEW := "NEW RUN"

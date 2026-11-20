@@ -210,6 +210,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "ui5a":
+		if not await _capture_ui5a():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "ui4":
 		if not await _capture_ui4():
 			get_tree().quit(1)
@@ -6181,6 +6187,66 @@ func _capture_sk2() -> bool:
 	board.refresh_view()
 	print("SK2 retry ", board.run.rung_tag(), " ", board.run.distance_yards(), " awaiting ", board.run.awaiting_rung)
 	return await _capture("sk2_retry_keeps_rung.png")
+
+
+func _capture_ui5a() -> bool:
+	board.highlight = Kickers.slot_for(Kickers.WALK_ON)
+	board.selecting = true
+	board.front.run_mode = "standard"
+	board.confirm_kicker()
+	board.run.tad_level = 0
+	board.run.open_tad(0)
+	board.load_current_kick()
+	board.logic.phase = KickLogic.Phase.AIMING
+	board.run.phase = RunLogic.Phase.PLAYING
+	board.run.special_kicks.clear()
+	board._special_banner = 2.0
+	board.paused = true
+	board.help_open = false
+	board.pause_index = 1
+	print("UI5A pause")
+	if not await _capture("ui5a_pause_three_buttons.png"):
+		return false
+	board.run.open_tad(10)
+	if not await _capture("ui5a_pause_tad10.png"):
+		return false
+	board.run.open_tad(0)
+	board._open_help()
+	if not await _capture("ui5a_help_kick_and_aim.png"):
+		return false
+	board.help_page = 1
+	board.refresh_view()
+	if not await _capture("ui5a_help_wind_clues.png"):
+		return false
+	var old_left: int = int(Settings.binds["aim_left"])
+	var old_right: int = int(Settings.binds["aim_right"])
+	var old_path: String = str(Settings.file_path)
+	Settings.file_path = "user://ui5a_shot_settings.cfg"
+	Settings.try_rebind("aim_left", KEY_A)
+	Settings.try_rebind("aim_right", KEY_D)
+	board.help_page = 0
+	board.refresh_view()
+	if not await _capture("ui5a_help_rebound_keys.png"):
+		return false
+	Settings.binds["aim_left"] = old_left
+	Settings.binds["aim_right"] = old_right
+	Settings.apply_binds()
+	Settings.file_path = old_path
+	board._close_help()
+	board.paused = true
+	board.run.awaiting_offer = false
+	board.run.awaiting_shop = true
+	board.run.shop_stock = [Vitamins.PICKLE, Vitamins.PROTEIN, Vitamins.MAGNESIUM]
+	board.run.shop_note = ""
+	board._open_help()
+	if not await _capture("ui5a_help_over_shop.png"):
+		return false
+	DisplayServer.window_set_size(Vector2i(1920, 1080))
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var wide: bool = await _capture("ui5a_help_window_1920x1080.png")
+	DisplayServer.window_set_size(Vector2i(1280, 720))
+	return wide
 
 
 func _ui4_card(id: String, slot: String, lucky: bool = false) -> Dictionary:

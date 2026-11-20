@@ -33,7 +33,10 @@ func _draw() -> void:
 	if game.run.awaiting_shop:
 		_draw_shop(game.run)
 		if game.paused:
-			_draw_pause_panel()
+			if game.help_open:
+				_draw_help_book()
+			else:
+				_draw_pause_panel()
 		return
 	var logic: KickLogic = game.logic
 	var run: RunLogic = game.run
@@ -68,7 +71,10 @@ func _draw() -> void:
 		_text_centered(game.run.unlock_toast, 96.0, 22, Color(1.0, 0.92, 0.45))
 	_draw_slot_tooltip()
 	if game.paused:
-		_draw_pause_panel()
+		if game.help_open:
+			_draw_help_book()
+		else:
+			_draw_pause_panel()
 
 
 func pause_hit(point: Vector2) -> int:
@@ -106,9 +112,18 @@ func _pause_drop() -> float:
 	return 28.0 + 16.0 * float(game.run.tad_level)
 
 
+func _pause_plate() -> Rect2:
+	var drop := _pause_drop()
+	var height := (318.0 + drop + 128.0 + 52.0 + 24.0) - 148.0
+	return Rect2(330, 148, 620, height)
+
+
 func _pause_buttons() -> Array:
 	var drop := _pause_drop()
-	return [Rect2(390, 318 + drop, 500, 58), Rect2(390, 392 + drop, 500, 58)]
+	var buttons: Array = []
+	for i in 3:
+		buttons.append(Rect2(390, 318.0 + drop + 64.0 * float(i), 500, 52))
+	return buttons
 
 
 func _gate_buttons(which: String) -> Array:
@@ -119,8 +134,7 @@ func _gate_buttons(which: String) -> Array:
 
 func _draw_pause_panel() -> void:
 	draw_rect(Rect2(0, 0, KickConstants.WINDOW_WIDTH, KickConstants.WINDOW_HEIGHT), Color(0, 0, 0, 0.38))
-	var drop := _pause_drop()
-	var plate := Rect2(330, 148, 620, 340 + drop)
+	var plate := _pause_plate()
 	_metal_plate(plate)
 	_pg_center(FrontEnd.PAUSE_WORD, 168, 42, Color(0.96, 0.94, 0.88), "callout")
 	if game.run != null and game.run.tad_active(1):
@@ -131,10 +145,178 @@ func _draw_pause_panel() -> void:
 		for level in range(1, game.run.tad_level + 1):
 			_pg_center(RunLogic.tad_line(level), y, line_px, Color(0.93, 0.91, 0.84))
 			y += 16.0
-	var labels := [FrontEnd.RESUME_WORD, FrontEnd.SAVE_QUIT_WORD]
+	var labels := [FrontEnd.RESUME_WORD, FrontEnd.HOW_TO_PLAY_WORD, FrontEnd.SAVE_QUIT_WORD]
 	var buttons := _pause_buttons()
 	for index in buttons.size():
 		_menu_button(buttons[index], str(labels[index]), index == game.pause_index)
+
+
+func help_book_rects() -> Dictionary:
+	return {
+		"plate": Rect2(80, 40, 1120, 640),
+		"content": Rect2(112, 136, 1056, 424),
+		"prev": Rect2(112, 600, 200, 48),
+		"back": Rect2(540, 600, 200, 48),
+		"next": Rect2(968, 600, 200, 48),
+	}
+
+
+func help_hit(point: Vector2) -> int:
+	var rects: Dictionary = help_book_rects()
+	if (rects["prev"] as Rect2).has_point(point):
+		return 0
+	if (rects["back"] as Rect2).has_point(point):
+		return 1
+	if (rects["next"] as Rect2).has_point(point):
+		return 2
+	return -1
+
+
+func help_demo_meter_rect() -> Rect2:
+	var width := 400.0
+	var height := width * MeterGauge.FRAME_H / MeterGauge.FRAME_W
+	return Rect2(720, 200, width, height)
+
+
+static func help_ribbon_end(origin: Vector2, band: String) -> Vector2:
+	var lean := deg_to_rad(KickLogic.ribbon_lean_degrees(band))
+	return origin + Vector2(sin(lean), cos(lean)) * 40.0
+
+
+func help_lowest_y(page_id: String) -> float:
+	if page_id == "wind":
+		return 476.0 + 24.0 * float(HowToPlay.WIND_LINES.size() - 1) + 16.0
+	var y := 144.0
+	for step in HowToPlay.KICK_STEPS:
+		var lines := _wrap_lines(_help_fill(str(step["body"])), 520.0, 16)
+		y += 40.0 + float(lines.size()) * 20.0 + 8.0
+	y -= 8.0
+	var footer := _wrap_lines(HowToPlay.KICK_FOOTER, 520.0, 16)
+	y += 16.0 + float(footer.size()) * 20.0
+	var caption := help_demo_meter_rect().end.y + 28.0
+	return maxf(y, caption)
+
+
+func _draw_help_book() -> void:
+	draw_rect(Rect2(0, 0, KickConstants.WINDOW_WIDTH, KickConstants.WINDOW_HEIGHT), Color(0, 0, 0, 0.55))
+	var rects: Dictionary = help_book_rects()
+	_metal_plate(rects["plate"])
+	_pg_center("HOW TO PLAY", 56, 34, Color(0.96, 0.94, 0.88), "callout")
+	var page := 0
+	if game != null:
+		page = clampi(int(game.help_page), 0, HowToPlay.page_count() - 1)
+	var page_id := HowToPlay.page_id(page)
+	_pg_center(HowToPlay.title(page_id), 104, 20, Color(0.95, 0.78, 0.28))
+	if page_id == "wind":
+		_draw_help_wind()
+	else:
+		_draw_help_kick()
+	_pg_center("PAGE %d OF %d" % [page + 1, HowToPlay.page_count()], 570, 14, Color(0.82, 0.84, 0.8))
+	var last := page >= HowToPlay.page_count() - 1
+	_menu_button(rects["prev"], "PREV", false, page == 0)
+	_menu_button(rects["back"], "BACK", false, false)
+	_menu_button(rects["next"], "NEXT", false, last)
+
+
+func _draw_help_kick() -> void:
+	var cream := Color(0.93, 0.91, 0.84)
+	var y := 144.0
+	for step in HowToPlay.KICK_STEPS:
+		_pg(str(step["label"]), Vector2(128, y), 18, cream)
+		y = _draw_wrapped_at(_help_fill(str(step["body"])), 128.0, y + 40.0, 520.0, 16)
+		y += 8.0
+	y -= 8.0
+	_draw_wrapped_at(HowToPlay.KICK_FOOTER, 128.0, y + 16.0, 520.0, 16, Color(0.82, 0.84, 0.8))
+	var meter := help_demo_meter_rect()
+	_draw_demo_meter(meter, 45.0)
+	var caption := HowToPlay.KICK_CAPTION
+	var font := ThemeDB.fallback_font
+	if font != null:
+		var width := font.get_string_size(caption, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x
+		_text(Vector2(meter.position.x + (meter.size.x - width) * 0.5, meter.position.y + meter.size.y + 28.0), caption, 15, Color(0.82, 0.84, 0.8))
+
+
+func _draw_demo_meter(rect: Rect2, needle_angle: float) -> void:
+	var scale := rect.size.x / MeterGauge.FRAME_W
+	var hub := rect.position + Vector2(MeterGauge.HUB_X, MeterGauge.HUB_Y) * scale
+	var inner := MeterGauge.GROOVE_INNER * scale
+	var outer := MeterGauge.GROOVE_OUTER * scale
+	var base := KickerStats.new()
+	var layout := MeterGauge.accuracy_layout(base.perfect_band, base.good_band)
+	var saved_filter := texture_filter
+	texture_filter = TEXTURE_FILTER_NEAREST
+	var art := _meter_art()
+	if art != null:
+		draw_texture_rect(art, rect, false)
+	_draw_annulus(hub, inner, outer, 90.0, float(layout["band_top"]), Color(0.78, 0.1, 0.08, 1.0))
+	_draw_annulus(hub, inner, outer, float(layout["band_top"]), float(layout["perfect_top"]), Color(0.93, 0.74, 0.12, 1.0))
+	_draw_annulus(hub, inner, outer, float(layout["perfect_top"]), float(layout["perfect_bottom"]), Color(0.2, 0.78, 0.28, 1.0))
+	_draw_annulus(hub, inner, outer, float(layout["perfect_bottom"]), float(layout["band_bottom"]), Color(0.93, 0.74, 0.12, 1.0))
+	_draw_annulus(hub, inner, outer, float(layout["band_bottom"]), 0.0, Color(0.78, 0.1, 0.08, 1.0))
+	var label_r := (inner + outer) * 0.5
+	var good_high := (float(layout["band_top"]) + float(layout["perfect_top"])) * 0.5
+	var good_low := (float(layout["perfect_bottom"]) + float(layout["band_bottom"])) * 0.5
+	_draw_wedge_label(hub, label_r, good_high, "GOOD")
+	_draw_wedge_label(hub, label_r, 45.0, "PERFECT")
+	_draw_wedge_label(hub, label_r, good_low, "GOOD")
+	var needle_tex := _needle_art()
+	if needle_tex != null:
+		draw_set_transform(hub, deg_to_rad(90.0 - needle_angle), Vector2(scale, scale))
+		draw_texture(needle_tex, -MeterGauge.NEEDLE_PIVOT, Color.WHITE)
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	texture_filter = saved_filter
+	var cream := Color(0.93, 0.91, 0.84)
+	_help_arc_label(hub, outer, 180.0, "POWER", cream)
+	_help_arc_label(hub, outer, 0.0, "ACCURACY", cream)
+
+
+func _help_fill(text: String) -> String:
+	var filled := text
+	filled = filled.replace("{aim_left}", Settings.sentence_key(Settings.key_label("aim_left")))
+	filled = filled.replace("{aim_right}", Settings.sentence_key(Settings.key_label("aim_right")))
+	filled = filled.replace("{confirm}", Settings.sentence_key(Settings.key_label("confirm")))
+	return filled
+
+
+func _help_arc_label(hub: Vector2, radius: float, degrees: float, text: String, color: Color) -> void:
+	var at := _gauge_point(hub, radius, degrees)
+	var width := BitmapFonts.measure_px("ui", text, 14)
+	# The frame already paints its own plate on the arc end. Sit this label below that plate.
+	var plate_drop := (572.0 - MeterGauge.HUB_Y) * (radius / MeterGauge.GROOVE_OUTER)
+	_pg(text, Vector2(at.x - float(width) * 0.5, at.y + plate_drop + 18.0), 14, color)
+
+
+func _draw_help_wind() -> void:
+	var cream := Color(0.93, 0.91, 0.84)
+	var grey := Color(0.82, 0.84, 0.8)
+	var yellow := Color(0.98, 0.85, 0.2)
+	var ribbon := Color(0.9, 0.12, 0.1)
+	var centers: Array[float] = [244.0, 508.0, 772.0, 1036.0]
+	for i in centers.size():
+		var cx: float = centers[i]
+		draw_line(Vector2(cx - 60.0, 330.0), Vector2(cx + 60.0, 330.0), yellow, 6.0)
+		draw_line(Vector2(cx - 60.0, 330.0), Vector2(cx - 60.0, 190.0), yellow, 6.0)
+		draw_line(Vector2(cx + 60.0, 330.0), Vector2(cx + 60.0, 190.0), yellow, 6.0)
+		draw_line(Vector2(cx, 330.0), Vector2(cx, 392.0), yellow, 6.0)
+		var mph := int(HowToPlay.WIND_MPH[i])
+		var band := KickLogic.ribbon_band(mph)
+		for side in [-60.0, 60.0]:
+			var origin := Vector2(cx + side, 190.0)
+			draw_line(origin, help_ribbon_end(origin, band), ribbon, 6.0)
+		var name := "WIND " + RunLogic.wind_name(mph).to_upper()
+		var name_w := BitmapFonts.measure_px("ui", name, 16)
+		_pg(name, Vector2(cx - float(name_w) * 0.5, 410.0), 16, cream)
+		var range_text := str(HowToPlay.WIND_RANGES[i])
+		var range_w := BitmapFonts.measure_px("ui", range_text, 14)
+		_pg(range_text, Vector2(cx - float(range_w) * 0.5, 434.0), 14, grey)
+	var y := 476.0
+	var content: Rect2 = help_book_rects()["content"]
+	var font := ThemeDB.fallback_font
+	for line in HowToPlay.WIND_LINES:
+		if font != null:
+			var width := font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x
+			_text(Vector2(content.position.x + (content.size.x - width) * 0.5, y), line, 16, KickConstants.COLOR_TEXT)
+		y += 24.0
 
 
 func _draw_gate(front: FrontEnd) -> void:
@@ -166,12 +348,17 @@ func _metal_plate(rect: Rect2) -> void:
 	draw_rect(rect.grow(-6), Color(0.28, 0.3, 0.33), false, 1.0)
 
 
-func _menu_button(rect: Rect2, text: String, selected: bool) -> void:
+func _menu_button(rect: Rect2, text: String, selected: bool, dimmed: bool = false) -> void:
 	draw_rect(rect, Color(0.14, 0.15, 0.17) if selected else Color(0.1, 0.11, 0.12))
-	draw_rect(rect, Color(0.97, 0.98, 1.0) if selected else Color(0.45, 0.47, 0.5), false, 3.0 if selected else 2.0)
+	var border := Color(0.97, 0.98, 1.0) if selected else Color(0.45, 0.47, 0.5)
+	var ink := Color(0.97, 0.96, 0.92)
+	if dimmed:
+		border.a = 0.4
+		ink.a = 0.4
+	draw_rect(rect, border, false, 3.0 if selected else 2.0)
 	var width := BitmapFonts.measure_px("ui", text, 16)
 	var at := Vector2(rect.position.x + (rect.size.x - float(width)) * 0.5, rect.position.y + 16)
-	_pg(text, at, 16, Color(0.97, 0.96, 0.92))
+	_pg(text, at, 16, ink)
 
 
 func _pg_center(text: String, y: float, size: int, color: Color, font_key: String = "ui") -> void:
@@ -1062,7 +1249,7 @@ func _draw_portrait(info: Dictionary, area: Rect2) -> void:
 		draw_circle(area.position + area.size * 0.5, radius, ink)
 
 
-func _draw_wrapped_at(text: String, x: float, y: float, width: float, size: int) -> float:
+func _draw_wrapped_at(text: String, x: float, y: float, width: float, size: int, color: Color = KickConstants.COLOR_TEXT) -> float:
 	var font := ThemeDB.fallback_font
 	if font == null:
 		return y
@@ -1070,13 +1257,13 @@ func _draw_wrapped_at(text: String, x: float, y: float, width: float, size: int)
 	for word in text.split(" "):
 		var trial := (line + word).strip_edges()
 		if line != "" and font.get_string_size(trial, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > width:
-			_text(Vector2(x, y), line.strip_edges(), size, KickConstants.COLOR_TEXT)
+			_text(Vector2(x, y), line.strip_edges(), size, color)
 			y += float(size) + 4.0
 			line = word + " "
 		else:
 			line = trial + " "
 	if line.strip_edges() != "":
-		_text(Vector2(x, y), line.strip_edges(), size, KickConstants.COLOR_TEXT)
+		_text(Vector2(x, y), line.strip_edges(), size, color)
 		y += float(size) + 4.0
 	return y
 

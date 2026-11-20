@@ -90,6 +90,8 @@ var offer_hover := -1
 var offer_hover_from := -1
 var offer_hover_age := 0.08
 var offer_primed := false
+var help_open := false
+var help_page := 0
 var _beams: Node3D
 var _beam_mat: ShaderMaterial
 var _pool_mat: ShaderMaterial
@@ -1072,7 +1074,8 @@ func _process(delta: float) -> void:
 				run.unlock_toast = ""
 				_unlock_seen = ""
 				_unlock_time = 0.0
-	tick_tad_card(delta)
+	if not help_open:
+		tick_tad_card(delta)
 	if run == null or (not run.awaiting_offer and not run.awaiting_rung):
 		if offer_primed:
 			clear_offer_hover()
@@ -1080,7 +1083,7 @@ func _process(delta: float) -> void:
 		offer_hover_age = minf(offer_hover_age + delta, 0.08)
 		if _hud != null:
 			_hud.queue_redraw()
-	if logic.phase == KickLogic.Phase.AIMING and not run.practicing and not selecting:
+	if not help_open and logic.phase == KickLogic.Phase.AIMING and not run.practicing and not selecting:
 		_special_banner += delta
 		_maybe_fire_sound()
 	if OS.is_debug_build() and OS.get_environment("FX1_FRAMES") == "1" and _frame_watch > 0.0:
@@ -1709,6 +1712,7 @@ func _open_pause() -> void:
 
 func _resume_pause() -> void:
 	paused = false
+	help_open = false
 	refresh_view()
 
 
@@ -1736,6 +1740,7 @@ func _write_quit_slot() -> void:
 
 
 func _save_and_quit() -> void:
+	help_open = false
 	_write_quit_slot()
 	_return_to_main_menu()
 
@@ -1787,6 +1792,9 @@ func _keep_saved_run() -> void:
 
 
 func _pause_input(event: InputEvent) -> void:
+	if help_open:
+		_help_input(event)
+		return
 	if _is_back(event):
 		_resume_pause()
 		return
@@ -1804,9 +1812,9 @@ func _pause_input(event: InputEvent) -> void:
 	if not key.pressed or key.echo:
 		return
 	if Settings.pressed_event(event, "menu_up") or Settings.pressed_event(event, "menu_left"):
-		pause_index = 0
+		pause_index = maxi(0, pause_index - 1)
 	elif Settings.pressed_event(event, "menu_down") or Settings.pressed_event(event, "menu_right"):
-		pause_index = 1
+		pause_index = mini(2, pause_index + 1)
 	elif _is_confirm(event):
 		_activate_pause()
 	refresh_view()
@@ -1815,8 +1823,57 @@ func _pause_input(event: InputEvent) -> void:
 func _activate_pause() -> void:
 	if pause_index == 0:
 		_resume_pause()
+	elif pause_index == 1:
+		_open_help()
 	else:
 		_save_and_quit()
+
+
+func _open_help() -> void:
+	help_open = true
+	help_page = 0
+	refresh_view()
+
+
+func _close_help() -> void:
+	help_open = false
+	pause_index = 1
+	refresh_view()
+
+
+func _help_input(event: InputEvent) -> void:
+	if _is_back(event):
+		_close_help()
+		return
+	var last := HowToPlay.page_count() - 1
+	if event is InputEventMouseButton:
+		var mouse := event as InputEventMouseButton
+		if mouse.pressed and mouse.button_index == MOUSE_BUTTON_LEFT:
+			var hit: int = _hud.help_hit(mouse.position)
+			if hit == 0:
+				help_page = maxi(0, help_page - 1)
+			elif hit == 1:
+				_close_help()
+				return
+			elif hit == 2:
+				help_page = mini(last, help_page + 1)
+			refresh_view()
+		return
+	if not event is InputEventKey:
+		return
+	var key := event as InputEventKey
+	if not key.pressed or key.echo:
+		return
+	if Settings.pressed_event(event, "menu_left") or Settings.pressed_event(event, "aim_left"):
+		help_page = maxi(0, help_page - 1)
+	elif Settings.pressed_event(event, "menu_right") or Settings.pressed_event(event, "aim_right"):
+		help_page = mini(last, help_page + 1)
+	elif _is_confirm(event):
+		if help_page >= last:
+			_close_help()
+			return
+		help_page += 1
+	refresh_view()
 
 
 func _gate_input(event: InputEvent) -> void:
