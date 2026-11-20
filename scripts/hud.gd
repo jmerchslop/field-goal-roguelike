@@ -395,7 +395,7 @@ func _draw_score_bug(run: RunLogic) -> void:
 	var cells := [
 		{"label": "SCORE", "value": str(run.score), "w": 86.0},
 		{"label": "STREAK", "value": str(run.streak), "w": 86.0},
-		{"label": "MULT", "value": RunLogic._two_decimals(run.current_mult()), "w": 90.0},
+		{"label": "MULT", "value": RunLogic._two_decimals(run.kick_mult_preview()), "w": 90.0},
 		{"label": "ATTEMPTS", "value": "", "w": 112.0},
 	]
 	var x := bug.position.x + 6.0
@@ -408,8 +408,20 @@ func _draw_score_bug(run: RunLogic) -> void:
 			_draw_compact_pips(run, rect.position.x + 8.0, rect.position.y + 32.0)
 			_pg("CAP %d" % run.attempt_cap, rect.position + Vector2(8.0 + float(run.attempt_cap) * 8.0 + 4.0, 24), 12, cream)
 		else:
-			_pg(str(cell["value"]), rect.position + Vector2(6, 22), 22, cream)
+			var shown := str(cell["value"])
+			var px := 22
+			if str(cell["label"]) == "MULT":
+				px = _mult_px(shown)
+			_pg(shown, rect.position + Vector2(6, 22), px, cream)
 		x += float(cell["w"]) + 4.0
+
+
+func _mult_px(text: String) -> int:
+	var limit := 90.0 - 12.0
+	for size in [22, 18, 16]:
+		if float(BitmapFonts.measure_px("ui", text, size)) <= limit:
+			return size
+	return 16
 
 
 func _draw_kicker_plate(logic: KickLogic, run: RunLogic) -> void:
@@ -1675,6 +1687,55 @@ func _draw_curse_prompt(run: RunLogic) -> void:
 	_text_centered("Esc cancels. Tart Cherry stays on the belt.", box.position.y + 160.0, 18, KickConstants.COLOR_TEXT)
 
 
+static func shop_shelf_frames() -> Array:
+	return [Rect2(344, 488, 132, 132), Rect2(572, 488, 128, 132), Rect2(796, 488, 128, 132)]
+
+
+static func shop_price_plate(frame: Rect2) -> Rect2:
+	return Rect2(frame.position.x + frame.size.x * 0.5 - 107.0, 604.0, 214.0, 74.0)
+
+
+static func shop_info_rect() -> Rect2:
+	return Rect2(132, 250, 190, 210)
+
+
+static func shop_belt_rect(index: int) -> Rect2:
+	var info := shop_info_rect()
+	return Rect2(info.position + Vector2(12, 74 + float(index) * 58), Vector2(166, 50))
+
+
+static func shop_b12_rect() -> Rect2:
+	return Rect2(980, 250, 250, 150)
+
+
+func shop_reroll_rect(run: RunLogic) -> Rect2:
+	var text := "Reroll (%s): $%d" % [Settings.key_sentence("shop_reroll"), run.shop_reroll_cost()]
+	var font := ThemeDB.fallback_font
+	var width := 180.0
+	var height := 16.0
+	if font != null:
+		var measured := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 16)
+		width = measured.x
+		height = maxf(measured.y, 16.0)
+	return Rect2(36.0, 64.0 - height, width, height)
+
+
+func shop_hit(point: Vector2) -> String:
+	var frames: Array = shop_shelf_frames()
+	for i in frames.size():
+		var frame: Rect2 = frames[i]
+		if frame.has_point(point) or shop_price_plate(frame).has_point(point):
+			return "shelf%d" % i
+	if shop_b12_rect().has_point(point):
+		return "b12"
+	for i in 2:
+		if shop_belt_rect(i).has_point(point):
+			return "belt%d" % i
+	if game != null and game.run != null and shop_reroll_rect(game.run).has_point(point):
+		return "reroll"
+	return ""
+
+
 func _draw_shop(run: RunLogic) -> void:
 	var backdrop := _icon("res://art/shop/vitamin_shop.png")
 	if backdrop != null:
@@ -1682,7 +1743,7 @@ func _draw_shop(run: RunLogic) -> void:
 	else:
 		draw_rect(Rect2(0, 0, KickConstants.WINDOW_WIDTH, KickConstants.WINDOW_HEIGHT), Color(0.12, 0.08, 0.05))
 	_text(Vector2(36, 32), "Vitamin Shop", 28, Color(1.0, 0.95, 0.8))
-	var info := Rect2(132, 250, 190, 210)
+	var info := shop_info_rect()
 	draw_rect(info, Color(0.05, 0.04, 0.03, 0.82))
 	_text(info.position + Vector2(12, 28), "$%d" % run.cash, 22, KickConstants.COLOR_ATTEMPT)
 	if run.cash_popup != "":
@@ -1691,13 +1752,13 @@ func _draw_shop(run: RunLogic) -> void:
 	for i in 2:
 		var id := str(run.belt[i]) if i < run.belt.size() else ""
 		var label := "Z" if i == 0 else "X"
-		var slot := Rect2(info.position + Vector2(12, 74 + float(i) * 58), Vector2(166, 50))
+		var slot := shop_belt_rect(i)
 		_draw_bottle(id, slot, id == "")
 		_text(slot.position + Vector2(4, 16), label, 12, KickConstants.COLOR_TEXT)
 		if id != "":
 			_text(slot.position + Vector2(42, 16), Vitamins.piece_name(id), 11, KickConstants.COLOR_TEXT)
 			_text(slot.position + Vector2(42, 34), run.vitamin_line(id), 10, KickConstants.COLOR_TEXT)
-	var frames := [Rect2(344, 488, 132, 132), Rect2(572, 488, 128, 132), Rect2(796, 488, 128, 132)]
+	var frames: Array = shop_shelf_frames()
 	for i in 3:
 		var id := str(run.shop_stock[i]) if i < run.shop_stock.size() else ""
 		var frame: Rect2 = frames[i]
@@ -1705,12 +1766,12 @@ func _draw_shop(run: RunLogic) -> void:
 			_text(frame.position + Vector2(28, 78), "SOLD", 22, Color(0.85, 0.85, 0.88))
 		else:
 			_draw_bottle(id, frame.grow(-18), false)
-			var plate := Rect2(frame.position.x + frame.size.x * 0.5 - 107.0, 604.0, 214.0, 74.0)
+			var plate := shop_price_plate(frame)
 			draw_rect(plate, Color(0.05, 0.04, 0.03, 0.88))
 			var price_color := Color(1.0, 0.3, 0.25) if run.shop_flash == str(i) else KickConstants.COLOR_ATTEMPT
 			_text(plate.position + Vector2(8, 16), "%d  $%d  %s" % [i + 1, run.item_price(id), Vitamins.piece_name(id)], 12, price_color)
 			_draw_wrapped(run.vitamin_line(id), Rect2(plate.position + Vector2(8, 30), Vector2(plate.size.x - 16, 40)), 10)
-	var b12 := Rect2(980, 250, 250, 150)
+	var b12 := shop_b12_rect()
 	var grey := run.b12_grey()
 	draw_rect(b12, Color(0.08, 0.08, 0.08, 0.9) if grey else Color(0.16, 0.12, 0.05, 0.92))
 	draw_rect(b12, Color(0.45, 0.45, 0.45) if grey else Color(0.95, 0.82, 0.28), false, 3.0)
@@ -1723,7 +1784,8 @@ func _draw_shop(run: RunLogic) -> void:
 	if b12_reason != "":
 		_text(b12.position + Vector2(16, 126), b12_reason, 16, Color(0.8, 0.8, 0.8))
 	var reroll_color := Color(1.0, 0.3, 0.25) if run.shop_flash == "reroll" else KickConstants.COLOR_TEXT
-	_text(Vector2(36, 64), "Reroll (%s): $%d" % [Settings.key_sentence("shop_reroll"), run.shop_reroll_cost()], 16, reroll_color)
+	var reroll_at := shop_reroll_rect(run)
+	_text(Vector2(reroll_at.position.x, reroll_at.position.y + reroll_at.size.y), "Reroll (%s): $%d" % [Settings.key_sentence("shop_reroll"), run.shop_reroll_cost()], 16, reroll_color)
 	if run.shop_note != "":
 		_text(Vector2(36, 92), run.shop_note, 18, Color(1.0, 0.45, 0.35))
 	_text_centered("%s/%s/%s buy  %s B12  %s/%s sell  %s reroll  %s leave" % [

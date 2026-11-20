@@ -22,6 +22,7 @@ const LIGHTS := "UNDER THE LIGHTS"
 const CLOCK := "KICK CLOCK"
 const MOVING := "MOVING POSTS"
 const CLOCK_SEC := 4.0
+const SUDDEN_DEATH_MULT := 5.0
 const NO_HUDDLE_SEC := 5.0
 const POST_SWING := 3.0
 const POST_PERIOD := 4.0
@@ -101,8 +102,7 @@ var ring_offer_skipped := false
 # Gear Manager. Passes wait until a legal second-style card exists.
 var gm_passes := 0
 var gm_second_slots: Array = []
-var gm_offer := false
-var gm_offer_done := false
+var ring_offer_live := false
 var pk2_cursor := 0
 var pk2_grants: Array = []
 var camp_makes := 0
@@ -259,8 +259,7 @@ func new_run() -> void:
 	ring_offer_skipped = false
 	gm_passes = 0
 	gm_second_slots = []
-	gm_offer = false
-	gm_offer_done = false
+	ring_offer_live = false
 	pk2_cursor = 0
 	pk2_grants = []
 	camp_makes = 0
@@ -557,6 +556,16 @@ func current_mult() -> float:
 	return (1.0 + stats.streak_step * float(streak)) * showtime_mult
 
 
+# The Mult a plain make scores with. Landing bonuses stay out of this number.
+func kick_mult_preview() -> float:
+	var pre := Loadout.preworkout_mult(_vitamin_count(Vitamins.PREWORKOUT), loadout_state(), item_effect_scale())
+	var gel := 0.5 if stats.gelcap and _belt_vitamin_active() else 0.0
+	var mult := current_mult() + storm_bonus() + hero_bonus() + curse_bonus() + drill_bonus() + pre + gel
+	if has_curse(Loadout.SUDDEN_DEATH):
+		mult *= SUDDEN_DEATH_MULT
+	return mult
+
+
 func storm_bonus() -> float:
 	return stats.storm_per_mph * absf(KickLogic.crosswind_mph(float(wind_speed), wind_direction))
 
@@ -634,7 +643,7 @@ func resolve_kick(result_text: String, offset: float, perfect: bool) -> void:
 		var mult := base_mult + storm + hero + curse_add + drill + pre + gel
 		var sudden := 1.0
 		if has_curse(Loadout.SUDDEN_DEATH):
-			sudden = 5.0
+			sudden = SUDDEN_DEATH_MULT
 			mult *= sudden
 		last_points = points_for(distance, mult, down_the_middle, boss, score_perfect)
 		score += last_points
@@ -714,8 +723,7 @@ func go_to_next_kick() -> bool:
 	last_points = 0
 	awaiting_offer = false
 	ring_offer_pending = false
-	gm_offer = false
-	gm_offer_done = false
+	ring_offer_live = false
 	awaiting_mulligan = false
 	awaiting_shop = false
 	offer = []
@@ -741,8 +749,7 @@ func begin_retry() -> bool:
 	is_first_ball = false
 	awaiting_offer = false
 	ring_offer_pending = false
-	gm_offer = false
-	gm_offer_done = false
+	ring_offer_live = false
 	offer = []
 	attempt_note = ""
 	score_line = ""
@@ -1237,31 +1244,32 @@ func pick_card(index: int) -> bool:
 	if not awaiting_offer or index < 0 or index >= offer.size():
 		return false
 	var card := _as_loadout_card(offer[index])
-	if gm_offer:
-		_close_offer()
-		gm_offer = false
-		var slot := str(card.get("slot", ""))
-		var picked := str(card.get("id", ""))
-		var rank := int(card.get("rank", 1))
-		if gm_passes > 0 and _accept_equipment(slot, picked, rank) and _gm_second_ok(slot, picked):
+	var from_ring := ring_offer_live
+	_close_offer()
+	ring_offer_live = false
+	var slot := str(card.get("slot", ""))
+	var picked := str(card.get("id", ""))
+	var rank := int(card.get("rank", 1))
+	if bool(card.get("gm_second", false)):
+		if gm_live() and gm_passes > 0 and _accept_equipment(slot, picked, rank) and _gm_second_ok(slot, picked):
 			_store_equipment(slot, picked, rank)
 			if not gm_second_slots.has(slot):
 				gm_second_slots.append(slot)
 			gm_passes -= 1
 			rebuild_stats()
 		return true
-	_close_offer()
-	give(str(card.get("id", "")), int(card.get("rank", 1)))
+	# A normal offer never puts a second style in. The Bonus Ring still can.
+	if _gm_second_ok(slot, picked) and not from_ring:
+		return true
+	give(picked, rank)
 	return true
 
 
 func skip_offer() -> bool:
 	if not awaiting_offer:
 		return false
-	var was_gm := gm_offer
 	_close_offer()
-	if was_gm:
-		gm_offer = false
+	ring_offer_live = false
 	return true
 
 
@@ -1287,8 +1295,8 @@ func reroll_offer() -> bool:
 	else:
 		rerolls_left -= 1
 	var previous: Array = offer.duplicate(true)
-	if gm_offer:
-		var redraw := Loadout.draw_ring_offer(loadout_state(), _offer_rng, true)
+	if ring_offer_live:
+		var redraw := Loadout.draw_ring_offer(loadout_state(), _offer_rng)
 		if not redraw.is_empty():
 			offer = redraw
 		awaiting_offer = true
@@ -1692,19 +1700,6 @@ func collects_at(offset: float, center: float, result_text: String, reached: boo
 	return absf(offset - center) <= RING_COLLECT_YARDS
 
 
-func open_gm_offer_after_make() -> bool:
-	if gm_offer_done or not last_result_made or gm_passes <= 0 or phase != Phase.PLAYING:
-		return false
-	var cards := Loadout.draw_ring_offer(loadout_state(), _offer_rng, true)
-	if cards.is_empty():
-		return false
-	offer = cards
-	awaiting_offer = true
-	gm_offer = true
-	gm_offer_done = true
-	return true
-
-
 func _pk2_rank(id: String) -> int:
 	if Loadout.slot_of(id) == Loadout.CURSE:
 		return 1 if curse_ids.has(id) else 0
@@ -1769,6 +1764,7 @@ func open_ring_offer() -> bool:
 		return false
 	offer = cards
 	awaiting_offer = true
+	ring_offer_live = true
 	return true
 
 
@@ -1957,6 +1953,7 @@ func loadout_state() -> Dictionary:
 		"run_mode": run_mode,
 		"gm_passes": gm_passes,
 		"gm_second_slots": gm_second_slots.duplicate(),
+		"gm_live": gm_live(),
 		"camp_makes": camp_makes,
 	}
 
@@ -2192,7 +2189,6 @@ func export_resume() -> Dictionary:
 		"ring_offer": ring_offer_pending,
 		"gm_passes": gm_passes,
 		"gm_second_slots": gm_second_slots.duplicate(),
-		"gm_offer": gm_offer,
 		"camp_makes": camp_makes,
 		"kick10_boss": kick10_boss,
 		"standard_bosses": _boss_rows(standard_bosses),
@@ -2221,8 +2217,6 @@ func import_resume(data: Dictionary) -> void:
 	curses_locked = bool(data.get("curses_locked", false))
 	gm_passes = int(data.get("gm_passes", 0))
 	gm_second_slots = _string_list(data.get("gm_second_slots", []))
-	gm_offer = bool(data.get("gm_offer", false))
-	gm_offer_done = gm_offer
 	camp_makes = int(data.get("camp_makes", 0))
 	bench_extra_cap = int(data.get("bench_extra_cap", 0))
 	bench_bank = float(data.get("bench_bank", 0.0))
@@ -2288,34 +2282,38 @@ func import_resume(data: Dictionary) -> void:
 			standard_bosses[int(pair.get("kick", 0))] = str(pair.get("name", ""))
 		kick10_boss = str(standard_bosses.get(10, kick10_boss))
 	var place := str(data.get("place", "tee"))
-	if place == "offer":
+	var legacy_gm_offer := bool(data.get("gm_offer", false))
+	if place == "offer" and legacy_gm_offer:
+		# An old Equipment Manager offer was open. Treat it as a skip.
+		kick_resolved = true
+		last_result_made = true
+		awaiting_offer = false
+		offer = []
+		if opens_shop() and not stats.brand_deal and not has_curse(Loadout.ALL_NATURAL):
+			open_shop()
+		elif can_advance():
+			go_to_next_kick()
+	elif place == "offer":
 		awaiting_offer = true
 		kick_resolved = true
 		last_result_made = true
-		gm_offer = bool(data.get("gm_offer", false))
-		gm_offer_done = gm_offer
 		offer = _dict_list(data.get("offer", []))
 	elif place == "ring":
 		awaiting_offer = true
 		kick_resolved = true
 		last_result_made = false
 		ring_offer_pending = false
-		gm_offer = false
-		gm_offer_done = false
+		ring_offer_live = true
 		offer = _dict_list(data.get("offer", []))
 	elif place == "shop":
 		awaiting_shop = true
 		kick_resolved = true
 		last_result_made = true
-		gm_offer = false
-		gm_offer_done = false
 		shop_stock = _string_list(data.get("shop_stock", ["", "", ""]))
 	else:
 		awaiting_offer = false
 		awaiting_shop = false
 		kick_resolved = false
-		gm_offer = false
-		gm_offer_done = false
 		offer = []
 
 

@@ -416,7 +416,7 @@ static func piece_name(id: String) -> String:
 		HYPE_MAN:
 			return "Hype Man"
 		GEAR_MANAGER:
-			return "Gear Manager"
+			return "Equipment Manager"
 		TEAM_DOCTOR:
 			return "Team Doctor"
 		ICED:
@@ -601,7 +601,7 @@ static func effect_line(id: String, rank: int) -> String:
 		HYPE_MAN:
 			return _hype_card(rank, {})
 		GEAR_MANAGER:
-			return "Unlock a second gear slot of a type you own. I 1 slot, II 2, III 3."
+			return "Second gear slots can show up in offers. I 1 slot, II 2, III 3."
 		TEAM_DOCTOR:
 			return _doctor_card(1.5 + 0.1 * float(maxi(rank, 1) - 1))
 		ICED:
@@ -889,6 +889,14 @@ static func legal_equipment(state: Dictionary) -> Array:
 				cards.append(_card(EQUIPMENT, slot_name, owned_id, rank + 1))
 			if second_id != "" and second_rank < max_rank(second_id, mode):
 				cards.append(_card(EQUIPMENT, slot_name, second_id, second_rank + 1))
+			var passes := int(state.get("gm_passes", 0))
+			if bool(state.get("gm_live", false)) and passes > 0 and second_id == "":
+				for id in pool:
+					if str(id) == owned_id:
+						continue
+					var second_card := _card(EQUIPMENT, slot_name, str(id), 1)
+					second_card["gm_second"] = true
+					cards.append(second_card)
 	return cards
 
 

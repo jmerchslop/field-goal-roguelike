@@ -138,6 +138,12 @@ func _ready() -> void:
 			return
 		get_tree().quit(0)
 		return
+	if OS.get_environment("FG_SHOT_PART") == "fx1":
+		if not await _capture_fx1():
+			get_tree().quit(1)
+			return
+		get_tree().quit(0)
+		return
 	if OS.get_environment("FG_SHOT_PART") == "bl1":
 		if not await _capture_bl1():
 			get_tree().quit(1)
@@ -1905,6 +1911,103 @@ func _capture_f3() -> bool:
 	return true
 
 
+func _capture_fx1() -> bool:
+	board._taking_pictures = true
+	board.highlight = 1
+	board.confirm_kicker()
+	board.run.unlock_toast = "Willow Reed unlocked"
+	board._unlock_seen = ""
+	board.refresh_view()
+	if not await _capture("fx1_unlock_toast_on.png"):
+		return false
+	board.run.unlock_toast = ""
+	board.refresh_view()
+	if not await _capture("fx1_unlock_toast_gone.png"):
+		return false
+	board.run.give(Loadout.CANNON, 1)
+	board.run.give(Loadout.GEAR_MANAGER, 1)
+	board.run.force_offer([
+		{"id": Loadout.GEAR_MANAGER, "rank": 1, "kind": Loadout.PERK, "slot": Loadout.PERK},
+		{"id": Loadout.HOT_STREAK, "rank": 1, "kind": Loadout.PERK, "slot": Loadout.PERK},
+		{"id": Loadout.CANNON, "rank": 2, "kind": Loadout.EQUIPMENT, "slot": Loadout.CLEATS},
+	])
+	board.run.roll_offer()
+	board._hud.pinned_slot = 3
+	if not await _capture("fx1_em_card.png"):
+		return false
+	board.run.skip_offer()
+	board._hud.pinned_slot = 3
+	board.run.awaiting_offer = true
+	board.run.offer = [
+		{"id": Loadout.PINPOINT, "rank": 1, "kind": Loadout.EQUIPMENT, "slot": Loadout.CLEATS, "gm_second": true},
+		{"id": Loadout.HOT_STREAK, "rank": 1, "kind": Loadout.PERK, "slot": Loadout.PERK},
+		{"id": Loadout.CANNON, "rank": 2, "kind": Loadout.EQUIPMENT, "slot": Loadout.CLEATS},
+	]
+	if not await _capture("fx1_em_offer_second_card.png"):
+		return false
+	board.run.skip_offer()
+	board._hud.pinned_slot = -1
+	board.run.streak = 2
+	board.run.give(Loadout.SUDDEN_DEATH)
+	board.run.prepare_kick_stats()
+	board._copy_run_onto_kick()
+	if board.run.kick_mult_preview() < 7.0:
+		print("fx1 mult ", board.run.kick_mult_preview())
+		return false
+	if not await _capture("fx1_mult_sudden_death.png"):
+		return false
+	board.run.run_mode = "endless"
+	board.run.perks = [{"id": Loadout.STORM_CHASER, "rank": 6}]
+	board.run.wind_speed = 40
+	board.run.wind_direction = 90.0
+	board.run.rebuild_stats()
+	board.run.prepare_kick_stats()
+	board._copy_run_onto_kick()
+	if not await _capture("fx1_mult_wide_value.png"):
+		return false
+	board.run.curse_ids = []
+	board.run.perks = []
+	board.run.rebuild_stats()
+	board.run.cash = 40
+	board.run.kick_number = 5
+	board.run.last_result_made = true
+	board.run.open_shop()
+	board.run.shop_stock = [Vitamins.PROTEIN, Vitamins.MAGNESIUM, Vitamins.PICKLE]
+	board._shop_click(board._hud.shop_shelf_frames()[0].get_center())
+	if str(board.run.shop_stock[0]) != "" or str(board.run.belt[0]) != Vitamins.PROTEIN:
+		print("fx1 buy ", board.run.shop_stock, " ", board.run.belt)
+		return false
+	if not await _capture("fx1_shop_click_buy.png"):
+		return false
+	board.run.cash = 0
+	board._shop_click(board._hud.shop_price_plate(board._hud.shop_shelf_frames()[1]).get_center())
+	if board.run.shop_flash != "1":
+		print("fx1 flash ", board.run.shop_flash)
+		return false
+	if not await _capture("fx1_shop_click_broke.png"):
+		return false
+	board.run.leave_shop()
+	board.run.weather = RunLogic.CLEAR
+	board.run.wind_speed = 18
+	board.run.wind_direction = 90.0
+	board.logic.wind_speed = 18
+	board.logic.wind_direction = 90.0
+	board.load_current_kick()
+	board._place_ribbons()
+	if not await _capture("fx1_wind_flags_red.png"):
+		return false
+	board.force_weather(RunLogic.LIGHTS)
+	board.load_current_kick()
+	board._place_ribbons()
+	if not await _capture("fx1_wind_flags_red_lights.png"):
+		return false
+	board.force_weather(RunLogic.SNOW)
+	board.load_current_kick()
+	if not await _capture("fx1_snow_first_kick.png"):
+		return false
+	return true
+
+
 func _capture_pk2b() -> bool:
 	board.highlight = 1
 	board.confirm_kicker()
@@ -2019,30 +2122,20 @@ func _capture_pk2a() -> bool:
 	board.run.perks = []
 	board.run.gm_passes = 0
 	board.run.gm_second_slots = []
-	board.run.gm_offer = false
-	board.run.gm_offer_done = false
 	board.run.awaiting_offer = false
 	board.run.offer = []
 	board.run.give(Loadout.CANNON, 1)
 	board.run.give(Loadout.WIND_VISOR, 1)
 	board.run.give(Loadout.IRON_GRIP, 1)
 	board.run.give(Loadout.GEAR_MANAGER, 1)
-	board.run.last_result_made = true
-	board.run.phase = RunLogic.Phase.PLAYING
-	if not board.run.open_gm_offer_after_make():
-		print("pk2a gear offer did not open")
-		return false
-	if not await _capture("pk2a_gm_offer.png"):
-		return false
-	var cleat_card: Dictionary = {"id": Loadout.PINPOINT, "rank": 1, "kind": Loadout.EQUIPMENT, "slot": Loadout.CLEATS}
-	board.run.offer = [cleat_card]
+	board.run.awaiting_offer = true
+	board.run.offer = [{"id": Loadout.PINPOINT, "rank": 1, "kind": Loadout.EQUIPMENT, "slot": Loadout.CLEATS, "gm_second": true}]
 	if not board.run.pick_card(0):
 		print("pk2a could not take Pinpoint")
 		return false
 	board.run.helmet2_id = Loadout.SCOUT_LID
 	board.run.helmet2_rank = 1
 	board.run.awaiting_offer = false
-	board.run.gm_offer = false
 	board._sync_debug_loadout()
 	if board.run.cleats2_id != Loadout.PINPOINT or board.run.helmet2_id != Loadout.SCOUT_LID:
 		print("pk2a rail setup ", board.run.cleats2_id, " ", board.run.helmet2_id)

@@ -64,6 +64,7 @@ func _run() -> void:
 	_check_ui1()
 	_check_pk2a()
 	_check_pk2b()
+	_check_fx1()
 	_check_f3()
 	_check_au1()
 	_check_drive_lid_and_power_safety()
@@ -88,6 +89,7 @@ func _finish_live() -> void:
 	_check_as2_live()
 	_check_pk2a_live()
 	_check_pk2b_live()
+	_check_fx1_live()
 	_check_tw1_live()
 	_check_bl1_live()
 	_check_floodlights_live()
@@ -7676,7 +7678,8 @@ func _check_pk2a() -> void:
 	check(Loadout.max_rank(Loadout.GEAR_MANAGER, "standard") == 3 and Loadout.max_rank(Loadout.GEAR_MANAGER, "endless") == 3, "Gear Manager caps at III in both modes")
 	check(Loadout.max_rank(Loadout.HYPE_MAN, "standard") == 3 and Loadout.max_rank(Loadout.HYPE_MAN, "endless") == 6, "Hype Man keeps the perk cap")
 	check(Loadout.effect_line(Loadout.HYPE_MAN, 1) == "Boosts your other perk ×1.5. Nothing to boost yet.", "Hype Man alone says there is nothing to boost")
-	check(Loadout.effect_line(Loadout.GEAR_MANAGER, 1) == "Unlock a second gear slot of a type you own. I 1 slot, II 2, III 3.", "Gear Manager names the three passes")
+	check(Loadout.piece_name(Loadout.GEAR_MANAGER) == "Equipment Manager" and Loadout.GEAR_MANAGER == "gear_manager", "Equipment Manager keeps the gear_manager id")
+	check(Loadout.effect_line(Loadout.GEAR_MANAGER, 1) == "Second gear slots can show up in offers. I 1 slot, II 2, III 3.", "Equipment Manager names the three passes")
 	var fresh: Array = Loadout.legal_perks(Loadout.empty_state(), 4)
 	var fresh_ids := {}
 	for card in fresh:
@@ -7820,29 +7823,37 @@ func _check_pk2a() -> void:
 	var empty_gear := RunLogic.new()
 	empty_gear.start_with_kicker(Kickers.WALK_ON)
 	empty_gear.give(Loadout.GEAR_MANAGER, 1)
-	empty_gear.last_result_made = true
-	check(not empty_gear.open_gm_offer_after_make() and empty_gear.gm_passes == 1 and empty_gear.offer.is_empty(), "no gear means no Gear Manager offer, and the pass waits")
+	var empty_seconds := 0
+	for card in Loadout.legal_equipment(empty_gear.loadout_state()):
+		if bool(card.get("gm_second", false)):
+			empty_seconds += 1
+	check(empty_seconds == 0 and empty_gear.gm_passes == 1, "no owned gear means no second-style cards, and the pass waits")
 	var cleats := RunLogic.new()
 	cleats.start_with_kicker(Kickers.WALK_ON)
 	cleats.give(Loadout.CANNON, 1)
-	cleats.give(Loadout.GEAR_MANAGER, 1)
+	cleats.awaiting_offer = true
 	cleats.last_result_made = true
-	check(cleats.open_gm_offer_after_make() and not cleats.offer.is_empty(), "Cannon opens a Gear Manager offer")
-	for card in cleats.offer:
-		check(str(card.get("slot", "")) == Loadout.CLEATS and str(card.get("id", "")) != Loadout.CANNON and int(card.get("rank", 0)) == 1, "the offer is a new cleat at rank I")
-	cleats.offer = [{"id": Loadout.PINPOINT, "rank": 1, "kind": Loadout.EQUIPMENT, "slot": Loadout.CLEATS}]
-	check(cleats.pick_card(0), "Pinpoint can be picked from the Gear Manager offer")
+	cleats.offer = [{"id": Loadout.GEAR_MANAGER, "rank": 1, "kind": Loadout.PERK, "slot": Loadout.PERK}]
+	check(cleats.pick_card(0) and not cleats.awaiting_offer and cleats.gm_passes == 1 and cleats.cleats2_id == "", "taking Equipment Manager is only the pick")
+	var second_ids := {}
+	var saw_cannon_up := false
+	for card in Loadout.legal_equipment(cleats.loadout_state()):
+		if bool(card.get("gm_second", false)):
+			second_ids[str(card.get("id", ""))] = int(card.get("rank", 0))
+		if str(card.get("id", "")) == Loadout.CANNON and int(card.get("rank", 0)) == 2:
+			saw_cannon_up = true
+	check(saw_cannon_up and second_ids.size() == 3 and int(second_ids.get(Loadout.PINPOINT, 0)) == 1, "second cleats are normal rank I cards beside the Cannon rank-up")
+	cleats.awaiting_offer = true
+	cleats.offer = [{"id": Loadout.PINPOINT, "rank": 1, "kind": Loadout.EQUIPMENT, "slot": Loadout.CLEATS, "gm_second": true}]
+	check(cleats.pick_card(0), "a second-style card can be picked from a normal offer")
 	check(cleats.cleats_id == Loadout.CANNON and cleats.cleats2_id == Loadout.PINPOINT and cleats.gm_passes == 0 and cleats.gm_second_slots.has(Loadout.CLEATS), "the pass fills the second cleat slot")
 	var skipped := RunLogic.new()
 	skipped.start_with_kicker(Kickers.WALK_ON)
 	skipped.give(Loadout.CANNON, 1)
 	skipped.give(Loadout.GEAR_MANAGER, 1)
-	skipped.last_result_made = true
-	check(skipped.open_gm_offer_after_make(), "the skip case opens the offer")
-	check(skipped.skip_offer() and skipped.gm_passes == 1 and skipped.cleats2_id == "" and not skipped.awaiting_offer, "Skip keeps the pass and the slot")
-	check(not skipped.open_gm_offer_after_make(), "the same make does not open a second Gear Manager offer")
-	skipped.gm_offer_done = false
-	check(skipped.open_gm_offer_after_make() and skipped.gm_passes == 1, "the offer returns after the next make")
+	skipped.awaiting_offer = true
+	skipped.offer = [{"id": Loadout.PINPOINT, "rank": 1, "kind": Loadout.EQUIPMENT, "slot": Loadout.CLEATS, "gm_second": true}]
+	check(skipped.skip_offer() and skipped.gm_passes == 1 and skipped.cleats2_id == "" and not skipped.awaiting_offer, "skipping a second-style card keeps the pass")
 	var ringed := RunLogic.new()
 	ringed.start_with_kicker(Kickers.WALK_ON)
 	ringed.give(Loadout.CANNON, 1)
@@ -7851,10 +7862,11 @@ func _check_pk2a() -> void:
 	ringed.helmet2_id = Loadout.SCOUT_LID
 	ringed.helmet2_rank = 1
 	ringed.give(Loadout.GEAR_MANAGER, 1)
-	ringed.last_result_made = true
-	check(ringed.open_gm_offer_after_make(), "a ring-filled helmet still leaves the cleats offer")
-	for card in ringed.offer:
-		check(str(card.get("slot", "")) != Loadout.HELMET and int(card.get("rank", 0)) == 1 and str(card.get("id", "")) != Loadout.CANNON, "the ring helmet is not offered and nothing is a third style")
+	var helmet_seconds := 0
+	for card in Loadout.legal_equipment(ringed.loadout_state()):
+		if bool(card.get("gm_second", false)) and str(card.get("slot", "")) == Loadout.HELMET:
+			helmet_seconds += 1
+	check(helmet_seconds == 0, "a Bonus Ring second helmet is not offered again")
 	var full := RunLogic.new()
 	full.start_with_kicker(Kickers.WALK_ON)
 	full.cleats_id = Loadout.CANNON
@@ -7870,17 +7882,17 @@ func _check_pk2a() -> void:
 	full.gloves2_id = Loadout.GUIDE_GLOVES
 	full.gloves2_rank = 1
 	full.give(Loadout.GEAR_MANAGER, 1)
-	full.last_result_made = true
-	check(not full.open_gm_offer_after_make() and full.gm_passes == 1, "no empty second slot means the pass waits")
+	var full_seconds := 0
+	for card in Loadout.legal_equipment(full.loadout_state()):
+		if bool(card.get("gm_second", false)):
+			full_seconds += 1
+	check(full_seconds == 0 and full.gm_passes == 1, "filled second slots get no more second-style cards")
 	var benched := RunLogic.new()
 	benched.start_with_kicker(Kickers.WALK_ON)
 	benched.give(Loadout.SCOUT_LID, 1)
 	benched.give(Loadout.GEAR_MANAGER, 1)
-	benched.last_result_made = true
-	check(benched.open_gm_offer_after_make(), "Scout Lid opens a helmet offer")
-	for card in benched.offer:
-		check(str(card.get("slot", "")) == Loadout.HELMET and str(card.get("id", "")) != Loadout.SCOUT_LID and int(card.get("rank", 0)) == 1, "the helmet offer is a new style at rank I")
-	benched.offer = [{"id": Loadout.DRIVE_LID, "rank": 1, "kind": Loadout.EQUIPMENT, "slot": Loadout.HELMET}]
+	benched.awaiting_offer = true
+	benched.offer = [{"id": Loadout.DRIVE_LID, "rank": 1, "kind": Loadout.EQUIPMENT, "slot": Loadout.HELMET, "gm_second": true}]
 	check(benched.pick_card(0), "Drive Lid can take the second helmet slot")
 	benched.prepare_kick_stats()
 	var equipped_range := benched.stats.range_bonus
@@ -8274,5 +8286,219 @@ func _check_pk2b_live() -> void:
 	game._arm_boss_twist()
 	game.tick_kick_clock(5.0)
 	check(game.logic.phase != KickLogic.Phase.AIMING, "the No Huddle clock auto-starts the meter")
+	game.free()
+
+
+func _fx1_score(run: RunLogic, offset: float) -> void:
+	run.kick_resolved = false
+	run.phase = RunLogic.Phase.PLAYING
+	var preview := run.kick_mult_preview()
+	var boss := run.is_boss()
+	run.resolve_kick("GOOD", offset, false)
+	var plain := RunLogic.round_whole(preview * run.distance_yards())
+	if boss:
+		check(run.last_points == RunLogic.round_whole(preview * run.distance_yards() * 1.5), "boss points are the preview times yards, then ×1.5 (%s)" % run.score_line)
+	else:
+		check(run.last_points == plain, "plain points match the MULT preview times yards (%s vs %s)" % [run.last_points, plain])
+
+
+func _check_fx1() -> void:
+	check(Loadout.piece_name(Loadout.GEAR_MANAGER) == "Equipment Manager", "the player-facing name is Equipment Manager")
+	check(Loadout.GEAR_MANAGER == "gear_manager", "the save id is still gear_manager")
+	check(Loadout.effect_line(Loadout.GEAR_MANAGER, 2) == "Second gear slots can show up in offers. I 1 slot, II 2, III 3.", "the Equipment Manager card text is exact")
+	var named := RunLogic.new()
+	named.start_with_kicker(Kickers.WALK_ON)
+	named.give(Loadout.GEAR_MANAGER, 1)
+	check(named.lived_effect_line(Loadout.GEAR_MANAGER, 1).find("Passes left 1") >= 0, "the tooltip still shows passes left")
+	var same := RunLogic.new()
+	same.start_with_kicker(Kickers.WALK_ON)
+	same.give(Loadout.CANNON, 1)
+	same.kick_number = 5
+	same.last_result_made = true
+	same.awaiting_offer = true
+	same.offer = [{"id": Loadout.GEAR_MANAGER, "rank": 1, "kind": Loadout.PERK, "slot": Loadout.PERK}]
+	check(same.pick_card(0) and not same.awaiting_offer and same.gm_passes == 1 and same.cleats2_id == "", "the pick does not open another offer")
+	check(same.follow_offer() == "shop" and not same.awaiting_offer, "after the pick the next step is the shop")
+	var pool_run := RunLogic.new()
+	pool_run.start_with_kicker(Kickers.WALK_ON)
+	pool_run.give(Loadout.CANNON, 1)
+	pool_run.give(Loadout.GEAR_MANAGER, 1)
+	var styles := {}
+	var rank_up := 0
+	for card in Loadout.legal_equipment(pool_run.loadout_state()):
+		var cid := str(card.get("id", ""))
+		if bool(card.get("gm_second", false)):
+			check(int(card.get("rank", 0)) == 1 and cid != Loadout.CANNON and str(card.get("slot", "")) == Loadout.CLEATS, "a second-style card is another cleat at rank I")
+			styles[cid] = int(styles.get(cid, 0)) + 1
+		elif cid == Loadout.CANNON:
+			rank_up += 1
+	check(styles.size() == 3 and int(styles.get(Loadout.PINPOINT, 0)) == 1 and rank_up == 1, "each other cleat appears once, plus one Cannon rank-up")
+	pool_run.gm_passes = 0
+	var blocked := 0
+	for card in Loadout.legal_equipment(pool_run.loadout_state()):
+		if bool(card.get("gm_second", false)):
+			blocked += 1
+	check(blocked == 0, "zero passes removes the second-style cards")
+	pool_run.gm_passes = 1
+	pool_run._set_perk_rank(Loadout.GEAR_MANAGER, 0)
+	blocked = 0
+	for card in Loadout.legal_equipment(pool_run.loadout_state()):
+		if bool(card.get("gm_second", false)):
+			blocked += 1
+	check(blocked == 0, "a benched Equipment Manager adds no second-style cards")
+	var kept: Dictionary = pool_run.export_resume()
+	check(not kept.has("gm_offer"), "new saves do not store an Equipment Manager offer")
+	kept["gm_offer"] = true
+	kept["place"] = "offer"
+	kept["gm_passes"] = 2
+	kept["kick_number"] = 1
+	var resumed := RunLogic.new()
+	resumed.import_resume(kept)
+	check(not resumed.awaiting_offer and resumed.gm_passes == 2 and resumed.kick_number == 2, "an old open offer loads as a skip and keeps the pass")
+	var odds_run := RunLogic.new()
+	odds_run.start_with_kicker(Kickers.WALK_ON)
+	odds_run.give(Loadout.CANNON, 1)
+	odds_run.give(Loadout.GEAR_MANAGER, 1)
+	var odds_state: Dictionary = odds_run.loadout_state()
+	var legal_n := Loadout.legal_equipment(odds_state).size()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 11
+	var second_cards := 0
+	var pinpoint_cards := 0
+	var cannon_cards := 0
+	for _i in 1000:
+		var drawn: Array = Loadout.draw_offer(odds_state, odds_run.attempt_cap, rng, [], 1)
+		var seen_second := false
+		for card in drawn:
+			if bool(card.get("gm_second", false)):
+				seen_second = true
+				if str(card.get("id", "")) == Loadout.PINPOINT:
+					pinpoint_cards += 1
+			elif str(card.get("id", "")) == Loadout.CANNON:
+				cannon_cards += 1
+		if seen_second:
+			second_cards += 1
+	print("FX1 odds legal ", legal_n, " second offers ", second_cards, " pinpoint ", pinpoint_cards, " cannon rank-up ", cannon_cards)
+	check(second_cards > 0 and second_cards < 1000, "a second-style card is possible and not guaranteed")
+	check(absi(pinpoint_cards - cannon_cards) < 40, "a second cleat and the Cannon rank-up show up at the same rate")
+	var plain := RunLogic.new()
+	plain.start_with_kicker(Kickers.WALK_ON)
+	plain.prepare_kick_stats()
+	_fx1_score(plain, 2.0)
+	var hero := RunLogic.new()
+	hero.start_with_kicker(Kickers.WALK_ON)
+	hero.give(Loadout.HERO_BALL, 1)
+	hero.prepare_kick_stats()
+	check(near(hero.kick_mult_preview(), hero.current_mult() + 1.0), "Hero Ball I is in the MULT chip")
+	_fx1_score(hero, 2.0)
+	hero.give(Loadout.SUDDEN_DEATH)
+	hero.prepare_kick_stats()
+	_fx1_score(hero, 2.0)
+	var windy := RunLogic.new()
+	windy.start_with_kicker(Kickers.WALK_ON)
+	windy.give(Loadout.STORM_CHASER, 1)
+	windy.wind_speed = 10
+	windy.wind_direction = 90.0
+	windy.prepare_kick_stats()
+	_fx1_score(windy, 2.0)
+	var cursed := RunLogic.new()
+	cursed.start_with_kicker(Kickers.WALK_ON)
+	cursed.give(Loadout.ICED)
+	cursed.prepare_kick_stats()
+	_fx1_score(cursed, 2.0)
+	var boss := RunLogic.new()
+	boss.start_with_kicker(Kickers.WALK_ON)
+	boss.give(Loadout.TWO_MINUTE, 1)
+	boss.kick_number = 10
+	boss.prepare_kick_stats()
+	_fx1_score(boss, 2.0)
+	var pre := RunLogic.new()
+	pre.start_with_kicker(Kickers.WALK_ON)
+	pre.active_vitamins[Vitamins.PREWORKOUT] = 1
+	pre.prepare_kick_stats()
+	_fx1_score(pre, 2.0)
+	var gel := RunLogic.new()
+	gel.start_with_kicker(Kickers.PHIL)
+	gel.active_vitamins[Vitamins.PROTEIN] = 1
+	gel.prepare_kick_stats()
+	check(gel.kick_mult_preview() > gel.current_mult(), "the gelcap is in the preview when a vitamin is live")
+	_fx1_score(gel, 2.0)
+	var sudden := RunLogic.new()
+	sudden.start_with_kicker(Kickers.WALK_ON)
+	sudden.streak = 2
+	sudden.give(Loadout.SUDDEN_DEATH)
+	sudden.prepare_kick_stats()
+	check(near(sudden.current_mult(), 1.5) and near(sudden.kick_mult_preview(), 7.5), "Sudden Death turns 1.50 into 7.50")
+	_fx1_score(sudden, 2.0)
+	var old_line := RunLogic.format_score_line(35.0, 1.0, false, false, true)
+	check(old_line == "35 yd × 1.00 = 35 (+5 Perfect)", "the score line text is unchanged")
+	check(RunLogic.SUDDEN_DEATH_MULT == 5.0, "Sudden Death is still ×5")
+
+
+func _check_fx1_live() -> void:
+	OS.set_environment("FG_SHOTS", "")
+	var packed: PackedScene = load("res://scenes/main.tscn")
+	var game = packed.instantiate()
+	get_root().add_child(game)
+	game._taking_pictures = true
+	check(game._snow.amount == game.SNOW_PARTICLES and game._rain.amount == game.MONSOON_PARTICLES, "snow and rain allocate their final particle counts")
+	var snow_amount := int(game._snow.amount)
+	var rain_amount := int(game._rain.amount)
+	game.force_weather(RunLogic.SNOW)
+	game.force_weather(RunLogic.RAIN)
+	game.force_weather(RunLogic.MONSOON)
+	game.force_weather(RunLogic.SNOW)
+	check(game._snow.amount == snow_amount and game._rain.amount == rain_amount, "tuning weather does not rebuild the particle counts")
+	var left: StandardMaterial3D = game._ribbon_l.material_override
+	var right: StandardMaterial3D = game._ribbon_r.material_override
+	check(left.albedo_color.is_equal_approx(Color(1.0, 0.08, 0.06)) and right.albedo_color.is_equal_approx(Color(1.0, 0.08, 0.06)), "both wind flags are bright red")
+	var records = get_root().get_node("SaveData")
+	var vex_was := bool(records.unlocks.get(Kickers.VEX, false))
+	records.unlocks[Kickers.VEX] = false
+	game._taking_pictures = false
+	game.run._try_unlock(Kickers.VEX)
+	check(game.run.unlock_toast != "", "an unlock sets the toast")
+	game.paused = true
+	game._process(5.0)
+	check(game.run.unlock_toast != "", "paused time does not clear the toast")
+	game.paused = false
+	game.run.awaiting_shop = true
+	game._process(5.0)
+	check(game.run.unlock_toast != "", "shop time does not clear the toast")
+	game.run.awaiting_shop = false
+	game._process(3.9)
+	check(game.run.unlock_toast != "", "the toast is still up before 4 seconds")
+	game._process(0.2)
+	check(game.run.unlock_toast == "", "the toast clears after 4 seconds")
+	game.run.unlock_toast = "First"
+	game._process(3.0)
+	game.run.unlock_toast = "Second"
+	game._process(3.0)
+	check(game.run.unlock_toast == "Second", "a newer unlock restarts the timer")
+	game._process(1.1)
+	check(game.run.unlock_toast == "", "the replacement toast lasts its own 4 seconds")
+	records.unlocks[Kickers.VEX] = vex_was
+	records.save_file()
+	game.highlight = 1
+	game.confirm_kicker()
+	game.run.open_shop()
+	game.run.cash = 40
+	game.run.shop_stock = [Vitamins.PROTEIN, Vitamins.MAGNESIUM, Vitamins.PICKLE]
+	var hud = game._hud
+	check(hud.shop_hit(hud.shop_shelf_frames()[0].get_center()) == "shelf0", "the first shelf hits")
+	check(hud.shop_hit(hud.shop_price_plate(hud.shop_shelf_frames()[1]).get_center()) == "shelf1", "a price plate hits its shelf")
+	check(hud.shop_hit(hud.shop_shelf_frames()[2].get_center()) == "shelf2", "the third shelf hits")
+	check(hud.shop_hit(hud.shop_b12_rect().get_center()) == "b12", "the B12 panel hits")
+	check(hud.shop_hit(hud.shop_belt_rect(0).get_center()) == "belt0", "belt Z hits")
+	check(hud.shop_hit(hud.shop_belt_rect(1).get_center()) == "belt1", "belt X hits")
+	check(hud.shop_hit(hud.shop_reroll_rect(game.run).get_center()) == "reroll", "the reroll line hits")
+	check(hud.shop_hit(Vector2(8, 8)) == "", "empty shop space does not hit")
+	game._shop_click(hud.shop_shelf_frames()[0].get_center())
+	check(str(game.run.shop_stock[0]) == "" and str(game.run.belt[0]) == Vitamins.PROTEIN, "a shelf click buys like the key")
+	game.run.cash = 0
+	game._shop_click(hud.shop_price_plate(hud.shop_shelf_frames()[1]).get_center())
+	check(game.run.shop_flash == "1" and str(game.run.shop_stock[1]) == Vitamins.MAGNESIUM, "a broke click flashes the price and does not buy")
+	game._shop_click(hud.shop_belt_rect(0).get_center())
+	check(str(game.run.belt[0]) == "", "a belt click sells like the key")
 	game.free()
 

@@ -27,6 +27,10 @@ var _checkpoint: Dictionary = {}
 var save_note := ""
 var _note_time := 0.0
 var _trophy_time := 0.0
+var _unlock_time := 0.0
+var _unlock_seen := ""
+var _frame_watch := 0.0
+var _frame_peak := 0.0
 var _cash_time := 0.0
 var _vitamin_time := 0.0
 var highlight := -1
@@ -278,6 +282,9 @@ func load_current_kick() -> void:
 	_approach_time = 0.0
 	_bank_time = 0.0
 	_arm_boss_twist()
+	if OS.is_debug_build() and OS.get_environment("FX1_FRAMES") == "1":
+		_frame_watch = 1.0
+		_frame_peak = 0.0
 	consider_too_weak()
 	refresh_view()
 
@@ -392,10 +399,6 @@ func _choose_card(index: int) -> void:
 
 
 func _after_cards() -> void:
-	if run.last_result_made and run.open_gm_offer_after_make():
-		_remember_run()
-		refresh_view()
-		return
 	if run.last_result_made:
 		if run.follow_offer() == "shop":
 			_remember_run()
@@ -969,6 +972,20 @@ func _process(delta: float) -> void:
 			if _vitamin_time >= 1.6:
 				run.vitamin_note = ""
 				_vitamin_time = 0.0
+		if run.unlock_toast != _unlock_seen:
+			_unlock_seen = run.unlock_toast
+			_unlock_time = 0.0
+		if run.unlock_toast != "" and not paused and not run.awaiting_shop:
+			_unlock_time += delta
+			if _unlock_time >= 4.0:
+				run.unlock_toast = ""
+				_unlock_seen = ""
+				_unlock_time = 0.0
+	if OS.is_debug_build() and OS.get_environment("FX1_FRAMES") == "1" and _frame_watch > 0.0:
+		_frame_peak = maxf(_frame_peak, delta)
+		_frame_watch -= delta
+		if _frame_watch <= 0.0:
+			print("FX1 kick frame peak_ms ", snappedf(_frame_peak * 1000.0, 0.1), " weather ", run.weather)
 	if _taking_pictures:
 		return
 	front.tick(delta)
@@ -1070,8 +1087,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event is InputEventMouseButton:
 		var mouse := event as InputEventMouseButton
-		if mouse.pressed and mouse.button_index == MOUSE_BUTTON_LEFT and run.awaiting_offer:
-			_choose_card(_hud.card_index_at(mouse.position))
+		if mouse.pressed and mouse.button_index == MOUSE_BUTTON_LEFT:
+			if run.awaiting_shop:
+				_shop_click(mouse.position)
+			elif run.awaiting_offer:
+				_choose_card(_hud.card_index_at(mouse.position))
 		return
 	if not event is InputEventKey:
 		return
@@ -1763,6 +1783,32 @@ func _options_index_at(point: Vector2) -> int:
 	return -1
 
 
+func _shop_click(point: Vector2) -> void:
+	if paused or _hud == null:
+		return
+	var hit := str(_hud.shop_hit(point))
+	var bought := false
+	if hit == "shelf0":
+		bought = run.buy_shelf(0)
+	elif hit == "shelf1":
+		bought = run.buy_shelf(1)
+	elif hit == "shelf2":
+		bought = run.buy_shelf(2)
+	elif hit == "b12":
+		bought = run.buy_b12()
+	elif hit == "belt0":
+		bought = run.sell_belt(0)
+	elif hit == "belt1":
+		bought = run.sell_belt(1)
+	elif hit == "reroll":
+		bought = run.reroll_shop()
+	else:
+		return
+	if bought:
+		_cue("shop")
+	refresh_view()
+
+
 func _shop_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
 	if Settings.pressed_event(event, "choose_1"):
@@ -1786,10 +1832,10 @@ func _shop_input(event: InputEvent) -> void:
 	elif Settings.pressed_event(event, "shop_reroll"):
 		if run.reroll_shop():
 			_cue("shop")
-	elif key.keycode == KEY_C:
+	elif key != null and key.keycode == KEY_C:
 		run.add_debug_cash()
 		_cash_time = 0.0
-	elif Settings.pressed_event(event, "confirm") or key.keycode == KEY_ENTER or key.keycode == KEY_KP_ENTER:
+	elif Settings.pressed_event(event, "confirm") or (key != null and (key.keycode == KEY_ENTER or key.keycode == KEY_KP_ENTER)):
 		_cue("shop")
 		_leave_shop()
 		return
@@ -2162,21 +2208,25 @@ func _build_weather() -> void:
 	_weather_anchor = Node3D.new()
 	_weather_anchor.name = "Weather"
 	_world.add_child(_weather_anchor)
-	_rain = _make_precip("Rain", _streak_texture(), Vector2(0.1, 0.86), true)
-	_snow = _make_precip("Snow", _flake_texture(), Vector2(0.32, 0.32), false)
+	_rain = _make_precip("Rain", _streak_texture(), Vector2(0.1, 0.86), true, MONSOON_PARTICLES, 0.85)
+	_snow = _make_precip("Snow", _flake_texture(), Vector2(0.32, 0.32), false, SNOW_PARTICLES, 3.6)
 	_weather_anchor.add_child(_rain)
 	_weather_anchor.add_child(_snow)
 	_apply_weather("")
+	_prime_precip()
 
 
-func _make_precip(node_name: String, texture: Texture2D, size: Vector2, align_fall: bool) -> GPUParticles3D:
+func _make_precip(node_name: String, texture: Texture2D, size: Vector2, align_fall: bool, amount: int, life: float) -> GPUParticles3D:
 	var particles := GPUParticles3D.new()
 	particles.name = node_name
 	particles.emitting = false
 	particles.visible = false
-	particles.amount = 1
-	particles.lifetime = 1.2
-	particles.preprocess = 4.0
+	# Allocate the final buffer once. Later weather only changes amount_ratio.
+	particles.amount = amount
+	particles.lifetime = life
+	particles.amount_ratio = 1.0
+	# 1.5s fills the first frame without simulating the old 4s burst.
+	particles.preprocess = 1.5
 	particles.explosiveness = 0.0
 	particles.local_coords = true
 	particles.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -2270,8 +2320,12 @@ func _apply_weather(weather: String) -> void:
 		fall = SNOW_FALL
 	var dim := OVERCAST_DIM if kind != "none" else 1.0
 	weather_state = {"kind": kind, "amount": amount, "fall": fall, "dim": dim}
-	_tune_precip(_rain, kind == "rain", amount, fall, 0.55 if weather == RunLogic.MONSOON else 0.85)
-	_tune_precip(_snow, kind == "snow", amount, fall, 3.6)
+	var rain_life := 0.55 if weather == RunLogic.MONSOON else 0.85
+	var rain_ratio := 1.0
+	if weather == RunLogic.RAIN and MONSOON_PARTICLES > 0:
+		rain_ratio = float(RAIN_PARTICLES) / float(MONSOON_PARTICLES)
+	_tune_precip(_rain, kind == "rain", fall, rain_life, rain_ratio)
+	_tune_precip(_snow, kind == "snow", fall, 3.6, 1.0)
 	var env := $WorldEnvironment.environment as Environment
 	if env != null:
 		env.ambient_light_energy = AMBIENT_ENERGY * dim
@@ -2280,15 +2334,16 @@ func _apply_weather(weather: String) -> void:
 		sun.light_energy = SUN_ENERGY * dim
 
 
-func _tune_precip(particles: GPUParticles3D, active: bool, amount: int, fall: float, life: float) -> void:
+func _tune_precip(particles: GPUParticles3D, active: bool, fall: float, life: float, ratio: float) -> void:
 	if particles == null:
 		return
 	particles.visible = active
 	particles.emitting = active
 	if not active:
 		return
-	particles.amount = amount
-	particles.lifetime = life
+	if not is_equal_approx(particles.lifetime, life):
+		particles.lifetime = life
+	particles.amount_ratio = ratio
 	var process := particles.process_material as ParticleProcessMaterial
 	if process == null:
 		return
@@ -2296,6 +2351,33 @@ func _tune_precip(particles: GPUParticles3D, active: bool, amount: int, fall: fl
 	process.initial_velocity_max = fall * 1.15
 	process.gravity = Vector3(0, -fall, 0)
 	process.color = Color(1, 1, 1, 0.84 if particles == _snow else 0.72)
+
+
+func _prime_precip() -> void:
+	if DisplayServer.get_name() == "headless" or _camera == null or _weather_anchor == null:
+		return
+	var forward := -_camera.global_transform.basis.z
+	if forward.length_squared() < 0.0001:
+		forward = Vector3(0, 0, -1)
+	_weather_anchor.global_position = _camera.global_position + forward.normalized() * 9.0
+	for particles in [_rain, _snow]:
+		if particles == null:
+			continue
+		particles.visible = true
+		particles.emitting = true
+		var process := particles.process_material as ParticleProcessMaterial
+		if process != null:
+			process.color = Color(1, 1, 1, 0)
+	RenderingServer.force_draw()
+	RenderingServer.force_draw()
+	for particles in [_rain, _snow]:
+		if particles == null:
+			continue
+		particles.visible = false
+		particles.emitting = false
+		var process := particles.process_material as ParticleProcessMaterial
+		if process != null:
+			process.color = Color(1, 1, 1, 0.84 if particles == _snow else 0.72)
 
 
 func _place_weather() -> void:
@@ -2327,8 +2409,11 @@ func _place_weather() -> void:
 		var process := particles.process_material as ParticleProcessMaterial
 		if process == null:
 			continue
-		process.gravity = local_grav
-		process.direction = local_grav.normalized()
+		if not process.gravity.is_equal_approx(local_grav):
+			process.gravity = local_grav
+		var aim := local_grav.normalized()
+		if not process.direction.is_equal_approx(aim):
+			process.direction = aim
 
 
 func floodlight_plan(span: float) -> Dictionary:
@@ -3033,9 +3118,9 @@ func _make_ribbon(node_name: String) -> MeshInstance3D:
 	var mesh := BoxMesh.new()
 	mesh.size = Vector3(0.11, 1.17, 0.02)
 	body.mesh = mesh
-	var paint := _mat(Color(1.0, 0.42, 0.05), 0.55)
+	var paint := _mat(Color(1.0, 0.08, 0.06), 0.55)
 	paint.emission_enabled = true
-	paint.emission = Color(0.85, 0.28, 0.02)
+	paint.emission = Color(0.9, 0.04, 0.03)
 	body.material_override = paint
 	body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_world.add_child(body)
